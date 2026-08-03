@@ -175,6 +175,140 @@ theorem adjacent_div_ne (a b c : ByteArray) (d : Nat)
   rw [h_b_true] at h_b_false
   exact Bool.noConfusion h_b_false
 
+/-- Above the divergence the two keys agree — that is what makes the
+    divergence "the" level rather than "a" level. -/
+theorem divBelow_agree_above :
+    ∀ (d : Nat) (a b : ByteArray) (i j : Nat),
+      divBelow d a b = some i → i < j → j < d →
+      BitsKey.keyBit a j = BitsKey.keyBit b j := by
+  intro d
+  induction d with
+  | zero => intro a b i j h _ hj; omega
+  | succ k ih =>
+    intro a b i j h hij hj
+    unfold divBelow at h
+    by_cases hne : BitsKey.keyBit a k != BitsKey.keyBit b k
+    · rw [if_pos hne] at h
+      have : i = k := by simpa using h.symm
+      omega
+    · rw [if_neg hne] at h
+      rcases Nat.lt_or_ge j k with hjk | hjk
+      · exact ih a b i j h hij hjk
+      · have : j = k := by omega
+        subst this
+        simpa using (by simpa using hne : ¬ (BitsKey.keyBit a j != BitsKey.keyBit b j))
+  
+/-- Agreeing above a level where they differ IS the divergence. -/
+theorem divBelow_eq_of :
+    ∀ (d : Nat) (a b : ByteArray) (k : Nat),
+      k < d → BitsKey.keyBit a k ≠ BitsKey.keyBit b k →
+      (∀ j, k < j → j < d → BitsKey.keyBit a j = BitsKey.keyBit b j) →
+      divBelow d a b = some k := by
+  intro d
+  induction d with
+  | zero => intro _ _ _ h; omega
+  | succ m ih =>
+    intro a b k hk hne hab
+    unfold divBelow
+    by_cases hm : BitsKey.keyBit a m != BitsKey.keyBit b m
+    · rw [if_pos hm]
+      -- `m` is a difference, and everything strictly above `k` agrees,
+      -- so `m` cannot be above `k`; with `k < m + 1` it must BE `k`.
+      have : k = m := by
+        rcases Nat.lt_or_ge k m with h | h
+        · exact absurd (hab m h (Nat.lt_succ_self m)) (by simpa using hm)
+        · omega
+      rw [this]
+    · rw [if_neg hm]
+      have hkm : k < m := by
+        rcases Nat.lt_or_ge k m with h | h
+        · exact h
+        · have : k = m := by omega
+          subst this
+          exact absurd (by simpa using hm) hne
+      exact ih a b k hkm hne (fun j hj hjm => hab j hj (Nat.lt_succ_of_lt hjm))
+
+/-- **Path order is total on keys the tree can tell apart.**
+
+    "Can tell apart" is `divBelow smtDepth ≠ none` — the keys differ at
+    some bit the walk actually reads.  It is a side condition rather
+    than a fact because `pathLess` is defined on `ByteArray`, and two
+    arrays agreeing on all 256 read bits are equal only once their SIZE
+    is fixed; the collision-freedom the state root already assumes is
+    what supplies it for real cell keys. -/
+theorem pathLess_total (a b : ByteArray)
+    (h_sep : divBelow smtDepth a b ≠ none) (h_ab : pathLess a b = false) :
+    pathLess b a = true := by
+  unfold pathLess at h_ab ⊢
+  rw [divBelow_comm smtDepth b a]
+  cases hd : divBelow smtDepth a b with
+  | none => exact absurd hd h_sep
+  | some d =>
+    rw [hd] at h_ab
+    have h_a : BitsKey.keyBit a d = true := by simpa using h_ab
+    have h_ne := divBelow_bit_ne smtDepth a b d hd
+    simp only []
+    cases hb : BitsKey.keyBit b d with
+    | false => simp
+    | true  => exact absurd (h_a.trans hb.symm) h_ne
+
+/-- **Path order is transitive.**
+
+    The three-way case split is where `adjacent_div_ne` earns its
+    keep: equal divergence levels are impossible for a sorted triple,
+    so only the two strict orderings remain and each determines
+    `div a c` outright. -/
+theorem pathLess_trans (a b c : ByteArray)
+    (hab : pathLess a b = true) (hbc : pathLess b c = true) :
+    pathLess a c = true := by
+  -- Both divergences exist, or the premises are false.
+  have hdab_ex : ∃ dab, divBelow smtDepth a b = some dab := by
+    cases hd : divBelow smtDepth a b with
+    | none   => rw [pathLess, hd] at hab; exact absurd hab (by simp)
+    | some d => exact ⟨d, rfl⟩
+  have hdbc_ex : ∃ dbc, divBelow smtDepth b c = some dbc := by
+    cases hd : divBelow smtDepth b c with
+    | none   => rw [pathLess, hd] at hbc; exact absurd hbc (by simp)
+    | some d => exact ⟨d, rfl⟩
+  obtain ⟨dab, hdab⟩ := hdab_ex
+  obtain ⟨dbc, hdbc⟩ := hdbc_ex
+  have h_a : BitsKey.keyBit a dab = false := by
+    rw [pathLess, hdab] at hab; simpa using hab
+  have h_b : BitsKey.keyBit b dbc = false := by
+    rw [pathLess, hdbc] at hbc; simpa using hbc
+  rcases Nat.lt_trichotomy dab dbc with h | h | h
+  · -- The higher split is `dbc`; `a` and `b` agree there.
+    have h_ab_at : BitsKey.keyBit a dbc = BitsKey.keyBit b dbc :=
+      divBelow_agree_above smtDepth a b dab dbc hdab h
+        (divBelow_lt smtDepth b c dbc hdbc)
+    have h_ac : BitsKey.keyBit a dbc ≠ BitsKey.keyBit c dbc := by
+      rw [h_ab_at]; exact divBelow_bit_ne smtDepth b c dbc hdbc
+    have h_above : ∀ j, dbc < j → j < smtDepth →
+        BitsKey.keyBit a j = BitsKey.keyBit c j := by
+      intro j hj hjd
+      rw [divBelow_agree_above smtDepth a b dab j hdab (by omega) hjd,
+          divBelow_agree_above smtDepth b c dbc j hdbc hj hjd]
+    have hac := divBelow_eq_of smtDepth a c dbc
+      (divBelow_lt smtDepth b c dbc hdbc) h_ac h_above
+    rw [pathLess, hac]
+    simpa [h_ab_at] using h_b
+  · exact absurd (adjacent_div_ne a b c dab hab hbc hdab (h ▸ hdbc)) (by simp)
+  · -- The higher split is `dab`; `b` and `c` agree there.
+    have h_bc_at : BitsKey.keyBit b dab = BitsKey.keyBit c dab :=
+      divBelow_agree_above smtDepth b c dbc dab hdbc h
+        (divBelow_lt smtDepth a b dab hdab)
+    have h_ac : BitsKey.keyBit a dab ≠ BitsKey.keyBit c dab := by
+      rw [← h_bc_at]; exact divBelow_bit_ne smtDepth a b dab hdab
+    have h_above : ∀ j, dab < j → j < smtDepth →
+        BitsKey.keyBit a j = BitsKey.keyBit c j := by
+      intro j hj hjd
+      rw [divBelow_agree_above smtDepth a b dab j hdab hj hjd,
+          divBelow_agree_above smtDepth b c dbc j hdbc (by omega) hjd]
+    have hac := divBelow_eq_of smtDepth a c dab
+      (divBelow_lt smtDepth a b dab hdab) h_ac h_above
+    rw [pathLess, hac]
+    simpa using h_a
+
 /-! ## The frontier -/
 
 /-- Insert a cell into a path-sorted, key-distinct list, collapsing a
@@ -272,6 +406,200 @@ theorem frontierShapeOk_nil_of_cons (t : CellTag) (ts : List CellTag) :
   cases hc : frontierOf (t :: ts) with
   | nil          => exact absurd hc h
   | cons _ _     => simp [pathSort]
+
+/-! ## The frontier is sorted, and therefore key-distinct
+
+`pathSorted (frontierOf ts)` was a value-level fact — checked on two
+example write sets — while `frontierShapeOk`'s whole argument rests on
+it: "strict ascent gives distinctness for free, which is why the shape
+check is one comparison rather than two."  These are that argument,
+proved.
+
+The side condition is `KeysSeparated`: the cells' keys differ at some
+bit the walk actually READS.  It is not free, because `pathLess` is
+defined on `ByteArray` and two arrays agreeing on all 256 read bits are
+equal only once their size is pinned; the collision-freedom the state
+root already assumes is what supplies it for real cell keys. -/
+
+/-- Every pair of cells in `ts` that the frontier does NOT collapse
+    differs at some bit the walk reads.
+
+    Phrased on `==` rather than `≠` deliberately: the collapse in
+    `frontierInsert` is a `==` test, so this is the same relation the
+    insertion decides on rather than a proposition that happens to
+    coincide with it. -/
+def KeysSeparated (ts : List CellTag) : Prop :=
+  ∀ t ∈ ts, ∀ u ∈ ts, (smtCellKey t == smtCellKey u) = false →
+    divBelow smtDepth (smtCellKey t) (smtCellKey u) ≠ none
+
+/-- Membership is preserved by insertion, up to the collapse: every
+    cell of the result was already there or is the inserted one. -/
+theorem mem_frontierInsert (t u : CellTag) (l : List CellTag)
+    (h : u ∈ frontierInsert t l) : u = t ∨ u ∈ l := by
+  induction l with
+  | nil => simp [frontierInsert] at h; exact Or.inl h
+  | cons v rest ih =>
+    unfold frontierInsert at h
+    split at h
+    · exact Or.inr h
+    · split at h
+      · rcases List.mem_cons.mp h with h' | h'
+        · exact Or.inl h'
+        · exact Or.inr h'
+      · rcases List.mem_cons.mp h with h' | h'
+        · exact Or.inr (h' ▸ List.mem_cons_self)
+        · rcases ih h' with h'' | h''
+          · exact Or.inl h''
+          · exact Or.inr (List.mem_cons_of_mem _ h'')
+
+/-- Every cell of a frontier came from the list it was built from. -/
+theorem mem_frontierOf (ts : List CellTag) :
+    ∀ u ∈ frontierOf ts, u ∈ ts := by
+  induction ts with
+  | nil => intro u h; simp [frontierOf] at h
+  | cons t rest ih =>
+    intro u h
+    show u ∈ t :: rest
+    have : u ∈ frontierInsert t (frontierOf rest) := h
+    rcases mem_frontierInsert t u (frontierOf rest) this with h' | h'
+    · exact h' ▸ List.mem_cons_self
+    · exact List.mem_cons_of_mem _ (ih u h')
+
+/-- A sorted list stays sorted when a key that precedes its head is
+    prepended. -/
+theorem pathSorted_cons (t : CellTag) (l : List CellTag)
+    (h_sorted : pathSorted l = true)
+    (h_head : ∀ u, l.head? = some u → pathLess (smtCellKey t) (smtCellKey u) = true) :
+    pathSorted (t :: l) = true := by
+  cases l with
+  | nil => rfl
+  | cons u rest =>
+    show (pathLess (smtCellKey t) (smtCellKey u) && pathSorted (u :: rest)) = true
+    rw [h_head u rfl, h_sorted]
+    rfl
+
+/-- The tail of a strictly ascending list is strictly ascending. -/
+theorem pathSorted_tail (t : CellTag) (l : List CellTag)
+    (h : pathSorted (t :: l) = true) : pathSorted l = true := by
+  cases l with
+  | nil => rfl
+  | cons v tl =>
+    have h' : (pathLess (smtCellKey t) (smtCellKey v) && pathSorted (v :: tl)) = true := h
+    exact (Bool.and_eq_true _ _).mp h' |>.2
+
+/-- In a strictly ascending list the head precedes every later entry —
+    transitivity, applied down the list. -/
+theorem pathSorted_head_lt :
+    ∀ (t : CellTag) (l : List CellTag) (u : CellTag),
+      pathSorted (t :: l) = true → u ∈ l →
+      pathLess (smtCellKey t) (smtCellKey u) = true := by
+  intro t l
+  induction l generalizing t with
+  | nil => intro u _ hu; simp at hu
+  | cons v tl ih =>
+    intro u h hu
+    have h' : (pathLess (smtCellKey t) (smtCellKey v) && pathSorted (v :: tl)) = true := h
+    obtain ⟨h_tv, h_rest⟩ := (Bool.and_eq_true _ _).mp h'
+    rcases List.mem_cons.mp hu with h'' | h''
+    · exact h'' ▸ h_tv
+    · exact pathLess_trans _ _ _ h_tv (ih v u h_rest h'')
+
+/-- **Insertion preserves sortedness.**
+
+    Three branches and each is a different fact: the collapse returns
+    the list untouched; the prepend is licensed by the guard itself;
+    and the fall-through needs TOTALITY — the inserted key did not
+    precede the head and is not equal to it, so the head precedes it,
+    which is what keeps the head in front of whatever the recursion
+    produces. -/
+theorem pathSorted_frontierInsert (t : CellTag) (l : List CellTag)
+    (h_sorted : pathSorted l = true)
+    (h_sep : ∀ u ∈ l, (smtCellKey t == smtCellKey u) = false →
+      divBelow smtDepth (smtCellKey t) (smtCellKey u) ≠ none) :
+    pathSorted (frontierInsert t l) = true := by
+  induction l with
+  | nil => rfl
+  | cons u rest ih =>
+    unfold frontierInsert
+    split
+    · exact h_sorted
+    · rename_i h_ne_key
+      split
+      · rename_i h_lt
+        exact pathSorted_cons t (u :: rest) h_sorted
+          (fun v hv => by cases hv; exact h_lt)
+      · rename_i h_not_lt
+        -- The head precedes the inserted key, by totality.
+        have h_ul : pathLess (smtCellKey u) (smtCellKey t) = true :=
+          pathLess_total (smtCellKey t) (smtCellKey u)
+            (h_sep u List.mem_cons_self (Bool.not_eq_true _ ▸ h_ne_key))
+            (by simpa using h_not_lt)
+        have h_rest : pathSorted rest = true := pathSorted_tail u rest h_sorted
+        have h_ih := ih h_rest
+          (fun v hv hne => h_sep v (List.mem_cons_of_mem _ hv) hne)
+        refine pathSorted_cons u (frontierInsert t rest) h_ih (fun v hv => ?_)
+        -- The head of the recursion is either `t` or `rest`'s head,
+        -- and `u` precedes both.
+        have h_mem : v ∈ frontierInsert t rest := List.mem_of_mem_head? hv
+        rcases mem_frontierInsert t v rest h_mem with h' | h'
+        · exact h' ▸ h_ul
+        · cases rest with
+          | nil => simp at h'
+          | cons w tl =>
+            have h_uw : pathLess (smtCellKey u) (smtCellKey w) = true := by
+              have h' : (pathLess (smtCellKey u) (smtCellKey w)
+                          && pathSorted (w :: tl)) = true := h_sorted
+              exact ((Bool.and_eq_true _ _).mp h').1
+            rcases List.mem_cons.mp h' with h'' | h''
+            · exact h'' ▸ h_uw
+            · -- `w` precedes every later entry, and `u` precedes `w`.
+              have h_wv : pathLess (smtCellKey w) (smtCellKey v) = true :=
+                pathSorted_head_lt w tl v (pathSorted_tail u (w :: tl) h_sorted) h''
+              exact pathLess_trans _ _ _ h_uw h_wv
+
+/-- **The frontier of any key-separated write set is strictly
+    ascending** — and therefore key-distinct, which is the property
+    `frontierShapeOk` turns on. -/
+theorem pathSorted_frontierOf (ts : List CellTag) (h : KeysSeparated ts) :
+    pathSorted (frontierOf ts) = true := by
+  induction ts with
+  | nil => rfl
+  | cons t rest ih =>
+    have h_rest : KeysSeparated rest := fun a ha b hb hne =>
+      h a (List.mem_cons_of_mem _ ha) b (List.mem_cons_of_mem _ hb) hne
+    show pathSorted (frontierInsert t (frontierOf rest)) = true
+    refine pathSorted_frontierInsert t (frontierOf rest) (ih h_rest) (fun u hu hne => ?_)
+    exact h t List.mem_cons_self u
+      (List.mem_cons_of_mem _ (mem_frontierOf rest u hu)) hne
+
+/-- **Strict ascent IS distinctness.**  The claim `frontierShapeOk`'s
+    docstring makes — "one comparison rather than two" — as a theorem:
+    a strictly ascending list has no key twice, because `pathLess` is
+    irreflexive and the head precedes every later entry. -/
+theorem pathSorted_keys_nodup (l : List CellTag) (h : pathSorted l = true) :
+    ∀ (t : CellTag) (rest : List CellTag), l = t :: rest →
+      ∀ u ∈ rest, smtCellKey u ≠ smtCellKey t := by
+  intro t rest h_eq u hu h_key
+  subst h_eq
+  have h_lt := pathSorted_head_lt t rest u h hu
+  rw [h_key, pathLess_irrefl] at h_lt
+  exact Bool.noConfusion h_lt
+
+/-- The frontier's keys are pairwise distinct, all the way down. -/
+theorem frontierOf_keys_nodup (ts : List CellTag) (h : KeysSeparated ts) :
+    (frontierOf ts).map smtCellKey |>.Nodup := by
+  -- Induction on the SORTED list rather than on `ts`: distinctness is
+  -- a property of the result's order, and the order is what
+  -- `pathSorted_frontierOf` established.
+  have h_sorted := pathSorted_frontierOf ts h
+  generalize frontierOf ts = l at h_sorted
+  induction l with
+  | nil => simp
+  | cons t rest ih =>
+    rw [List.map_cons]
+    refine List.nodup_cons.mpr ⟨fun h_mem => ?_, ih (pathSorted_tail t rest h_sorted)⟩
+    obtain ⟨u, hu, h_eq⟩ := List.mem_map.mp h_mem
+    exact (pathSorted_keys_nodup (t :: rest) h_sorted t rest rfl u hu) h_eq
 
 /-! ## The wire's shape
 

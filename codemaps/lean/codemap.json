@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "8dbe5390f044b502c0c06eae87bb2e8ad291e89b20d14a570946655dc6af4daa"
+    "source_digest": "defe2687b7271ac16b6b6960978e40f43b95d1b65281d2c85d5443922cdf9e2e"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5842
+    "declaration_count": 5857
   },
   "modules": [
     {
@@ -22955,7 +22955,7 @@
     {
       "module": "LegalKernel.FaultProof.Frontier",
       "path": "LegalKernel/FaultProof/Frontier.lean",
-      "declaration_count": 28,
+      "declaration_count": 42,
       "declarations": [
         {
           "kind": "namespace",
@@ -23041,9 +23041,52 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "divBelow_agree_above",
+          "line": 179,
+          "called": [
+            "divBelow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "divBelow_eq_of",
+          "line": 201,
+          "called": [
+            "divBelow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathLess_total",
+          "line": 238,
+          "called": [
+            "divBelow",
+            "divBelow_bit_ne",
+            "divBelow_comm",
+            "pathLess",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathLess_trans",
+          "line": 260,
+          "called": [
+            "adjacent_div_ne",
+            "divBelow",
+            "divBelow_agree_above",
+            "divBelow_bit_ne",
+            "divBelow_eq_of",
+            "divBelow_lt",
+            "pathLess",
+            "smtDepth"
+          ]
+        },
+        {
           "kind": "def",
           "name": "frontierInsert",
-          "line": 185,
+          "line": 319,
           "called": [
             "CellTag",
             "pathLess",
@@ -23053,7 +23096,7 @@
         {
           "kind": "def",
           "name": "frontierOf",
-          "line": 193,
+          "line": 327,
           "called": [
             "CellTag",
             "frontierInsert"
@@ -23062,7 +23105,7 @@
         {
           "kind": "def",
           "name": "pathSorted",
-          "line": 199,
+          "line": 333,
           "called": [
             "CellTag",
             "pathLess",
@@ -23072,7 +23115,7 @@
         {
           "kind": "def",
           "name": "pathInsert",
-          "line": 210,
+          "line": 344,
           "called": [
             "CellTag",
             "pathLess",
@@ -23082,7 +23125,7 @@
         {
           "kind": "def",
           "name": "pathSort",
-          "line": 217,
+          "line": 351,
           "called": [
             "CellTag",
             "pathInsert"
@@ -23091,7 +23134,7 @@
         {
           "kind": "def",
           "name": "frontierShapeOk",
-          "line": 236,
+          "line": 370,
           "called": [
             "CellTag",
             "frontierOf",
@@ -23102,7 +23145,7 @@
         {
           "kind": "theorem",
           "name": "frontierInsert_ne_nil",
-          "line": 241,
+          "line": 375,
           "called": [
             "CellTag",
             "frontierInsert"
@@ -23111,7 +23154,7 @@
         {
           "kind": "theorem",
           "name": "frontierOf_cons_ne_nil",
-          "line": 252,
+          "line": 386,
           "called": [
             "CellTag",
             "frontierInsert",
@@ -23122,7 +23165,7 @@
         {
           "kind": "theorem",
           "name": "frontierShapeOk_nil_of_cons",
-          "line": 267,
+          "line": 401,
           "called": [
             "CellTag",
             "frontierOf",
@@ -23133,8 +23176,133 @@
         },
         {
           "kind": "def",
+          "name": "KeysSeparated",
+          "line": 430,
+          "called": [
+            "CellTag",
+            "divBelow",
+            "smtCellKey",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_frontierInsert",
+          "line": 436,
+          "called": [
+            "CellTag",
+            "frontierInsert"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_frontierOf",
+          "line": 455,
+          "called": [
+            "CellTag",
+            "frontierInsert",
+            "frontierOf",
+            "mem_frontierInsert"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathSorted_cons",
+          "line": 469,
+          "called": [
+            "CellTag",
+            "pathLess",
+            "pathSorted",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathSorted_tail",
+          "line": 481,
+          "called": [
+            "CellTag",
+            "pathLess",
+            "pathSorted",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathSorted_head_lt",
+          "line": 491,
+          "called": [
+            "CellTag",
+            "pathLess",
+            "pathLess_trans",
+            "pathSorted",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathSorted_frontierInsert",
+          "line": 514,
+          "called": [
+            "CellTag",
+            "divBelow",
+            "frontierInsert",
+            "mem_frontierInsert",
+            "pathLess",
+            "pathLess_total",
+            "pathLess_trans",
+            "pathSorted",
+            "pathSorted_cons",
+            "pathSorted_head_lt",
+            "pathSorted_tail",
+            "smtCellKey",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathSorted_frontierOf",
+          "line": 562,
+          "called": [
+            "CellTag",
+            "KeysSeparated",
+            "frontierInsert",
+            "frontierOf",
+            "mem_frontierOf",
+            "pathSorted",
+            "pathSorted_frontierInsert"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathSorted_keys_nodup",
+          "line": 578,
+          "called": [
+            "CellTag",
+            "pathLess_irrefl",
+            "pathSorted",
+            "pathSorted_head_lt",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "frontierOf_keys_nodup",
+          "line": 588,
+          "called": [
+            "CellTag",
+            "KeysSeparated",
+            "frontierOf",
+            "pathSorted_frontierOf",
+            "pathSorted_keys_nodup",
+            "pathSorted_tail",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "adjacentDivs",
-          "line": 284,
+          "line": 612,
           "called": [
             "divLevel"
           ]
@@ -23142,7 +23310,7 @@
         {
           "kind": "def",
           "name": "activeAt",
-          "line": 291,
+          "line": 619,
           "called": [
             "adjacentDivs"
           ]
@@ -23150,7 +23318,7 @@
         {
           "kind": "def",
           "name": "mergesAt",
-          "line": 295,
+          "line": 623,
           "called": [
             "adjacentDivs"
           ]
@@ -23158,7 +23326,7 @@
         {
           "kind": "def",
           "name": "gapsAt",
-          "line": 301,
+          "line": 629,
           "called": [
             "activeAt",
             "mergesAt"
@@ -23167,7 +23335,7 @@
         {
           "kind": "def",
           "name": "gapCount",
-          "line": 305,
+          "line": 633,
           "called": [
             "gapsAt",
             "smtDepth"
@@ -23176,7 +23344,7 @@
         {
           "kind": "def",
           "name": "gapCountClosed",
-          "line": 312,
+          "line": 640,
           "called": [
             "adjacentDivs",
             "smtDepth"
@@ -23185,13 +23353,13 @@
         {
           "kind": "def",
           "name": "aliasConsistent",
-          "line": 331,
+          "line": 659,
           "called": []
         },
         {
           "kind": "def",
           "name": "plannedBalanceAt?",
-          "line": 336,
+          "line": 664,
           "called": [
             "ActorId",
             "ResourceId"
@@ -23200,7 +23368,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalanceAt?_of_aliasConsistent",
-          "line": 344,
+          "line": 672,
           "called": [
             "ActorId",
             "LegalKernel.FaultProof",
@@ -30304,7 +30472,7 @@
     {
       "module": "LegalKernel.FaultProof.Terminate",
       "path": "LegalKernel/FaultProof/Terminate.lean",
-      "declaration_count": 18,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "namespace",
@@ -30493,17 +30661,16 @@
         {
           "kind": "def",
           "name": "bundleValueAt",
-          "line": 357,
+          "line": 366,
           "called": [
             "CellTag",
-            "MultiBundle",
-            "smtCellKey"
+            "MultiBundle"
           ]
         },
         {
           "kind": "def",
           "name": "bundleBalanceReader",
-          "line": 364,
+          "line": 373,
           "called": [
             "BalanceReader",
             "MultiBundle",
@@ -30513,7 +30680,7 @@
         {
           "kind": "def",
           "name": "bundleNextWdId",
-          "line": 374,
+          "line": 383,
           "called": [
             "MultiBundle",
             "bundleValueAt"
@@ -30522,7 +30689,7 @@
         {
           "kind": "def",
           "name": "multiFrontierOf",
-          "line": 389,
+          "line": 398,
           "called": [
             "Action",
             "ActorId",
@@ -30534,7 +30701,7 @@
         {
           "kind": "def",
           "name": "verifierPostRootMulti",
-          "line": 415,
+          "line": 424,
           "called": [
             "Action",
             "ActorId",
@@ -30561,7 +30728,7 @@
         {
           "kind": "def",
           "name": "stepMultiBundle",
-          "line": 484,
+          "line": 493,
           "called": [
             "ExtendedState",
             "MultiBundle",
@@ -30580,9 +30747,24 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "bundleValueAt_stepMultiBundle",
+          "line": 516,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "SignedAction",
+            "bundleValueAt",
+            "es",
+            "getCellValue",
+            "multiFrontierOf",
+            "stepMultiBundle"
+          ]
+        },
+        {
           "kind": "def",
           "name": "stepMultiPostRoot",
-          "line": 497,
+          "line": 546,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -57461,6 +57643,8 @@
             "Action",
             "ActorId",
             "BalanceReader",
+            "CellTag",
+            "KeysSeparated",
             "LegalKernel.Test.FaultProof.Frontier",
             "ResourceId",
             "TestCase",
@@ -57469,13 +57653,18 @@
             "cells",
             "claimBudgetRefund",
             "depositWithFee",
+            "divBelow",
             "divLevel",
             "frontierOf",
+            "frontierOf_keys_nodup",
             "frontierShapeOk",
             "gapCount",
             "gapCountClosed",
             "pathLess",
+            "pathLess_total",
+            "pathLess_trans",
             "pathSorted",
+            "pathSorted_frontierOf",
             "plannedBalanceAt?",
             "plannedBalances",
             "plannedBalances_alias_consistent",
@@ -58728,15 +58917,24 @@
           "line": 106,
           "called": [
             "ActorId",
+            "CellTag",
+            "ExtendedState",
             "MultiBundle",
+            "SignedAction",
             "StateCommit",
             "TestCase",
             "assertEq",
             "base",
+            "bundleValueAt",
+            "bundleValueAt_stepMultiBundle",
             "commitExtendedState",
+            "es",
+            "getCellValue",
+            "multiFrontierOf",
             "probes",
             "runProbe",
             "sign",
+            "stepMultiBundle",
             "stepMultiPostRoot",
             "stepPostRoot",
             "verifierPostRootMulti",
@@ -58746,7 +58944,7 @@
         {
           "kind": "def",
           "name": "zeroGapWire",
-          "line": 175,
+          "line": 198,
           "called": [
             "SmtMultiProof",
             "buildMultiProof"
@@ -58755,13 +58953,13 @@
         {
           "kind": "def",
           "name": "setMaskBit",
-          "line": 179,
+          "line": 202,
           "called": []
         },
         {
           "kind": "def",
           "name": "probeLevels",
-          "line": 185,
+          "line": 208,
           "called": [
             "base",
             "multiFrontierOf",
@@ -58773,7 +58971,7 @@
         {
           "kind": "def",
           "name": "multiTests",
-          "line": 190,
+          "line": 213,
           "called": [
             "MultiBundle",
             "TestCase",
@@ -58805,7 +59003,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 370,
+          "line": 393,
           "called": [
             "LegalKernel.Test.FaultProof.Terminate",
             "TestCase",

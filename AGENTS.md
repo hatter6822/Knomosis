@@ -669,6 +669,10 @@ The Genesis Plan promises a small set of type-level guarantees
 | M | The gap count is a closed form | `gapCountClosed` | `FaultProof/Frontier.lean` |
 | M | An alias cannot fork the plan | `plannedBalances_alias_consistent` | `FaultProof/Terminate.lean` |
 | M | An empty bundle is refused | `frontierShapeOk_nil_of_cons` | `FaultProof/Frontier.lean` |
+| M | Path order is a strict total order | `pathLess_trans` / `pathLess_total` | `FaultProof/Frontier.lean` |
+| M | The frontier is strictly ascending | `pathSorted_frontierOf` | `FaultProof/Frontier.lean` |
+| M | ...hence its keys are distinct | `frontierOf_keys_nodup` | `FaultProof/Frontier.lean` |
+| M | The honest bundle reads the state | `bundleValueAt_stepMultiBundle` | `FaultProof/Terminate.lean` |
 | B-3 | Root observes exactly the cells | `commitExtendedState_eq_of_cells_agree` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | A step's write chain is coherent | `chainCoherent_canonicalCellChain` | `FaultProof/CellWrites.lean` |
 | B-3 | `setCell` round-trips the reader | `getCellValue_setCell_getCellValue` | `FaultProof/CellWrites.lean` |
@@ -1423,12 +1427,22 @@ that an honest fold lands on the published root, the multiproof's own
 version of that statement is only VALUE-level so far (twenty corpus
 probes plus nineteen `faultproof-terminate` probes, on both stacks),
 and composing `multiFold_eq_commit_post` into a
-`stepMultiPostRoot` counterpart is a development in its own right —
-it needs the frontier's sortedness, `plannedBalances`' totality and a
-twenty-five-way dispatch through `VerifierWrites`' `*_correct` family.
-Retiring a headline guarantee before its replacement is proved would be
-the wrong order.  Recorded in
-`state_root_merkleisation_plan.md` §6.5 M8.
+`stepMultiPostRoot` counterpart is a development in its own right.
+
+Its FOUNDATION is built.  `pathSorted (frontierOf …)` was a
+value-level fact — two examples — while `frontierShapeOk`'s whole
+argument rested on it; `pathLess_trans` / `pathLess_total` now make
+path order a strict total order, `pathSorted_frontierOf` lifts it to
+the frontier, `frontierOf_keys_nodup` turns sortedness into
+distinctness, and `bundleValueAt_stepMultiBundle` bridges a submitted
+bundle to `getCellValue`, which is what every `VerifierWrites`
+correctness theorem is stated against.  That last one also corrected a
+stack disagreement: `bundleValueAt` looked cells up by HASHED KEY while
+`KnomosisStepVMRoot._findOpened` looks them up by tag, so Lean now
+matches the contract.  What remains is a reader congruence for
+`plannedBalances`, a `derivedCellValue_correct` over the twenty-five
+variants, and the well-formedness side conditions.  Recorded in
+`state_root_merkleisation_plan.md` §6.5 M8 / M9.
 
 ### Fair queuing (Workstream FQ / GP.8)
 

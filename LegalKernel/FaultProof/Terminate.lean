@@ -348,15 +348,24 @@ structure MultiBundle where
   proof : SmtMultiProof
   deriving Repr
 
-/-- A cell's proven pre-value, looked up BY CELL.
+/-- A cell's proven pre-value, looked up BY CELL IDENTITY.
 
     The replacement for `preStateValueAt`'s first-occurrence rule.
     Under a multiproof a cell is opened exactly once — the shape check
     refuses a duplicate — so "the first opening naming this cell" and
     "the opening naming this cell" are the same thing, and the rule
-    that had to distinguish them is gone. -/
+    that had to distinguish them is gone.
+
+    By TAG rather than by hashed key, which is what
+    `KnomosisStepVMRoot._findOpened` does: it compares
+    `(cellKind, keyA, keyB)`.  The by-key form the chained era used
+    agreed with it on anything past the shape check — that check forces
+    the submitted tags to BE the derived frontier — but it made the two
+    stacks decide the same question two ways, and it made "the entry
+    whose key matches is the entry" a fact about `smtCellKey`'s
+    injectivity rather than about a decidable equality on `CellTag`. -/
 def bundleValueAt (b : MultiBundle) (t : CellTag) : Option ByteArray :=
-  (b.cells.find? (fun c => smtCellKey c.1 == smtCellKey t)).map Prod.snd
+  (b.cells.find? (fun c => c.1 == t)).map Prod.snd
 
 /-- The balance reader a multiproof bundle induces.  PARTIAL, exactly
     as the chained one is: a derivation reading a cell the bundle does
@@ -488,6 +497,46 @@ def stepMultiBundle (es : ExtendedState) (st : SignedAction) : MultiBundle :=
   { cells := ts.map (fun t => (t, getCellValue es t))
   , proof := buildMultiProof (multiGapLevels smtDepth opened)
                (multiSiblings smtDepth (stateCellEntries es) opened) }
+
+/-- **The honest bundle reads back what the state holds**, at every
+    cell the frontier opens.
+
+    The bridge between `bundleValueAt` — a lookup BY KEY over a
+    submitted list — and `getCellValue`, which is what every
+    `VerifierWrites` correctness theorem is stated against.  It is not
+    a `rfl`: the lookup finds the FIRST entry whose key matches, and
+    "first entry with a matching key" is only "this entry" because the
+    frontier's keys are distinct.  `frontierOf_keys_nodup` is what
+    supplies that, so the `KeysSeparated` side condition is where the
+    tree's ability to tell two cells apart enters.
+
+    Composing this with the `*_correct` family is the remaining step
+    toward `stepMultiPostRoot = some (commitExtendedState
+    (productionApplyBudget …))` — see
+    `docs/planning/state_root_merkleisation_plan.md` §6.5 M8. -/
+theorem bundleValueAt_stepMultiBundle (es : ExtendedState) (st : SignedAction)
+    (t : CellTag)
+    (h_mem : t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId) :
+    bundleValueAt (stepMultiBundle es st) t = some (getCellValue es t) := by
+  unfold bundleValueAt stepMultiBundle
+  simp only []
+  generalize multiFrontierOf st.action st.signer es.bridge.nextWdId = ts at h_mem
+  induction ts with
+  | nil => simp at h_mem
+  | cons u rest ih =>
+    rw [List.map_cons, List.find?_cons]
+    cases h_eq : (u == t) with
+    | true =>
+      have h_tag : u = t := by simpa using h_eq
+      subst h_tag
+      simp only []
+      rfl
+    | false =>
+      simp only []
+      refine ih ?_
+      rcases List.mem_cons.mp h_mem with h' | h'
+      · exact absurd h_eq (by simp [h'])
+      · exact h'
 
 /-- **The post-state root the multiproof verifier reaches** for an
     honest step: one merged walk, one root check, one answer.

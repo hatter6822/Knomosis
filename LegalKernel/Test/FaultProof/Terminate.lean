@@ -154,6 +154,29 @@ def coreTests : List TestCase :=
                          (fun t => t.kindIndex))
             s!"{name}: the derived cell list must be the complete one"
     }
+  , { name := "the honest bundle reads back the state"
+    , body := do
+        -- The bridge between `bundleValueAt` — a lookup over a
+        -- SUBMITTED list — and `getCellValue`, which is what every
+        -- `VerifierWrites` correctness theorem is stated against.
+        -- Checked value-level on every probe, and pinned as a theorem
+        -- below.
+        for (name, a) in probes do
+          let st := sign a
+          let b := stepMultiBundle base st
+          for t in multiFrontierOf a 7 base.bridge.nextWdId do
+            assertEq (expected := some (getCellValue base t).toList)
+              (actual := (bundleValueAt b t).map ByteArray.toList)
+              s!"{name}: the bundle must read back the state at every frontier cell"
+    }
+  , { name := "API stability: the honest bundle reads back the state"
+    , body := do
+        let _proof : ∀ (es : ExtendedState) (st : SignedAction) (t : CellTag),
+            t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId →
+            bundleValueAt (stepMultiBundle es st) t = some (getCellValue es t) :=
+          fun es st t h => bundleValueAt_stepMultiBundle es st t h
+        pure ()
+    }
   , { name := "API stability: the verifier's signature"
     , body := do
         let _proof : StateCommit → Authority.Action → ActorId → Nat →

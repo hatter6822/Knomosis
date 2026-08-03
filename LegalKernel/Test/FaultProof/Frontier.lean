@@ -235,6 +235,52 @@ def tests : List TestCase :=
         assertEq (expected := divLevel a b) (actual := divLevel b a)
           "divergence is symmetric"
     }
+  , -- ...and the order laws, at the term level.  `pathSorted
+    -- (frontierOf …)` used to be checked on two examples while
+    -- `frontierShapeOk`'s whole argument rested on it; these are that
+    -- argument, proved.
+    { name := "API stability: path order is transitive and total"
+    , body := do
+        let _trans : ∀ (a b c : ByteArray),
+            pathLess a b = true → pathLess b c = true → pathLess a c = true :=
+          pathLess_trans
+        let _total : ∀ (a b : ByteArray),
+            divBelow smtDepth a b ≠ none → pathLess a b = false →
+            pathLess b a = true :=
+          pathLess_total
+        pure ()
+    }
+  , { name := "API stability: the frontier is sorted, hence key-distinct"
+    , body := do
+        -- The two theorems that replace the value-level checks above:
+        -- ANY key-separated write set sorts, and sortedness IS
+        -- distinctness.
+        let _sorted : ∀ (ts : List CellTag), KeysSeparated ts →
+            pathSorted (frontierOf ts) = true :=
+          pathSorted_frontierOf
+        let _nodup : ∀ (ts : List CellTag), KeysSeparated ts →
+            ((frontierOf ts).map smtCellKey).Nodup :=
+          frontierOf_keys_nodup
+        pure ()
+    }
+  , { name := "the separation side condition holds on real cell keys"
+    , body := do
+        -- `KeysSeparated` is a hypothesis rather than a fact because
+        -- `pathLess` is defined on `ByteArray`.  On the keys a real
+        -- write set produces it is discharged by computation, and
+        -- checking that here is what keeps the hypothesis from being
+        -- one no instance satisfies.
+        let cells : List CellTag :=
+          [.budgetPolicy, .balance 1 7, .balance 1 8, .nonce 7, .epochBudget 7]
+        for t in cells do
+          for u in cells do
+            if (smtCellKey t == smtCellKey u) == false then
+              assertEq (expected := true)
+                (actual := (divBelow smtDepth (smtCellKey t) (smtCellKey u)).isSome)
+                "distinct cell keys diverge at a bit the walk reads"
+        assertEq (expected := true) (actual := pathSorted (frontierOf cells))
+          "and the frontier they build is strictly ascending"
+    }
   ]
 
 end LegalKernel.Test.FaultProof.Frontier
