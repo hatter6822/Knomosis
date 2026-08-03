@@ -293,6 +293,82 @@ def coreTests : List TestCase :=
           plannedBalanceAt_correct
         pure ()
     }
+  , { name := "the honest merged fold lands on the published post-root"
+    , body := do
+        -- The headline, value-level: hand the verifier the PRE-state's
+        -- wire and the POST-state's leaves and the single merged walk
+        -- reaches `commitExtendedState` of the state the step
+        -- produces.  Checked here on every probe; the theorem below is
+        -- the same statement with its side conditions named.
+        for (name, a) in probes do
+          let st := sign a
+          let ts := multiFrontierOf a 7 base.bridge.nextWdId
+          let post := productionApplyBudget base st 0
+          let sibs := multiSiblings smtDepth (stateCellEntries base) (openedOf base ts)
+          match multiWalk smtDepth (openedOf post ts) sibs with
+          | some (root, []) =>
+              assertEq (expected := (commitExtendedState post).toList)
+                (actual := root.toList)
+                s!"{name}: the fold must land on the published post-root"
+          | _ => throw <| IO.userError s!"{name}: the merged fold did not consume the wire"
+    }
+  , { name := "...and the same wire reproduces the PRE-root"
+    , body := do
+        -- One wire, two roots.  Without this the case above would be
+        -- satisfied by a wire built from the post-state, which is not a
+        -- wire any verifier holds.
+        for (name, a) in probes do
+          let ts := multiFrontierOf a 7 base.bridge.nextWdId
+          let sibs := multiSiblings smtDepth (stateCellEntries base) (openedOf base ts)
+          match multiWalk smtDepth (openedOf base ts) sibs with
+          | some (root, []) =>
+              assertEq (expected := (commitExtendedState base).toList)
+                (actual := root.toList)
+                s!"{name}: the same wire must reproduce the pre-root"
+          | _ => throw <| IO.userError s!"{name}: the pre-side fold did not consume the wire"
+    }
+  , { name := "API stability: the honest merged fold lands on the post-root"
+    , body := do
+        let _fold : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
+            FaultProofAdjudicable st.action = true →
+            KeyInjectiveOn (.budgetPolicy ::
+              verifierWriteCells st.action st.signer es.bridge.nextWdId) →
+            WriteSetComplete es (productionApplyBudget es st idx) st.action st.signer →
+            BitsDistinctBelow smtDepth (stateCellEntries es) →
+            BitsDistinctBelow smtDepth
+              (stateCellEntries (productionApplyBudget es st idx)) →
+            (∀ t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId,
+              ∀ u ∈ stateCellTags (productionApplyBudget es st idx),
+              smtCellKey u = smtCellKey t → u = t) →
+            multiWalk smtDepth
+                (openedOf (productionApplyBudget es st idx)
+                  (multiFrontierOf st.action st.signer es.bridge.nextWdId))
+                (multiSiblings smtDepth (stateCellEntries es)
+                  (openedOf es (multiFrontierOf st.action st.signer es.bridge.nextWdId)))
+              = some (commitExtendedState (productionApplyBudget es st idx), []) :=
+          stepMultiFold_eq_commit_post
+        let _post : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
+            ExtendedState.CanonicalBounds es →
+            KeyInjectiveOn (.budgetPolicy ::
+              verifierWriteCells st.action st.signer es.bridge.nextWdId) →
+            ∀ (plan : List ((ResourceId × ActorId) × Nat)),
+            plannedBalances (stateBalanceReader es) st.action st.signer = some plan →
+            (multiFrontierOf st.action st.signer es.bridge.nextWdId).filterMap (fun t =>
+                if t = .budgetPolicy then
+                  (bundleValueAt (stepMultiBundle es st) t).map
+                    (fun v => (smtCellKey t, cellLeaf t v))
+                else
+                  (derivedCellValue (bundleValueAt (stepMultiBundle es st))
+                    (getCellValue es .budgetPolicy) st.action st.signer idx plan t).map
+                    (fun v => (smtCellKey t, cellLeaf t v)))
+              = openedOf (productionApplyBudget es st idx)
+                  (multiFrontierOf st.action st.signer es.bridge.nextWdId) :=
+          postOpened_eq_openedOf
+        let _total : ∀ (es : ExtendedState) (a : Authority.Action) (signer : ActorId),
+            ∃ plan, plannedBalances (stateBalanceReader es) a signer = some plan :=
+          plannedBalances_stateBalanceReader_isSome
+        pure ()
+    }
   , { name := "API stability: the verifier's signature"
     , body := do
         let _proof : StateCommit → Authority.Action → ActorId → Nat →

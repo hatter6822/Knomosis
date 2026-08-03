@@ -642,6 +642,13 @@ theorem mem_keys_frontierOf (ts : List CellTag) (t : CellTag) (h : t ∈ ts) :
 def KeyInjectiveOn (ts : List CellTag) : Prop :=
   ∀ t ∈ ts, ∀ u ∈ ts, smtCellKey t = smtCellKey u → t = u
 
+/-- Key injectivity restricts to any sub-list — so a caller
+    discharges it once, over every cell a step's adjudication can
+    touch, and every consumer takes the part it needs. -/
+theorem KeyInjectiveOn.mono {ts us : List CellTag} (h : KeyInjectiveOn us)
+    (h_sub : ∀ t ∈ ts, t ∈ us) : KeyInjectiveOn ts :=
+  fun t ht u hu h_key => h t (h_sub t ht) u (h_sub u hu) h_key
+
 /-- **A written cell is an opened cell**, given that the tree can tell
     the write set's cells apart.
 

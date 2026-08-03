@@ -734,6 +734,113 @@ theorem multiSiblings_pre_eq_post (es es' : ExtendedState) (ts : List CellTag)
   exact multiSiblings_congr smtDepth (stateCellEntries es) (stateCellEntries es')
     (openedOf es' ts) h_ag h_wf h_wf'
 
+/-! ### Discharging the fold's side conditions
+
+`multiFold_eq_commit_post` takes four properties about the states and
+the bundle.  These discharge them for the bundle a state induces,
+which is the only bundle an honest sequencer builds — and between
+them they say exactly what the multiproof's soundness rests on: the
+tree can tell the cells apart, and the step moves nothing it did not
+declare.
+-/
+
+/-- **A state's own bundle is coherent with its tree.**
+
+    Every leaf `openedOf` claims is the leaf the entries actually put
+    at that key, which is `multiWalk`'s completeness hypothesis.
+
+    The absent branch is the substantive one and it is where the key
+    hypothesis is spent: a cell whose value is canonically absent must
+    have an EMPTY bucket, and that is only true if no LIVE cell hashes
+    to the same key.  `stateCellEntries` drops absent cells, so the
+    two notions of absence — "reads as the canonical absent value" and
+    "has no entry in the tree" — coincide exactly under key
+    injectivity.  Without it a colliding live cell would sit under the
+    absent cell's key and the claimed empty leaf would be wrong. -/
+theorem leavesCoherent_openedOf (es : ExtendedState) (ts : List CellTag)
+    (h_bd : BitsDistinctBelow smtDepth (stateCellEntries es))
+    (h_key : ∀ t ∈ ts, ∀ u ∈ stateCellTags es, smtCellKey u = smtCellKey t → u = t) :
+    LeavesCoherent smtDepth (stateCellEntries es) (openedOf es ts) := by
+  intro o ho
+  obtain ⟨t, ht, rfl⟩ := List.mem_map.mp ho
+  show smtRootListAux 0 (bucketAt smtDepth (stateCellEntries es) (smtCellKey t))
+    = cellLeaf t (getCellValue es t)
+  by_cases h_abs : getCellValue es t = canonicalAbsentValue t
+  · -- Absent: no LIVE cell carries this key, so the bucket is empty
+    -- and the walk starts from the canonical empty leaf.
+    have h_nil : bucketAt smtDepth (stateCellEntries es) (smtCellKey t) = [] := by
+      refine bucketAt_eq_nil_of_not_mem _ _ ?_ (smtCellKey_size t) ?_
+      · intro p hp
+        obtain ⟨u, _, rfl, _⟩ := stateCellEntries_spec es p hp
+        exact smtCellKey_size u
+      · intro p hp h_pkey
+        obtain ⟨u, hu, rfl, hu_ne⟩ := stateCellEntries_spec es p hp
+        exact hu_ne ((h_key t ht u hu h_pkey) ▸ h_abs)
+    rw [h_nil]
+    show emptyRootAt 0 = _
+    unfold cellLeaf
+    rw [if_pos h_abs]
+  · have h_tag : t ∈ stateCellTags es :=
+      Classical.byContradiction fun h_c => h_abs (getCellValue_of_not_mem es t h_c)
+    rw [bucketAt_eq_singleton_of_mem smtDepth _ _ _ h_bd
+      (mem_stateCellEntries_of_ne_absent es t h_tag h_abs)]
+    show leafHash (smtCellKey t) (getCellValue es t) = _
+    unfold cellLeaf
+    rw [if_neg h_abs]
+
+/-- **Agreement away from the opened cells**, from agreement away
+    from the opened TAGS.
+
+    The other side condition the one-wire-two-roots argument needs,
+    and it costs no hash hypothesis at all: the argument runs
+    tag-to-key, never key-to-tag, so a cell whose key is unopened is
+    a cell whose tag is unopened and the step's completeness applies
+    directly.
+
+    This is where `WriteSetComplete` enters the multiproof: it is
+    exactly `h_agree`, instantiated at the step's write set. -/
+theorem agreeOffOpened_openedOf (pre post : ExtendedState) (ts : List CellTag)
+    (h_agree : ∀ t : CellTag, t ∉ ts → getCellValue post t = getCellValue pre t) :
+    AgreeOffOpened (openedOf post ts) (stateCellEntries pre) (stateCellEntries post) := by
+  intro p hp
+  have h_off : ∀ u : CellTag, smtCellKey u = p.1 → u ∉ ts := by
+    intro u h_key hu
+    exact hp ⟨(smtCellKey u, cellLeaf u (getCellValue post u)),
+      List.mem_map_of_mem hu, h_key⟩
+  constructor
+  · intro h_pre
+    obtain ⟨u, _, rfl, hu_ne⟩ := stateCellEntries_spec pre p h_pre
+    have h_eq := h_agree u (h_off u rfl)
+    have hu_ne' : getCellValue post u ≠ canonicalAbsentValue u := by rw [h_eq]; exact hu_ne
+    have h_tag : u ∈ stateCellTags post :=
+      Classical.byContradiction fun h_c => hu_ne' (getCellValue_of_not_mem post u h_c)
+    have := mem_stateCellEntries_of_ne_absent post u h_tag hu_ne'
+    rwa [h_eq] at this
+  · intro h_post
+    obtain ⟨u, _, rfl, hu_ne⟩ := stateCellEntries_spec post p h_post
+    have h_eq := h_agree u (h_off u rfl)
+    rw [h_eq] at hu_ne ⊢
+    exact mem_stateCellEntries_of_ne_absent pre u
+      (Classical.byContradiction fun h_c => hu_ne (getCellValue_of_not_mem pre u h_c)) hu_ne
+
+/-- **The opened cells are distinguishable by the bits the walk
+    reads.**
+
+    Two facts, and both are already proved: a cell key is 32 bytes, so
+    it fills the tree's depth exactly (`keysSeparated_cellTags`), and a
+    frontier's keys are pairwise distinct (`frontierOf_keys_nodup`).
+    The hypothesis is stated on the key list rather than derived from
+    `frontierOf` so a caller can supply either. -/
+theorem bitsDistinctBelow_openedOf (es : ExtendedState) (ts : List CellTag)
+    (h_nodup : (ts.map smtCellKey).Nodup) :
+    BitsDistinctBelow smtDepth (openedOf es ts) := by
+  refine bitsDistinctBelow_of_keys_pairwise_ne (fun p hp => ?_) ?_
+  · obtain ⟨t, _, rfl⟩ := List.mem_map.mp hp
+    exact smtCellKey_size t
+  · rw [show (openedOf es ts) = ts.map (fun t => (smtCellKey t, cellLeaf t (getCellValue es t)))
+        from rfl, List.pairwise_map]
+    exact (List.pairwise_map.mp h_nodup)
+
 /-- **The post-state's root, from the pre-state's wire.**
 
     The M3 headline, and the statement the L1 needs: hand the verifier a

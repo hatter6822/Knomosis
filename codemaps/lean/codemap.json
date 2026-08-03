@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7d949dd1b582ca7d2c5627af6d4e4d05b4f38287e74566bae5a3a9931232fc74"
+    "source_digest": "9c77963b9551b70eaa9aecbf6e1714669133f149b0050bf286d02b6303bf2ae4"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5894
+    "declaration_count": 5901
   },
   "modules": [
     {
@@ -22955,7 +22955,7 @@
     {
       "module": "LegalKernel.FaultProof.Frontier",
       "path": "LegalKernel/FaultProof/Frontier.lean",
-      "declaration_count": 54,
+      "declaration_count": 55,
       "declarations": [
         {
           "kind": "namespace",
@@ -23281,8 +23281,17 @@
         },
         {
           "kind": "theorem",
+          "name": "KeyInjectiveOn.mono",
+          "line": 647,
+          "called": [
+            "CellTag",
+            "KeyInjectiveOn"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "mem_frontierOf_of_mem",
-          "line": 652,
+          "line": 659,
           "called": [
             "CellTag",
             "KeyInjectiveOn",
@@ -23294,7 +23303,7 @@
         {
           "kind": "theorem",
           "name": "keyInjectiveOn_of_collisionFree",
-          "line": 665,
+          "line": 672,
           "called": [
             "CellTag",
             "KeyInjectiveOn",
@@ -23305,7 +23314,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_cons",
-          "line": 675,
+          "line": 682,
           "called": [
             "CellTag",
             "pathLess",
@@ -23316,7 +23325,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_tail",
-          "line": 687,
+          "line": 694,
           "called": [
             "CellTag",
             "pathLess",
@@ -23327,7 +23336,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_head_lt",
-          "line": 697,
+          "line": 704,
           "called": [
             "CellTag",
             "pathLess",
@@ -23339,7 +23348,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_frontierInsert",
-          "line": 720,
+          "line": 727,
           "called": [
             "CellTag",
             "divBelow",
@@ -23359,7 +23368,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_frontierOf",
-          "line": 771,
+          "line": 778,
           "called": [
             "CellTag",
             "frontierInsert",
@@ -23372,7 +23381,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_keys_nodup",
-          "line": 784,
+          "line": 791,
           "called": [
             "CellTag",
             "pathLess_irrefl",
@@ -23384,7 +23393,7 @@
         {
           "kind": "theorem",
           "name": "frontierOf_keys_nodup",
-          "line": 794,
+          "line": 801,
           "called": [
             "CellTag",
             "frontierOf",
@@ -23397,7 +23406,7 @@
         {
           "kind": "def",
           "name": "adjacentDivs",
-          "line": 818,
+          "line": 825,
           "called": [
             "divLevel"
           ]
@@ -23405,7 +23414,7 @@
         {
           "kind": "def",
           "name": "activeAt",
-          "line": 825,
+          "line": 832,
           "called": [
             "adjacentDivs"
           ]
@@ -23413,7 +23422,7 @@
         {
           "kind": "def",
           "name": "mergesAt",
-          "line": 829,
+          "line": 836,
           "called": [
             "adjacentDivs"
           ]
@@ -23421,7 +23430,7 @@
         {
           "kind": "def",
           "name": "gapsAt",
-          "line": 835,
+          "line": 842,
           "called": [
             "activeAt",
             "mergesAt"
@@ -23430,7 +23439,7 @@
         {
           "kind": "def",
           "name": "gapCount",
-          "line": 839,
+          "line": 846,
           "called": [
             "gapsAt",
             "smtDepth"
@@ -23439,7 +23448,7 @@
         {
           "kind": "def",
           "name": "gapCountClosed",
-          "line": 846,
+          "line": 853,
           "called": [
             "adjacentDivs",
             "smtDepth"
@@ -23448,13 +23457,13 @@
         {
           "kind": "def",
           "name": "aliasConsistent",
-          "line": 865,
+          "line": 872,
           "called": []
         },
         {
           "kind": "def",
           "name": "plannedBalanceAt?",
-          "line": 870,
+          "line": 877,
           "called": [
             "ActorId",
             "ResourceId"
@@ -23463,7 +23472,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_elim",
-          "line": 878,
+          "line": 885,
           "called": [
             "aliasConsistent"
           ]
@@ -23471,7 +23480,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalanceAt?_of_mem",
-          "line": 892,
+          "line": 899,
           "called": [
             "ActorId",
             "ResourceId",
@@ -23483,7 +23492,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalanceAt?_of_aliasConsistent",
-          "line": 923,
+          "line": 930,
           "called": [
             "ActorId",
             "LegalKernel.FaultProof",
@@ -24400,7 +24409,7 @@
     {
       "module": "LegalKernel.FaultProof.MultiProof",
       "path": "LegalKernel/FaultProof/MultiProof.lean",
-      "declaration_count": 52,
+      "declaration_count": 55,
       "declarations": [
         {
           "kind": "namespace",
@@ -24866,8 +24875,76 @@
         },
         {
           "kind": "theorem",
+          "name": "leavesCoherent_openedOf",
+          "line": 759,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "LeavesCoherent",
+            "bucketAt",
+            "bucketAt_eq_nil_of_not_mem",
+            "bucketAt_eq_singleton_of_mem",
+            "canonicalAbsentValue",
+            "cellLeaf",
+            "emptyRootAt",
+            "es",
+            "getCellValue",
+            "getCellValue_of_not_mem",
+            "leafHash",
+            "mem_stateCellEntries_of_ne_absent",
+            "openedOf",
+            "smtCellKey",
+            "smtCellKey_size",
+            "smtDepth",
+            "smtRootListAux",
+            "stateCellEntries",
+            "stateCellEntries_spec",
+            "stateCellTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "agreeOffOpened_openedOf",
+          "line": 801,
+          "called": [
+            "AgreeOffOpened",
+            "CellTag",
+            "ExtendedState",
+            "canonicalAbsentValue",
+            "cellLeaf",
+            "getCellValue",
+            "getCellValue_of_not_mem",
+            "mem_stateCellEntries_of_ne_absent",
+            "openedOf",
+            "smtCellKey",
+            "stateCellEntries",
+            "stateCellEntries_spec",
+            "stateCellTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bitsDistinctBelow_openedOf",
+          "line": 833,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "bitsDistinctBelow_of_keys_pairwise_ne",
+            "cellLeaf",
+            "es",
+            "getCellValue",
+            "openedOf",
+            "smtCellKey",
+            "smtCellKey_size",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "multiFold_eq_commit_post",
-          "line": 746,
+          "line": 853,
           "called": [
             "AgreeOffOpened",
             "BitsDistinctBelow",
@@ -24888,7 +24965,7 @@
         {
           "kind": "theorem",
           "name": "multiFold_eq_commit_pre",
-          "line": 762,
+          "line": 869,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -24907,7 +24984,7 @@
         {
           "kind": "def",
           "name": "multiGapLevels",
-          "line": 790,
+          "line": 897,
           "called": [
             "OpenedLeaf",
             "opened",
@@ -24918,7 +24995,7 @@
         {
           "kind": "theorem",
           "name": "multiGapLevels_gapLow",
-          "line": 803,
+          "line": 910,
           "called": [
             "OpenedLeaf",
             "multiGapLevels",
@@ -24930,7 +25007,7 @@
         {
           "kind": "theorem",
           "name": "multiGapLevels_gapHigh",
-          "line": 813,
+          "line": 920,
           "called": [
             "OpenedLeaf",
             "multiGapLevels",
@@ -24942,7 +25019,7 @@
         {
           "kind": "theorem",
           "name": "multiGapLevels_merge",
-          "line": 823,
+          "line": 930,
           "called": [
             "OpenedLeaf",
             "multiGapLevels",
@@ -24954,7 +25031,7 @@
         {
           "kind": "theorem",
           "name": "multiGapLevels_empty",
-          "line": 834,
+          "line": 941,
           "called": [
             "OpenedLeaf",
             "multiGapLevels",
@@ -24966,7 +25043,7 @@
         {
           "kind": "theorem",
           "name": "multiGapLevels_length_eq",
-          "line": 846,
+          "line": 953,
           "called": [
             "OpenedLeaf",
             "SmtEntries",
@@ -24991,7 +25068,7 @@
         {
           "kind": "theorem",
           "name": "multiGapLevels_single",
-          "line": 884,
+          "line": 991,
           "called": [
             "multiGapLevels",
             "multiGapLevels_gapHigh",
@@ -25003,19 +25080,19 @@
         {
           "kind": "structure",
           "name": "SmtMultiProof",
-          "line": 912,
+          "line": 1019,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "SmtMultiProof",
-          "line": 920,
+          "line": 1027,
           "called": []
         },
         {
           "kind": "def",
           "name": "gapBit",
-          "line": 924,
+          "line": 1031,
           "called": [
             "SmtMultiProof"
           ]
@@ -25023,7 +25100,7 @@
         {
           "kind": "def",
           "name": "toWireBytes",
-          "line": 931,
+          "line": 1038,
           "called": [
             "SmtMultiProof"
           ]
@@ -25031,7 +25108,7 @@
         {
           "kind": "def",
           "name": "buildMultiProof",
-          "line": 939,
+          "line": 1046,
           "called": [
             "SmtMultiProof",
             "emptySubtreeHash",
@@ -25041,7 +25118,7 @@
         {
           "kind": "def",
           "name": "expandMultiProof",
-          "line": 950,
+          "line": 1057,
           "called": [
             "SmtMultiProof",
             "emptySubtreeHash",
@@ -25051,7 +25128,7 @@
         {
           "kind": "def",
           "name": "SmtMultiProof.gapPopcount",
-          "line": 972,
+          "line": 1079,
           "called": [
             "SmtMultiProof"
           ]
@@ -25059,7 +25136,7 @@
         {
           "kind": "def",
           "name": "SmtMultiProof.isWellFormedFor",
-          "line": 986,
+          "line": 1093,
           "called": [
             "SmtMultiProof"
           ]
@@ -25067,7 +25144,7 @@
         {
           "kind": "theorem",
           "name": "SmtMultiProof.toWireBytes_size",
-          "line": 995,
+          "line": 1102,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -30587,7 +30664,7 @@
     {
       "module": "LegalKernel.FaultProof.Terminate",
       "path": "LegalKernel/FaultProof/Terminate.lean",
-      "declaration_count": 32,
+      "declaration_count": 35,
       "declarations": [
         {
           "kind": "namespace",
@@ -31160,9 +31237,99 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "plannedBalances_stateBalanceReader_isSome",
+          "line": 1107,
+          "called": [
+            "Action",
+            "ActorId",
+            "ExtendedState",
+            "deriveAmmSwapBalances",
+            "deriveBurnBalance",
+            "deriveChainPair",
+            "deriveCreditBalance",
+            "deriveDelegatedTopUpBalances",
+            "deriveDepositBalance",
+            "deriveDepositWithFeeBalances",
+            "deriveReclaimBalances",
+            "deriveRefundBalances",
+            "deriveTopUpBalances",
+            "deriveTransferBalances",
+            "deriveWithdrawBalance",
+            "es",
+            "plannedBalances",
+            "stateBalanceReader"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "postOpened_eq_openedOf",
+          "line": 1130,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "KeyInjectiveOn",
+            "ResourceId",
+            "SignedAction",
+            "bundleValueAt",
+            "bundleValueAt_stepMultiBundle",
+            "cellLeaf",
+            "derivedCellValue",
+            "derivedCellValue_correct",
+            "es",
+            "getCellValue",
+            "multiFrontierOf",
+            "openedOf",
+            "plannedBalances",
+            "productionApplyBudget",
+            "productionApplyBudget_budgetPolicy",
+            "smtCellKey",
+            "stateBalanceReader",
+            "stepMultiBundle",
+            "verifierWriteCells"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "stepMultiFold_eq_commit_post",
+          "line": 1200,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "FaultProofAdjudicable",
+            "KeyInjectiveOn",
+            "SignedAction",
+            "WriteSetComplete",
+            "agreeOffOpened_openedOf",
+            "bitsDistinctBelow_openedOf",
+            "commitExtendedState",
+            "es",
+            "frontierOf_cons_ne_nil",
+            "frontierOf_keys_nodup",
+            "getCellValue",
+            "leavesCoherent_openedOf",
+            "mem_frontierOf_of_mem",
+            "multiFold_eq_commit_post",
+            "multiFrontierOf",
+            "multiSiblings",
+            "multiWalk",
+            "openedOf",
+            "openedOf_keys_eq",
+            "productionApplyBudget",
+            "smtCellKey",
+            "smtDepth",
+            "stateCellEntries",
+            "stateCellTags",
+            "verifierWriteCells",
+            "verifierWriteCells_eq_writeCellsAt"
+          ]
+        },
+        {
           "kind": "def",
           "name": "stepMultiPostRoot",
-          "line": 1095,
+          "line": 1247,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -59477,15 +59644,18 @@
           "line": 106,
           "called": [
             "ActorId",
+            "BitsDistinctBelow",
             "CellTag",
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
+            "FaultProofAdjudicable",
             "KeyInjectiveOn",
             "MultiBundle",
             "ResourceId",
             "SignedAction",
             "StateCommit",
             "TestCase",
+            "WriteSetComplete",
             "assertEq",
             "base",
             "budgetPolicy_mem_multiFrontierOf",
@@ -59494,6 +59664,7 @@
             "bundleValueAt",
             "bundleValueAt_stepMultiBundle",
             "cellKeyPreimage",
+            "cellLeaf",
             "commitExtendedState",
             "derivedCellValue",
             "derivedCellValue_correct",
@@ -59502,16 +59673,26 @@
             "keyInjectiveOn_of_collisionFree",
             "mem_multiFrontierOf_of_writeCells",
             "multiFrontierOf",
+            "multiSiblings",
+            "multiWalk",
+            "openedOf",
             "plannedBalanceAt",
             "plannedBalanceAt_correct",
             "plannedBalances",
+            "plannedBalances_stateBalanceReader_isSome",
             "plannedBalances_stepMultiBundle",
+            "postOpened_eq_openedOf",
             "probes",
             "productionApplyBudget",
             "runProbe",
             "sign",
+            "smtCellKey",
+            "smtDepth",
             "stateBalanceReader",
+            "stateCellEntries",
+            "stateCellTags",
             "stepMultiBundle",
+            "stepMultiFold_eq_commit_post",
             "stepMultiPostRoot",
             "stepPostRoot",
             "transfer",
@@ -59522,7 +59703,7 @@
         {
           "kind": "def",
           "name": "zeroGapWire",
-          "line": 314,
+          "line": 390,
           "called": [
             "SmtMultiProof",
             "buildMultiProof"
@@ -59531,13 +59712,13 @@
         {
           "kind": "def",
           "name": "setMaskBit",
-          "line": 318,
+          "line": 394,
           "called": []
         },
         {
           "kind": "def",
           "name": "probeLevels",
-          "line": 324,
+          "line": 400,
           "called": [
             "base",
             "multiFrontierOf",
@@ -59549,7 +59730,7 @@
         {
           "kind": "def",
           "name": "multiTests",
-          "line": 329,
+          "line": 405,
           "called": [
             "MultiBundle",
             "TestCase",
@@ -59581,7 +59762,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 509,
+          "line": 585,
           "called": [
             "LegalKernel.Test.FaultProof.Terminate",
             "TestCase",

@@ -668,6 +668,14 @@ The Genesis Plan promises a small set of type-level guarantees
 | M | Adjacent divergences are distinct | `adjacent_div_ne` | `FaultProof/Frontier.lean` |
 | M | The gap count is a closed form | `gapCountClosed` | `FaultProof/Frontier.lean` |
 | M | An alias cannot fork the plan | `plannedBalances_alias_consistent` | `FaultProof/Terminate.lean` |
+| M | Honest fold = the published post root | `stepMultiFold_eq_commit_post` | `FaultProof/Terminate.lean` |
+| M | Derived value = the post-state's | `derivedCellValue_correct` | `FaultProof/Terminate.lean` |
+| M | The bundle reads back the state | `bundleValueAt_stepMultiBundle` | `FaultProof/Terminate.lean` |
+| M | The bundle plans what the state plans | `plannedBalances_stepMultiBundle` | `FaultProof/Terminate.lean` |
+| M | Path order is a strict total order | `pathLess_trans`, `pathLess_total` | `FaultProof/Frontier.lean` |
+| M | Every frontier is strictly ascending | `pathSorted_frontierOf` | `FaultProof/Frontier.lean` |
+| M | Cell keys always diverge | `keysSeparated_cellTags` | `FaultProof/Frontier.lean` |
+| M | `ByteArray` `==` decides `=` | `instLawfulBEqByteArray` | `Encoding/CBOR.lean` |
 | M | An empty bundle is refused | `frontierShapeOk_nil_of_cons` | `FaultProof/Frontier.lean` |
 | M | Path order is a strict total order | `pathLess_trans` / `pathLess_total` | `FaultProof/Frontier.lean` |
 | M | The frontier is strictly ascending | `pathSorted_frontierOf` | `FaultProof/Frontier.lean` |

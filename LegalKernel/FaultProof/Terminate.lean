@@ -1087,6 +1087,158 @@ theorem derivedCellValue_correct (es : ExtendedState) (st : SignedAction) (idx :
       · exact absurd h (by cases st.action <;> simp [Action.writeCells])
       · exact absurd h_eq (by simp)
 
+/-! ## The honest fold lands on the published root
+
+The composition M8 left open, assembled.  Three ingredients, all now
+in hand: the frontier is sorted and key-distinct (`Frontier`), the
+honest bundle reads back the state and plans what the state plans
+(above), and the derivation reaches the post-state at every cell
+(`derivedCellValue_correct`).  What remains is to feed them to
+`multiFold_eq_commit_post` and discharge its side conditions.
+-/
+
+/-- **A state always yields a plan.**  `stateBalanceReader` is total,
+    and the derivations refuse only on a missing read, so an honest
+    sequencer's plan exists for every action.
+
+    Worth stating because `verifierPostRootMulti` refuses on `none`
+    and that refusal must be unreachable for an honest step — an
+    adjudication that could not run would let a correct defender lose
+    by default. -/
+theorem plannedBalances_stateBalanceReader_isSome (es : ExtendedState)
+    (a : Action) (signer : ActorId) :
+    ∃ plan, plannedBalances (stateBalanceReader es) a signer = some plan := by
+  cases a <;>
+    simp [plannedBalances, stateBalanceReader, deriveTransferBalances,
+      deriveCreditBalance, deriveBurnBalance, deriveDepositBalance,
+      deriveWithdrawBalance, deriveDepositWithFeeBalances, deriveChainPair,
+      deriveTopUpBalances, deriveDelegatedTopUpBalances, deriveRefundBalances,
+      deriveAmmSwapBalances, deriveReclaimBalances] <;>
+    (repeat' split) <;> simp_all
+
+/-- **The verifier's post-side leaves are the post-state's own.**
+
+    `derivedCellValue_correct` lifted from one cell to the whole
+    frontier, in exactly the shape `verifierPostRootMulti` builds:
+    the `filterMap` never drops (so the length check passes) and each
+    surviving leaf is the leaf the post-state gives that cell.
+
+    The policy cell takes the other branch and needs its own
+    argument — it is a READ, so the verifier keeps the submitted
+    pre-value rather than deriving one, and that is correct precisely
+    because no action writes it
+    (`productionApplyBudget_budgetPolicy`). -/
+theorem postOpened_eq_openedOf (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (h_bounds : ExtendedState.CanonicalBounds es)
+    (h_inj : KeyInjectiveOn (.budgetPolicy ::
+      verifierWriteCells st.action st.signer es.bridge.nextWdId))
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h_plan : plannedBalances (stateBalanceReader es) st.action st.signer = some plan) :
+    (multiFrontierOf st.action st.signer es.bridge.nextWdId).filterMap (fun t =>
+        if t = .budgetPolicy then
+          (bundleValueAt (stepMultiBundle es st) t).map
+            (fun v => (smtCellKey t, cellLeaf t v))
+        else
+          (derivedCellValue (bundleValueAt (stepMultiBundle es st))
+            (getCellValue es .budgetPolicy) st.action st.signer idx plan t).map
+            (fun v => (smtCellKey t, cellLeaf t v)))
+      = openedOf (productionApplyBudget es st idx)
+          (multiFrontierOf st.action st.signer es.bridge.nextWdId) := by
+  have h_each : ∀ t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId,
+      (if t = .budgetPolicy then
+          (bundleValueAt (stepMultiBundle es st) t).map
+            (fun v => (smtCellKey t, cellLeaf t v))
+        else
+          (derivedCellValue (bundleValueAt (stepMultiBundle es st))
+            (getCellValue es .budgetPolicy) st.action st.signer idx plan t).map
+            (fun v => (smtCellKey t, cellLeaf t v)))
+      = some (smtCellKey t,
+          cellLeaf t (getCellValue (productionApplyBudget es st idx) t)) := by
+    intro t ht
+    by_cases h_bp : t = .budgetPolicy
+    · subst h_bp
+      rw [if_pos rfl, bundleValueAt_stepMultiBundle es st _ ht]
+      -- The policy cell is a READ: no action writes it, so the
+      -- pre-value IS the post-value.
+      show some (smtCellKey CellTag.budgetPolicy,
+        cellLeaf CellTag.budgetPolicy (getCellValue es .budgetPolicy)) = _
+      rw [show getCellValue es CellTag.budgetPolicy
+            = getCellValue (productionApplyBudget es st idx) CellTag.budgetPolicy from by
+          simp [getCellValue, productionApplyBudget_budgetPolicy es st idx]]
+    · rw [if_neg h_bp,
+        derivedCellValue_correct es st idx h_bounds h_inj t ht h_bp plan h_plan]
+      rfl
+  unfold openedOf
+  generalize multiFrontierOf st.action st.signer es.bridge.nextWdId = ts at h_each ⊢
+  induction ts with
+  | nil => rfl
+  | cons u rest ih =>
+    rw [List.filterMap_cons, List.map_cons,
+      h_each u List.mem_cons_self,
+      ih (fun t ht => h_each t (List.mem_cons_of_mem _ ht))]
+
+/-- **The honest merged fold lands on the published post-root.**
+
+    The multiproof counterpart of
+    `stepPostRoot_eq_commit_productionApplyBudget`, and the statement
+    the chained write algebra was kept alive for: hand a verifier the
+    pre-state's wire and the post-state's leaves, and the single
+    merged walk computes `commitExtendedState` of the state the step
+    produces — m cells at once, order-free, with the pre-root checked
+    once in aggregate.
+
+    Every hypothesis is discharged elsewhere rather than assumed here.
+    `WriteSetComplete` is proved per variant in `StepWriteSets`;
+    `BitsDistinctBelow` on the entries comes from
+    `stateCellEntries_bitsDistinct`; `KeyInjectiveOn` and `h_key` come
+    from `CollisionFreeOn` over the step's own pre-images
+    (`keyInjectiveOn_of_collisionFree`).  What this theorem adds is
+    that they SUFFICE.
+
+    Non-emptiness is not an extra assumption: the frontier always
+    leads with the budget-policy cell, so `frontierOf_cons_ne_nil`
+    supplies it. -/
+theorem stepMultiFold_eq_commit_post (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (h_adj : FaultProofAdjudicable st.action = true)
+    (h_inj : KeyInjectiveOn (.budgetPolicy ::
+      verifierWriteCells st.action st.signer es.bridge.nextWdId))
+    (h_complete : WriteSetComplete es (productionApplyBudget es st idx)
+      st.action st.signer)
+    (h_bd : BitsDistinctBelow smtDepth (stateCellEntries es))
+    (h_bd' : BitsDistinctBelow smtDepth
+      (stateCellEntries (productionApplyBudget es st idx)))
+    (h_key : ∀ t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId,
+      ∀ u ∈ stateCellTags (productionApplyBudget es st idx),
+      smtCellKey u = smtCellKey t → u = t) :
+    multiWalk smtDepth
+        (openedOf (productionApplyBudget es st idx)
+          (multiFrontierOf st.action st.signer es.bridge.nextWdId))
+        (multiSiblings smtDepth (stateCellEntries es)
+          (openedOf es (multiFrontierOf st.action st.signer es.bridge.nextWdId)))
+      = some (commitExtendedState (productionApplyBudget es st idx), []) := by
+  -- The step moves no cell the frontier does not open: `WriteSetComplete`
+  -- gives that away from the declared write set, and the frontier
+  -- contains the declared write set.
+  have h_agree : ∀ t : CellTag,
+      t ∉ multiFrontierOf st.action st.signer es.bridge.nextWdId →
+      getCellValue (productionApplyBudget es st idx) t = getCellValue es t := by
+    intro t ht
+    refine h_complete t (fun h_w => ht ?_)
+    refine mem_frontierOf_of_mem _ h_inj t (List.mem_cons_of_mem _ ?_)
+    rw [verifierWriteCells_eq_writeCellsAt es st.action st.signer h_adj]
+    exact h_w
+  refine multiFold_eq_commit_post es (productionApplyBudget es st idx) _ ?_
+    (agreeOffOpened_openedOf es _ _ h_agree) h_bd h_bd'
+    (leavesCoherent_openedOf _ _ h_bd' h_key)
+    (bitsDistinctBelow_openedOf _ _ (frontierOf_keys_nodup _))
+  -- The frontier is never empty: it always opens the policy cell.
+  intro h_nil
+  have h_empty : multiFrontierOf st.action st.signer es.bridge.nextWdId = [] := by
+    have h_keys := congrArg (List.map Prod.fst) h_nil
+    rw [openedOf_keys_eq] at h_keys
+    simpa using h_keys
+  exact frontierOf_cons_ne_nil _ _ h_empty
+
 /-- **The post-state root the multiproof verifier reaches** for an
     honest step: one merged walk, one root check, one answer.
 
