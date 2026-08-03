@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "193335f1694b04ac2bd43c167bdf4687312b0fcc48127a33f2088c6c5ffe4b5d"
+    "source_digest": "c0d46c9606ed72585a0fd2c982f9ea4f10b4f5ba28633bf754c889d25acc3d15"
   },
   "summary": {
-    "module_count": 336,
-    "declaration_count": 5826
+    "module_count": 337,
+    "declaration_count": 5837
   },
   "modules": [
     {
@@ -45648,6 +45648,152 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.MultiProof",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/MultiProof.lean",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck.MultiProof",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 63,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "rich",
+          "line": 77,
+          "called": [
+            "ActorId",
+            "BalanceMap",
+            "EpochBudgetState",
+            "ExtendedState",
+            "KeyRegistry",
+            "LocalPolicies",
+            "Nonce",
+            "ResourceId",
+            "base",
+            "budgetGrant"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "sparse",
+          "line": 117,
+          "called": [
+            "BalanceMap",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "ResourceId",
+            "base"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "Probe",
+          "line": 125,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "cells"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "probes",
+          "line": 147,
+          "called": [
+            "Probe",
+            "amountCellValue",
+            "cells",
+            "natCellValue",
+            "rich",
+            "sparse"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "postOf",
+          "line": 185,
+          "called": [
+            "ExtendedState",
+            "Probe",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "wireOf",
+          "line": 192,
+          "called": [
+            "CellTag",
+            "Probe",
+            "SmtMultiProof",
+            "buildMultiProof",
+            "frontierOf",
+            "multiGapLevels",
+            "multiSiblings",
+            "openedOf",
+            "smtDepth",
+            "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "probeJson",
+          "line": 200,
+          "called": [
+            "Json",
+            "Probe",
+            "cellLeaf",
+            "commitExtendedState",
+            "getCellValue",
+            "hexFromBytes",
+            "postOf",
+            "smtCellKey",
+            "wireOf"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixture",
+          "line": 226,
+          "called": [
+            "Json",
+            "probeJson"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 235,
+          "called": [
+            "LegalKernel.Test.Bridge.CrossCheck.MultiProof",
+            "TestCase",
+            "assertEq",
+            "canonicalAbsentValue",
+            "commitExtendedState",
+            "expandMultiProof",
+            "fixtureName",
+            "frontierOf",
+            "getCellValue",
+            "multiWalk",
+            "openedOf",
+            "postOf",
+            "probes",
+            "smtDepth",
+            "wireOf",
+            "writeHashDependentFixture"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.ObserverGameTraces",
       "path": "LegalKernel/Test/Bridge/CrossCheck/ObserverGameTraces.lean",
       "declaration_count": 48,
@@ -71017,7 +71163,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 224,
+          "line": 225,
           "called": [
             "runAll"
           ]

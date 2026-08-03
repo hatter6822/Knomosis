@@ -169,6 +169,7 @@ import LegalKernel.Test.FaultProof.SmtInjective
 import LegalKernel.Test.FaultProof.StateCellsInjective
 import LegalKernel.Test.FaultProof.CellWrites
 import LegalKernel.Test.FaultProof.Frontier
+import LegalKernel.Test.Bridge.CrossCheck.MultiProof
 import LegalKernel.Test.FaultProof.MultiProof
 import LegalKernel.Test.FaultProof.StepWriteSets
 import LegalKernel.Test.FaultProof.Terminate
@@ -435,6 +436,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.Frontier.tests)
   failed := failed + (← runAll "faultproof-multiproof"
                                     LegalKernel.Test.FaultProof.MultiProof.tests)
+  failed := failed + (← runAll "crosscheck-smt-multi-proof"
+                        LegalKernel.Test.Bridge.CrossCheck.MultiProof.tests)
   failed := failed + (← runAll "faultproof-write-sets"
                                 LegalKernel.Test.FaultProof.StepWriteSets.tests)
   failed := failed + (← runAll "faultproof-terminate"

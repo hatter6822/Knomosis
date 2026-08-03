@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "26d038ccf31b05f12fe54efe724be955af4f417fad7efe36e740756a27c701f3"
+    "source_digest": "b1d0a70add52d5b89f3ce4ca107052651a71390f72ae5f5eab79827e1bde90e2"
   },
   "summary": {
-    "module_count": 98,
-    "declaration_count": 2078
+    "module_count": 99,
+    "declaration_count": 2099
   },
   "modules": [
     {
@@ -12138,6 +12138,221 @@
           "name": "test_audit3_direction_coverage",
           "line": 198,
           "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "MultiProof.t",
+      "path": "solidity/test/CrossCheck/MultiProof.t.sol",
+      "declaration_count": 21,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "MultiProofCrossCheckProxy",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "foldFromKeys",
+          "line": 21,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "gapCountOf",
+          "line": 39,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "pathIndexOf",
+          "line": 49,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "MultiProofCrossCheck",
+          "line": 79,
+          "called": [
+            "CrossCheckFramework",
+            "MultiProofCrossCheckProxy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 85,
+          "called": [
+            "MultiProofCrossCheckProxy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_probe",
+          "line": 94,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_keys",
+          "line": 99,
+          "called": [
+            "_probe"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_leaves",
+          "line": 111,
+          "called": [
+            "_probe"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 133,
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_published_cells_are_in_ascending_path_order",
+          "line": 153,
+          "called": [
+            "_keys",
+            "_probe",
+            "fixtureExists",
+            "name",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_derived_gap_count_matches_the_published_one",
+          "line": 179,
+          "called": [
+            "_keys",
+            "_probe",
+            "fixtureExists",
+            "name",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_published_wire_lengths_match_the_derived_shape",
+          "line": 199,
+          "called": [
+            "_keys",
+            "_probe",
+            "fixtureExists",
+            "name",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_corpus_exercises_both_gap_branches",
+          "line": 226,
+          "called": [
+            "_probe",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_every_probe_folds_to_both_of_its_roots",
+          "line": 255,
+          "called": [
+            "_keys",
+            "_leaves",
+            "_probe",
+            "_requireKeccakLinked",
+            "_skipWithReason",
+            "fixtureExists",
+            "name",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_the_two_roots_differ_for_every_probe",
+          "line": 288,
+          "called": [
+            "_probe",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_a_tampered_leaf_does_not_reach_the_root",
+          "line": 314,
+          "called": [
+            "_keys",
+            "_leaves",
+            "_probe",
+            "_requireKeccakLinked",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_multiCellProbe",
+          "line": 349,
+          "called": [
+            "_probe"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_a_truncated_sibling_region_reverts",
+          "line": 370,
+          "called": [
+            "_keys",
+            "_leaves",
+            "_multiCellProbe",
+            "_probe",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_a_reordered_bundle_reverts_at_the_walk",
+          "line": 402,
+          "called": [
+            "_keys",
+            "_leaves",
+            "_multiCellProbe",
+            "_probe",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_the_same_cell_twice_reverts",
+          "line": 431,
+          "called": [
+            "_keys",
+            "_leaves",
+            "_multiCellProbe",
+            "_probe",
+            "_skipWithReason",
             "fixtureExists",
             "readFixture"
           ]
