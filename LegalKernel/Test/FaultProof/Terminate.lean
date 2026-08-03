@@ -247,6 +247,52 @@ def coreTests : List TestCase :=
           keyInjectiveOn_of_collisionFree
         pure ()
     }
+  , { name := "the derived value is the post-state's, at every frontier cell"
+    , body := do
+        -- The composition, value-level: for every probe and every cell
+        -- the frontier opens (bar the read-only policy cell), what the
+        -- verifier DERIVES from the bundle's proven pre-values is what
+        -- the step actually leaves in the cell.
+        for (name, a) in probes do
+          let st := sign a
+          let b := stepMultiBundle base st
+          let post := productionApplyBudget base st 0
+          match plannedBalances (stateBalanceReader base) a 7 with
+          | none      => throw <| IO.userError s!"{name}: the plan aborted"
+          | some plan =>
+            for t in multiFrontierOf a 7 base.bridge.nextWdId do
+              if t != CellTag.budgetPolicy then
+                assertEq (expected := some (getCellValue post t).toList)
+                  (actual := (derivedCellValue (bundleValueAt b)
+                    (getCellValue base .budgetPolicy) a 7 0 plan t).map ByteArray.toList)
+                  s!"{name}: the derivation must reach the post-state at {repr t}"
+    }
+  , { name := "API stability: the derived value is the post-state's"
+    , body := do
+        let _proof : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
+            ExtendedState.CanonicalBounds es →
+            KeyInjectiveOn (.budgetPolicy ::
+              verifierWriteCells st.action st.signer es.bridge.nextWdId) →
+            ∀ (t : CellTag),
+            t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId →
+            t ≠ .budgetPolicy →
+            ∀ (plan : List ((ResourceId × ActorId) × Nat)),
+            plannedBalances (stateBalanceReader es) st.action st.signer = some plan →
+            derivedCellValue (bundleValueAt (stepMultiBundle es st))
+                (getCellValue es .budgetPolicy) st.action st.signer idx plan t
+              = some (getCellValue (productionApplyBudget es st idx) t) :=
+          derivedCellValue_correct
+        let _plan : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat)
+            (r : ResourceId) (x : ActorId),
+            CellTag.balance r x ∈ st.action.writeCells st.signer →
+            ∀ (plan : List ((ResourceId × ActorId) × Nat)),
+            plannedBalances (stateBalanceReader es) st.action st.signer = some plan →
+            plannedBalanceAt plan r x
+              = some (LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base r x) :=
+          plannedBalanceAt_correct
+        pure ()
+    }
   , { name := "API stability: the verifier's signature"
     , body := do
         let _proof : StateCommit → Authority.Action → ActorId → Nat →

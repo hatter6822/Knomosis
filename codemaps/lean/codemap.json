@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "f13eac7f6e88f10c4af66d339f23076b8ed01de7a4fa3680b119fdad3a7846a8"
+    "source_digest": "7d949dd1b582ca7d2c5627af6d4e4d05b4f38287e74566bae5a3a9931232fc74"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5883
+    "declaration_count": 5894
   },
   "modules": [
     {
@@ -22955,7 +22955,7 @@
     {
       "module": "LegalKernel.FaultProof.Frontier",
       "path": "LegalKernel/FaultProof/Frontier.lean",
-      "declaration_count": 52,
+      "declaration_count": 54,
       "declarations": [
         {
           "kind": "namespace",
@@ -23462,8 +23462,28 @@
         },
         {
           "kind": "theorem",
-          "name": "plannedBalanceAt?_of_aliasConsistent",
+          "name": "aliasConsistent_elim",
           "line": 878,
+          "called": [
+            "aliasConsistent"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "plannedBalanceAt?_of_mem",
+          "line": 892,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_elim",
+            "plannedBalanceAt?"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "plannedBalanceAt?_of_aliasConsistent",
+          "line": 923,
           "called": [
             "ActorId",
             "LegalKernel.FaultProof",
@@ -30567,7 +30587,7 @@
     {
       "module": "LegalKernel.FaultProof.Terminate",
       "path": "LegalKernel/FaultProof/Terminate.lean",
-      "declaration_count": 23,
+      "declaration_count": 32,
       "declarations": [
         {
           "kind": "namespace",
@@ -30954,9 +30974,195 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "mem_vwc_of_mem_frontier",
+          "line": 712,
+          "called": [
+            "Action",
+            "ActorId",
+            "CellTag",
+            "mem_frontierOf",
+            "multiFrontierOf",
+            "verifierWriteCells",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "nonce_eq_signer",
+          "line": 726,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "epochBudget_signer_mem",
+          "line": 732,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "registry_cases",
+          "line": 738,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "localPolicy_cases",
+          "line": 746,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeConsumed_cases",
+          "line": 754,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId",
+            "deposit",
+            "depositWithFee"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeNextWdId_cases",
+          "line": 761,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "plannedBalanceAt_correct",
+          "line": 779,
+          "called": [
+            "Action.writeCells",
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "aliasConsistent",
+            "ammSwap",
+            "base",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "deriveAmmSwapBalances_correct",
+            "deriveBurnBalance_correct",
+            "deriveCreditBalance_correct_mint",
+            "deriveCreditBalance_correct_reward",
+            "deriveDelegatedTopUpBalances_correct",
+            "deriveDepositBalance_correct",
+            "deriveDepositWithFeeBalances_correct",
+            "deriveReclaimBalances_correct",
+            "deriveRefundBalances_correct",
+            "deriveTopUpBalances_correct",
+            "deriveTransferBalances_correct",
+            "deriveWithdrawBalance_correct",
+            "es",
+            "mint",
+            "plannedBalanceAt",
+            "plannedBalanceAt?_of_mem",
+            "plannedBalances",
+            "plannedBalances_alias_consistent",
+            "poolActor",
+            "productionApplyBudget",
+            "receiver",
+            "reclaimAmmReserves",
+            "reward",
+            "sender",
+            "stateBalanceReader",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "derivedCellValue_correct",
+          "line": 942,
+          "called": [
+            "Action.writeCells",
+            "ActorId",
+            "CellTag",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "KeyInjectiveOn",
+            "ResourceId",
+            "SignedAction",
+            "actorBudget_bounded_of_canonicalBounds",
+            "bridgeConsumed_cases",
+            "bridgeNextWdId_cases",
+            "budgetGrant",
+            "budgetPolicy_bounded_of_canonicalBounds",
+            "bundleValueAt",
+            "bundleValueAt_stepMultiBundle",
+            "deposit",
+            "depositWithFee",
+            "deriveConsumedCellValue",
+            "deriveConsumedCellValue_correct_deposit",
+            "deriveConsumedCellValue_correct_depositWithFee",
+            "deriveDeclaredPolicyCellValue",
+            "deriveDeclaredPolicyCellValue_correct",
+            "deriveEpochBudgetCellValue",
+            "deriveEpochBudgetCellValue_correct",
+            "deriveNextWdIdCellValue",
+            "deriveNextWdIdCellValue_correct",
+            "deriveNonceCellValue",
+            "deriveNonceCellValue_correct",
+            "derivePendingCellValue",
+            "derivePendingCellValue_correct",
+            "deriveRegistryCellValue",
+            "deriveRegistryCellValue_correct_registerIdentity",
+            "deriveRegistryCellValue_correct_replaceKey",
+            "deriveRevokedPolicyCellValue",
+            "deriveRevokedPolicyCellValue_correct",
+            "derivedCellValue",
+            "epochBudget_signer_mem",
+            "es",
+            "expectsNonce_lt_of_canonicalBounds",
+            "getCellValue",
+            "localPolicy_cases",
+            "mem_multiFrontierOf_of_writeCells",
+            "mem_vwc_of_mem_frontier",
+            "multiFrontierOf",
+            "nonce_eq_signer",
+            "plannedBalanceAt",
+            "plannedBalanceAt_correct",
+            "plannedBalances",
+            "productionApplyBudget",
+            "registry_cases",
+            "stateBalanceReader",
+            "stepMultiBundle",
+            "verifierWriteCells",
+            "withdraw"
+          ]
+        },
+        {
           "kind": "def",
           "name": "stepMultiPostRoot",
-          "line": 687,
+          "line": 1095,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -59289,14 +59495,19 @@
             "bundleValueAt_stepMultiBundle",
             "cellKeyPreimage",
             "commitExtendedState",
+            "derivedCellValue",
+            "derivedCellValue_correct",
             "es",
             "getCellValue",
             "keyInjectiveOn_of_collisionFree",
             "mem_multiFrontierOf_of_writeCells",
             "multiFrontierOf",
+            "plannedBalanceAt",
+            "plannedBalanceAt_correct",
             "plannedBalances",
             "plannedBalances_stepMultiBundle",
             "probes",
+            "productionApplyBudget",
             "runProbe",
             "sign",
             "stateBalanceReader",
@@ -59311,7 +59522,7 @@
         {
           "kind": "def",
           "name": "zeroGapWire",
-          "line": 268,
+          "line": 314,
           "called": [
             "SmtMultiProof",
             "buildMultiProof"
@@ -59320,13 +59531,13 @@
         {
           "kind": "def",
           "name": "setMaskBit",
-          "line": 272,
+          "line": 318,
           "called": []
         },
         {
           "kind": "def",
           "name": "probeLevels",
-          "line": 278,
+          "line": 324,
           "called": [
             "base",
             "multiFrontierOf",
@@ -59338,7 +59549,7 @@
         {
           "kind": "def",
           "name": "multiTests",
-          "line": 283,
+          "line": 329,
           "called": [
             "MultiBundle",
             "TestCase",
@@ -59370,7 +59581,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 463,
+          "line": 509,
           "called": [
             "LegalKernel.Test.FaultProof.Terminate",
             "TestCase",

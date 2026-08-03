@@ -679,6 +679,414 @@ theorem plannedBalances_stepMultiBundle (es : ExtendedState) (st : SignedAction)
   -- The thirteen variants that write no balance cell at all.
   | _ => rfl
 
+/-! ## The derived value is the post-state's
+
+`bundleValueAt_stepMultiBundle` and `plannedBalances_stepMultiBundle`
+say the honest bundle presents the state faithfully.  This section is
+the other half: what the verifier DERIVES from that presentation is
+what the step actually leaves in the cell.
+
+Every ingredient is already proved — `VerifierWrites`' `*_correct`
+family covers all fifteen cell kinds across all twenty-five variants.
+What is missing is the composition, and the obstacle is not arithmetic
+but ADDRESSING: the `*_correct` theorems are stated for a NAMED cell
+("`transfer`'s sender balance"), while the verifier holds an arbitrary
+tag off the frontier and must discover which one it is.  The inversion
+lemmas below are that discovery, and they are what makes the dispatch
+finite: a tag on the frontier is a declared write or `withdraw`'s
+state-keyed pending entry, and each cell kind pins the action down far
+enough to name the theorem that applies.
+-/
+
+/-- **What frontier membership says about a cell.**
+
+    Once the read-only policy cell is excluded, a tag the frontier
+    opens is either a cell the action DECLARES it writes or
+    `withdraw`'s state-keyed pending entry — the one cell whose key is
+    a function of the pre-state rather than of the action.
+
+    This is the inversion the whole dispatch below runs on.  Going the
+    other way (`mem_multiFrontierOf_of_writeCells`) needs
+    `KeyInjectiveOn`; this direction needs nothing, because dropping
+    cells is what a frontier is allowed to do and inventing them is
+    not. -/
+theorem mem_vwc_of_mem_frontier (a : Action) (signer : ActorId) (n : Nat) (t : CellTag)
+    (h_mem : t ∈ multiFrontierOf a signer n) (h_ne : t ≠ .budgetPolicy) :
+    t ∈ a.writeCells signer ∨
+      (t = .bridgePending n ∧ ∃ r s amt rcp, a = .withdraw r s amt rcp) := by
+  have h := mem_frontierOf _ t h_mem
+  rcases List.mem_cons.mp h with h' | h'
+  · exact absurd h' h_ne
+  · unfold verifierWriteCells at h'
+    rcases List.mem_append.mp h' with h'' | h''
+    · exact Or.inl h''
+    · cases a <;> simp_all
+
+/-- The only nonce cell any action writes is the signer's — which is
+    why `deriveNonceCellValue_correct` can be action-independent. -/
+theorem nonce_eq_signer (a : Action) (signer x : ActorId)
+    (h : CellTag.nonce x ∈ a.writeCells signer) : x = signer := by
+  cases a <;> simp_all [Action.writeCells]
+
+/-- Every action writes the signer's epoch-budget cell, so the
+    derivation's second read is always available. -/
+theorem epochBudget_signer_mem (a : Action) (signer : ActorId) :
+    CellTag.epochBudget signer ∈ a.writeCells signer := by
+  cases a <;> simp [Action.writeCells]
+
+/-- A registry cell in the write set names the action's own actor, and
+    only the two identity actions write one. -/
+theorem registry_cases (a : Action) (signer x : ActorId)
+    (h : CellTag.registry x ∈ a.writeCells signer) :
+    (∃ k, a = .replaceKey x k) ∨ (∃ pk, a = .registerIdentity x pk) := by
+  cases a <;> simp_all [Action.writeCells]
+
+/-- A local-policy cell in the write set is the SIGNER's — an actor
+    cannot declare a policy for anyone else — and only the two policy
+    actions write one. -/
+theorem localPolicy_cases (a : Action) (signer x : ActorId)
+    (h : CellTag.localPolicy x ∈ a.writeCells signer) :
+    x = signer ∧ ((∃ p, a = .declareLocalPolicy p) ∨ a = .revokeLocalPolicy) := by
+  cases a <;> simp_all [Action.writeCells]
+
+/-- A consumed cell in the write set carries the action's own deposit
+    id, so the derivation's record is the action's own fields rather
+    than a lookup. -/
+theorem bridgeConsumed_cases (a : Action) (signer : ActorId) (d : LegalKernel.Bridge.DepositId)
+    (h : CellTag.bridgeConsumed d ∈ a.writeCells signer) :
+    (∃ r rcp amt, a = .deposit r rcp amt d) ∨
+      (∃ r rcp pa ua pam bg, a = .depositWithFee r rcp pa ua pam bg d) := by
+  cases a <;> simp_all [Action.writeCells]
+
+/-- The next-withdrawal-id counter is written by `withdraw` alone. -/
+theorem bridgeNextWdId_cases (a : Action) (signer : ActorId)
+    (h : CellTag.bridgeNextWdId ∈ a.writeCells signer) :
+    ∃ r s amt rcp, a = .withdraw r s amt rcp := by
+  cases a <;> simp_all [Action.writeCells]
+
+/-- **The plan answers every balance cell the step writes**, with the
+    value the step leaves there.
+
+    The balance half of the dispatch, and the one that needs a plan
+    rather than a per-cell derivation: five variants write two balance
+    cells that are CHAINED, so the pair is planned once from both
+    pre-values.  Composing `VerifierWrites`' twelve `*_correct`
+    theorems with `plannedBalanceAt?_of_mem` turns that plan back into
+    a per-cell answer.
+
+    `plannedBalances_alias_consistent` is what licenses the lookup:
+    without it a plan naming one cell twice could disagree with itself
+    and `plannedBalanceAt?` would refuse. -/
+theorem plannedBalanceAt_correct (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (x : ActorId)
+    (h_mem : CellTag.balance r x ∈ st.action.writeCells st.signer)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h_plan : plannedBalances (stateBalanceReader es) st.action st.signer = some plan) :
+    plannedBalanceAt plan r x
+      = some (LegalKernel.getBalance (productionApplyBudget es st idx).base r x) := by
+  have h_cons : aliasConsistent plan = true :=
+    plannedBalances_alias_consistent _ _ _ _ h_plan
+  unfold plannedBalanceAt
+  cases h_act : st.action with
+  | transfer r' sender receiver amount =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveTransferBalances_correct es st idx r' sender receiver amount h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+  | mint r' to amount =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveCreditBalance_correct_mint es st idx r' to amount h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      obtain ⟨rfl, rfl⟩ := h_mem
+      exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+  | reward r' to amount =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveCreditBalance_correct_reward es st idx r' to amount h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      obtain ⟨rfl, rfl⟩ := h_mem
+      exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+  | burn r' from_ amount =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveBurnBalance_correct es st idx r' from_ amount h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      obtain ⟨rfl, rfl⟩ := h_mem
+      exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+  | deposit r' recipient amount d =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveDepositBalance_correct es st idx r' recipient amount d h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      obtain ⟨rfl, rfl⟩ := h_mem
+      exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+  | withdraw r' sender amount rcp =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveWithdrawBalance_correct es st idx r' sender amount rcp h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      obtain ⟨rfl, rfl⟩ := h_mem
+      exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+  | depositWithFee r' recipient poolActor userAmount poolAmount bg d =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveDepositWithFeeBalances_correct es st idx r' recipient poolActor
+        userAmount poolAmount bg d h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+  | topUpActionBudget gr gasAmount bi pa =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveTopUpBalances_correct es st idx gr gasAmount bi pa h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+  | topUpActionBudgetFor recipient gr gasAmount bi pa =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveDelegatedTopUpBalances_correct es st idx recipient gr gasAmount
+        bi pa h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+  | claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveRefundBalances_correct es st idx gr budgetUnits weiPerBudgetUnit
+        pa h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      -- The plan runs POOL first while the write set leads with the
+      -- claimant, so the two positions are swapped here.
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveAmmSwapBalances_correct es st idx fromResource toResource
+        amountIn amountOut reserveActor h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+  | reclaimAmmReserves r' amount reserveActor poolActor =>
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveReclaimBalances_correct es st idx r' amount reserveActor
+        poolActor h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+  -- The thirteen variants that write no balance cell at all: the
+  -- membership hypothesis is false.
+  | _ => rw [h_act] at h_mem; simp [Action.writeCells] at h_mem
+
+/-- **The verifier's derived value is the post-state's value**, at
+    every cell a step's frontier opens.
+
+    §4 step 3's statement for the whole cell space: what an L1 computes
+    from PROVEN pre-values and the action's own fields is byte-for-byte
+    what `productionApplyBudget` leaves in the cell — with no access to
+    the post-state anywhere in the derivation.
+
+    The budget-policy cell is excluded because it is a READ: the
+    verifier keeps its value rather than deriving one, which is what
+    lets a read join the frontier as a write of the same value.
+
+    Two hypotheses carry the state's well-formedness.
+    `CanonicalBounds` supplies every CBE width bound the decoders need
+    (and the policy's anti-spam floor, which is not a width bound and
+    is not decoration — a zero-cost policy is one no deployment can
+    hold).  `KeyInjectiveOn` is needed for exactly one step: reading
+    the SIGNER's epoch-budget cell when the tag names someone else's,
+    which requires knowing the signer's is on the frontier too. -/
+theorem derivedCellValue_correct (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (h_bounds : ExtendedState.CanonicalBounds es)
+    (h_inj : KeyInjectiveOn (.budgetPolicy ::
+      verifierWriteCells st.action st.signer es.bridge.nextWdId))
+    (t : CellTag)
+    (h_mem : t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId)
+    (h_ne : t ≠ .budgetPolicy)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h_plan : plannedBalances (stateBalanceReader es) st.action st.signer = some plan) :
+    derivedCellValue (bundleValueAt (stepMultiBundle es st))
+        (getCellValue es .budgetPolicy) st.action st.signer idx plan t
+      = some (getCellValue (productionApplyBudget es st idx) t) := by
+  cases t with
+  | balance r x =>
+      rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, _⟩
+      · show (plannedBalanceAt plan r x).map
+              (fun v => ByteArray.mk (Encoding.encodeAmount v).toArray) = _
+        rw [plannedBalanceAt_correct es st idx r x h plan h_plan]
+        rfl
+      · exact absurd h_eq (by simp)
+  | nonce x =>
+      rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, _⟩
+      · have hx : x = st.signer := nonce_eq_signer _ _ _ h
+        subst hx
+        show (match bundleValueAt (stepMultiBundle es st) (.nonce st.signer) with
+              | none   => none
+              | some v => deriveNonceCellValue v) = _
+        rw [bundleValueAt_stepMultiBundle es st _ h_mem]
+        exact deriveNonceCellValue_correct es st idx
+          (expectsNonce_lt_of_canonicalBounds es st.signer h_bounds)
+      · exact absurd h_eq (by simp)
+  | epochBudget target =>
+      show (match bundleValueAt (stepMultiBundle es st) (.epochBudget st.signer),
+                  bundleValueAt (stepMultiBundle es st) (.epochBudget target) with
+            | some signerValue, some targetValue =>
+              deriveEpochBudgetCellValue (getCellValue es .budgetPolicy)
+                signerValue targetValue st.action st.signer target
+            | _, _ => none) = _
+      rw [bundleValueAt_stepMultiBundle es st (.epochBudget st.signer)
+            (mem_multiFrontierOf_of_writeCells es st h_inj _
+              (epochBudget_signer_mem _ _)),
+          bundleValueAt_stepMultiBundle es st (.epochBudget target) h_mem]
+      cases h_pol : es.budgetPolicy with
+      | bounded ft ac ce =>
+        obtain ⟨h_ft, h_ac, h_ce⟩ :=
+          budgetPolicy_bounded_of_canonicalBounds es ft ac ce h_pol h_bounds
+        have h_pos : 1 ≤ ac := (h_bounds.bp_val ft ac ce h_pol).2.2.2
+        obtain ⟨h_se, h_sb⟩ := actorBudget_bounded_of_canonicalBounds es st.signer h_bounds
+        obtain ⟨h_te, h_tb⟩ := actorBudget_bounded_of_canonicalBounds es target h_bounds
+        exact deriveEpochBudgetCellValue_correct es st idx target ft ac ce h_pol
+          h_ft h_ac h_ce h_pos h_se h_sb h_te h_tb
+  | registry x =>
+      rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, _⟩
+      · rcases registry_cases _ _ _ h with ⟨k, h_act⟩ | ⟨pk, h_act⟩
+        · show (match st.action with
+                | .replaceKey _ key      => some (deriveRegistryCellValue key)
+                | .registerIdentity _ p  => some (deriveRegistryCellValue p)
+                | _                      => none) = _
+          rw [h_act]
+          exact congrArg some
+            (deriveRegistryCellValue_correct_replaceKey es st idx x k h_act)
+        · show (match st.action with
+                | .replaceKey _ key      => some (deriveRegistryCellValue key)
+                | .registerIdentity _ p  => some (deriveRegistryCellValue p)
+                | _                      => none) = _
+          rw [h_act]
+          exact congrArg some
+            (deriveRegistryCellValue_correct_registerIdentity es st idx x pk h_act)
+      · exact absurd h_eq (by simp)
+  | localPolicy x =>
+      rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, _⟩
+      · obtain ⟨hx, hcase⟩ := localPolicy_cases _ _ _ h
+        subst hx
+        rcases hcase with ⟨p, h_act⟩ | h_act
+        · show (match st.action with
+                | .declareLocalPolicy q => some (deriveDeclaredPolicyCellValue q)
+                | .revokeLocalPolicy    => some deriveRevokedPolicyCellValue
+                | _                     => none) = _
+          rw [h_act]
+          exact congrArg some (deriveDeclaredPolicyCellValue_correct es st idx p h_act)
+        · show (match st.action with
+                | .declareLocalPolicy q => some (deriveDeclaredPolicyCellValue q)
+                | .revokeLocalPolicy    => some deriveRevokedPolicyCellValue
+                | _                     => none) = _
+          rw [h_act]
+          exact congrArg some (deriveRevokedPolicyCellValue_correct es st idx h_act)
+      · exact absurd h_eq (by simp)
+  | bridgeConsumed d =>
+      rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, _⟩
+      · rcases bridgeConsumed_cases _ _ _ h with ⟨r, rcp, amt, h_act⟩ |
+          ⟨r, rcp, pa, ua, pam, bg, h_act⟩
+        · show (match st.action with
+                | .deposit r' _ amount _ =>
+                  some (deriveConsumedCellValue
+                    { resource := r', userAmount := amount
+                    , poolAmount := 0, budgetGrant := 0 })
+                | .depositWithFee r' _ _ ua' pa' bg' _ =>
+                  some (deriveConsumedCellValue
+                    { resource := r', userAmount := ua'
+                    , poolAmount := pa', budgetGrant := bg' })
+                | _ => none) = _
+          rw [h_act]
+          exact congrArg some
+            (deriveConsumedCellValue_correct_deposit es st idx r rcp amt d h_act)
+        · show (match st.action with
+                | .deposit r' _ amount _ =>
+                  some (deriveConsumedCellValue
+                    { resource := r', userAmount := amount
+                    , poolAmount := 0, budgetGrant := 0 })
+                | .depositWithFee r' _ _ ua' pa' bg' _ =>
+                  some (deriveConsumedCellValue
+                    { resource := r', userAmount := ua'
+                    , poolAmount := pa', budgetGrant := bg' })
+                | _ => none) = _
+          rw [h_act]
+          exact congrArg some
+            (deriveConsumedCellValue_correct_depositWithFee es st idx r rcp pa ua pam
+              bg d h_act)
+      · exact absurd h_eq (by simp)
+  | bridgePending w =>
+      rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, r, s, amt, rcp, h_act⟩
+      · exact absurd h (by cases st.action <;> simp [Action.writeCells])
+      · injection h_eq with hw
+        subst hw
+        show (match st.action with
+              | .withdraw r' _ amount rcp' =>
+                some (derivePendingCellValue
+                  { resource := r', recipient := rcp', amount := amount
+                  , l2LogIndex := idx })
+              | _ => none) = _
+        rw [h_act]
+        exact congrArg some (derivePendingCellValue_correct es st idx r s amt rcp h_act)
+  | bridgeNextWdId =>
+      rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, _⟩
+      · obtain ⟨r, s, amt, rcp, h_act⟩ := bridgeNextWdId_cases _ _ h
+        show (match bundleValueAt (stepMultiBundle es st) .bridgeNextWdId with
+              | none   => none
+              | some v => deriveNextWdIdCellValue v) = _
+        rw [bundleValueAt_stepMultiBundle es st _ h_mem]
+        exact deriveNextWdIdCellValue_correct es st idx r s amt rcp h_act h_bounds.bs_nxt
+      · exact absurd h_eq (by simp)
+  | budgetPolicy => exact absurd rfl h_ne
+  | _ =>
+      rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, _⟩
+      · exact absurd h (by cases st.action <;> simp [Action.writeCells])
+      · exact absurd h_eq (by simp)
+
 /-- **The post-state root the multiproof verifier reaches** for an
     honest step: one merged walk, one root check, one answer.
 

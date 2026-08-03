@@ -874,6 +874,51 @@ def plannedBalanceAt? (plan : List ((ResourceId × ActorId) × Nat))
   | []      => none
   | v :: vs => if vs.all (fun q => q.2 == v.2) then some v.2 else none
 
+/-- `aliasConsistent` unpacked: two entries sharing a key share a
+    value. -/
+theorem aliasConsistent_elim {α β : Type} [BEq α] [LawfulBEq α]
+    [BEq β] [LawfulBEq β] (l : List (α × β)) (h : aliasConsistent l = true)
+    (p q : α × β) (hp : p ∈ l) (hq : q ∈ l) (hk : p.1 = q.1) : p.2 = q.2 := by
+  unfold aliasConsistent at h
+  have h1 := List.all_eq_true.mp h p hp
+  have h2 := List.all_eq_true.mp h1 q hq
+  simpa [hk] using h2
+
+/-- **A named cell reads back its value.**  In an alias-consistent plan
+    the lookup finds the entry rather than refusing.
+
+    This is what makes `plannedBalanceAt?`'s fail-closed branch free:
+    composed with `plannedBalances_alias_consistent` it says every plan
+    an action can produce answers every cell it names. -/
+theorem plannedBalanceAt?_of_mem (plan : List ((ResourceId × ActorId) × Nat))
+    (r : ResourceId) (a : ActorId) (v : Nat)
+    (h_mem : ((r, a), v) ∈ plan) (h_cons : aliasConsistent plan = true) :
+    plannedBalanceAt? plan r a = some v := by
+  unfold plannedBalanceAt?
+  have h_memf : ((r, a), v) ∈ plan.filter (fun p => p.1 == (r, a)) :=
+    List.mem_filter.mpr ⟨h_mem, by simp⟩
+  -- Every surviving entry has key `(r, a)`, so consistency pins all
+  -- their values to `v` — the head's included.
+  have h_val : ∀ q ∈ plan.filter (fun p => p.1 == (r, a)), q.2 = v := by
+    intro q hq
+    obtain ⟨hq_plan, hq_key⟩ := List.mem_filter.mp hq
+    exact aliasConsistent_elim plan h_cons q ((r, a), v) hq_plan h_mem
+      (by simpa using hq_key)
+  cases h_f : plan.filter (fun p => p.1 == (r, a)) with
+  | nil => rw [h_f] at h_memf; simp at h_memf
+  | cons w ws =>
+    have hw : w.2 = v := h_val w (h_f ▸ List.mem_cons_self)
+    have h_tail : (ws.all fun q => q.2 == w.2) = true :=
+      List.all_eq_true.mpr (fun q hq => by
+        have : q.2 = v := h_val q (h_f ▸ List.mem_cons_of_mem _ hq)
+        simp [this, hw])
+    show (match w :: ws with
+          | [] => none
+          | u :: us => if (us.all fun q => q.2 == u.2) = true then some u.2 else none)
+        = some v
+    simp only []
+    rw [if_pos h_tail, hw]
+
 /-- A consistent plan's lookup agrees with the first matching entry —
     so refusing costs nothing on any plan an action can produce. -/
 theorem plannedBalanceAt?_of_aliasConsistent
