@@ -46,6 +46,7 @@ remainder — provable by structural induction, and the headline is its
 import LegalKernel.FaultProof.Frontier
 import LegalKernel.FaultProof.StateCellsInjective
 
+open LegalKernel.Authority
 open LegalKernel.Runtime
 
 namespace LegalKernel.FaultProof
@@ -403,6 +404,370 @@ theorem multiSiblings_single_length (d : Nat) (entries : SmtEntries)
     (k leaf : ByteArray) :
     (multiSiblings d entries [(k, leaf)]).length = d := by
   rw [multiSiblings_single, canonicalSiblings_length]
+
+/-! ## The post-state's root, from the pre-state's siblings
+
+The whole economy of a pre-root multiproof is that ONE sibling list
+serves both roots: the one the bundle opens against, and the one the
+step's writes produce.  That is sound because a sibling is the root of
+a sub-tree containing NO opened cell, and the writes touch only opened
+cells — so the sub-tree is byte-identical in both states.
+
+Stating that needs a hypothesis relating the two entry lists.  The
+obvious one — "drop the opened keys from both and the remainders are a
+permutation" — forces a key-set filter through the whole induction and
+an awkward re-derivation at every level, because the recursion shrinks
+the opened list while the key set would have to stay fixed.
+
+The hypothesis below is pointwise instead: an entry whose key is NOT
+opened is in one list exactly when it is in the other.  It descends
+into a half for free, because an entry in the low half can only be
+matched by an opened cell in the low half. -/
+
+/-- Two entry lists agree away from the opened cells: an entry whose
+    key no opened cell names belongs to one exactly when it belongs to
+    the other. -/
+def AgreeOffOpened (opened : List OpenedLeaf) (e e' : SmtEntries) : Prop :=
+  ∀ p : ByteArray × ByteArray, (¬ ∃ o ∈ opened, o.1 = p.1) → (p ∈ e ↔ p ∈ e')
+
+/-- Agreement descends into the left half: an entry with bit `d` clear
+    can only be named by an opened cell with bit `d` clear. -/
+theorem AgreeOffOpened_low (d : Nat) (opened : List OpenedLeaf) (e e' : SmtEntries)
+    (h : AgreeOffOpened opened e e') :
+    AgreeOffOpened (openedLow d opened) (lowHalf d e) (lowHalf d e') := by
+  intro p hp
+  by_cases hbit : BitsKey.keyBit p.1 d
+  · -- Not in either half; both sides are false.
+    constructor
+    · intro hm; exact absurd (by simpa using (List.mem_filter.mp hm).2) (by simp [hbit])
+    · intro hm; exact absurd (by simpa using (List.mem_filter.mp hm).2) (by simp [hbit])
+  · have h_full : ¬ ∃ o ∈ opened, o.1 = p.1 := by
+      rintro ⟨o, ho, h_eq⟩
+      exact hp ⟨o, List.mem_filter.mpr ⟨ho, by simpa [h_eq] using hbit⟩, h_eq⟩
+    constructor
+    · intro hm
+      exact List.mem_filter.mpr ⟨(h p h_full).mp (List.mem_filter.mp hm).1,
+        (List.mem_filter.mp hm).2⟩
+    · intro hm
+      exact List.mem_filter.mpr ⟨(h p h_full).mpr (List.mem_filter.mp hm).1,
+        (List.mem_filter.mp hm).2⟩
+
+/-- Agreement descends into the right half. -/
+theorem AgreeOffOpened_high (d : Nat) (opened : List OpenedLeaf) (e e' : SmtEntries)
+    (h : AgreeOffOpened opened e e') :
+    AgreeOffOpened (openedHigh d opened) (highHalf d e) (highHalf d e') := by
+  intro p hp
+  by_cases hbit : BitsKey.keyBit p.1 d
+  · have h_full : ¬ ∃ o ∈ opened, o.1 = p.1 := by
+      rintro ⟨o, ho, h_eq⟩
+      exact hp ⟨o, List.mem_filter.mpr ⟨ho, by simpa [h_eq] using hbit⟩, h_eq⟩
+    constructor
+    · intro hm
+      exact List.mem_filter.mpr ⟨(h p h_full).mp (List.mem_filter.mp hm).1,
+        (List.mem_filter.mp hm).2⟩
+    · intro hm
+      exact List.mem_filter.mpr ⟨(h p h_full).mpr (List.mem_filter.mp hm).1,
+        (List.mem_filter.mp hm).2⟩
+  · constructor
+    · intro hm; exact absurd (List.mem_filter.mp hm).2 (by simpa using hbit)
+    · intro hm; exact absurd (List.mem_filter.mp hm).2 (by simpa using hbit)
+
+/-- **A gap sub-tree is the same in both states.**
+
+    Where no opened cell lands, the two entry lists coincide as sets —
+    and being duplicate-free, as permutations — so their roots are
+    equal.  This is the sibling-reuse argument in its smallest form. -/
+theorem gapRoot_congr (d : Nat) (opened : List OpenedLeaf) (e e' : SmtEntries)
+    (h : AgreeOffOpened opened e e') (h_none : opened = [])
+    (h_wf : BitsDistinctBelow d e) (h_wf' : BitsDistinctBelow d e') :
+    smtRootListAux d e = smtRootListAux d e' := by
+  refine smtRootListAux_perm d e e' ?_ h_wf
+  refine perm_of_nodup_of_mem_iff _ _ (nodup_of_bitsDistinct h_wf)
+    (nodup_of_bitsDistinct h_wf') (fun p => ?_)
+  exact h p (by rw [h_none]; rintro ⟨_, hm, _⟩; exact absurd hm (by simp))
+
+/-! ### Unfolding `multiSiblings` at a level
+
+Three shapes, each stated once and used for both entry lists, so a
+congruence proof rewrites rather than re-derives. -/
+
+/-- Only the right half holds an opened cell: recurse there, and this
+    level's sibling is the left half's root. -/
+theorem multiSiblings_succ_gapLow (k : Nat) (entries : SmtEntries)
+    (opened : List OpenedLeaf) (hi : OpenedLeaf) (his : List OpenedLeaf)
+    (h_l : openedLow k opened = []) (h_h : openedHigh k opened = hi :: his) :
+    multiSiblings (k + 1) entries opened
+      = multiSiblings k (highHalf k entries) (hi :: his)
+          ++ [smtRootListAux k (lowHalf k entries)] := by
+  show (match openedLow k opened, openedHigh k opened with
+        | [], [] => _ | (_ :: _), [] => _
+        | [], (_ :: _) => _ | (_ :: _), (_ :: _) => _) = _
+  rw [h_l, h_h]
+
+/-- Only the left half holds an opened cell. -/
+theorem multiSiblings_succ_gapHigh (k : Nat) (entries : SmtEntries)
+    (opened : List OpenedLeaf) (lo : OpenedLeaf) (los : List OpenedLeaf)
+    (h_l : openedLow k opened = lo :: los) (h_h : openedHigh k opened = []) :
+    multiSiblings (k + 1) entries opened
+      = multiSiblings k (lowHalf k entries) (lo :: los)
+          ++ [smtRootListAux k (highHalf k entries)] := by
+  show (match openedLow k opened, openedHigh k opened with
+        | [], [] => _ | (_ :: _), [] => _
+        | [], (_ :: _) => _ | (_ :: _), (_ :: _) => _) = _
+  rw [h_l, h_h]
+
+/-- Both halves hold an opened cell: a MERGE, which reads no sibling
+    from the wire — the two sub-trees are each other's. -/
+theorem multiSiblings_succ_merge (k : Nat) (entries : SmtEntries)
+    (opened : List OpenedLeaf) (lo hi : OpenedLeaf) (los his : List OpenedLeaf)
+    (h_l : openedLow k opened = lo :: los) (h_h : openedHigh k opened = hi :: his) :
+    multiSiblings (k + 1) entries opened
+      = multiSiblings k (lowHalf k entries) (lo :: los)
+          ++ multiSiblings k (highHalf k entries) (hi :: his) := by
+  show (match openedLow k opened, openedHigh k opened with
+        | [], [] => _ | (_ :: _), [] => _
+        | [], (_ :: _) => _ | (_ :: _), (_ :: _) => _) = _
+  rw [h_l, h_h]
+
+/-- Neither half holds an opened cell: no gaps at all. -/
+theorem multiSiblings_succ_empty (k : Nat) (entries : SmtEntries)
+    (opened : List OpenedLeaf)
+    (h_l : openedLow k opened = []) (h_h : openedHigh k opened = []) :
+    multiSiblings (k + 1) entries opened = [] := by
+  show (match openedLow k opened, openedHigh k opened with
+        | [], [] => _ | (_ :: _), [] => _
+        | [], (_ :: _) => _ | (_ :: _), (_ :: _) => _) = _
+  rw [h_l, h_h]
+
+/-- **The pre-state's sibling list serves the post-state too.**
+
+    The theorem the whole multiproof rests on: an honest bundle carries
+    ONE set of siblings, and it is valid against both roots.  Every
+    sibling it carries is a gap — a sub-tree holding no opened cell —
+    and `gapRoot_congr` says such a sub-tree is unchanged. -/
+theorem multiSiblings_congr :
+    ∀ (d : Nat) (e e' : SmtEntries) (opened : List OpenedLeaf),
+      AgreeOffOpened opened e e' →
+      BitsDistinctBelow d e → BitsDistinctBelow d e' →
+      multiSiblings d e opened = multiSiblings d e' opened := by
+  intro d
+  induction d with
+  | zero => intro _ _ _ _ _ _; rfl
+  | succ k ih =>
+    intro e e' opened h_ag h_wf h_wf'
+    have h_lo := AgreeOffOpened_low k opened e e' h_ag
+    have h_hi := AgreeOffOpened_high k opened e e' h_ag
+    have h_wlo : BitsDistinctBelow k (lowHalf k e) := BitsDistinctBelow.filter_low h_wf
+    have h_whi : BitsDistinctBelow k (highHalf k e) := BitsDistinctBelow.filter_high h_wf
+    have h_wlo' : BitsDistinctBelow k (lowHalf k e') := BitsDistinctBelow.filter_low h_wf'
+    have h_whi' : BitsDistinctBelow k (highHalf k e') := BitsDistinctBelow.filter_high h_wf'
+    cases h_l : openedLow k opened with
+    | nil =>
+      cases h_h : openedHigh k opened with
+      | nil =>
+        rw [multiSiblings_succ_empty k e opened h_l h_h,
+          multiSiblings_succ_empty k e' opened h_l h_h]
+      | cons hi his =>
+        rw [multiSiblings_succ_gapLow k e opened hi his h_l h_h,
+          multiSiblings_succ_gapLow k e' opened hi his h_l h_h,
+          ih (highHalf k e) (highHalf k e') (hi :: his) (h_h ▸ h_hi) h_whi h_whi',
+          gapRoot_congr k (openedLow k opened) (lowHalf k e) (lowHalf k e')
+            h_lo h_l h_wlo h_wlo']
+    | cons lo los =>
+      cases h_h : openedHigh k opened with
+      | nil =>
+        rw [multiSiblings_succ_gapHigh k e opened lo los h_l h_h,
+          multiSiblings_succ_gapHigh k e' opened lo los h_l h_h,
+          ih (lowHalf k e) (lowHalf k e') (lo :: los) (h_l ▸ h_lo) h_wlo h_wlo',
+          gapRoot_congr k (openedHigh k opened) (highHalf k e) (highHalf k e')
+            h_hi h_h h_whi h_whi']
+      | cons hi his =>
+        rw [multiSiblings_succ_merge k e opened lo hi los his h_l h_h,
+          multiSiblings_succ_merge k e' opened lo hi los his h_l h_h,
+          ih (lowHalf k e) (lowHalf k e') (lo :: los) (h_l ▸ h_lo) h_wlo h_wlo',
+          ih (highHalf k e) (highHalf k e') (hi :: his) (h_h ▸ h_hi) h_whi h_whi']
+
+/-! ## The two roots
+
+`multiSiblings` reads its opened list only through the KEYS — every
+split filters on `o.1`, and only the depth-0 base case looks at a leaf.
+So the same wire serves a bundle carrying pre-values and one carrying
+post-values, which is what makes "one sibling list, two roots"
+precise. -/
+
+/-- Filtering on the key commutes with taking keys. -/
+theorem map_fst_filter (p : ByteArray → Bool) :
+    ∀ (l : List OpenedLeaf),
+      (l.filter (fun o => p o.1)).map Prod.fst = (l.map Prod.fst).filter p := by
+  intro l
+  induction l with
+  | nil => rfl
+  | cons o rest ih =>
+    by_cases hp : p o.1
+    · simp [hp, ih]
+    · simp [hp, ih]
+
+/-- Two bundles with the same keys have the same halves. -/
+theorem openedLow_key_congr (d : Nat) (o₁ o₂ : List OpenedLeaf)
+    (h : o₁.map Prod.fst = o₂.map Prod.fst) :
+    (openedLow d o₁).map Prod.fst = (openedLow d o₂).map Prod.fst := by
+  unfold openedLow
+  rw [map_fst_filter (fun k => ! BitsKey.keyBit k d) o₁,
+    map_fst_filter (fun k => ! BitsKey.keyBit k d) o₂, h]
+
+/-- ...and the same right halves. -/
+theorem openedHigh_key_congr (d : Nat) (o₁ o₂ : List OpenedLeaf)
+    (h : o₁.map Prod.fst = o₂.map Prod.fst) :
+    (openedHigh d o₁).map Prod.fst = (openedHigh d o₂).map Prod.fst := by
+  unfold openedHigh
+  rw [map_fst_filter (fun k => BitsKey.keyBit k d) o₁,
+    map_fst_filter (fun k => BitsKey.keyBit k d) o₂, h]
+
+/-- A list is empty exactly when its key list is. -/
+theorem nil_iff_map_fst_nil (l : List OpenedLeaf) : l = [] ↔ l.map Prod.fst = [] := by
+  cases l <;> simp
+
+/-- **The wire does not depend on the leaves.**  Two bundles opening
+    the same cells produce the same sibling list, whatever values they
+    carry — which is why one wire serves the pre-root and the post-root
+    alike. -/
+theorem multiSiblings_key_congr :
+    ∀ (d : Nat) (e : SmtEntries) (o₁ o₂ : List OpenedLeaf),
+      o₁.map Prod.fst = o₂.map Prod.fst →
+      multiSiblings d e o₁ = multiSiblings d e o₂ := by
+  intro d
+  induction d with
+  | zero => intro _ _ _ _; rfl
+  | succ k ih =>
+    intro e o₁ o₂ h
+    have h_l := openedLow_key_congr k o₁ o₂ h
+    have h_h := openedHigh_key_congr k o₁ o₂ h
+    cases h_l₁ : openedLow k o₁ with
+    | nil =>
+      have h_l₂ : openedLow k o₂ = [] := by
+        refine (nil_iff_map_fst_nil _).mpr ?_
+        rw [← h_l, h_l₁]; rfl
+      cases h_h₁ : openedHigh k o₁ with
+      | nil =>
+        have h_h₂ : openedHigh k o₂ = [] := by
+          refine (nil_iff_map_fst_nil _).mpr ?_
+          rw [← h_h, h_h₁]; rfl
+        rw [multiSiblings_succ_empty k e o₁ h_l₁ h_h₁,
+          multiSiblings_succ_empty k e o₂ h_l₂ h_h₂]
+      | cons hi his =>
+        cases h_h₂ : openedHigh k o₂ with
+        | nil =>
+          have hc : ((hi :: his) : List OpenedLeaf).map Prod.fst = [] := by
+            rw [← h_h₁, h_h, h_h₂]; rfl
+          simp at hc
+        | cons hi' his' =>
+          rw [multiSiblings_succ_gapLow k e o₁ hi his h_l₁ h_h₁,
+            multiSiblings_succ_gapLow k e o₂ hi' his' h_l₂ h_h₂,
+            ih (highHalf k e) (hi :: his) (hi' :: his') (by rw [← h_h₁, ← h_h₂, h_h])]
+    | cons lo los =>
+      have h_l₂ : ∃ lo' los', openedLow k o₂ = lo' :: los' := by
+        cases h_c : openedLow k o₂ with
+        | nil =>
+          have hc : ((lo :: los) : List OpenedLeaf).map Prod.fst = [] := by
+            rw [← h_l₁, h_l, h_c]; rfl
+          simp at hc
+        | cons a b => exact ⟨a, b, rfl⟩
+      obtain ⟨lo', los', h_l₂⟩ := h_l₂
+      cases h_h₁ : openedHigh k o₁ with
+      | nil =>
+        have h_h₂ : openedHigh k o₂ = [] := by
+          refine (nil_iff_map_fst_nil _).mpr ?_
+          rw [← h_h, h_h₁]; rfl
+        rw [multiSiblings_succ_gapHigh k e o₁ lo los h_l₁ h_h₁,
+          multiSiblings_succ_gapHigh k e o₂ lo' los' h_l₂ h_h₂,
+          ih (lowHalf k e) (lo :: los) (lo' :: los') (by rw [← h_l₁, ← h_l₂, h_l])]
+      | cons hi his =>
+        cases h_h₂ : openedHigh k o₂ with
+        | nil =>
+          have hc : ((hi :: his) : List OpenedLeaf).map Prod.fst = [] := by
+            rw [← h_h₁, h_h, h_h₂]; rfl
+          simp at hc
+        | cons hi' his' =>
+          rw [multiSiblings_succ_merge k e o₁ lo hi los his h_l₁ h_h₁,
+            multiSiblings_succ_merge k e o₂ lo' hi' los' his' h_l₂ h_h₂,
+            ih (lowHalf k e) (lo :: los) (lo' :: los') (by rw [← h_l₁, ← h_l₂, h_l]),
+            ih (highHalf k e) (hi :: his) (hi' :: his') (by rw [← h_h₁, ← h_h₂, h_h])]
+
+/-! ## One wire, two state roots
+
+The step-level statement.  An honest sequencer builds the bundle from
+the PRE-state and publishes one sibling list; the L1 folds it twice —
+once from the pre-values to check it against the submitted pre-root,
+once from the derived post-values to obtain the root it will compare —
+and both are the roots the two states actually have. -/
+
+/-- The bundle a state induces for a cell list: each cell's key with
+    the leaf that state gives it. -/
+def openedOf (es : ExtendedState) (ts : List CellTag) : List OpenedLeaf :=
+  ts.map (fun t => (smtCellKey t, cellLeaf t (getCellValue es t)))
+
+/-- The keys a bundle opens are the cells' keys — nothing about the
+    state survives into them, which is the fact both congruences use. -/
+theorem openedOf_keys_eq (es : ExtendedState) (ts : List CellTag) :
+    (openedOf es ts).map Prod.fst = ts.map smtCellKey := by
+  simp [openedOf]
+
+/-- Two states induce bundles with the same keys. -/
+theorem openedOf_keys (es es' : ExtendedState) (ts : List CellTag) :
+    (openedOf es ts).map Prod.fst = (openedOf es' ts).map Prod.fst := by
+  rw [openedOf_keys_eq, openedOf_keys_eq]
+
+/-- **The pre-state's wire is the post-state's wire.**
+
+    Both congruences at once: the sibling list does not depend on the
+    leaves (`multiSiblings_key_congr`) and does not depend on entries
+    away from the opened cells (`multiSiblings_congr`).  Together they
+    are the sentence "one bundle, two roots" made precise. -/
+theorem multiSiblings_pre_eq_post (es es' : ExtendedState) (ts : List CellTag)
+    (h_ag : AgreeOffOpened (openedOf es' ts) (stateCellEntries es) (stateCellEntries es'))
+    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries es))
+    (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es')) :
+    multiSiblings smtDepth (stateCellEntries es) (openedOf es ts)
+      = multiSiblings smtDepth (stateCellEntries es') (openedOf es' ts) := by
+  rw [multiSiblings_key_congr smtDepth (stateCellEntries es) (openedOf es ts)
+        (openedOf es' ts) (openedOf_keys es es' ts)]
+  exact multiSiblings_congr smtDepth (stateCellEntries es) (stateCellEntries es')
+    (openedOf es' ts) h_ag h_wf h_wf'
+
+/-- **The post-state's root, from the pre-state's wire.**
+
+    The M3 headline, and the statement the L1 needs: hand the verifier a
+    pre-root, the cells a step writes, and ONE sibling list, and the
+    fold of the DERIVED post-values lands on
+    `commitExtendedState` of the state the step produces.
+
+    It subsumes `foldStateCellWrites_eq_commit_of_coherent` — m cells at
+    once, with no per-link coherence obligation and no ordering, because
+    every opening is against the same root. -/
+theorem multiFold_eq_commit_post (es es' : ExtendedState) (ts : List CellTag)
+    (h_ne : openedOf es' ts ≠ [])
+    (h_ag : AgreeOffOpened (openedOf es' ts) (stateCellEntries es) (stateCellEntries es'))
+    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries es))
+    (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es'))
+    (h_coh : LeavesCoherent smtDepth (stateCellEntries es') (openedOf es' ts))
+    (h_dist : BitsDistinctBelow smtDepth (openedOf es' ts)) :
+    multiWalk smtDepth (openedOf es' ts)
+        (multiSiblings smtDepth (stateCellEntries es) (openedOf es ts))
+      = some (commitExtendedState es', []) := by
+  rw [multiSiblings_pre_eq_post es es' ts h_ag h_wf h_wf']
+  exact multiWalk_eq_smtRootListAux (stateCellEntries es') (openedOf es' ts)
+    h_ne h_coh h_dist
+
+/-- **The pre-state's root, from the same wire.**  The other half of
+    the pair: what the verifier checks the submitted pre-root against. -/
+theorem multiFold_eq_commit_pre (es : ExtendedState) (ts : List CellTag)
+    (h_ne : openedOf es ts ≠ [])
+    (h_coh : LeavesCoherent smtDepth (stateCellEntries es) (openedOf es ts))
+    (h_dist : BitsDistinctBelow smtDepth (openedOf es ts)) :
+    multiWalk smtDepth (openedOf es ts)
+        (multiSiblings smtDepth (stateCellEntries es) (openedOf es ts))
+      = some (commitExtendedState es, []) :=
+  multiWalk_eq_smtRootListAux (stateCellEntries es) (openedOf es ts) h_ne h_coh h_dist
 
 end FaultProof
 end LegalKernel

@@ -28,6 +28,7 @@ can see and a theorem statement cannot:
     no.
 -/
 
+import LegalKernel.FaultProof.CellStore
 import LegalKernel.FaultProof.MultiProof
 import LegalKernel.Test.Framework
 
@@ -131,6 +132,46 @@ def tests : List TestCase :=
           (actual := (multiSiblings smtDepth entries [one]).length)
           "and it is one sibling per level"
     }
+  , { name := "one wire serves both roots"
+    , body := do
+        -- M3's claim, run rather than asserted.  A step writes the
+        -- signer's nonce; build the wire from the PRE-state and fold
+        -- the POST-state's leaves through it.  If the sibling reuse
+        -- were unsound this would land somewhere that is not a root.
+        let post := setCell base (.nonce 7) (natCellValue 4)
+        let ts : List CellTag := frontierOf [.nonce 7]
+        let sibs := multiSiblings smtDepth (stateCellEntries base) (openedOf base ts)
+        match multiWalk smtDepth (openedOf base ts) sibs with
+        | none => assertEq (expected := "some") (actual := "none") "pre side folds"
+        | some (r, _) =>
+            assertEq (expected := (commitExtendedState base).toList) (actual := r.toList)
+              "the pre-values reach the pre-state's root"
+        match multiWalk smtDepth (openedOf post ts) sibs with
+        | none => assertEq (expected := "some") (actual := "none") "post side folds"
+        | some (r, rest) =>
+            assertEq (expected := (commitExtendedState post).toList) (actual := r.toList)
+              "the post-values reach the POST-state's root, from the same wire"
+            assertEq (expected := 0) (actual := rest.length) "and consume it all"
+        -- The negative control: the two roots differ, so the test above
+        -- is not passing because nothing moved.
+        assertEq (expected := true)
+          (actual := (commitExtendedState base).toList != (commitExtendedState post).toList)
+          "the write moved the root"
+    }
+  , { name := "the wire ignores the leaves it opens"
+    , body := do
+        -- `multiSiblings_key_congr` at the value level: same cells,
+        -- different state, identical wire.  This is what makes "one
+        -- wire, two roots" a sentence about the SAME bytes.
+        let post := setCell base (.nonce 7) (natCellValue 4)
+        let ts : List CellTag := frontierOf [.nonce 7]
+        assertEq
+          (expected := (multiSiblings smtDepth (stateCellEntries base)
+                          (openedOf base ts)).map ByteArray.toList)
+          (actual := (multiSiblings smtDepth (stateCellEntries base)
+                          (openedOf post ts)).map ByteArray.toList)
+          "the wire is a function of the cells, not their values"
+    }
   , { name := "completeness is pinned at the term level"
     , body := do
         let _pin : ∀ (entries : SmtEntries) (opened : List OpenedLeaf),
@@ -139,7 +180,18 @@ def tests : List TestCase :=
             multiWalk smtDepth opened (multiSiblings smtDepth entries opened)
               = some (smtRootListAux smtDepth entries, []) :=
           multiWalk_eq_smtRootListAux
-        assertEq (expected := true) (actual := true) "signature elaborates"
+        let _pinPost : ∀ (es es' : ExtendedState) (ts : List CellTag),
+            openedOf es' ts ≠ [] →
+            AgreeOffOpened (openedOf es' ts) (stateCellEntries es) (stateCellEntries es') →
+            BitsDistinctBelow smtDepth (stateCellEntries es) →
+            BitsDistinctBelow smtDepth (stateCellEntries es') →
+            LeavesCoherent smtDepth (stateCellEntries es') (openedOf es' ts) →
+            BitsDistinctBelow smtDepth (openedOf es' ts) →
+            multiWalk smtDepth (openedOf es' ts)
+                (multiSiblings smtDepth (stateCellEntries es) (openedOf es ts))
+              = some (commitExtendedState es', []) :=
+          multiFold_eq_commit_post
+        assertEq (expected := true) (actual := true) "signatures elaborate"
     }
   ]
 
