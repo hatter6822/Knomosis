@@ -68,7 +68,7 @@ private theorem byteArray_mk_size_ne_zero (l : List UInt8) (h : l ≠ []) :
 shapes lets the write set produce values in exactly the reader's form,
 which is what makes the read-back laws below statable at all. -/
 
-/-- The byte form of a value-carrying cell: the 17-byte CBE amount
+/-- The byte form of a value-carrying cell: the 33-byte CBE amount
     head.  Balances, the AMM reserves and the BOLD TVL figures. -/
 def amountCellValue (n : Nat) : ByteArray :=
   ByteArray.mk (Encoding.encodeAmount n).toArray
@@ -323,7 +323,7 @@ scalars and the budget policy are genesis parameters, mutated by no
 
 /-- A balance write reads back. -/
 theorem getCellValue_setCell_balance (es : ExtendedState) (r : ResourceId) (a : ActorId)
-    (n : Nat) (h : n < 256 ^ 16) :
+    (n : Nat) (h : n < 256 ^ 32) :
     getCellValue (setCell es (.balance r a) (amountCellValue n)) (.balance r a)
       = amountCellValue n := by
   have hd : Encoding.decodeAmount (amountCellValue n).data.toList = .ok (n, []) := by
@@ -384,8 +384,8 @@ theorem getCellValue_setCell_localPolicy_absent (es : ExtendedState) (a : ActorI
 /-- A consumed-deposit write reads back. -/
 theorem getCellValue_setCell_bridgeConsumed (es : ExtendedState) (d : DepositId)
     (rec : Bridge.DepositRecord)
-    (h : rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 16 ∧
-         rec.poolAmount < 256 ^ 16 ∧ rec.budgetGrant < 256 ^ 8) :
+    (h : rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 32 ∧
+         rec.poolAmount < 256 ^ 32 ∧ rec.budgetGrant < 256 ^ 8) :
     getCellValue (setCell es (.bridgeConsumed d) (depositCellValue rec)) (.bridgeConsumed d)
       = depositCellValue rec := by
   have hne : ¬ (depositCellValue rec).size = 0 := by
@@ -401,7 +401,7 @@ theorem getCellValue_setCell_bridgeConsumed (es : ExtendedState) (d : DepositId)
 /-- A pending-withdrawal write reads back. -/
 theorem getCellValue_setCell_bridgePending (es : ExtendedState) (w : WithdrawalId)
     (pw : Bridge.PendingWithdrawal)
-    (h_res : pw.resource.toNat < 256 ^ 8) (h_amt : pw.amount < 256 ^ 16)
+    (h_res : pw.resource.toNat < 256 ^ 8) (h_amt : pw.amount < 256 ^ 32)
     (h_idx : pw.l2LogIndex < 256 ^ 8) :
     getCellValue (setCell es (.bridgePending w) (withdrawalCellValue pw)) (.bridgePending w)
       = withdrawalCellValue pw := by
@@ -461,28 +461,28 @@ caller for the sake of six arms that are true. -/
 
 /-- The AMM ETH reserve reads back. -/
 theorem getCellValue_setCell_bridgeAmmReserveEth (es : ExtendedState) (n : Nat)
-    (h : n < 256 ^ 16) :
+    (h : n < 256 ^ 32) :
     getCellValue (setCell es .bridgeAmmReserveEth (amountCellValue n))
         .bridgeAmmReserveEth = amountCellValue n := by
   simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
 
 /-- The AMM BOLD reserve reads back. -/
 theorem getCellValue_setCell_bridgeAmmReserveBold (es : ExtendedState) (n : Nat)
-    (h : n < 256 ^ 16) :
+    (h : n < 256 ^ 32) :
     getCellValue (setCell es .bridgeAmmReserveBold (amountCellValue n))
         .bridgeAmmReserveBold = amountCellValue n := by
   simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
 
 /-- The BOLD TVL cap reads back. -/
 theorem getCellValue_setCell_bridgeBoldTvlCap (es : ExtendedState) (n : Nat)
-    (h : n < 256 ^ 16) :
+    (h : n < 256 ^ 32) :
     getCellValue (setCell es .bridgeBoldTvlCap (amountCellValue n))
         .bridgeBoldTvlCap = amountCellValue n := by
   simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
 
 /-- The BOLD total-locked-value reads back. -/
 theorem getCellValue_setCell_bridgeBoldTotalLockedValue (es : ExtendedState) (n : Nat)
-    (h : n < 256 ^ 16) :
+    (h : n < 256 ^ 32) :
     getCellValue (setCell es .bridgeBoldTotalLockedValue (amountCellValue n))
         .bridgeBoldTotalLockedValue = amountCellValue n := by
   simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]

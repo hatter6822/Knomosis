@@ -57,7 +57,7 @@ The constructor-tag map (frozen):
 
 The `Action.fieldsBounded` predicate captures the canonical-encoding
 bound on every numeric field: `< 2^128` for the wei-denominated amount
-fields, which ride the 17-byte CBE amount head, and `< 2^64` for
+fields, which ride the 33-byte CBE amount head, and `< 2^64` for
 identifiers, unit counts, nonces, epochs and deposit ids, which ride
 the 9-byte uint head.  Round-trip and injectivity
 hold for `Action`s that satisfy `fieldsBounded`; outside that range
@@ -84,7 +84,7 @@ open LegalKernel.Disputes
 /-! ## Numerical bound predicate
 
 `Action.fieldsBounded a` holds when every numeric field of `a` fits
-its canonical CBE head: the 16-byte amount payload (`< 2^128`) for
+its canonical CBE head: the 32-byte amount payload (`< 2^256`) for
 the wei-denominated amount fields, the 8-byte uint payload (`< 2^64`)
 for everything else.  Phase 5's runtime adaptor gates on this before
 serialising. -/
@@ -97,19 +97,19 @@ serialising. -/
     type's `fieldsBounded`. -/
 def Action.fieldsBounded : Action → Prop
   | .transfer r s r' a            =>
-      r.toNat < 256 ^ 8 ∧ s.toNat < 256 ^ 8 ∧ r'.toNat < 256 ^ 8 ∧ a < 256 ^ 16
+      r.toNat < 256 ^ 8 ∧ s.toNat < 256 ^ 8 ∧ r'.toNat < 256 ^ 8 ∧ a < 256 ^ 32
   | .mint r to a                  =>
-      r.toNat < 256 ^ 8 ∧ to.toNat < 256 ^ 8 ∧ a < 256 ^ 16
+      r.toNat < 256 ^ 8 ∧ to.toNat < 256 ^ 8 ∧ a < 256 ^ 32
   | .burn r fr a                  =>
-      r.toNat < 256 ^ 8 ∧ fr.toNat < 256 ^ 8 ∧ a < 256 ^ 16
+      r.toNat < 256 ^ 8 ∧ fr.toNat < 256 ^ 8 ∧ a < 256 ^ 32
   | .freezeResource r             => r.toNat < 256 ^ 8
   | .replaceKey actor newKey      => actor.toNat < 256 ^ 8 ∧ newKey.size < 256 ^ 8
   | .reward r to a                =>
-      r.toNat < 256 ^ 8 ∧ to.toNat < 256 ^ 8 ∧ a < 256 ^ 16
+      r.toNat < 256 ^ 8 ∧ to.toNat < 256 ^ 8 ∧ a < 256 ^ 32
   | .distributeOthers r e a       =>
-      r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ a < 256 ^ 16
+      r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ a < 256 ^ 32
   | .proportionalDilute r e tr    =>
-      r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ tr < 256 ^ 16
+      r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ tr < 256 ^ 32
   | .dispute d                    => Dispute.fieldsBounded d
   | .disputeWithdraw idx          => idx < 256 ^ 8
   | .verdict v                    => Verdict.fieldsBounded v ∧ Verdict.canonical v
@@ -117,7 +117,7 @@ def Action.fieldsBounded : Action → Prop
   | .registerIdentity actor pk    => actor.toNat < 256 ^ 8 ∧ pk.size < 256 ^ 8
   | .deposit r recipient amount d =>
       r.toNat < 256 ^ 8 ∧ recipient.toNat < 256 ^ 8 ∧
-      amount < 256 ^ 16 ∧ d < 256 ^ 8
+      amount < 256 ^ 32 ∧ d < 256 ^ 8
   | .withdraw r sender amount _rcp =>
       -- Audit-2: `recipientL1` is encoded as a 20-byte ByteArray
       -- (lossless via `EthAddress.toBytes`); no per-field bound
@@ -125,7 +125,7 @@ def Action.fieldsBounded : Action → Prop
       -- the type level via `Fin (2^160)`, and the 20-byte encoded
       -- form is `< 2^64` unconditionally).
       r.toNat < 256 ^ 8 ∧ sender.toNat < 256 ^ 8 ∧
-      amount < 256 ^ 16
+      amount < 256 ^ 32
   | .declareLocalPolicy p           => LocalPolicy.fieldsBounded p
   | .revokeLocalPolicy              => True
   | .faultProofChallenge bh s e cc  =>
@@ -135,24 +135,24 @@ def Action.fieldsBounded : Action → Prop
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
   | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
       r.toNat < 256 ^ 8 ∧ recipient.toNat < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8 ∧
-      userAmount < 256 ^ 16 ∧ poolAmount < 256 ^ 16 ∧
+      userAmount < 256 ^ 32 ∧ poolAmount < 256 ^ 32 ∧
       budgetGrant < 256 ^ 8 ∧ depositId < 256 ^ 8
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
-      gasResource.toNat < 256 ^ 8 ∧ gasAmount < 256 ^ 16 ∧
+      gasResource.toNat < 256 ^ 8 ∧ gasAmount < 256 ^ 32 ∧
       budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       recipient.toNat < 256 ^ 8 ∧ gasResource.toNat < 256 ^ 8 ∧
-      gasAmount < 256 ^ 16 ∧ budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
+      gasAmount < 256 ^ 32 ∧ budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       gasResource.toNat < 256 ^ 8 ∧ budgetUnits < 256 ^ 8 ∧
-      weiPerBudgetUnit < 256 ^ 16 ∧ poolActor.toNat < 256 ^ 8
+      weiPerBudgetUnit < 256 ^ 32 ∧ poolActor.toNat < 256 ^ 8
   -- Workstream GP (GP.11.4): ammSwap.
   | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
       fromResource.toNat < 256 ^ 8 ∧ toResource.toNat < 256 ^ 8 ∧
-      amountIn < 256 ^ 16 ∧ amountOut < 256 ^ 16 ∧ ammReserveActor.toNat < 256 ^ 8
+      amountIn < 256 ^ 32 ∧ amountOut < 256 ^ 32 ∧ ammReserveActor.toNat < 256 ^ 8
   -- Workstream GP (GP.11.10): reclaimAmmReserves.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
-      r.toNat < 256 ^ 8 ∧ amount < 256 ^ 16 ∧
+      r.toNat < 256 ^ 8 ∧ amount < 256 ^ 32 ∧
       reserveActor.toNat < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
   -- Workstream-LX (LX.18): codegen-managed Lex `fieldsBounded`
   -- arms land between the fence markers below.  Empty in M1
@@ -333,12 +333,12 @@ def Action.readNatField (s : Stream) :
     Except DecodeError (Nat × Stream) :=
   Encodable.decode (T := Nat) s
 
-/-- Read an `Amount` field from the stream: the 17-byte
+/-- Read an `Amount` field from the stream: the 33-byte
     `cbeTagAmount` head (`decodeAmount`), not the 8-byte uint head.
 
     Amounts are the one `Action` field that legitimately exceeds
     `2^64` — a wei-denominated balance passes that at ~18.45 ETH —
-    so they carry their own tag and a 16-byte body.  Identifiers,
+    so they carry their own tag and a 32-byte body.  Identifiers,
     nonces, log indices and budget UNIT counts stay on
     `readNatField`. -/
 def Action.readAmountField (s : Stream) :
@@ -693,7 +693,7 @@ theorem readNatField_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 8) :
 /-- Reading an `Amount` field that was encoded via `encodeAmount n`
     recovers `n`, given the 128-bit canonical-encoding bound.  The
     amount counterpart of `readNatField_roundtrip`. -/
-theorem readAmountField_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 16) :
+theorem readAmountField_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 32) :
     Action.readAmountField (encodeAmount n ++ rest) = .ok (n, rest) := by
   unfold Action.readAmountField
   exact amount_roundtrip n rest h

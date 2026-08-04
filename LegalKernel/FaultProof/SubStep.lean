@@ -156,7 +156,7 @@ theorem balanceCell_absent_of_balance_zero (es : ExtendedState)
     `balanceCell_absent_of_balance_zero`. -/
 theorem balanceCell_absent_iff_balance_zero (es : ExtendedState)
     (r : ResourceId) (a : ActorId)
-    (h_amt : LegalKernel.getBalance es.base r a < 256 ^ 16) :
+    (h_amt : LegalKernel.getBalance es.base r a < 256 ^ 32) :
     getCellValue es (.balance r a) = canonicalAbsentValue (.balance r a) ↔
       LegalKernel.getBalance es.base r a = 0 := by
   constructor
@@ -223,7 +223,7 @@ theorem mem_bulkRecipients_of_cell_live (es : ExtendedState)
     half is `mem_bulkRecipients_of_cell_live`, which is unconditional. -/
 theorem exists_mem_bulkRecipients_iff_cell_live (es : ExtendedState)
     (r : ResourceId) (excluded : ActorId) (a : ActorId)
-    (h_amt : LegalKernel.getBalance es.base r a < 256 ^ 16) :
+    (h_amt : LegalKernel.getBalance es.base r a < 256 ^ 32) :
     (∃ v, (a, v) ∈ bulkRecipients es r excluded) ↔
       (getCellValue es (.balance r a) ≠ canonicalAbsentValue (.balance r a)
         ∧ a ≠ excluded) := by
@@ -381,7 +381,7 @@ theorem subSteps_complete_of_pre
     (h : (Laws.distributeOthers r excluded amount).pre es.base) :
     (Action.distributeOthers_subSteps es r excluded amount).length
       = (bulkRecipients es r excluded).length :=
-  subSteps_length_eq_of_within_cap es r excluded amount h.2
+  subSteps_length_eq_of_within_cap es r excluded amount h.2.1
 
 /-- **And above the bound the law does nothing.**  Fail-closed: the
     step VM is never asked to adjudicate an advance it cannot
@@ -396,7 +396,7 @@ theorem distributeOthers_noop_above_cap
     (h : maxRecipientsPerBulkAction < (Laws.bulkRecipients s r excluded).length) :
     step_impl s (Laws.distributeOthers r excluded amount) = s := by
   unfold step_impl
-  rw [if_neg (fun hpre => absurd hpre.2 (Nat.not_le.mpr h))]
+  rw [if_neg (fun hpre => absurd hpre.2.1 (Nat.not_le.mpr h))]
 
 /-! ## The sub-step write set
 

@@ -111,7 +111,11 @@ def tests : List TestCase :=
         -- Compute hpre at runtime to also drive the precondition path.
         have hbal : getBalance s 1 10 ≥ 30 := by decide
         have hpos : 30 > 0 := by decide
-        let hpre : t.pre s := ⟨hbal, hpos⟩
+        -- The third conjunct is the C-3 ceiling on the credited
+        -- receiver, read from the post-debit state (`Laws/AmountBound.lean`).
+        have hcap : AmountBounded (setBalance s 1 10 (getBalance s 1 10 - 30))
+            1 20 30 := by decide
+        let hpre : t.pre s := ⟨hbal, hpos, hcap⟩
         let _proof : TotalSupply (step_impl s t) 1 = TotalSupply s 1 :=
           transfer_conserves 1 10 20 30 s hpre
         -- Value-level check: both sides compute to 150.
@@ -126,7 +130,11 @@ def tests : List TestCase :=
         let t  := transfer 1 10 10 30
         have hbal : getBalance s 1 10 ≥ 30 := by decide
         have hpos : 30 > 0 := by decide
-        let hpre : t.pre s := ⟨hbal, hpos⟩
+        -- Self-transfer: the post-debit read is `bal - 30`, so the
+        -- ceiling clause is `bal < maxAmount` rather than `bal + 30`.
+        have hcap : AmountBounded (setBalance s 1 10 (getBalance s 1 10 - 30))
+            1 10 30 := by decide
+        let hpre : t.pre s := ⟨hbal, hpos, hcap⟩
         let _proof : TotalSupply (step_impl s t) 1 = TotalSupply s 1 :=
           transfer_conserves 1 10 10 30 s hpre
         assertEq (expected := TotalSupply s 1)

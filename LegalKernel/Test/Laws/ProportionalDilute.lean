@@ -184,7 +184,8 @@ def tests : List TestCase :=
   , { name := "proportionalDilute_not_conservative API stability"
     , body := do
         let _proof : ∀ (r : ResourceId) (excluded : ActorId) (totalReward : Amount),
-            totalReward > 0 → ¬ IsConservative (proportionalDilute r excluded totalReward) :=
+            totalReward > 0 → totalReward + totalReward < maxAmount →
+            ¬ IsConservative (proportionalDilute r excluded totalReward) :=
           proportionalDilute_not_conservative
         pure ()
     }

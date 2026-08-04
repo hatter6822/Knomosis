@@ -289,6 +289,7 @@ import LegalKernel.FaultProof.CellValue
 import LegalKernel.FaultProof.CellStore
 import LegalKernel.FaultProof.CellWrites
 import LegalKernel.FaultProof.Commit
+import LegalKernel.FaultProof.BoundsReachable
 import LegalKernel.FaultProof.Smt
 import LegalKernel.FaultProof.LawClassification
 import LegalKernel.FaultProof.StepVariants

@@ -49,7 +49,7 @@ that `getCellValue` returns when the underlying sub-state has no
 entry for the cell key. -/
 
 /-- The canonical "absent" value for each cell type:
-    * `balance`: a CBE `0` on the 17-byte amount head — the same
+    * `balance`: a CBE `0` on the 33-byte amount head — the same
       head a present balance uses, so absent and present cells are
       read by one decoder path.
     * `nonce`, `bridgeNextWdId`: a CBE `0` on the 9-byte uint head
@@ -96,7 +96,7 @@ def canonicalAbsentValue : CellTag → ByteArray
 def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
   match tag with
   | .balance r a =>
-    -- A balance is value-carrying, so it rides the 17-byte amount
+    -- A balance is value-carrying, so it rides the 33-byte amount
     -- head rather than the 9-byte identifier head.  The nonce and
     -- next-withdrawal-id cells below keep the narrow head: they are
     -- counters, not wei.
@@ -147,7 +147,7 @@ def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
   -- all of `BridgeState`, but until these tags existed there was no
   -- cell to *prove* them against, so a dispute that turned on the AMM
   -- mirror or the kill switch had nothing to open.  Reserves and the
-  -- TVL figures are value-carrying, so they ride the 17-byte amount
+  -- TVL figures are value-carrying, so they ride the 33-byte amount
   -- head; the two flags ride the uint head as 0/1.
   | .bridgeAmmReserveEth =>
     ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveEth).toArray

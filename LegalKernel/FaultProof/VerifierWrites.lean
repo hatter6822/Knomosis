@@ -624,7 +624,9 @@ def deriveTransferBalances (read : BalanceReader)
     Option (List ((ResourceId × ActorId) × Nat)) :=
   match read r sender, read r receiver with
   | some sBal, some rBal =>
-    if amount > 0 ∧ amount ≤ sBal then
+    if amount > 0 ∧ amount ≤ sBal ∧
+       (if sender = receiver then sBal - amount else rBal) + amount
+         < Laws.maxAmount then
       if sender = receiver then
         some [((r, sender), sBal), ((r, receiver), sBal)]
       else
@@ -652,7 +654,9 @@ theorem deriveTransferBalances_correct
   show (match some (LegalKernel.getBalance es.base r sender),
               some (LegalKernel.getBalance es.base r receiver) with
         | some sBal, some rBal =>
-          if amount > 0 ∧ amount ≤ sBal then
+          if amount > 0 ∧ amount ≤ sBal ∧
+             (if sender = receiver then sBal - amount else rBal) + amount
+               < Laws.maxAmount then
             if sender = receiver then
               some [((r, sender), sBal), ((r, receiver), sBal)]
             else
@@ -661,15 +665,34 @@ theorem deriveTransferBalances_correct
             some [((r, sender), sBal), ((r, receiver), rBal)]
         | _, _ => none) = _
   simp only []
-  -- `Laws.transfer.pre` is `getBalance ≥ amount ∧ amount > 0`; the
-  -- derivation orders the conjuncts the other way, so the two guards
+  -- The law's ceiling conjunct reads the receiver from the DEBITED
+  -- state; the derivation branches on `sender = receiver` instead,
+  -- because it holds pre-values rather than a state.  Same number.
+  have h_read : LegalKernel.getBalance
+        (setBalance es.base r sender
+          (LegalKernel.getBalance es.base r sender - amount)) r receiver
+      = (if sender = receiver then LegalKernel.getBalance es.base r sender - amount
+         else LegalKernel.getBalance es.base r receiver) := by
+    by_cases h : sender = receiver
+    · subst h; rw [getBalance_setBalance_same, if_pos rfl]
+    · rw [getBalance_setBalance_other _ r r sender receiver _ (Or.inr h), if_neg h]
+  -- `Laws.transfer.pre` is `getBalance ≥ amount ∧ amount > 0 ∧ …`; the
+  -- derivation orders the first two the other way, so the two guards
   -- agree only after commuting them.
-  have h_iff : (amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r sender)
+  have h_iff : (amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r sender ∧
+        (if sender = receiver then LegalKernel.getBalance es.base r sender - amount
+         else LegalKernel.getBalance es.base r receiver) + amount < Laws.maxAmount)
       ↔ (Action.toTransition (.transfer r sender receiver amount) st.signer).pre es.base := by
-    show _ ↔ (LegalKernel.getBalance es.base r sender ≥ amount ∧ amount > 0)
-    exact ⟨fun h => ⟨h.2, h.1⟩, fun h => ⟨h.2, h.1⟩⟩
+    show _ ↔ (LegalKernel.getBalance es.base r sender ≥ amount ∧ amount > 0 ∧
+              Laws.AmountBounded (setBalance es.base r sender
+                (LegalKernel.getBalance es.base r sender - amount)) r receiver amount)
+    unfold Laws.AmountBounded
+    rw [h_read]
+    exact ⟨fun h => ⟨h.2.1, h.1, h.2.2⟩, fun h => ⟨h.2.1, h.1, h.2.2⟩⟩
   unfold step_impl
-  by_cases h_pre : amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r sender
+  by_cases h_pre : amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r sender ∧
+      (if sender = receiver then LegalKernel.getBalance es.base r sender - amount
+       else LegalKernel.getBalance es.base r receiver) + amount < Laws.maxAmount
   · rw [if_pos h_pre, if_pos (h_iff.mp h_pre)]
     show _ = some [((r, sender), LegalKernel.getBalance
                       ((Laws.transfer r sender receiver amount).apply_impl es.base) r sender),
@@ -683,7 +706,7 @@ theorem deriveTransferBalances_correct
       -- debited value, so the net is the pre-balance.
       rw [getBalance_setBalance_same]
       rw [getBalance_setBalance_same]
-      have h_ge : amount ≤ LegalKernel.getBalance es.base r sender := h_pre.2
+      have h_ge : amount ≤ LegalKernel.getBalance es.base r sender := h_pre.2.1
       have : LegalKernel.getBalance es.base r sender - amount + amount
           = LegalKernel.getBalance es.base r sender := Nat.sub_add_cancel h_ge
       rw [this]
@@ -710,7 +733,7 @@ def deriveCreditBalance (read : BalanceReader)
     Option (List ((ResourceId × ActorId) × Nat)) :=
   match read r to with
   | some bal =>
-    if amount > 0 then some [((r, to), bal + amount)]
+    if amount > 0 ∧ bal + amount < Laws.maxAmount then some [((r, to), bal + amount)]
     else some [((r, to), bal)]
   | none => none
 
@@ -733,10 +756,11 @@ theorem deriveCreditBalance_correct_mint
       = some [((r, to), LegalKernel.getBalance
                 (productionApplyBudget es st idx).base r to)] := by
   rw [productionApplyBudget_base, h_act]
-  show (if amount > 0 then some [((r, to), LegalKernel.getBalance es.base r to + amount)]
+  show (if amount > 0 ∧ LegalKernel.getBalance es.base r to + amount < Laws.maxAmount then
+          some [((r, to), LegalKernel.getBalance es.base r to + amount)]
         else some [((r, to), LegalKernel.getBalance es.base r to)]) = _
   unfold step_impl
-  by_cases h : amount > 0
+  by_cases h : amount > 0 ∧ LegalKernel.getBalance es.base r to + amount < Laws.maxAmount
   · rw [if_pos h, if_pos (show (Action.toTransition (.mint r to amount) st.signer).pre es.base from h)]
     show _ = some [((r, to), LegalKernel.getBalance
                       ((Laws.mint r to amount).apply_impl es.base) r to)]
@@ -756,10 +780,11 @@ theorem deriveCreditBalance_correct_reward
       = some [((r, to), LegalKernel.getBalance
                 (productionApplyBudget es st idx).base r to)] := by
   rw [productionApplyBudget_base, h_act]
-  show (if amount > 0 then some [((r, to), LegalKernel.getBalance es.base r to + amount)]
+  show (if amount > 0 ∧ LegalKernel.getBalance es.base r to + amount < Laws.maxAmount then
+          some [((r, to), LegalKernel.getBalance es.base r to + amount)]
         else some [((r, to), LegalKernel.getBalance es.base r to)]) = _
   unfold step_impl
-  by_cases h : amount > 0
+  by_cases h : amount > 0 ∧ LegalKernel.getBalance es.base r to + amount < Laws.maxAmount
   · rw [if_pos h,
       if_pos (show (Action.toTransition (.reward r to amount) st.signer).pre es.base from h)]
     show _ = some [((r, to), LegalKernel.getBalance
@@ -806,7 +831,9 @@ def deriveDepositBalance (read : BalanceReader)
     (r : ResourceId) (recipient : ActorId) (amount : Amount) :
     Option (List ((ResourceId × ActorId) × Nat)) :=
   match read r recipient with
-  | some bal => some [((r, recipient), bal + amount)]
+  | some bal =>
+    if bal + amount < Laws.maxAmount then some [((r, recipient), bal + amount)]
+    else some [((r, recipient), bal)]
   | none     => none
 
 /-- **`withdraw`'s balance write** — a debit under a sufficiency
@@ -830,14 +857,19 @@ theorem deriveDepositBalance_correct
       = some [((r, recipient), LegalKernel.getBalance
                 (productionApplyBudget es st idx).base r recipient)] := by
   rw [productionApplyBudget_base, h_act]
-  show some [((r, recipient), LegalKernel.getBalance es.base r recipient + amount)] = _
+  show (if LegalKernel.getBalance es.base r recipient + amount < Laws.maxAmount then
+          some [((r, recipient), LegalKernel.getBalance es.base r recipient + amount)]
+        else some [((r, recipient), LegalKernel.getBalance es.base r recipient)]) = _
   unfold step_impl
-  rw [if_pos (show (Action.toTransition (.deposit r recipient amount d)
-    st.signer).pre es.base from trivial)]
-  show _ = some [((r, recipient), LegalKernel.getBalance
-                    ((Laws.deposit r recipient amount d).apply_impl es.base) r recipient)]
-  simp only [Laws.deposit]
-  rw [getBalance_setBalance_same]
+  by_cases h : LegalKernel.getBalance es.base r recipient + amount < Laws.maxAmount
+  · rw [if_pos h, if_pos (show (Action.toTransition (.deposit r recipient amount d)
+      st.signer).pre es.base from h)]
+    show _ = some [((r, recipient), LegalKernel.getBalance
+                      ((Laws.deposit r recipient amount d).apply_impl es.base) r recipient)]
+    simp only [Laws.deposit]
+    rw [getBalance_setBalance_same]
+  · rw [if_neg h, if_neg (show ¬ (Action.toTransition (.deposit r recipient amount d)
+      st.signer).pre es.base from h)]
 
 /-- The verifier's `withdraw` balance is the sequencer's. -/
 theorem deriveWithdrawBalance_correct
@@ -910,6 +942,23 @@ theorem getBalance_chain_pair_first (s : State) (r : ResourceId) (x y : ActorId)
   · rw [getBalance_setBalance_other _ r r y x _ (Or.inr (fun he => h he.symm)),
       getBalance_setBalance_same, if_neg h]
 
+/-- **What the credit leg reads, in the form the derivation holds it.**
+
+    Every chained law states its ceiling conjunct over the POST-DEBIT
+    state, because that is the state its credit reads.  A verifier
+    holds pre-values rather than a state, so it must branch on
+    `x = y` instead.  This is the bridge between the two spellings,
+    and it is shared by all five chained variants — a per-variant copy
+    would be five chances for the branch to drift from the law's. -/
+theorem getBalance_chain_second_read (s : State) (r : ResourceId) (x y : ActorId)
+    (fx : Nat → Nat) :
+    LegalKernel.getBalance (setBalance s r x (fx (LegalKernel.getBalance s r x))) r y
+      = (if x = y then fx (LegalKernel.getBalance s r x)
+         else LegalKernel.getBalance s r y) := by
+  by_cases h : x = y
+  · subst h; rw [getBalance_setBalance_same, if_pos rfl]
+  · rw [getBalance_setBalance_other _ r r x y _ (Or.inr h), if_neg h]
+
 /-- **The chained pair's derivation.**  `fx` and `fy` are the law's own
     per-cell arithmetic; the branch on `x = y` is the chain's, not the
     law's, so every caller gets it right by construction. -/
@@ -956,33 +1005,32 @@ theorem deriveChainPair_correct (es : ExtendedState) (r : ResourceId)
 def deriveTopUpBalances (read : BalanceReader)
     (gr : ResourceId) (payer poolActor : ActorId) (gasAmount : Amount) :
     Option (List ((ResourceId × ActorId) × Nat)) :=
-  match read gr payer with
-  | some payerBal =>
-    if gasAmount ≤ payerBal then
+  match read gr payer, read gr poolActor with
+  | some payerBal, some poolBal =>
+    if gasAmount ≤ payerBal ∧
+       (if payer = poolActor then payerBal - gasAmount else poolBal) + gasAmount
+         < Laws.maxAmount then
       deriveChainPair read gr payer poolActor
         (fun b => b - gasAmount) (fun b => b + gasAmount)
     else
-      match read gr poolActor with
-      | some poolBal => some [((gr, payer), payerBal), ((gr, poolActor), poolBal)]
-      | none         => none
-  | none => none
+      some [((gr, payer), payerBal), ((gr, poolActor), poolBal)]
+  | _, _ => none
 
 /-- **`claimBudgetRefund`'s balance writes** — the mirror: debit the
     pool, credit the claimant. -/
 def deriveRefundBalances (read : BalanceReader)
     (gr : ResourceId) (poolActor claimant : ActorId) (refundAmount : Amount) :
     Option (List ((ResourceId × ActorId) × Nat)) :=
-  match read gr poolActor with
-  | some poolBal =>
-    if refundAmount ≤ poolBal then
+  match read gr poolActor, read gr claimant with
+  | some poolBal, some claimBal =>
+    if refundAmount ≤ poolBal ∧
+       (if poolActor = claimant then poolBal - refundAmount else claimBal)
+         + refundAmount < Laws.maxAmount then
       deriveChainPair read gr poolActor claimant
         (fun b => b - refundAmount) (fun b => b + refundAmount)
     else
-      match read gr claimant with
-      | some claimBal =>
-          some [((gr, poolActor), poolBal), ((gr, claimant), claimBal)]
-      | none => none
-  | none => none
+      some [((gr, poolActor), poolBal), ((gr, claimant), claimBal)]
+  | _, _ => none
 
 /-- **`depositWithFee`'s balance writes** — credit the recipient, then
     the pool.  `pre` is `True`, like `deposit`'s, so there is no
@@ -991,8 +1039,16 @@ def deriveDepositWithFeeBalances (read : BalanceReader)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) :
     Option (List ((ResourceId × ActorId) × Nat)) :=
-  deriveChainPair read r recipient poolActor
-    (fun b => b + userAmount) (fun b => b + poolAmount)
+  match read r recipient, read r poolActor with
+  | some recipBal, some poolBal =>
+    if recipBal + userAmount < Laws.maxAmount ∧
+       (if recipient = poolActor then recipBal + userAmount else poolBal)
+         + poolAmount < Laws.maxAmount then
+      deriveChainPair read r recipient poolActor
+        (fun b => b + userAmount) (fun b => b + poolAmount)
+    else
+      some [((r, recipient), recipBal), ((r, poolActor), poolBal)]
+  | _, _ => none
 
 /-- The verifier's `topUpActionBudget` balances are the sequencer's. -/
 theorem deriveTopUpBalances_correct
@@ -1007,14 +1063,24 @@ theorem deriveTopUpBalances_correct
   rw [productionApplyBudget_base, h_act]
   unfold deriveTopUpBalances stateBalanceReader step_impl
   simp only []
-  by_cases h : gasAmount ≤ LegalKernel.getBalance es.base gr st.signer
+  have h_read := getBalance_chain_second_read es.base gr st.signer pa
+    (fun b => b - gasAmount)
+  by_cases h : gasAmount ≤ LegalKernel.getBalance es.base gr st.signer ∧
+      (if st.signer = pa then LegalKernel.getBalance es.base gr st.signer - gasAmount
+       else LegalKernel.getBalance es.base gr pa) + gasAmount < Laws.maxAmount
   · rw [if_pos h,
       if_pos (show (Action.toTransition (.topUpActionBudget gr gasAmount bi pa)
-        st.signer).pre es.base from h)]
+        st.signer).pre es.base from ⟨h.1, by
+          show Laws.AmountBounded _ gr pa gasAmount
+          unfold Laws.AmountBounded
+          rw [h_read]; exact h.2⟩)]
     exact deriveChainPair_correct es gr st.signer pa _ _
   · rw [if_neg h,
       if_neg (show ¬ (Action.toTransition (.topUpActionBudget gr gasAmount bi pa)
-        st.signer).pre es.base from h)]
+        st.signer).pre es.base from fun hp => h ⟨hp.1, by
+          have := hp.2
+          unfold Laws.AmountBounded at this
+          rw [h_read] at this; exact this⟩)]
 
 /-- The verifier's `claimBudgetRefund` balances are the sequencer's. -/
 theorem deriveRefundBalances_correct
@@ -1033,16 +1099,28 @@ theorem deriveRefundBalances_correct
   rw [productionApplyBudget_base, h_act]
   unfold deriveRefundBalances stateBalanceReader step_impl
   simp only []
-  by_cases h : budgetUnits * weiPerBudgetUnit ≤ LegalKernel.getBalance es.base gr pa
+  have h_read := getBalance_chain_second_read es.base gr pa st.signer
+    (fun b => b - budgetUnits * weiPerBudgetUnit)
+  by_cases h : budgetUnits * weiPerBudgetUnit ≤ LegalKernel.getBalance es.base gr pa ∧
+      (if pa = st.signer then
+         LegalKernel.getBalance es.base gr pa - budgetUnits * weiPerBudgetUnit
+       else LegalKernel.getBalance es.base gr st.signer)
+        + budgetUnits * weiPerBudgetUnit < Laws.maxAmount
   · rw [if_pos h,
       if_pos (show (Action.toTransition
         (.claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa)
-        st.signer).pre es.base from h)]
+        st.signer).pre es.base from ⟨h.1, by
+          show Laws.AmountBounded _ gr st.signer _
+          unfold Laws.AmountBounded
+          rw [h_read]; exact h.2⟩)]
     exact deriveChainPair_correct es gr pa st.signer _ _
   · rw [if_neg h,
       if_neg (show ¬ (Action.toTransition
         (.claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa)
-        st.signer).pre es.base from h)]
+        st.signer).pre es.base from fun hp => h ⟨hp.1, by
+          have := hp.2
+          unfold Laws.AmountBounded at this
+          rw [h_read] at this; exact this⟩)]
 
 /-- The verifier's `depositWithFee` balances are the sequencer's. -/
 theorem deriveDepositWithFeeBalances_correct
@@ -1059,10 +1137,27 @@ theorem deriveDepositWithFeeBalances_correct
              , ((r, poolActor), LegalKernel.getBalance
                   (productionApplyBudget es st idx).base r poolActor) ] := by
   rw [productionApplyBudget_base, h_act]
-  unfold deriveDepositWithFeeBalances step_impl
-  rw [if_pos (show (Action.toTransition (.depositWithFee r recipient poolActor
-    userAmount poolAmount bg d) st.signer).pre es.base from trivial)]
-  exact deriveChainPair_correct es r recipient poolActor _ _
+  unfold deriveDepositWithFeeBalances stateBalanceReader step_impl
+  simp only []
+  have h_read := getBalance_chain_second_read es.base r recipient poolActor
+    (fun b => b + userAmount)
+  have h_iff : (LegalKernel.getBalance es.base r recipient + userAmount < Laws.maxAmount ∧
+      (if recipient = poolActor then LegalKernel.getBalance es.base r recipient + userAmount
+       else LegalKernel.getBalance es.base r poolActor) + poolAmount < Laws.maxAmount)
+      ↔ (Action.toTransition (.depositWithFee r recipient poolActor
+          userAmount poolAmount bg d) st.signer).pre es.base := by
+    show _ ↔ (Laws.AmountBounded es.base r recipient userAmount ∧
+              Laws.AmountBounded (setBalance es.base r recipient
+                (LegalKernel.getBalance es.base r recipient + userAmount))
+                r poolActor poolAmount)
+    unfold Laws.AmountBounded
+    rw [h_read]
+  by_cases h : LegalKernel.getBalance es.base r recipient + userAmount < Laws.maxAmount ∧
+      (if recipient = poolActor then LegalKernel.getBalance es.base r recipient + userAmount
+       else LegalKernel.getBalance es.base r poolActor) + poolAmount < Laws.maxAmount
+  · rw [if_pos h, if_pos (h_iff.mp h)]
+    exact deriveChainPair_correct es r recipient poolActor _ _
+  · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
 
 /-- **`topUpActionBudgetFor`'s balance writes** — the delegated
     top-up: the SIGNER pays, the pool is credited, and the recipient
@@ -1075,16 +1170,16 @@ theorem deriveDepositWithFeeBalances_correct
 def deriveDelegatedTopUpBalances (read : BalanceReader)
     (gr : ResourceId) (payer poolActor recipient : ActorId)
     (gasAmount : Amount) : Option (List ((ResourceId × ActorId) × Nat)) :=
-  match read gr payer with
-  | some payerBal =>
-    if gasAmount ≤ payerBal ∧ recipient ≠ payer then
+  match read gr payer, read gr poolActor with
+  | some payerBal, some poolBal =>
+    if gasAmount ≤ payerBal ∧ recipient ≠ payer ∧
+       (if payer = poolActor then payerBal - gasAmount else poolBal) + gasAmount
+         < Laws.maxAmount then
       deriveChainPair read gr payer poolActor
         (fun b => b - gasAmount) (fun b => b + gasAmount)
     else
-      match read gr poolActor with
-      | some poolBal => some [((gr, payer), payerBal), ((gr, poolActor), poolBal)]
-      | none         => none
-  | none => none
+      some [((gr, payer), payerBal), ((gr, poolActor), poolBal)]
+  | _, _ => none
 
 /-- **`reclaimAmmReserves`' balance writes** — the post-disable sweep:
     debit the reserve actor its ENTIRE balance, credit the pool.
@@ -1094,17 +1189,16 @@ def deriveDelegatedTopUpBalances (read : BalanceReader)
 def deriveReclaimBalances (read : BalanceReader)
     (r : ResourceId) (reserveActor poolActor : ActorId) (amount : Amount) :
     Option (List ((ResourceId × ActorId) × Nat)) :=
-  match read r reserveActor with
-  | some reserveBal =>
-    if reserveBal = amount ∧ reserveActor ≠ poolActor ∧ amount > 0 then
+  match read r reserveActor, read r poolActor with
+  | some reserveBal, some poolBal =>
+    if reserveBal = amount ∧ reserveActor ≠ poolActor ∧ amount > 0 ∧
+       (if reserveActor = poolActor then reserveBal - amount else poolBal) + amount
+         < Laws.maxAmount then
       deriveChainPair read r reserveActor poolActor
         (fun b => b - amount) (fun b => b + amount)
     else
-      match read r poolActor with
-      | some poolBal =>
-          some [((r, reserveActor), reserveBal), ((r, poolActor), poolBal)]
-      | none => none
-  | none => none
+      some [((r, reserveActor), reserveBal), ((r, poolActor), poolBal)]
+  | _, _ => none
 
 /-- The verifier's `topUpActionBudgetFor` balances are the
     sequencer's. -/
@@ -1122,13 +1216,25 @@ theorem deriveDelegatedTopUpBalances_correct
   rw [productionApplyBudget_base, h_act]
   unfold deriveDelegatedTopUpBalances stateBalanceReader step_impl
   simp only []
+  have h_read := getBalance_chain_second_read es.base gr st.signer pa
+    (fun b => b - gasAmount)
   have h_iff : (gasAmount ≤ LegalKernel.getBalance es.base gr st.signer ∧
-      recipient ≠ st.signer)
+      recipient ≠ st.signer ∧
+      (if st.signer = pa then LegalKernel.getBalance es.base gr st.signer - gasAmount
+       else LegalKernel.getBalance es.base gr pa) + gasAmount < Laws.maxAmount)
       ↔ (Action.toTransition (.topUpActionBudgetFor recipient gr gasAmount bi pa)
-          st.signer).pre es.base :=
-    ⟨fun h => ⟨h.1, h.2⟩, fun h => ⟨h.1, h.2⟩⟩
+          st.signer).pre es.base := by
+    show _ ↔ (gasAmount ≤ LegalKernel.getBalance es.base gr st.signer ∧
+              recipient ≠ st.signer ∧
+              Laws.AmountBounded (setBalance es.base gr st.signer
+                (LegalKernel.getBalance es.base gr st.signer - gasAmount))
+                gr pa gasAmount)
+    unfold Laws.AmountBounded
+    rw [h_read]
   by_cases h : gasAmount ≤ LegalKernel.getBalance es.base gr st.signer ∧
-      recipient ≠ st.signer
+      recipient ≠ st.signer ∧
+      (if st.signer = pa then LegalKernel.getBalance es.base gr st.signer - gasAmount
+       else LegalKernel.getBalance es.base gr pa) + gasAmount < Laws.maxAmount
   · rw [if_pos h, if_pos (h_iff.mp h)]
     exact deriveChainPair_correct es gr st.signer pa _ _
   · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
@@ -1146,13 +1252,27 @@ theorem deriveReclaimBalances_correct
   rw [productionApplyBudget_base, h_act]
   unfold deriveReclaimBalances stateBalanceReader step_impl
   simp only []
+  have h_read := getBalance_chain_second_read es.base r reserveActor poolActor
+    (fun b => b - amount)
   have h_iff : (LegalKernel.getBalance es.base r reserveActor = amount ∧
-      reserveActor ≠ poolActor ∧ amount > 0)
+      reserveActor ≠ poolActor ∧ amount > 0 ∧
+      (if reserveActor = poolActor then
+         LegalKernel.getBalance es.base r reserveActor - amount
+       else LegalKernel.getBalance es.base r poolActor) + amount < Laws.maxAmount)
       ↔ (Action.toTransition (.reclaimAmmReserves r amount reserveActor poolActor)
-          st.signer).pre es.base :=
-    ⟨fun h => ⟨h.1, h.2⟩, fun h => ⟨h.1, h.2⟩⟩
+          st.signer).pre es.base := by
+    show _ ↔ (LegalKernel.getBalance es.base r reserveActor = amount ∧
+              reserveActor ≠ poolActor ∧ amount > 0 ∧
+              Laws.AmountBounded (setBalance es.base r reserveActor
+                (LegalKernel.getBalance es.base r reserveActor - amount))
+                r poolActor amount)
+    unfold Laws.AmountBounded
+    rw [h_read]
   by_cases h : LegalKernel.getBalance es.base r reserveActor = amount ∧
-      reserveActor ≠ poolActor ∧ amount > 0
+      reserveActor ≠ poolActor ∧ amount > 0 ∧
+      (if reserveActor = poolActor then
+         LegalKernel.getBalance es.base r reserveActor - amount
+       else LegalKernel.getBalance es.base r poolActor) + amount < Laws.maxAmount
   · rw [if_pos h, if_pos (h_iff.mp h)]
     exact deriveChainPair_correct es r reserveActor poolActor _ _
   · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
@@ -1170,7 +1290,8 @@ def deriveAmmSwapBalances (read : BalanceReader)
     (ammReserveActor : ActorId) : Option (List ((ResourceId × ActorId) × Nat)) :=
   match read fromResource ammReserveActor, read toResource ammReserveActor with
   | some fromBal, some toBal =>
-    if toBal ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0 then
+    if toBal ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0 ∧
+       fromBal + amountIn < Laws.maxAmount then
       some [ ((fromResource, ammReserveActor), fromBal + amountIn)
            , ((toResource, ammReserveActor), toBal - amountOut) ]
     else
@@ -1195,12 +1316,16 @@ theorem deriveAmmSwapBalances_correct
   unfold deriveAmmSwapBalances stateBalanceReader step_impl
   simp only []
   have h_iff : (LegalKernel.getBalance es.base toResource ammReserveActor ≥ amountOut ∧
-      fromResource ≠ toResource ∧ amountIn > 0)
+      fromResource ≠ toResource ∧ amountIn > 0 ∧
+      LegalKernel.getBalance es.base fromResource ammReserveActor + amountIn
+        < Laws.maxAmount)
       ↔ (Action.toTransition (.ammSwap fromResource toResource amountIn amountOut
           ammReserveActor) st.signer).pre es.base :=
-    ⟨fun h => ⟨h.1, h.2⟩, fun h => ⟨h.1, h.2⟩⟩
+    Iff.rfl
   by_cases h : LegalKernel.getBalance es.base toResource ammReserveActor ≥ amountOut ∧
-      fromResource ≠ toResource ∧ amountIn > 0
+      fromResource ≠ toResource ∧ amountIn > 0 ∧
+      LegalKernel.getBalance es.base fromResource ammReserveActor + amountIn
+        < Laws.maxAmount
   · rw [if_pos h, if_pos (h_iff.mp h)]
     show _ = some [((fromResource, ammReserveActor), LegalKernel.getBalance
                       ((Laws.ammSwap fromResource toResource amountIn amountOut
@@ -1785,7 +1910,9 @@ theorem deriveTransferBalances_alias_consistent (read : BalanceReader)
     | some rBal =>
       rw [hs, hr] at h
       simp only [] at h
-      by_cases hpre : amount > 0 ∧ amount ≤ sBal
+      by_cases hpre : amount > 0 ∧ amount ≤ sBal ∧
+          (if sender = receiver then sBal - amount else rBal) + amount
+            < Laws.maxAmount
       · rw [if_pos hpre] at h
         by_cases hsr : sender = receiver
         · rw [if_pos hsr] at h
@@ -1811,18 +1938,19 @@ theorem deriveTopUpBalances_alias_consistent (read : BalanceReader)
     aliasConsistent plan = true := by
   unfold deriveTopUpBalances at h
   cases hp : read gr payer with
-  | none => rw [hp] at h; simp at h
+  | none => rw [hp] at h; cases read gr poolActor <;> simp at h
   | some payerBal =>
-    rw [hp] at h
-    simp only [] at h
-    by_cases hpre : gasAmount ≤ payerBal
-    · rw [if_pos hpre] at h
-      exact deriveChainPair_alias_consistent read gr payer poolActor _ _ plan h
-    · rw [if_neg hpre] at h
-      cases hq : read gr poolActor with
-      | none => rw [hq] at h; simp at h
-      | some poolBal =>
-        rw [hq] at h
+    cases hq : read gr poolActor with
+    | none => rw [hp, hq] at h; simp at h
+    | some poolBal =>
+      rw [hp, hq] at h
+      simp only [] at h
+      by_cases hpre : gasAmount ≤ payerBal ∧
+          (if payer = poolActor then payerBal - gasAmount else poolBal) + gasAmount
+            < Laws.maxAmount
+      · rw [if_pos hpre] at h
+        exact deriveChainPair_alias_consistent read gr payer poolActor _ _ plan h
+      · rw [if_neg hpre] at h
         simp only [Option.some.injEq] at h
         subst h
         exact aliasConsistent_read_pair read gr gr payer poolActor payerBal poolBal hp hq
@@ -1835,18 +1963,19 @@ theorem deriveRefundBalances_alias_consistent (read : BalanceReader)
     aliasConsistent plan = true := by
   unfold deriveRefundBalances at h
   cases hp : read gr poolActor with
-  | none => rw [hp] at h; simp at h
+  | none => rw [hp] at h; cases read gr claimant <;> simp at h
   | some poolBal =>
-    rw [hp] at h
-    simp only [] at h
-    by_cases hpre : refundAmount ≤ poolBal
-    · rw [if_pos hpre] at h
-      exact deriveChainPair_alias_consistent read gr poolActor claimant _ _ plan h
-    · rw [if_neg hpre] at h
-      cases hq : read gr claimant with
-      | none => rw [hq] at h; simp at h
-      | some claimBal =>
-        rw [hq] at h
+    cases hq : read gr claimant with
+    | none => rw [hp, hq] at h; simp at h
+    | some claimBal =>
+      rw [hp, hq] at h
+      simp only [] at h
+      by_cases hpre : refundAmount ≤ poolBal ∧
+          (if poolActor = claimant then poolBal - refundAmount else claimBal)
+            + refundAmount < Laws.maxAmount
+      · rw [if_pos hpre] at h
+        exact deriveChainPair_alias_consistent read gr poolActor claimant _ _ plan h
+      · rw [if_neg hpre] at h
         simp only [Option.some.injEq] at h
         subst h
         exact aliasConsistent_read_pair read gr gr poolActor claimant poolBal claimBal hp hq
@@ -1870,7 +1999,8 @@ theorem deriveAmmSwapBalances_alias_consistent (read : BalanceReader)
     | some toBal =>
       rw [hf, ht] at h
       simp only [] at h
-      by_cases hpre : toBal ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0
+      by_cases hpre : toBal ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0 ∧
+          fromBal + amountIn < Laws.maxAmount
       · rw [if_pos hpre] at h
         simp only [Option.some.injEq] at h
         subst h
@@ -1892,18 +2022,19 @@ theorem deriveReclaimBalances_alias_consistent (read : BalanceReader)
     aliasConsistent plan = true := by
   unfold deriveReclaimBalances at h
   cases hs : read r reserveActor with
-  | none => rw [hs] at h; simp at h
+  | none => rw [hs] at h; cases read r poolActor <;> simp at h
   | some reserveBal =>
-    rw [hs] at h
-    simp only [] at h
-    by_cases hpre : reserveBal = amount ∧ reserveActor ≠ poolActor ∧ amount > 0
-    · rw [if_pos hpre] at h
-      exact deriveChainPair_alias_consistent read r reserveActor poolActor _ _ plan h
-    · rw [if_neg hpre] at h
-      cases hq : read r poolActor with
-      | none => rw [hq] at h; simp at h
-      | some poolBal =>
-        rw [hq] at h
+    cases hq : read r poolActor with
+    | none => rw [hs, hq] at h; simp at h
+    | some poolBal =>
+      rw [hs, hq] at h
+      simp only [] at h
+      by_cases hpre : reserveBal = amount ∧ reserveActor ≠ poolActor ∧ amount > 0 ∧
+          (if reserveActor = poolActor then reserveBal - amount else poolBal) + amount
+            < Laws.maxAmount
+      · rw [if_pos hpre] at h
+        exact deriveChainPair_alias_consistent read r reserveActor poolActor _ _ plan h
+      · rw [if_neg hpre] at h
         simp only [Option.some.injEq] at h
         subst h
         exact aliasConsistent_read_pair read r r reserveActor poolActor
@@ -1919,21 +2050,56 @@ theorem deriveDelegatedTopUpBalances_alias_consistent (read : BalanceReader)
     aliasConsistent plan = true := by
   unfold deriveDelegatedTopUpBalances at h
   cases hp : read gr payer with
-  | none => rw [hp] at h; simp at h
+  | none => rw [hp] at h; cases read gr poolActor <;> simp at h
   | some payerBal =>
-    rw [hp] at h
-    simp only [] at h
-    by_cases hpre : gasAmount ≤ payerBal ∧ recipient ≠ payer
-    · rw [if_pos hpre] at h
-      exact deriveChainPair_alias_consistent read gr payer poolActor _ _ plan h
-    · rw [if_neg hpre] at h
-      cases hq : read gr poolActor with
-      | none => rw [hq] at h; simp at h
-      | some poolBal =>
-        rw [hq] at h
+    cases hq : read gr poolActor with
+    | none => rw [hp, hq] at h; simp at h
+    | some poolBal =>
+      rw [hp, hq] at h
+      simp only [] at h
+      by_cases hpre : gasAmount ≤ payerBal ∧ recipient ≠ payer ∧
+          (if payer = poolActor then payerBal - gasAmount else poolBal) + gasAmount
+            < Laws.maxAmount
+      · rw [if_pos hpre] at h
+        exact deriveChainPair_alias_consistent read gr payer poolActor _ _ plan h
+      · rw [if_neg hpre] at h
         simp only [Option.some.injEq] at h
         subst h
         exact aliasConsistent_read_pair read gr gr payer poolActor payerBal poolBal hp hq
+
+/-- `deriveDepositWithFeeBalances` is alias-consistent.
+
+    It used to BE a bare `deriveChainPair`, so the chained pair's own
+    lemma covered it and `plannedBalances_alias_consistent` invoked
+    that directly.  The C-3 ceiling put a guard in front, so the
+    refusal branch is now a pair of pre-values and needs the same
+    two-case split every other guarded pair takes. -/
+theorem deriveDepositWithFeeBalances_alias_consistent (read : BalanceReader)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveDepositWithFeeBalances read r recipient poolActor
+           userAmount poolAmount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveDepositWithFeeBalances at h
+  cases hr : read r recipient with
+  | none => rw [hr] at h; cases read r poolActor <;> simp at h
+  | some recipBal =>
+    cases hq : read r poolActor with
+    | none => rw [hr, hq] at h; simp at h
+    | some poolBal =>
+      rw [hr, hq] at h
+      simp only [] at h
+      by_cases hpre : recipBal + userAmount < Laws.maxAmount ∧
+          (if recipient = poolActor then recipBal + userAmount else poolBal)
+            + poolAmount < Laws.maxAmount
+      · rw [if_pos hpre] at h
+        exact deriveChainPair_alias_consistent read r recipient poolActor _ _ plan h
+      · rw [if_neg hpre] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        exact aliasConsistent_read_pair read r r recipient poolActor
+          recipBal poolBal hr hq
 
 /-- The four single-cell derivations are alias-consistent: one entry
     cannot alias anything. -/
@@ -1948,7 +2114,7 @@ theorem deriveCreditBalance_alias_consistent (read : BalanceReader)
   | some bal =>
     rw [hb] at h
     simp only [] at h
-    by_cases hpos : amount > 0
+    by_cases hpos : amount > 0 ∧ bal + amount < Laws.maxAmount
     · rw [if_pos hpos] at h; simp only [Option.some.injEq] at h; subst h
       exact aliasConsistent_singleton _ _
     · rw [if_neg hpos] at h; simp only [Option.some.injEq] at h; subst h
@@ -1983,9 +2149,12 @@ theorem deriveDepositBalance_alias_consistent (read : BalanceReader)
   | none => rw [hb] at h; simp at h
   | some bal =>
     rw [hb] at h
-    simp only [Option.some.injEq] at h
-    subst h
-    exact aliasConsistent_singleton _ _
+    simp only [] at h
+    by_cases hpre : bal + amount < Laws.maxAmount
+    · rw [if_pos hpre] at h; simp only [Option.some.injEq] at h; subst h
+      exact aliasConsistent_singleton _ _
+    · rw [if_neg hpre] at h; simp only [Option.some.injEq] at h; subst h
+      exact aliasConsistent_singleton _ _
 
 /-- `deriveWithdrawBalance` writes one cell. -/
 theorem deriveWithdrawBalance_alias_consistent (read : BalanceReader)
@@ -2076,7 +2245,8 @@ theorem deriveDepositWithFeeBalances_congr (read₁ read₂ : BalanceReader)
     deriveDepositWithFeeBalances read₁ r recipient poolActor userAmount poolAmount
       = deriveDepositWithFeeBalances read₂ r recipient poolActor userAmount poolAmount := by
   unfold deriveDepositWithFeeBalances
-  exact deriveChainPair_congr read₁ read₂ r recipient poolActor _ _ hr hp
+  rw [hr, hp, deriveChainPair_congr read₁ read₂ r recipient poolActor
+        (fun b => b + userAmount) (fun b => b + poolAmount) hr hp]
 
 /-- `topUpActionBudget` reads the payer's and the pool's cells — both
     branches, since the failing one still returns their pre-values. -/
@@ -2087,14 +2257,8 @@ theorem deriveTopUpBalances_congr (read₁ read₂ : BalanceReader)
     deriveTopUpBalances read₁ gr payer poolActor gasAmount
       = deriveTopUpBalances read₂ gr payer poolActor gasAmount := by
   unfold deriveTopUpBalances
-  rw [hp]
-  cases read₂ gr payer with
-  | none => rfl
-  | some payerBal =>
-    simp only []
-    split
-    · exact deriveChainPair_congr read₁ read₂ gr payer poolActor _ _ hp hq
-    · rw [hq]
+  rw [hp, hq, deriveChainPair_congr read₁ read₂ gr payer poolActor
+        (fun b => b - gasAmount) (fun b => b + gasAmount) hp hq]
 
 /-- `topUpActionBudgetFor` reads the payer's and the pool's cells; the
     recipient enters only through the guard, not through a read. -/
@@ -2105,14 +2269,8 @@ theorem deriveDelegatedTopUpBalances_congr (read₁ read₂ : BalanceReader)
     deriveDelegatedTopUpBalances read₁ gr payer poolActor recipient gasAmount
       = deriveDelegatedTopUpBalances read₂ gr payer poolActor recipient gasAmount := by
   unfold deriveDelegatedTopUpBalances
-  rw [hp]
-  cases read₂ gr payer with
-  | none => rfl
-  | some payerBal =>
-    simp only []
-    split
-    · exact deriveChainPair_congr read₁ read₂ gr payer poolActor _ _ hp hq
-    · rw [hq]
+  rw [hp, hq, deriveChainPair_congr read₁ read₂ gr payer poolActor
+        (fun b => b - gasAmount) (fun b => b + gasAmount) hp hq]
 
 /-- `claimBudgetRefund` reads the pool's and the claimant's cells. -/
 theorem deriveRefundBalances_congr (read₁ read₂ : BalanceReader)
@@ -2122,14 +2280,8 @@ theorem deriveRefundBalances_congr (read₁ read₂ : BalanceReader)
     deriveRefundBalances read₁ gr poolActor claimant refundAmount
       = deriveRefundBalances read₂ gr poolActor claimant refundAmount := by
   unfold deriveRefundBalances
-  rw [hp]
-  cases read₂ gr poolActor with
-  | none => rfl
-  | some poolBal =>
-    simp only []
-    split
-    · exact deriveChainPair_congr read₁ read₂ gr poolActor claimant _ _ hp hc
-    · rw [hc]
+  rw [hp, hc, deriveChainPair_congr read₁ read₂ gr poolActor claimant
+        (fun b => b - refundAmount) (fun b => b + refundAmount) hp hc]
 
 /-- `ammSwap` reads the reserve actor's cell at BOTH resources. -/
 theorem deriveAmmSwapBalances_congr (read₁ read₂ : BalanceReader)
@@ -2151,14 +2303,8 @@ theorem deriveReclaimBalances_congr (read₁ read₂ : BalanceReader)
     deriveReclaimBalances read₁ r reserveActor poolActor amount
       = deriveReclaimBalances read₂ r reserveActor poolActor amount := by
   unfold deriveReclaimBalances
-  rw [hres]
-  cases read₂ r reserveActor with
-  | none => rfl
-  | some reserveBal =>
-    simp only []
-    split
-    · exact deriveChainPair_congr read₁ read₂ r reserveActor poolActor _ _ hres hpool
-    · rw [hpool]
+  rw [hres, hpool, deriveChainPair_congr read₁ read₂ r reserveActor poolActor
+        (fun b => b - amount) (fun b => b + amount) hres hpool]
 
 end FaultProof
 end LegalKernel

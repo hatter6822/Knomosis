@@ -587,7 +587,7 @@ theorem l1NextEntryHash_size (p s a : ByteArray) :
       * tag `cbeTagUint` with exactly 9 bytes → read the 8-byte
         little-endian payload.  Identifier-width cells (nonces, the
         next-withdrawal id).
-      * tag `cbeTagAmount` with exactly 17 bytes → read the 16-byte
+      * tag `cbeTagAmount` with exactly 33 bytes → read the 32-byte
         little-endian payload.  Balance cells, which are
         wei-denominated and therefore cross `2^64`.
       * anything else — unknown tag, or a length that does not match
@@ -597,7 +597,7 @@ theorem l1NextEntryHash_size (p s a : ByteArray) :
         dispatcher cannot produce the responsible party's claim".
 
     Deriving the width from the tag rather than assuming 8 bytes is
-    load-bearing.  A fixed 8-byte read against a 17-byte amount cell
+    load-bearing.  A fixed 8-byte read against a 33-byte amount cell
     returns the low 64 bits — a *wrong balance*, silently, on exactly
     the values a bisection game settles against. -/
 def decodeCellNat (bytes : ByteArray) : Nat :=
@@ -606,7 +606,7 @@ def decodeCellNat (bytes : ByteArray) : Nat :=
     let tag := bytes.data[0]!
     let width :=
       if tag = Encoding.cbeTagUint then 8
-      else if tag = Encoding.cbeTagAmount then 16
+      else if tag = Encoding.cbeTagAmount then 32
       else 0
     if width = 0 ∨ bytes.size ≠ 1 + width then 0
     else

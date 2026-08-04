@@ -216,7 +216,7 @@ def tests : List TestCase :=
             t ≠ t₀ → getCellValue (setCell es t₀ v) t = getCellValue es t :=
           getCellValue_setCell_ne
         let _bal : ∀ (es : ExtendedState) (r : ResourceId) (a : ActorId) (n : Nat),
-            n < 256 ^ 16 →
+            n < 256 ^ 32 →
             getCellValue (setCell es (.balance r a) (amountCellValue n)) (.balance r a)
               = amountCellValue n :=
           getCellValue_setCell_balance

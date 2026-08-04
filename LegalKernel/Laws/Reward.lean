@@ -36,6 +36,7 @@ imported by `LegalKernel.lean` for re-export and by
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
 import Lex.DSL.Law
 
 namespace LegalKernel
@@ -53,10 +54,15 @@ namespace Laws
     prelude WU R.17) and downstream authorisation policies, not in
     the kernel-level `Transition`.
 
-    `decPre` is inferred: the precondition is a single decidable
-    arithmetic comparison over `Nat`. -/
+    The ceiling conjunct is the C-3 bound every crediting law carries
+    (`Laws/AmountBound.lean`): above `Laws.maxAmount` the credited
+    cell encodes as the canonically-absent value, so the state root
+    would stop seeing the balance.
+
+    `decPre` is inferred: the precondition is a conjunction of two
+    decidable arithmetic comparisons over `Nat`. -/
 def reward (r : ResourceId) (to : ActorId) (amount : Amount) : Transition where
-  pre        := fun _ => amount > 0
+  pre        := fun s => amount > 0 ∧ AmountBounded s r to amount
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     setBalance s r to (getBalance s r to + amount)
@@ -72,7 +78,8 @@ lexlaw legalkernel_reward where
   lex_signed_by       to
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (to : ActorId) (amount : Amount)
-  lex_pre             := fun _ => amount > 0
+  lex_pre             := fun s => amount > 0 ∧
+                                LegalKernel.Laws.AmountBounded s r to amount
   lex_impl            :=
     fun s => setBalance s r to (getBalance s r to + amount)
   -- Per plan §19.4 LX.24: `reward` claims `monotonic` (succeeds
@@ -193,10 +200,15 @@ instance reward_isMonotonic
     conservation tier. -/
 theorem reward_not_conservative
     (r : ResourceId) (to : ActorId) (amount : Amount)
-    (hpos : amount > 0) :
+    (hpos : amount > 0) (hbound : amount < maxAmount) :
     ¬ IsConservative (reward r to amount) := by
   intro hcons
-  have hpre : (reward r to amount).pre genesisState := hpos
+  -- The ceiling conjunct is discharged at genesis, where every
+  -- balance reads `0`, so the credited value is `amount` itself.
+  have hpre : (reward r to amount).pre genesisState := by
+    refine ⟨hpos, ?_⟩
+    show getBalance genesisState r to + amount < maxAmount
+    simpa [getBalance, genesisState] using hbound
   have hcons_r := hcons.conserves r genesisState hpre
   rw [totalSupply_after_reward r to amount genesisState hpre] at hcons_r
   rw [totalSupply_genesis_eq_zero r] at hcons_r

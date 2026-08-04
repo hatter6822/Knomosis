@@ -38,6 +38,7 @@ This module is **not** part of the trusted computing base.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
 import LegalKernel.Laws.BulkBound
 import Lex.DSL.Law
 
@@ -73,7 +74,9 @@ namespace Laws
 def proportionalDilute
     (r : ResourceId) (excluded : ActorId) (totalReward : Amount) : Transition where
   pre        := fun s => totalReward > 0 ∧ sumOthers s r excluded > 0 ∧
-                        BulkBounded s r excluded
+                        BulkBounded s r excluded ∧
+                        AmountBoundedAll s r (bulkRecipients s r excluded)
+                          (fun kv => totalReward * kv.2 / sumOthers s r excluded)
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     let S  := sumOthers s r excluded
@@ -114,7 +117,11 @@ lexlaw legalkernel_proportionalDilute where
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
   lex_pre             := fun s => totalReward > 0 ∧ sumOthers s r excluded > 0 ∧
-                                  LegalKernel.Laws.BulkBounded s r excluded
+                                  LegalKernel.Laws.BulkBounded s r excluded ∧
+                                  LegalKernel.Laws.AmountBoundedAll s r
+                                    (LegalKernel.Laws.bulkRecipients s r excluded)
+                                    (fun kv => totalReward * kv.2 /
+                                               LegalKernel.sumOthers s r excluded)
   lex_impl            :=
     fun s =>
       let S  := sumOthers s r excluded
@@ -405,10 +412,16 @@ instance proportionalDilute_isMonotonic
     Concretely: the singleton filter `[(non_excluded, totalReward)]`
     contributes `totalReward * totalReward / totalReward = totalReward`
     to the post-supply, so post = pre + totalReward, contradicting
-    conservation when `totalReward > 0`. -/
+    conservation when `totalReward > 0`.
+
+    `hbound` is what the witness state needs to satisfy the C-3
+    ceiling conjunct: the fixture's single recipient starts at
+    `totalReward` and is credited `totalReward`, so the law is a
+    no-op — and the witness would not witness — unless the doubled
+    value stays under `Laws.maxAmount`. -/
 theorem proportionalDilute_not_conservative
     (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
-    (hpos : totalReward > 0) :
+    (hpos : totalReward > 0) (hbound : totalReward + totalReward < maxAmount) :
     ¬ IsConservative (proportionalDilute r excluded totalReward) := by
   intro hcons
   let non_excluded : ActorId := if excluded = 0 then 1 else 0
@@ -438,23 +451,55 @@ theorem proportionalDilute_not_conservative
     unfold sumOthers
     rw [hT0, h_get_excluded]
     simp
+  -- The fixture holds exactly one entry at `r`.  Hoisted out of the
+  -- precondition witness because both the recipient bound and the
+  -- ceiling conjunct read it.
+  have h_some : s.balances[r]? =
+      some ((∅ : BalanceMap).insert non_excluded totalReward) := by
+    show (((∅ : Std.TreeMap ResourceId BalanceMap _).insert r
+            (((∅ : Std.TreeMap ResourceId BalanceMap _)[r]?.getD ∅).insert
+              non_excluded totalReward)))[r]? = _
+    rw [RBMap.find?_insert_self]
+    rfl
+  have h_bm : s.balances[r]?.getD ∅
+      = (∅ : BalanceMap).insert non_excluded totalReward := by
+    rw [h_some]; rfl
   have hpre : (proportionalDilute r excluded totalReward).pre s := by
-    refine ⟨hpos, ?_, ?_⟩
+    refine ⟨hpos, ?_, ?_, ?_⟩
     · rw [h_sumOthers]; exact hpos
     -- The fixture state holds one entry at `r`, so the recipient
     -- bound is satisfied with room to spare.
     · refine bulkBounded_of_map_length_le s r excluded ?_
-      have h_bm : s.balances[r]?.getD ∅
-          = (∅ : BalanceMap).insert non_excluded totalReward := by
-        show (((∅ : Std.TreeMap ResourceId BalanceMap _).insert r
-                (((∅ : Std.TreeMap ResourceId BalanceMap _)[r]?.getD ∅).insert
-                  non_excluded totalReward)))[r]?.getD ∅ = _
-        rw [RBMap.find?_insert_self]
-        simp only [Option.getD_some]
-        rfl
       rw [h_bm]
       simp only [Std.TreeMap.length_toList, maxRecipientsPerBulkAction]
       exact Nat.le_trans (Std.TreeMap.size_insert_le) (by simp)
+    -- The one recipient holds `totalReward` and, since `sumOthers`
+    -- is also `totalReward`, is credited `totalReward * v / v = v`.
+    · intro kv hmem
+      show getBalance s r kv.1 + totalReward * kv.2 / sumOthers s r excluded
+             < maxAmount
+      -- The map is a singleton, so a member's value is `totalReward`
+      -- and every actor's balance is at most that.
+      have hmem' := ((mem_bulkRecipients_iff s r excluded kv).mp hmem).1
+      rw [h_bm] at hmem'
+      have hval : kv.2 = totalReward := by
+        have hlk := Std.TreeMap.mem_toList_iff_getElem?_eq_some.mp hmem'
+        by_cases ha : kv.1 = non_excluded
+        · rw [ha, RBMap.find?_insert_self] at hlk
+          exact (Option.some_inj.mp hlk).symm
+        · rw [RBMap.find?_insert_other _ _ _ _ (Ne.symm ha)] at hlk
+          simp at hlk
+      have hle : getBalance s r kv.1 ≤ totalReward := by
+        unfold getBalance
+        rw [h_some]
+        show ((∅ : BalanceMap).insert non_excluded totalReward)[kv.1]?.getD 0
+               ≤ totalReward
+        by_cases ha : kv.1 = non_excluded
+        · rw [ha, RBMap.find?_insert_self]; simp
+        · rw [RBMap.find?_insert_other _ _ _ _ (Ne.symm ha)]; simp
+      -- `totalReward * v / v = totalReward` at `v = totalReward > 0`.
+      rw [h_sumOthers, hval, Nat.mul_div_cancel _ hpos]
+      exact Nat.lt_of_le_of_lt (Nat.add_le_add_right hle totalReward) hbound
   have hcons_r := hcons.conserves r s hpre
   have hpost := totalSupply_after_proportionalDilute r excluded totalReward s hpre
   -- Compute the filter explicitly: bm.toList = [(non_excluded, totalReward)],

@@ -210,21 +210,22 @@ def jsonShapePreserving : TestCase := {
 }
 
 /-- Non-circular ground-truth pin: `gasPoolClaim 0 2 250` encodes to
-    the exact 36-byte hex below (tag-18 head + three uint heads),
-    independent of the encoder under test. -/
+    the exact 60-byte hex below (tag-18 head + two uint heads + one
+    amount head), independent of the encoder under test. -/
 def gasPoolClaimGroundTruth : TestCase := {
   name := "GP.6.3: gasPoolClaim canonical hex pinned to ground truth"
   body := do
     let hex := encodeEventHex (Event.gasPoolClaim 0 2 250)
-    -- Spell the 44-byte stream explicitly: tag 18, r 0, sequencer 2 as
+    -- Spell the 60-byte stream explicitly: tag 18, r 0, sequencer 2 as
     -- 9-byte uint heads (0x00 ‖ 8-byte LE), then amount 250 as a
-    -- 17-byte amount head (0x01 ‖ 16-byte LE).
+    -- 33-byte amount head (0x06 ‖ 32-byte LE).
     let want :=
       "0x" ++
       "001200000000000000" ++   -- tag = 18 (0x12)
       "000000000000000000" ++   -- r = 0
       "000200000000000000" ++   -- sequencer = 2
-      "01fa000000000000000000000000000000"  -- amount = 250 (0xfa)
+      "06fa" ++                 -- amount = 250 (0xfa), amount tag
+      "00000000000000000000000000000000000000000000000000000000000000"
     assertEq want hex "gasPoolClaim ground-truth hex"
 }
 

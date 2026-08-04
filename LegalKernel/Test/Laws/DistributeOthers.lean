@@ -145,7 +145,8 @@ def tests : List TestCase :=
   , { name := "distributeOthers_not_conservative API stability"
     , body := do
         let _proof : ∀ (r : ResourceId) (excluded : ActorId) (amount : Amount),
-            amount > 0 → ¬ IsConservative (distributeOthers r excluded amount) :=
+            amount > 0 → amount + amount < maxAmount →
+            ¬ IsConservative (distributeOthers r excluded amount) :=
           distributeOthers_not_conservative
         pure ()
     }

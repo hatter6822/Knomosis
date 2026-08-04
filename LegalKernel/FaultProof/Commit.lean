@@ -716,10 +716,10 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   base_outer_len : es.base.balances.toList.length < 256 ^ 8
   /-- Each inner `BalanceMap` pair-list length fits. -/
   base_inner_len : ∀ p ∈ es.base.balances.toList, p.2.toList.length < 256 ^ 8
-  /-- Each inner balance fits the 17-byte amount head's `2^128`
+  /-- Each inner balance fits the 33-byte amount head's `2^128`
       range (not the `2^64` an identifier field would impose — a
       wei-denominated balance crosses `2^64` at ~18.45 ETH). -/
-  base_amt : ∀ p ∈ es.base.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 16
+  base_amt : ∀ p ∈ es.base.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 32
   /-- Each inner-map framed-bytes size fits. -/
   base_inner_size : ∀ p ∈ es.base.balances.toList,
                     (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8
@@ -747,8 +747,8 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
                  (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8
   /-- Each deposit record's fields fit. -/
   bs_cons_rec : ∀ p ∈ es.bridge.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
-                p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+                p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8
   /-- The bridge pending-map pair-list length fits. -/
   bs_pend_len : es.bridge.pending.toList.length < 256 ^ 8
   /-- Each per-withdrawal-id fits. -/
@@ -759,18 +759,18 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   /-- Each pending withdrawal's fields fit. -/
   bs_pend_wd : ∀ p ∈ es.bridge.pending.toList,
                p.2.resource.toNat < 256 ^ 8 ∧
-               p.2.amount < 256 ^ 16 ∧
+               p.2.amount < 256 ^ 32 ∧
                p.2.l2LogIndex < 256 ^ 8
   /-- The bridge nextWdId fits. -/
   bs_nxt : es.bridge.nextWdId < 256 ^ 8
   /-- GP.11.8: AMM ETH reserve fits. -/
-  bs_ammEth : es.bridge.ammReserveEth < 256 ^ 16
+  bs_ammEth : es.bridge.ammReserveEth < 256 ^ 32
   /-- GP.11.8: AMM BOLD reserve fits. -/
-  bs_ammBold : es.bridge.ammReserveBold < 256 ^ 16
+  bs_ammBold : es.bridge.ammReserveBold < 256 ^ 32
   /-- GP.11.8: BOLD TVL cap fits. -/
-  bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 16
+  bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 32
   /-- GP.11.8: BOLD total locked value fits. -/
-  bs_totalLocked : es.bridge.boldTotalLockedValue < 256 ^ 16
+  bs_totalLocked : es.bridge.boldTotalLockedValue < 256 ^ 32
   /-- The epoch-budget pair-list length fits. -/
   eb_len : es.epochBudgets.toList.length < 256 ^ 8
   /-- Each per-actor budget's epoch and balance fit. -/
@@ -801,12 +801,12 @@ subtly wrong.  These do it once. -/
     entries included: the default is `0`. -/
 theorem getBalance_lt_of_canonicalBounds (es : ExtendedState)
     (r : ResourceId) (a : ActorId) (h : ExtendedState.CanonicalBounds es) :
-    LegalKernel.getBalance es.base r a < 256 ^ 16 := by
+    LegalKernel.getBalance es.base r a < 256 ^ 32 := by
   unfold LegalKernel.getBalance
   match h_outer : es.base.balances[r]? with
   | none    => exact Nat.pow_pos (by decide)
   | some bm =>
-    show bm[a]?.getD 0 < 256 ^ 16
+    show bm[a]?.getD 0 < 256 ^ 32
     match h_inner : bm[a]? with
     | none   => exact Nat.pow_pos (by decide)
     | some v =>
@@ -843,8 +843,8 @@ theorem depositRecord_bounded_of_canonicalBounds (es : ExtendedState)
     (d : Bridge.DepositId) (rec : Bridge.DepositRecord)
     (h_d : es.bridge.consumed[d]? = some rec)
     (h : ExtendedState.CanonicalBounds es) :
-    rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 16 ∧
-      rec.poolAmount < 256 ^ 16 ∧ rec.budgetGrant < 256 ^ 8 :=
+    rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 32 ∧
+      rec.poolAmount < 256 ^ 32 ∧ rec.budgetGrant < 256 ^ 8 :=
   h.bs_cons_rec (d, rec) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_d)
 
 /-- A live pending withdrawal's fields are bounded. -/
@@ -852,7 +852,7 @@ theorem pendingWithdrawal_bounded_of_canonicalBounds (es : ExtendedState)
     (w : Bridge.WithdrawalId) (pw : Bridge.PendingWithdrawal)
     (h_w : es.bridge.pending[w]? = some pw)
     (h : ExtendedState.CanonicalBounds es) :
-    pw.resource.toNat < 256 ^ 8 ∧ pw.amount < 256 ^ 16 ∧ pw.l2LogIndex < 256 ^ 8 :=
+    pw.resource.toNat < 256 ^ 8 ∧ pw.amount < 256 ^ 32 ∧ pw.l2LogIndex < 256 ^ 8 :=
   h.bs_pend_wd (w, pw) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_w)
 
 /-- An actor's epoch budget is bounded, absent entries included: the

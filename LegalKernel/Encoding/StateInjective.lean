@@ -23,7 +23,7 @@ This file ships:
   * **EI.2.a** `BalanceMap.encode_injective` — inner-map injectivity
     (equal bytes ⇒ extensional `TreeMap.Equiv` on the inner map).
     Specialises `encodeSortedPairs_injective_bounded` to `(Nat,
-    AmountValue)` — the balance slot rides the 17-byte amount head —
+    AmountValue)` — the balance slot rides the 33-byte amount head —
     and lifts the projected-key equality through `UInt64.toNat_inj`.
 
   * **EI.2.b** `BalanceMap.encode_injective_to_equiv` — explicit
@@ -111,7 +111,7 @@ notion. -/
         and would let an attacker collide two distinct maps.
         Deployment-level constraint (§8.8.6).
       * `h_amt₁ / h_amt₂` — per-amount canonical-encoding bounds.
-        Balances ride the 17-byte amount head, so the bound is
+        Balances ride the 33-byte amount head, so the bound is
         `2^128`, not the `2^64` the identifier head imposes.  That
         difference is the whole point of the wide head: a
         wei-denominated balance crosses `2^64` at ~18.45 ETH and
@@ -132,8 +132,8 @@ theorem BalanceMap.encode_injective
     (bm₁ bm₂ : BalanceMap)
     (h_len₁ : bm₁.toList.length < 256 ^ 8)
     (h_len₂ : bm₂.toList.length < 256 ^ 8)
-    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 16)
-    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 16)
+    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 32)
+    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 32)
     (h : BalanceMap.encode bm₁ = BalanceMap.encode bm₂) :
     bm₁.Equiv bm₂ := by
   -- Step A: unfold the encoder to expose the pair-list shape.
@@ -185,7 +185,7 @@ theorem BalanceMap.encode_injective
                   .ok (p.2, rest) := by
     intro p hp_mem rest
     obtain ⟨q, hq_mem, hq_eq⟩ := List.mem_map.mp hp_mem
-    have hp_bound : p.2.val < 256 ^ 16 := by
+    have hp_bound : p.2.val < 256 ^ 32 := by
       have : p.2 = ⟨q.2⟩ := by rw [← hq_eq]; rfl
       rw [this]; exact h_amt₁ q hq_mem
     exact amountValue_roundtrip p.2 rest hp_bound
@@ -195,7 +195,7 @@ theorem BalanceMap.encode_injective
                   .ok (p.2, rest) := by
     intro p hp_mem rest
     obtain ⟨q, hq_mem, hq_eq⟩ := List.mem_map.mp hp_mem
-    have hp_bound : p.2.val < 256 ^ 16 := by
+    have hp_bound : p.2.val < 256 ^ 32 := by
       have : p.2 = ⟨q.2⟩ := by rw [← hq_eq]; rfl
       rw [this]; exact h_amt₂ q hq_mem
     exact amountValue_roundtrip p.2 rest hp_bound
@@ -231,8 +231,8 @@ theorem BalanceMap.encode_injective_to_equiv
     (bm₁ bm₂ : BalanceMap)
     (h_len₁ : bm₁.toList.length < 256 ^ 8)
     (h_len₂ : bm₂.toList.length < 256 ^ 8)
-    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 16)
-    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 16)
+    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 32)
+    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 32)
     (h : BalanceMap.encode bm₁ = BalanceMap.encode bm₂) :
     bm₁.Equiv bm₂ :=
   BalanceMap.encode_injective bm₁ bm₂ h_len₁ h_len₂ h_amt₁ h_amt₂ h
@@ -267,8 +267,8 @@ theorem BalanceMap.encodeAsBytes_injective
     (bm₁ bm₂ : BalanceMap)
     (h_len₁ : bm₁.toList.length < 256 ^ 8)
     (h_len₂ : bm₂.toList.length < 256 ^ 8)
-    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 16)
-    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 16)
+    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 32)
+    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 32)
     (h : BalanceMap.encodeAsBytes bm₁ = BalanceMap.encodeAsBytes bm₂) :
     bm₁.Equiv bm₂ := by
   -- Strip the framing wrapper.
@@ -455,9 +455,9 @@ theorem State.encode_injective
     (h_inner_len₁ : ∀ p ∈ s₁.balances.toList, p.2.toList.length < 256 ^ 8)
     (h_inner_len₂ : ∀ p ∈ s₂.balances.toList, p.2.toList.length < 256 ^ 8)
     (h_amt₁ : ∀ p ∈ s₁.balances.toList,
-              ∀ q ∈ p.2.toList, q.2 < 256 ^ 16)
+              ∀ q ∈ p.2.toList, q.2 < 256 ^ 32)
     (h_amt₂ : ∀ p ∈ s₂.balances.toList,
-              ∀ q ∈ p.2.toList, q.2 < 256 ^ 16)
+              ∀ q ∈ p.2.toList, q.2 < 256 ^ 32)
     (h_size₁ : ∀ p ∈ s₁.balances.toList,
                 (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8)
     (h_size₂ : ∀ p ∈ s₂.balances.toList,

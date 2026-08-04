@@ -488,7 +488,7 @@ asserted:
 
   * every CBE head is `1 + 8 = 9` bytes (`cborHeadEncode`), and a
     `Nat` / `ActorId` / list head is exactly one head;
-  * an `Amount` rides the 17-byte head after C-1, which is why
+  * an `Amount` rides the 33-byte head after C-1, which is why
     `capAmount` is the widest fixed-size clause;
   * a clause is at most `9 (variant tag) + 9 (resource) + 9 (list
     head) + 64 * 9 (elements) = 603` bytes;

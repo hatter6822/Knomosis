@@ -98,10 +98,10 @@ shared byte stream forces the decoded records to coincide. -/
     the runtime boundary (§8.5). -/
 theorem Bridge.DepositRecord.encode_injective
     (rec₁ rec₂ : Bridge.DepositRecord)
-    (h₁ : rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 16 ∧
-          rec₁.poolAmount < 256 ^ 16 ∧ rec₁.budgetGrant < 256 ^ 8)
-    (h₂ : rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 16 ∧
-          rec₂.poolAmount < 256 ^ 16 ∧ rec₂.budgetGrant < 256 ^ 8)
+    (h₁ : rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 32 ∧
+          rec₁.poolAmount < 256 ^ 32 ∧ rec₁.budgetGrant < 256 ^ 8)
+    (h₂ : rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 32 ∧
+          rec₂.poolAmount < 256 ^ 32 ∧ rec₂.budgetGrant < 256 ^ 8)
     (h : Bridge.DepositRecord.encode rec₁ = Bridge.DepositRecord.encode rec₂) :
     rec₁ = rec₂ := by
   have r₁ := depositRecord_roundtrip rec₁ [] h₁
@@ -124,10 +124,10 @@ Direct application of `encodeAsBytes_eq_injective_of_encode_eq_injective`
     on the inner record.  Same bounds hypotheses as EI.6.a. -/
 theorem Bridge.DepositRecord.encodeAsBytes_injective
     (rec₁ rec₂ : Bridge.DepositRecord)
-    (h₁ : rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 16 ∧
-          rec₁.poolAmount < 256 ^ 16 ∧ rec₁.budgetGrant < 256 ^ 8)
-    (h₂ : rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 16 ∧
-          rec₂.poolAmount < 256 ^ 16 ∧ rec₂.budgetGrant < 256 ^ 8)
+    (h₁ : rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 32 ∧
+          rec₁.poolAmount < 256 ^ 32 ∧ rec₁.budgetGrant < 256 ^ 8)
+    (h₂ : rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 32 ∧
+          rec₂.poolAmount < 256 ^ 32 ∧ rec₂.budgetGrant < 256 ^ 8)
     (h : Bridge.DepositRecord.encodeAsBytes rec₁ = Bridge.DepositRecord.encodeAsBytes rec₂) :
     rec₁ = rec₂ := by
   unfold Bridge.DepositRecord.encodeAsBytes at h
@@ -183,11 +183,11 @@ theorem Bridge.BridgeState.encodeConsumed_injective
     (h_size₂ : ∀ p ∈ bs₂.consumed.toList,
                 (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8)
     (h_rec₁ : ∀ p ∈ bs₁.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
-                p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8)
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+                p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8)
     (h_rec₂ : ∀ p ∈ bs₂.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
-                p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8)
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+                p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8)
     (h : Bridge.BridgeState.encodeConsumed bs₁ =
          Bridge.BridgeState.encodeConsumed bs₂) :
     bs₁.consumed.Equiv bs₂.consumed := by
@@ -345,10 +345,10 @@ The inner-record injectivity theorem for the 4-field
 theorem Bridge.PendingWithdrawal.encode_injective
     (wd₁ wd₂ : Bridge.PendingWithdrawal)
     (h_res₁ : wd₁.resource.toNat < 256 ^ 8)
-    (h_amt₁ : wd₁.amount < 256 ^ 16)
+    (h_amt₁ : wd₁.amount < 256 ^ 32)
     (h_idx₁ : wd₁.l2LogIndex < 256 ^ 8)
     (h_res₂ : wd₂.resource.toNat < 256 ^ 8)
-    (h_amt₂ : wd₂.amount < 256 ^ 16)
+    (h_amt₂ : wd₂.amount < 256 ^ 32)
     (h_idx₂ : wd₂.l2LogIndex < 256 ^ 8)
     (h : Bridge.PendingWithdrawal.encode wd₁ = Bridge.PendingWithdrawal.encode wd₂) :
     wd₁ = wd₂ := by
@@ -372,10 +372,10 @@ EI.7.b as the inner injectivity. -/
 theorem Bridge.PendingWithdrawal.encodeAsBytes_injective
     (wd₁ wd₂ : Bridge.PendingWithdrawal)
     (h_res₁ : wd₁.resource.toNat < 256 ^ 8)
-    (h_amt₁ : wd₁.amount < 256 ^ 16)
+    (h_amt₁ : wd₁.amount < 256 ^ 32)
     (h_idx₁ : wd₁.l2LogIndex < 256 ^ 8)
     (h_res₂ : wd₂.resource.toNat < 256 ^ 8)
-    (h_amt₂ : wd₂.amount < 256 ^ 16)
+    (h_amt₂ : wd₂.amount < 256 ^ 32)
     (h_idx₂ : wd₂.l2LogIndex < 256 ^ 8)
     (h : Bridge.PendingWithdrawal.encodeAsBytes wd₁ =
          Bridge.PendingWithdrawal.encodeAsBytes wd₂) :
@@ -423,11 +423,11 @@ theorem Bridge.BridgeState.encodePending_injective
                 (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8)
     (h_wd₁ : ∀ p ∈ bs₁.pending.toList,
               p.2.resource.toNat < 256 ^ 8 ∧
-              p.2.amount < 256 ^ 16 ∧
+              p.2.amount < 256 ^ 32 ∧
               p.2.l2LogIndex < 256 ^ 8)
     (h_wd₂ : ∀ p ∈ bs₂.pending.toList,
               p.2.resource.toNat < 256 ^ 8 ∧
-              p.2.amount < 256 ^ 16 ∧
+              p.2.amount < 256 ^ 32 ∧
               p.2.l2LogIndex < 256 ^ 8)
     (h : Bridge.BridgeState.encodePending bs₁ =
          Bridge.BridgeState.encodePending bs₂) :
@@ -563,11 +563,11 @@ private theorem nat_encode_suffix_split
   exact ⟨hprod.1, hprod.2⟩
 
 /-- Self-delimiting split for a single `encodeAmount` prefix — the
-    17-byte-head counterpart of `nat_encode_suffix_split`, under the
+    33-byte-head counterpart of `nat_encode_suffix_split`, under the
     128-bit canonical bound. -/
 private theorem amount_encode_suffix_split
     (n₁ n₂ : Nat) (rest₁ rest₂ : Stream)
-    (h₁ : n₁ < 256 ^ 16) (h₂ : n₂ < 256 ^ 16)
+    (h₁ : n₁ < 256 ^ 32) (h₂ : n₂ < 256 ^ 32)
     (h : encodeAmount n₁ ++ rest₁ = encodeAmount n₂ ++ rest₂) :
     n₁ = n₂ ∧ rest₁ = rest₂ := by
   have r₁ := amount_roundtrip n₁ rest₁ h₁
@@ -635,11 +635,11 @@ theorem Bridge.BridgeState.encode_injective
     (h_cons_size₂ : ∀ p ∈ bs₂.consumed.toList,
                   (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8)
     (h_cons_rec₁ : ∀ p ∈ bs₁.consumed.toList,
-                  p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
-                  p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8)
+                  p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+                  p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8)
     (h_cons_rec₂ : ∀ p ∈ bs₂.consumed.toList,
-                  p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
-                  p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8)
+                  p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+                  p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8)
     (h_pend_len₁ : bs₁.pending.toList.length < 256 ^ 8)
     (h_pend_len₂ : bs₂.pending.toList.length < 256 ^ 8)
     (h_pend_id₁ : ∀ p ∈ bs₁.pending.toList, p.1 < 256 ^ 8)
@@ -650,22 +650,22 @@ theorem Bridge.BridgeState.encode_injective
                   (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8)
     (h_pend_wd₁ : ∀ p ∈ bs₁.pending.toList,
                   p.2.resource.toNat < 256 ^ 8 ∧
-                  p.2.amount < 256 ^ 16 ∧
+                  p.2.amount < 256 ^ 32 ∧
                   p.2.l2LogIndex < 256 ^ 8)
     (h_pend_wd₂ : ∀ p ∈ bs₂.pending.toList,
                   p.2.resource.toNat < 256 ^ 8 ∧
-                  p.2.amount < 256 ^ 16 ∧
+                  p.2.amount < 256 ^ 32 ∧
                   p.2.l2LogIndex < 256 ^ 8)
     (h_nxt₁ : bs₁.nextWdId < 256 ^ 8)
     (h_nxt₂ : bs₂.nextWdId < 256 ^ 8)
-    (h_ammEth₁ : bs₁.ammReserveEth < 256 ^ 16)
-    (h_ammEth₂ : bs₂.ammReserveEth < 256 ^ 16)
-    (h_ammBold₁ : bs₁.ammReserveBold < 256 ^ 16)
-    (h_ammBold₂ : bs₂.ammReserveBold < 256 ^ 16)
-    (h_tvlCap₁ : bs₁.boldTvlCap < 256 ^ 16)
-    (h_tvlCap₂ : bs₂.boldTvlCap < 256 ^ 16)
-    (h_totalLocked₁ : bs₁.boldTotalLockedValue < 256 ^ 16)
-    (h_totalLocked₂ : bs₂.boldTotalLockedValue < 256 ^ 16)
+    (h_ammEth₁ : bs₁.ammReserveEth < 256 ^ 32)
+    (h_ammEth₂ : bs₂.ammReserveEth < 256 ^ 32)
+    (h_ammBold₁ : bs₁.ammReserveBold < 256 ^ 32)
+    (h_ammBold₂ : bs₂.ammReserveBold < 256 ^ 32)
+    (h_tvlCap₁ : bs₁.boldTvlCap < 256 ^ 32)
+    (h_tvlCap₂ : bs₂.boldTvlCap < 256 ^ 32)
+    (h_totalLocked₁ : bs₁.boldTotalLockedValue < 256 ^ 32)
+    (h_totalLocked₂ : bs₂.boldTotalLockedValue < 256 ^ 32)
     (h : Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂) :
     bs₁.consumed.Equiv bs₂.consumed ∧
     bs₁.pending.Equiv bs₂.pending ∧

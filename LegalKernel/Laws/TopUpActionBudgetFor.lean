@@ -48,6 +48,7 @@ verbatim (same `apply_impl` shape), only the precondition differs.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
 import LegalKernel.Laws.Transfer
 
 namespace LegalKernel
@@ -59,18 +60,27 @@ namespace Laws
     into `poolActor`; the admission layer credits `recipient`'s epoch
     budget by `budgetIncrement` (not modelled at the kernel level).
 
-    * Precondition: the signer holds at least `gasAmount`, and the
-      recipient is a *different* actor (`recipient ≠ signer`).
+    * Precondition: the signer holds at least `gasAmount`, the
+      recipient is a *different* actor (`recipient ≠ signer`), and
+      the credited pool stays under `Laws.maxAmount`.
     * Effect: debit `signer`, then credit `poolActor`, reading the
       pool's balance from the post-debit intermediate state (so the
       `signer = poolActor` corner conserves supply).
 
-    `decPre` is inferred: the precondition is a conjunction of a
-    decidable `Nat` comparison and a decidable `ActorId`
+    The ceiling conjunct reads that same post-debit state, for the
+    same reason the effect does — see `Laws/AmountBound.lean`, and
+    `Laws.transfer` for the identical shape.
+
+    `decPre` is inferred: the precondition is a conjunction of two
+    decidable `Nat` comparisons and a decidable `ActorId`
     disequality. -/
 def topUpActionBudgetFor (recipient signer : ActorId) (gasResource : ResourceId)
     (gasAmount : Amount) (_budgetIncrement : Nat) (poolActor : ActorId) : Transition where
-  pre := fun s => getBalance s gasResource signer ≥ gasAmount ∧ recipient ≠ signer
+  pre := fun s =>
+    getBalance s gasResource signer ≥ gasAmount ∧ recipient ≠ signer ∧
+    AmountBounded
+      (setBalance s gasResource signer (getBalance s gasResource signer - gasAmount))
+      gasResource poolActor gasAmount
   decPre := fun _ => inferInstance
   apply_impl := fun s =>
     let s1 := setBalance s gasResource signer (getBalance s gasResource signer - gasAmount)

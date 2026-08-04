@@ -162,19 +162,20 @@ def transferVsMintBytes : TestCase := {
 }
 
 /-- Spot-check: encoded byte length for transfer.  Four 9-byte uint
-    heads (tag, resource, sender, receiver) plus ONE 17-byte amount
-    head = 53 bytes.  The amount rides `cbeTagAmount` (1 tag byte + 16
-    LE body bytes) because a wei-denominated balance passes `2^64` at
-    ~18.45 ETH; identifiers stay on the 8-byte head. -/
+    heads (tag, resource, sender, receiver) plus ONE 33-byte amount
+    head = 69 bytes.  The amount rides `cbeTagAmount` (1 tag byte + 32
+    LE body bytes) because a value-carrying field both passes `2^64`
+    (a wei balance does at ~18.45 ETH) and *accumulates* past any
+    per-input gate; identifiers stay on the 8-byte head. -/
 def transferByteLength : TestCase := {
   name := "Action.transfer encoded length"
   body := do
     let bytes := Encodable.encode (T := Action) (.transfer 1 2 3 4)
-    -- 4 × 9 (tag + 3 ids) + 1 × 17 (amount) = 53 bytes total.
-    assertEq (53 : Nat) bytes.length "encoded length"
+    -- 4 × 9 (tag + 3 ids) + 1 × 33 (amount) = 69 bytes total.
+    assertEq (69 : Nat) bytes.length "encoded length"
     -- The amount head starts at offset 36 and carries the amount tag.
-    assertEq ([0x01, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : List UInt8)
-      ((bytes.drop 36).take 17) "transfer amount head"
+    assertEq ([0x06, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : List UInt8)
+      ((bytes.drop 36).take 33) "transfer amount head"
 }
 
 /-- Term-level API check: `action_roundtrip` signature. -/

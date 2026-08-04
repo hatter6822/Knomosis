@@ -1434,7 +1434,7 @@ same number, and an SMT leaf must be a function of the value alone.
 def cbeUintGoldenVals : List Nat :=
   [0, 1, 0xFF, 0x0100, 0x0102030405060708, 0xFFFFFFFFFFFFFFFF]
 
-/-- ...and for the 16-byte amount head. -/
+/-- ...and for the 32-byte amount head. -/
 def cbeAmountGoldenVals : List Nat :=
   [0, 1, 0xFF, 0x0100, 0x0102030405060708,
    0xFFFFFFFFFFFFFFFF, 0x0102030405060708090A0B0C0D0E0F10,

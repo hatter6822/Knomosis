@@ -68,6 +68,7 @@ poolActor in the debited role and the claimant in the credited role.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
 import LegalKernel.Laws.Transfer
 
 namespace LegalKernel
@@ -85,11 +86,20 @@ namespace Laws
       claimant's balance from the post-debit intermediate state (so
       the degenerate `poolActor = claimant` corner conserves supply).
 
-    `decPre` is inferred: the precondition is a single decidable
-    `Nat` comparison. -/
+    The ceiling conjunct reads that same post-debit state, for the
+    same reason the effect does — see `Laws/AmountBound.lean`, and
+    `Laws.transfer` for the identical shape.
+
+    `decPre` is inferred: the precondition is a conjunction of two
+    decidable `Nat` comparisons. -/
 def claimBudgetRefund (claimant poolActor : ActorId) (gasResource : ResourceId)
     (refundAmount : Amount) : Transition where
-  pre := fun s => getBalance s gasResource poolActor ≥ refundAmount
+  pre := fun s =>
+    getBalance s gasResource poolActor ≥ refundAmount ∧
+    AmountBounded
+      (setBalance s gasResource poolActor
+        (getBalance s gasResource poolActor - refundAmount))
+      gasResource claimant refundAmount
   decPre := fun _ => inferInstance
   apply_impl := fun s =>
     let s1 := setBalance s gasResource poolActor
@@ -170,7 +180,7 @@ theorem claimBudgetRefund_conserves
       gasResource claimant
       (getBalance (setBalance s gasResource poolActor
         (getBalance s gasResource poolActor - refundAmount)) gasResource claimant + refundAmount))
-    hpre
+    hpre.left
 
 /-! ## Cross-resource independence (mirrors §4.11.2) -/
 

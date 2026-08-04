@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 83, "column": 0},
+ {"position": {"line": 86, "column": 0},
   "file": "LegalKernel/Laws/DistributeOthers.lean"},
  "signed_by": {"name": "deployer", "kind": "actorRef"},
  "schema_version": 1,
@@ -13,7 +13,7 @@
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
  "pre_expr":
- "fun s => amount > 0 ∧\n                                LegalKernel.Laws.BulkBounded s r excluded\n  ",
+ "fun s => amount > 0 ∧\n                                LegalKernel.Laws.BulkBounded s r excluded ∧\n                                LegalKernel.Laws.AmountBoundedAll s r\n                                  (LegalKernel.Laws.bulkRecipients s r excluded)\n                                  (fun _ => amount)\n  ",
  "params":
  [{"type": "ResourceId", "name": "r", "kind": "explicit"},
   {"type": "ActorId", "name": "excluded", "kind": "explicit"},

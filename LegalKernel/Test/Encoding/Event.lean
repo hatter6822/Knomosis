@@ -152,23 +152,23 @@ def roundtripCoversAllTags : TestCase := {
 }
 
 /-- Non-circular byte-layout pin: `gasPoolClaim 0 2 250` (tag 18)
-    encodes to three 9-byte CBE uint heads plus one 17-byte amount
-    head (44 bytes), beginning with the hand-spelled `0x00`-tag +
+    encodes to three 9-byte CBE uint heads plus one 33-byte amount
+    head (60 bytes), beginning with the hand-spelled `0x00`-tag +
     little-endian-18 head. -/
 def gasPoolClaimByteLayout : TestCase := {
   name := "gasPoolClaim byte layout pinned"
   body := do
     let bytes := Encodable.encode (T := Event) (Event.gasPoolClaim 0 2 250)
     -- tag(18) + resource(0) + sequencer(2) are 9-byte uint heads;
-    -- amount(250) is a 17-byte amount head.  3 × 9 + 17 = 44.
-    assertEq (44 : Nat) bytes.length "gasPoolClaim encoded length"
+    -- amount(250) is a 33-byte amount head.  3 × 9 + 33 = 60.
+    assertEq (60 : Nat) bytes.length "gasPoolClaim encoded length"
     -- Leading head: 0x00 then 18 in the lowest LE byte, then 7 zeros.
     let head := bytes.take 9
     assertEq ([0x00, 18, 0, 0, 0, 0, 0, 0, 0] : List UInt8) head "gasPoolClaim tag head"
-    -- The `amount = 250` field is a 17-byte amount head at offset 27:
-    -- tag 0x01 then 250 (0xfa) in the lowest LE byte, then 15 zeros.
-    assertEq ([0x01, 250, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : List UInt8)
-      ((bytes.drop 27).take 17) "gasPoolClaim amount field head"
+    -- The `amount = 250` field is a 33-byte amount head at offset 27:
+    -- tag 0x06 then 250 (0xfa) in the lowest LE byte, then 31 zeros.
+    assertEq ([0x06, 250, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : List UInt8)
+      ((bytes.drop 27).take 33) "gasPoolClaim amount field head"
 }
 
 /-- The leading 9-byte CBE head of every event's encoding equals

@@ -280,7 +280,8 @@ theorem plannedBalances_alias_consistent (read : BalanceReader) (a : Action)
   | withdraw r sender amount _ =>
       exact deriveWithdrawBalance_alias_consistent read r sender amount plan h
   | depositWithFee r recipient poolActor userAmount poolAmount _ _ =>
-      exact deriveChainPair_alias_consistent read r recipient poolActor _ _ plan h
+      exact deriveDepositWithFeeBalances_alias_consistent read r recipient poolActor
+        userAmount poolAmount plan h
   | topUpActionBudget gr gasAmount _ pa =>
       exact deriveTopUpBalances_alias_consistent read gr signer pa gasAmount plan h
   | topUpActionBudgetFor recipient gr gasAmount _ pa =>
@@ -582,7 +583,7 @@ theorem budgetPolicy_mem_multiFrontierOf (es : ExtendedState) (st : SignedAction
     balance cell the frontier opens.
 
     The decode is where `CanonicalBounds` enters: `getCellValue` writes
-    the balance through the 17-byte amount head, and that round-trips
+    the balance through the 33-byte amount head, and that round-trips
     only inside `2^128`.  Off the frontier the two readers genuinely
     differ — the bundle's is `none` — which is the partiality the
     derivations rely on, so the membership hypothesis is not

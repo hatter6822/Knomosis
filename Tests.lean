@@ -174,6 +174,7 @@ import LegalKernel.Test.FaultProof.MultiProof
 import LegalKernel.Test.FaultProof.StepWriteSets
 import LegalKernel.Test.FaultProof.Terminate
 import LegalKernel.Test.FaultProof.SubStep
+import LegalKernel.Test.FaultProof.BoundsReachable
 import LegalKernel.Test.FaultProof.Step
 import LegalKernel.Test.FaultProof.Game
 import LegalKernel.Test.FaultProof.LawClassification
@@ -444,6 +445,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.Terminate.tests)
   failed := failed + (← runAll "faultproof-substep"
                                     LegalKernel.Test.FaultProof.SubStep.tests)
+  failed := failed + (← runAll "faultproof-bounds-reachable"
+                                    LegalKernel.Test.FaultProof.BoundsReachable.tests)
   failed := failed + (← runAll "faultproof-step"
                                     LegalKernel.Test.FaultProof.Step.tests)
   failed := failed + (← runAll "faultproof-game"

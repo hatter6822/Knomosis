@@ -166,7 +166,7 @@ def decoderRejectsUnsortedKeys : TestCase := {
   name := "decoder rejects unsorted-key map (canonicality)"
   body := do
     -- Build a CBE map manually with keys 5, 3 (unsorted).  Keys ride
-    -- the 9-byte uint head, balances the 17-byte amount head.
+    -- the 9-byte uint head, balances the 33-byte amount head.
     let mapHead := cborHeadEncode cbeTagMap 2
     let key5 := cborHeadEncode cbeTagUint 5
     let val100 := encodeAmount 100

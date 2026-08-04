@@ -1344,9 +1344,16 @@ theorem totalPoolDeposited_admissible_depositWithFee
     actor), the gas-pool actor's live L2 balance increases by exactly
     `poolAmount`.  The post-step `.base` is reduced through
     `apply_bridge_admissible_with_base_agrees` and the
-    `step_impl`-collapses-to-`apply_impl` fact (the law's precondition
-    is `True`), so this is the genuine effect of the production step,
-    not a law-level approximation. -/
+    `step_impl`-collapses-to-`apply_impl` fact, so this is the genuine
+    effect of the production step, not a law-level approximation.
+
+    `hpre` is that collapse's side condition.  It used to be free —
+    the law's precondition was `True`, so `step_impl` reduced by
+    `rfl` — and is now a real hypothesis, because a `depositWithFee`
+    that would carry either leg over `Laws.maxAmount` is a no-op and
+    credits the pool nothing.  Admissibility does not supply it:
+    `BridgeAdmissibleWith` governs who may submit and with what
+    authority, not whether the transition fires. -/
 theorem depositWithFee_admissible_credits_poolActor
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
@@ -1354,7 +1361,8 @@ theorem depositWithFee_admissible_credits_poolActor
     (r : ResourceId) (recipient poolActor : ActorId)
     (ua pa : Amount) (bg : Nat) (dep : DepositId)
     (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
-    (hne : recipient ≠ poolActor) :
+    (hne : recipient ≠ poolActor)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep).pre es.base) :
     getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor =
     getBalance es.base r poolActor + pa := by
   have hbase :
@@ -1364,7 +1372,8 @@ theorem depositWithFee_admissible_credits_poolActor
     show step_impl es.base (Action.toTransition st.action st.signer) = _
     rw [hst]
     show step_impl es.base (Laws.depositWithFee r recipient poolActor ua pa bg dep) = _
-    rfl
+    rw [step_impl]
+    simp only [if_pos hpre]
   rw [hbase]
   exact depositWithFee_credits_poolActor es.base r recipient poolActor ua pa bg dep hne
 
@@ -1384,13 +1393,14 @@ theorem depositWithFee_admissible_pool_credit_matches_ledger
     (r : ResourceId) (recipient poolActor : ActorId)
     (ua pa : Amount) (bg : Nat) (dep : DepositId)
     (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
-    (hne : recipient ≠ poolActor) :
+    (hne : recipient ≠ poolActor)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep).pre es.base) :
     getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor -
       getBalance es.base r poolActor =
     totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r -
       totalPoolDeposited es r := by
   rw [depositWithFee_admissible_credits_poolActor verify P d es st idx h
-        r recipient poolActor ua pa bg dep hst hne]
+        r recipient poolActor ua pa bg dep hst hne hpre]
   rw [totalPoolDeposited_admissible_depositWithFee verify P d es st idx h
         r recipient poolActor ua pa bg dep hst r]
   simp
@@ -1420,12 +1430,13 @@ theorem pool_solvency_preserved_by_admitted_depositWithFee
     (ua pa : Amount) (bg : Nat) (dep : DepositId)
     (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
     (hne : recipient ≠ poolActor) (payouts : Nat)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep).pre es.base)
     (h_recon : getBalance es.base r poolActor + payouts = totalPoolDeposited es r) :
     getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor +
       payouts =
     totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r := by
   rw [depositWithFee_admissible_credits_poolActor verify P d es st idx h
-        r recipient poolActor ua pa bg dep hst hne]
+        r recipient poolActor ua pa bg dep hst hne hpre]
   rw [totalPoolDeposited_admissible_depositWithFee verify P d es st idx h
         r recipient poolActor ua pa bg dep hst r]
   rw [if_pos rfl, ← h_recon]
@@ -1458,7 +1469,9 @@ theorem depositWithFee_budget_admitted_pool_credit_matches_ledger
     (r : ResourceId) (recipient poolActor : ActorId)
     (ua pa : Amount) (bg : Nat) (dep : DepositId)
     (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
-    (hne : recipient ≠ poolActor) {es' : ExtendedState}
+    (hne : recipient ≠ poolActor)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep).pre es.base)
+    {es' : ExtendedState}
     (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
     getBalance es'.base r poolActor - getBalance es.base r poolActor =
     totalPoolDeposited es' r - totalPoolDeposited es r := by
@@ -1469,7 +1482,7 @@ theorem depositWithFee_budget_admitted_pool_credit_matches_ledger
     rw [hbridge]
   rw [hbase, totalPoolDeposited_unchanged_when_consumed_eq es' _ hcons r]
   exact depositWithFee_admissible_pool_credit_matches_ledger verify P d es st idx h
-    r recipient poolActor ua pa bg dep hst hne
+    r recipient poolActor ua pa bg dep hst hne hpre
 
 end Bridge
 end LegalKernel

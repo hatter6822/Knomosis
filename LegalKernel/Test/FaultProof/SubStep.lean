@@ -214,7 +214,7 @@ def tests : List TestCase :=
         -- C-3 in `docs/audits/19-findings-and-followups.md`;
         -- `balanceCell_absent_iff_balance_zero` carries the bound as an
         -- explicit hypothesis rather than assuming it silently.
-        let big : Nat := 256 ^ 16
+        let big : Nat := 256 ^ 32
         let base := LegalKernel.setBalance { balances := ∅ } 1 1 10
         let withBig := LegalKernel.setBalance base 1 2 big
         let e (x : LegalKernel.State) : ExtendedState :=
@@ -362,12 +362,12 @@ def tests : List TestCase :=
                   (fun kv => kv.1 != excluded && kv.2 != 0) :=
           bulkRecipients_eq_law_list
         let _absent : ∀ (es : ExtendedState) (r : ResourceId) (a : ActorId),
-            LegalKernel.getBalance es.base r a < 256 ^ 16 →
+            LegalKernel.getBalance es.base r a < 256 ^ 32 →
             (getCellValue es (.balance r a) = canonicalAbsentValue (.balance r a) ↔
               LegalKernel.getBalance es.base r a = 0) :=
           balanceCell_absent_iff_balance_zero
         let _live : ∀ (es : ExtendedState) (r : ResourceId) (excluded a : ActorId),
-            LegalKernel.getBalance es.base r a < 256 ^ 16 →
+            LegalKernel.getBalance es.base r a < 256 ^ 32 →
             ((∃ v, (a, v) ∈ bulkRecipients es r excluded) ↔
               (getCellValue es (.balance r a) ≠ canonicalAbsentValue (.balance r a)
                 ∧ a ≠ excluded)) :=

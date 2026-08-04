@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d27daa8ff6da9e8bd4ab4ca1b4baa06786fb6f85f1c477ae45af53e30f1d4ea6"
+    "source_digest": "044813ab8184b46f1369571a967ce69583ebd946537dc12f1d9dd8bf44fda713"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5909
+    "declaration_count": 5913
   },
   "modules": [
     {
@@ -544,13 +544,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 327,
+          "line": 328,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelVersion",
-          "line": 343,
+          "line": 344,
           "called": [
             "LegalKernel"
           ]
@@ -5215,7 +5215,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_admissible_credits_poolActor",
-          "line": 1349,
+          "line": 1356,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -5242,7 +5242,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_admissible_pool_credit_matches_ledger",
-          "line": 1379,
+          "line": 1388,
           "called": [
             "ActorId",
             "Amount",
@@ -5268,7 +5268,7 @@
         {
           "kind": "theorem",
           "name": "pool_solvency_preserved_by_admitted_depositWithFee",
-          "line": 1414,
+          "line": 1424,
           "called": [
             "ActorId",
             "Amount",
@@ -5294,7 +5294,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_budget_admitted_pool_credit_matches_ledger",
-          "line": 1453,
+          "line": 1464,
           "called": [
             "ActorId",
             "Amount",
@@ -7814,7 +7814,7 @@
     {
       "module": "LegalKernel.Bridge.BudgetRefund",
       "path": "LegalKernel/Bridge/BudgetRefund.lean",
-      "declaration_count": 20,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "namespace",
@@ -7996,7 +7996,23 @@
         {
           "kind": "theorem",
           "name": "refund_pre_iff_pool_solvent",
-          "line": 279,
+          "line": 288,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "poolActor",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refund_pre_implies_pool_solvent",
+          "line": 304,
           "called": [
             "ActorId",
             "Amount",
@@ -8011,7 +8027,7 @@
         {
           "kind": "theorem",
           "name": "refund_pays_exact_amount_from_pool",
-          "line": 300,
+          "line": 324,
           "called": [
             "ActorId",
             "ResourceId",
@@ -8027,7 +8043,7 @@
         {
           "kind": "theorem",
           "name": "refund_conserves_supply",
-          "line": 321,
+          "line": 345,
           "called": [
             "ActorId",
             "Amount",
@@ -8043,7 +8059,7 @@
         {
           "kind": "theorem",
           "name": "refund_other_actor_untouched",
-          "line": 333,
+          "line": 357,
           "called": [
             "ActorId",
             "Amount",
@@ -8125,7 +8141,7 @@
         {
           "kind": "theorem",
           "name": "withdraw_step_base",
-          "line": 82,
+          "line": 93,
           "called": [
             "ActorId",
             "Amount",
@@ -8148,7 +8164,7 @@
         {
           "kind": "theorem",
           "name": "withdraw_step_supply",
-          "line": 99,
+          "line": 110,
           "called": [
             "ActorId",
             "Amount",
@@ -8171,7 +8187,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_depositWithFee",
-          "line": 127,
+          "line": 138,
           "called": [
             "ActorId",
             "Amount",
@@ -8190,7 +8206,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_step_base",
-          "line": 151,
+          "line": 162,
           "called": [
             "ActorId",
             "Amount",
@@ -8212,7 +8228,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_step_supply",
-          "line": 167,
+          "line": 178,
           "called": [
             "ActorId",
             "Amount",
@@ -8235,7 +8251,7 @@
         {
           "kind": "theorem",
           "name": "pendingFold_eq_listSum",
-          "line": 202,
+          "line": 213,
           "called": [
             "PendingWithdrawal",
             "WithdrawalId"
@@ -8244,7 +8260,7 @@
         {
           "kind": "theorem",
           "name": "pendingFold_insert_absent",
-          "line": 224,
+          "line": 235,
           "called": [
             "PendingWithdrawal",
             "WithdrawalId",
@@ -8254,7 +8270,7 @@
         {
           "kind": "def",
           "name": "WithdrawalsMonotonic",
-          "line": 261,
+          "line": 272,
           "called": [
             "ExtendedState",
             "WithdrawalId",
@@ -8264,7 +8280,7 @@
         {
           "kind": "theorem",
           "name": "nextWdId_not_mem_of_monotonic",
-          "line": 266,
+          "line": 277,
           "called": [
             "ExtendedState",
             "WithdrawalsMonotonic",
@@ -8274,7 +8290,7 @@
         {
           "kind": "theorem",
           "name": "withdraw_step_withdrawn",
-          "line": 275,
+          "line": 286,
           "called": [
             "ActorId",
             "Amount",
@@ -8300,7 +8316,7 @@
         {
           "kind": "theorem",
           "name": "deposit_step_withdrawn",
-          "line": 301,
+          "line": 312,
           "called": [
             "ActorId",
             "Amount",
@@ -8321,7 +8337,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_step_withdrawn",
-          "line": 322,
+          "line": 333,
           "called": [
             "ActorId",
             "Amount",
@@ -8342,7 +8358,7 @@
         {
           "kind": "theorem",
           "name": "deposit_step_deposited",
-          "line": 352,
+          "line": 363,
           "called": [
             "ActorId",
             "Amount",
@@ -8367,7 +8383,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_step_deposited",
-          "line": 381,
+          "line": 392,
           "called": [
             "ActorId",
             "Amount",
@@ -8392,7 +8408,7 @@
         {
           "kind": "theorem",
           "name": "withdraw_step_deposited",
-          "line": 412,
+          "line": 423,
           "called": [
             "ActorId",
             "Amount",
@@ -8415,7 +8431,7 @@
         {
           "kind": "def",
           "name": "BridgeConserves",
-          "line": 435,
+          "line": 446,
           "called": [
             "ExtendedState",
             "ResourceId",
@@ -8428,7 +8444,7 @@
         {
           "kind": "def",
           "name": "genesisExtended",
-          "line": 440,
+          "line": 451,
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
@@ -8440,7 +8456,7 @@
         {
           "kind": "theorem",
           "name": "genesis_conserves",
-          "line": 445,
+          "line": 456,
           "called": [
             "BridgeConserves",
             "TotalSupply",
@@ -8455,7 +8471,7 @@
         {
           "kind": "theorem",
           "name": "genesis_monotonic",
-          "line": 453,
+          "line": 464,
           "called": [
             "WithdrawalsMonotonic",
             "genesisExtended"
@@ -8464,7 +8480,7 @@
         {
           "kind": "theorem",
           "name": "withdrawalsMonotonic_step",
-          "line": 462,
+          "line": 473,
           "called": [
             "AuthorityPolicy",
             "BridgeAction",
@@ -8487,7 +8503,7 @@
         {
           "kind": "theorem",
           "name": "bridgeConserves_step",
-          "line": 509,
+          "line": 520,
           "called": [
             "AuthorityPolicy",
             "BridgeAction",
@@ -8518,7 +8534,7 @@
         {
           "kind": "theorem",
           "name": "bridgeReachable_preserves",
-          "line": 542,
+          "line": 553,
           "called": [
             "AuthorityPolicy",
             "BridgeConserves",
@@ -8536,7 +8552,7 @@
         {
           "kind": "theorem",
           "name": "bridge_chain_conserves",
-          "line": 556,
+          "line": 567,
           "called": [
             "AuthorityPolicy",
             "BridgeConserves",
@@ -8553,7 +8569,7 @@
         {
           "kind": "theorem",
           "name": "bridgeReachable_solvent",
-          "line": 566,
+          "line": 577,
           "called": [
             "AuthorityPolicy",
             "BridgeReachable",
@@ -8568,7 +8584,7 @@
         {
           "kind": "theorem",
           "name": "bridge_chain_accounting_equation",
-          "line": 582,
+          "line": 593,
           "called": [
             "AuthorityPolicy",
             "Bridge",
@@ -16436,43 +16452,43 @@
         {
           "kind": "abbrev",
           "name": "cbeTagAmount",
-          "line": 160,
+          "line": 177,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagBytes",
-          "line": 163,
+          "line": 180,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagText",
-          "line": 166,
+          "line": 183,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagArray",
-          "line": 169,
+          "line": 186,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagMap",
-          "line": 172,
+          "line": 189,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "Stream",
-          "line": 185,
+          "line": 202,
           "called": []
         },
         {
           "kind": "def",
           "name": "natToBytesLE",
-          "line": 196,
+          "line": 213,
           "called": [
             "Stream"
           ]
@@ -16480,7 +16496,7 @@
         {
           "kind": "theorem",
           "name": "natToBytesLE_length",
-          "line": 201,
+          "line": 218,
           "called": [
             "natToBytesLE"
           ]
@@ -16488,7 +16504,7 @@
         {
           "kind": "def",
           "name": "natFromBytesLE",
-          "line": 210,
+          "line": 227,
           "called": [
             "DecodeError",
             "Stream"
@@ -16497,13 +16513,13 @@
         {
           "kind": "theorem",
           "name": "nat_lt_256_toUInt8_toNat_eq",
-          "line": 237,
+          "line": 254,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "natFromBytesLE_natToBytesLE",
-          "line": 245,
+          "line": 262,
           "called": [
             "natFromBytesLE",
             "natToBytesLE",
@@ -16513,7 +16529,7 @@
         {
           "kind": "def",
           "name": "cborHeadEncode",
-          "line": 297,
+          "line": 314,
           "called": [
             "Stream",
             "natToBytesLE"
@@ -16522,7 +16538,7 @@
         {
           "kind": "def",
           "name": "cborHeadDecode",
-          "line": 310,
+          "line": 327,
           "called": [
             "DecodeError",
             "Stream",
@@ -16532,7 +16548,7 @@
         {
           "kind": "theorem",
           "name": "natFromBytesLE_append_natToBytesLE",
-          "line": 323,
+          "line": 340,
           "called": [
             "Stream",
             "natFromBytesLE",
@@ -16543,7 +16559,7 @@
         {
           "kind": "theorem",
           "name": "cborHeadRoundtrip",
-          "line": 351,
+          "line": 368,
           "called": [
             "cborHeadDecode",
             "cborHeadEncode",
@@ -16553,7 +16569,7 @@
         {
           "kind": "theorem",
           "name": "cborHeadRoundtrip_append",
-          "line": 362,
+          "line": 379,
           "called": [
             "Stream",
             "cborHeadDecode",
@@ -16564,7 +16580,7 @@
         {
           "kind": "def",
           "name": "cborAmountHeadEncode",
-          "line": 384,
+          "line": 402,
           "called": [
             "Stream",
             "cbeTagAmount",
@@ -16574,7 +16590,7 @@
         {
           "kind": "def",
           "name": "cborAmountHeadDecode",
-          "line": 394,
+          "line": 412,
           "called": [
             "DecodeError",
             "Stream",
@@ -16585,7 +16601,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadEncode_length",
-          "line": 405,
+          "line": 423,
           "called": [
             "cborAmountHeadEncode",
             "natToBytesLE_length"
@@ -16594,7 +16610,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadRoundtrip_append",
-          "line": 412,
+          "line": 430,
           "called": [
             "Stream",
             "cborAmountHeadDecode",
@@ -16605,7 +16621,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadRoundtrip",
-          "line": 420,
+          "line": 438,
           "called": [
             "cborAmountHeadDecode",
             "cborAmountHeadEncode",
@@ -16615,7 +16631,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadEncode_injective",
-          "line": 428,
+          "line": 446,
           "called": [
             "DecodeError",
             "Stream",
@@ -16626,7 +16642,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadEncode_ne_cborHeadEncode",
-          "line": 442,
+          "line": 460,
           "called": [
             "cbeTagAmount",
             "cbeTagUint",
@@ -16637,7 +16653,7 @@
         {
           "kind": "theorem",
           "name": "cborHeadEncode_injective",
-          "line": 465,
+          "line": 483,
           "called": [
             "DecodeError",
             "Encoding",
@@ -30747,10 +30763,10 @@
             "depositWithFee",
             "deriveAmmSwapBalances_alias_consistent",
             "deriveBurnBalance_alias_consistent",
-            "deriveChainPair_alias_consistent",
             "deriveCreditBalance_alias_consistent",
             "deriveDelegatedTopUpBalances_alias_consistent",
             "deriveDepositBalance_alias_consistent",
+            "deriveDepositWithFeeBalances_alias_consistent",
             "deriveReclaimBalances_alias_consistent",
             "deriveRefundBalances_alias_consistent",
             "deriveTopUpBalances_alias_consistent",
@@ -30772,7 +30788,7 @@
         {
           "kind": "structure",
           "name": "MultiBundle",
-          "line": 330,
+          "line": 331,
           "called": [
             "CellTag",
             "SmtMultiProof",
@@ -30782,7 +30798,7 @@
         {
           "kind": "def",
           "name": "bundleValueAt",
-          "line": 366,
+          "line": 367,
           "called": [
             "CellTag",
             "MultiBundle"
@@ -30791,7 +30807,7 @@
         {
           "kind": "def",
           "name": "bundleBalanceReader",
-          "line": 373,
+          "line": 374,
           "called": [
             "BalanceReader",
             "MultiBundle",
@@ -30801,7 +30817,7 @@
         {
           "kind": "def",
           "name": "bundleNextWdId",
-          "line": 383,
+          "line": 384,
           "called": [
             "MultiBundle",
             "bundleValueAt"
@@ -30810,7 +30826,7 @@
         {
           "kind": "def",
           "name": "multiFrontierOf",
-          "line": 398,
+          "line": 399,
           "called": [
             "Action",
             "ActorId",
@@ -30822,7 +30838,7 @@
         {
           "kind": "def",
           "name": "verifierPostRootMulti",
-          "line": 424,
+          "line": 425,
           "called": [
             "Action",
             "ActorId",
@@ -30849,7 +30865,7 @@
         {
           "kind": "def",
           "name": "stepMultiBundle",
-          "line": 493,
+          "line": 494,
           "called": [
             "ExtendedState",
             "MultiBundle",
@@ -30870,7 +30886,7 @@
         {
           "kind": "theorem",
           "name": "bundleValueAt_stepMultiBundle",
-          "line": 516,
+          "line": 517,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -30885,7 +30901,7 @@
         {
           "kind": "theorem",
           "name": "mem_multiFrontierOf_of_writeCells",
-          "line": 563,
+          "line": 564,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -30900,7 +30916,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_mem_multiFrontierOf",
-          "line": 574,
+          "line": 575,
           "called": [
             "ExtendedState",
             "KeyInjectiveOn",
@@ -30914,7 +30930,7 @@
         {
           "kind": "theorem",
           "name": "bundleBalanceReader_stepMultiBundle",
-          "line": 589,
+          "line": 590,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30934,7 +30950,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalances_stepMultiBundle",
-          "line": 619,
+          "line": 620,
           "called": [
             "Action.writeCells",
             "ActorId",
@@ -30982,7 +30998,7 @@
         {
           "kind": "theorem",
           "name": "mem_vwc_of_mem_frontier",
-          "line": 712,
+          "line": 713,
           "called": [
             "Action",
             "ActorId",
@@ -30996,7 +31012,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalanceAt_correct",
-          "line": 737,
+          "line": 738,
           "called": [
             "Action.writeCells",
             "ActorId",
@@ -31044,7 +31060,7 @@
         {
           "kind": "theorem",
           "name": "derivedCellValue_correct",
-          "line": 900,
+          "line": 901,
           "called": [
             "Action.writeCells",
             "ActorId",
@@ -31105,7 +31121,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalances_stateBalanceReader_isSome",
-          "line": 1065,
+          "line": 1066,
           "called": [
             "Action",
             "ActorId",
@@ -31130,7 +31146,7 @@
         {
           "kind": "theorem",
           "name": "postOpened_eq_openedOf",
-          "line": 1088,
+          "line": 1089,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -31159,7 +31175,7 @@
         {
           "kind": "theorem",
           "name": "stepMultiFold_eq_commit_post",
-          "line": 1158,
+          "line": 1159,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -31195,7 +31211,7 @@
         {
           "kind": "def",
           "name": "stepMultiPostRoot",
-          "line": 1205,
+          "line": 1206,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -31837,7 +31853,7 @@
     {
       "module": "LegalKernel.FaultProof.VerifierWrites",
       "path": "LegalKernel/FaultProof/VerifierWrites.lean",
-      "declaration_count": 95,
+      "declaration_count": 97,
       "declarations": [
         {
           "kind": "namespace",
@@ -32092,7 +32108,7 @@
         {
           "kind": "theorem",
           "name": "deriveTransferBalances_correct",
-          "line": 641,
+          "line": 643,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32109,6 +32125,7 @@
             "productionApplyBudget_base",
             "receiver",
             "sender",
+            "setBalance",
             "stateBalanceReader",
             "step_impl",
             "transfer"
@@ -32117,7 +32134,7 @@
         {
           "kind": "def",
           "name": "deriveCreditBalance",
-          "line": 707,
+          "line": 730,
           "called": [
             "ActorId",
             "Amount",
@@ -32128,7 +32145,7 @@
         {
           "kind": "def",
           "name": "deriveBurnBalance",
-          "line": 717,
+          "line": 740,
           "called": [
             "ActorId",
             "Amount",
@@ -32139,7 +32156,7 @@
         {
           "kind": "theorem",
           "name": "deriveCreditBalance_correct_mint",
-          "line": 727,
+          "line": 750,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32161,7 +32178,7 @@
         {
           "kind": "theorem",
           "name": "deriveCreditBalance_correct_reward",
-          "line": 750,
+          "line": 774,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32183,7 +32200,7 @@
         {
           "kind": "theorem",
           "name": "deriveBurnBalance_correct",
-          "line": 772,
+          "line": 797,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32205,7 +32222,7 @@
         {
           "kind": "def",
           "name": "deriveDepositBalance",
-          "line": 804,
+          "line": 829,
           "called": [
             "ActorId",
             "Amount",
@@ -32216,7 +32233,7 @@
         {
           "kind": "def",
           "name": "deriveWithdrawBalance",
-          "line": 813,
+          "line": 840,
           "called": [
             "ActorId",
             "Amount",
@@ -32228,7 +32245,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositBalance_correct",
-          "line": 823,
+          "line": 850,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32250,7 +32267,7 @@
         {
           "kind": "theorem",
           "name": "deriveWithdrawBalance_correct",
-          "line": 842,
+          "line": 874,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32273,7 +32290,7 @@
         {
           "kind": "theorem",
           "name": "getBalance_chain_pair",
-          "line": 882,
+          "line": 914,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32286,7 +32303,20 @@
         {
           "kind": "theorem",
           "name": "getBalance_chain_pair_first",
-          "line": 898,
+          "line": 930,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getBalance_chain_second_read",
+          "line": 952,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32299,7 +32329,7 @@
         {
           "kind": "def",
           "name": "deriveChainPair",
-          "line": 915,
+          "line": 964,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -32309,7 +32339,7 @@
         {
           "kind": "theorem",
           "name": "deriveChainPair_correct",
-          "line": 925,
+          "line": 974,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -32325,7 +32355,7 @@
         {
           "kind": "def",
           "name": "deriveTopUpBalances",
-          "line": 955,
+          "line": 1004,
           "called": [
             "ActorId",
             "Amount",
@@ -32338,7 +32368,7 @@
         {
           "kind": "def",
           "name": "deriveRefundBalances",
-          "line": 971,
+          "line": 1020,
           "called": [
             "ActorId",
             "Amount",
@@ -32353,7 +32383,7 @@
         {
           "kind": "def",
           "name": "deriveDepositWithFeeBalances",
-          "line": 989,
+          "line": 1037,
           "called": [
             "ActorId",
             "Amount",
@@ -32366,7 +32396,7 @@
         {
           "kind": "theorem",
           "name": "deriveTopUpBalances_correct",
-          "line": 997,
+          "line": 1053,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32378,6 +32408,7 @@
             "deriveChainPair_correct",
             "deriveTopUpBalances",
             "es",
+            "getBalance_chain_second_read",
             "productionApplyBudget",
             "productionApplyBudget_base",
             "stateBalanceReader",
@@ -32388,7 +32419,7 @@
         {
           "kind": "theorem",
           "name": "deriveRefundBalances_correct",
-          "line": 1019,
+          "line": 1085,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32400,6 +32431,7 @@
             "deriveChainPair_correct",
             "deriveRefundBalances",
             "es",
+            "getBalance_chain_second_read",
             "productionApplyBudget",
             "productionApplyBudget_base",
             "stateBalanceReader",
@@ -32409,7 +32441,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositWithFeeBalances_correct",
-          "line": 1047,
+          "line": 1125,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32422,9 +32454,11 @@
             "deriveChainPair_correct",
             "deriveDepositWithFeeBalances",
             "es",
+            "getBalance_chain_second_read",
             "poolActor",
             "productionApplyBudget",
             "productionApplyBudget_base",
+            "setBalance",
             "stateBalanceReader",
             "step_impl"
           ]
@@ -32432,7 +32466,7 @@
         {
           "kind": "def",
           "name": "deriveDelegatedTopUpBalances",
-          "line": 1074,
+          "line": 1169,
           "called": [
             "ActorId",
             "Amount",
@@ -32445,7 +32479,7 @@
         {
           "kind": "def",
           "name": "deriveReclaimBalances",
-          "line": 1093,
+          "line": 1188,
           "called": [
             "ActorId",
             "Amount",
@@ -32458,7 +32492,7 @@
         {
           "kind": "theorem",
           "name": "deriveDelegatedTopUpBalances_correct",
-          "line": 1110,
+          "line": 1204,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32470,8 +32504,10 @@
             "deriveChainPair_correct",
             "deriveDelegatedTopUpBalances",
             "es",
+            "getBalance_chain_second_read",
             "productionApplyBudget",
             "productionApplyBudget_base",
+            "setBalance",
             "stateBalanceReader",
             "step_impl",
             "topUpActionBudgetFor"
@@ -32480,7 +32516,7 @@
         {
           "kind": "theorem",
           "name": "deriveReclaimBalances_correct",
-          "line": 1136,
+          "line": 1242,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32492,10 +32528,12 @@
             "deriveChainPair_correct",
             "deriveReclaimBalances",
             "es",
+            "getBalance_chain_second_read",
             "poolActor",
             "productionApplyBudget",
             "productionApplyBudget_base",
             "reclaimAmmReserves",
+            "setBalance",
             "stateBalanceReader",
             "step_impl"
           ]
@@ -32503,7 +32541,7 @@
         {
           "kind": "def",
           "name": "deriveAmmSwapBalances",
-          "line": 1167,
+          "line": 1287,
           "called": [
             "ActorId",
             "Amount",
@@ -32515,7 +32553,7 @@
         {
           "kind": "theorem",
           "name": "deriveAmmSwapBalances_correct",
-          "line": 1181,
+          "line": 1302,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -32539,13 +32577,13 @@
         {
           "kind": "def",
           "name": "deriveRegistryCellValue",
-          "line": 1244,
+          "line": 1369,
           "called": []
         },
         {
           "kind": "def",
           "name": "deriveDeclaredPolicyCellValue",
-          "line": 1248,
+          "line": 1373,
           "called": [
             "policy"
           ]
@@ -32553,13 +32591,13 @@
         {
           "kind": "def",
           "name": "deriveRevokedPolicyCellValue",
-          "line": 1260,
+          "line": 1385,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "deriveRegistryCellValue_correct_replaceKey",
-          "line": 1263,
+          "line": 1388,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -32575,7 +32613,7 @@
         {
           "kind": "theorem",
           "name": "deriveRegistryCellValue_correct_registerIdentity",
-          "line": 1287,
+          "line": 1412,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -32591,7 +32629,7 @@
         {
           "kind": "theorem",
           "name": "deriveDeclaredPolicyCellValue_correct",
-          "line": 1311,
+          "line": 1436,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -32607,7 +32645,7 @@
         {
           "kind": "theorem",
           "name": "deriveDeclaredPolicyCellValue_eq_actionFields",
-          "line": 1350,
+          "line": 1475,
           "called": [
             "deriveDeclaredPolicyCellValue",
             "policy"
@@ -32616,7 +32654,7 @@
         {
           "kind": "theorem",
           "name": "registry_key_is_action_fields_tail",
-          "line": 1360,
+          "line": 1485,
           "called": [
             "ActorId"
           ]
@@ -32624,7 +32662,7 @@
         {
           "kind": "theorem",
           "name": "deriveRevokedPolicyCellValue_correct",
-          "line": 1374,
+          "line": 1499,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -32639,25 +32677,25 @@
         {
           "kind": "def",
           "name": "deriveConsumedCellValue",
-          "line": 1420,
+          "line": 1545,
           "called": []
         },
         {
           "kind": "def",
           "name": "derivePendingCellValue",
-          "line": 1424,
+          "line": 1549,
           "called": []
         },
         {
           "kind": "def",
           "name": "deriveNextWdIdCellValue",
-          "line": 1432,
+          "line": 1557,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "deriveConsumedCellValue_correct_deposit",
-          "line": 1438,
+          "line": 1563,
           "called": [
             "ActorId",
             "Amount",
@@ -32676,7 +32714,7 @@
         {
           "kind": "theorem",
           "name": "deriveConsumedCellValue_correct_depositWithFee",
-          "line": 1472,
+          "line": 1597,
           "called": [
             "ActorId",
             "Amount",
@@ -32696,7 +32734,7 @@
         {
           "kind": "theorem",
           "name": "derivePendingCellValue_correct",
-          "line": 1510,
+          "line": 1635,
           "called": [
             "ActorId",
             "Amount",
@@ -32715,7 +32753,7 @@
         {
           "kind": "theorem",
           "name": "deriveNextWdIdCellValue_correct",
-          "line": 1539,
+          "line": 1664,
           "called": [
             "ActorId",
             "Amount",
@@ -32734,7 +32772,7 @@
         {
           "kind": "def",
           "name": "FaultProofAdjudicable",
-          "line": 1607,
+          "line": 1732,
           "called": [
             "Action",
             "distributeOthers",
@@ -32744,7 +32782,7 @@
         {
           "kind": "theorem",
           "name": "writeCellsAt_eq_writeCells_of_adjudicable",
-          "line": 1616,
+          "line": 1741,
           "called": [
             "Action",
             "Action.writeCellsAt_eq_writeCells",
@@ -32759,7 +32797,7 @@
         {
           "kind": "theorem",
           "name": "writeCellsAt_withdraw_from_proven_counter",
-          "line": 1632,
+          "line": 1757,
           "called": [
             "ActorId",
             "Amount",
@@ -32772,7 +32810,7 @@
         {
           "kind": "theorem",
           "name": "faultProofAdjudicable_eq_false_iff",
-          "line": 1645,
+          "line": 1770,
           "called": [
             "Action",
             "FaultProofAdjudicable",
@@ -32783,7 +32821,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_malformed",
-          "line": 1664,
+          "line": 1789,
           "called": [
             "deriveNonceCellValue"
           ]
@@ -32791,7 +32829,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_trailing",
-          "line": 1678,
+          "line": 1803,
           "called": [
             "deriveNonceCellValue"
           ]
@@ -32799,7 +32837,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_pair",
-          "line": 1711,
+          "line": 1836,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32809,7 +32847,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_singleton",
-          "line": 1722,
+          "line": 1847,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32819,7 +32857,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_nil",
-          "line": 1726,
+          "line": 1851,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32829,7 +32867,7 @@
         {
           "kind": "theorem",
           "name": "deriveChainPair_alias_consistent",
-          "line": 1735,
+          "line": 1860,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -32842,7 +32880,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_read_pair",
-          "line": 1758,
+          "line": 1883,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -32854,7 +32892,7 @@
         {
           "kind": "theorem",
           "name": "deriveTransferBalances_alias_consistent",
-          "line": 1773,
+          "line": 1898,
           "called": [
             "ActorId",
             "Amount",
@@ -32871,7 +32909,7 @@
         {
           "kind": "theorem",
           "name": "deriveTopUpBalances_alias_consistent",
-          "line": 1806,
+          "line": 1933,
           "called": [
             "ActorId",
             "Amount",
@@ -32887,7 +32925,7 @@
         {
           "kind": "theorem",
           "name": "deriveRefundBalances_alias_consistent",
-          "line": 1830,
+          "line": 1958,
           "called": [
             "ActorId",
             "Amount",
@@ -32905,7 +32943,7 @@
         {
           "kind": "theorem",
           "name": "deriveAmmSwapBalances_alias_consistent",
-          "line": 1857,
+          "line": 1986,
           "called": [
             "ActorId",
             "Amount",
@@ -32921,7 +32959,7 @@
         {
           "kind": "theorem",
           "name": "deriveReclaimBalances_alias_consistent",
-          "line": 1887,
+          "line": 2017,
           "called": [
             "ActorId",
             "Amount",
@@ -32937,7 +32975,7 @@
         {
           "kind": "theorem",
           "name": "deriveDelegatedTopUpBalances_alias_consistent",
-          "line": 1913,
+          "line": 2044,
           "called": [
             "ActorId",
             "Amount",
@@ -32952,8 +32990,24 @@
         },
         {
           "kind": "theorem",
+          "name": "deriveDepositWithFeeBalances_alias_consistent",
+          "line": 2076,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_read_pair",
+            "deriveChainPair_alias_consistent",
+            "deriveDepositWithFeeBalances",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "deriveCreditBalance_alias_consistent",
-          "line": 1939,
+          "line": 2105,
           "called": [
             "ActorId",
             "Amount",
@@ -32967,7 +33021,7 @@
         {
           "kind": "theorem",
           "name": "deriveBurnBalance_alias_consistent",
-          "line": 1957,
+          "line": 2123,
           "called": [
             "ActorId",
             "Amount",
@@ -32981,7 +33035,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositBalance_alias_consistent",
-          "line": 1975,
+          "line": 2141,
           "called": [
             "ActorId",
             "Amount",
@@ -32995,7 +33049,7 @@
         {
           "kind": "theorem",
           "name": "deriveWithdrawBalance_alias_consistent",
-          "line": 1990,
+          "line": 2159,
           "called": [
             "ActorId",
             "Amount",
@@ -33010,7 +33064,7 @@
         {
           "kind": "theorem",
           "name": "deriveChainPair_congr",
-          "line": 2023,
+          "line": 2192,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -33021,7 +33075,7 @@
         {
           "kind": "theorem",
           "name": "deriveTransferBalances_congr",
-          "line": 2030,
+          "line": 2199,
           "called": [
             "ActorId",
             "Amount",
@@ -33035,7 +33089,7 @@
         {
           "kind": "theorem",
           "name": "deriveCreditBalance_congr",
-          "line": 2039,
+          "line": 2208,
           "called": [
             "ActorId",
             "Amount",
@@ -33047,7 +33101,7 @@
         {
           "kind": "theorem",
           "name": "deriveBurnBalance_congr",
-          "line": 2046,
+          "line": 2215,
           "called": [
             "ActorId",
             "Amount",
@@ -33059,7 +33113,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositBalance_congr",
-          "line": 2054,
+          "line": 2223,
           "called": [
             "ActorId",
             "Amount",
@@ -33071,7 +33125,7 @@
         {
           "kind": "theorem",
           "name": "deriveWithdrawBalance_congr",
-          "line": 2062,
+          "line": 2231,
           "called": [
             "ActorId",
             "Amount",
@@ -33084,7 +33138,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositWithFeeBalances_congr",
-          "line": 2070,
+          "line": 2239,
           "called": [
             "ActorId",
             "Amount",
@@ -33098,7 +33152,7 @@
         {
           "kind": "theorem",
           "name": "deriveTopUpBalances_congr",
-          "line": 2082,
+          "line": 2252,
           "called": [
             "ActorId",
             "Amount",
@@ -33112,7 +33166,7 @@
         {
           "kind": "theorem",
           "name": "deriveDelegatedTopUpBalances_congr",
-          "line": 2100,
+          "line": 2264,
           "called": [
             "ActorId",
             "Amount",
@@ -33126,7 +33180,7 @@
         {
           "kind": "theorem",
           "name": "deriveRefundBalances_congr",
-          "line": 2117,
+          "line": 2275,
           "called": [
             "ActorId",
             "Amount",
@@ -33142,7 +33196,7 @@
         {
           "kind": "theorem",
           "name": "deriveAmmSwapBalances_congr",
-          "line": 2134,
+          "line": 2286,
           "called": [
             "ActorId",
             "Amount",
@@ -33155,7 +33209,7 @@
         {
           "kind": "theorem",
           "name": "deriveReclaimBalances_congr",
-          "line": 2146,
+          "line": 2298,
           "called": [
             "ActorId",
             "Amount",
@@ -33871,19 +33925,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 53,
+          "line": 54,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 54,
+          "line": 55,
           "called": []
         },
         {
           "kind": "def",
           "name": "ammSwap",
-          "line": 72,
+          "line": 73,
           "called": [
             "ActorId",
             "Amount",
@@ -33897,7 +33951,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_other_resource_untouched",
-          "line": 93,
+          "line": 95,
           "called": [
             "ActorId",
             "Amount",
@@ -33912,7 +33966,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_does_not_touch_other_resources",
-          "line": 114,
+          "line": 116,
           "called": [
             "ActorId",
             "Amount",
@@ -33928,7 +33982,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_conserves_other_resource",
-          "line": 128,
+          "line": 130,
           "called": [
             "ActorId",
             "Amount",
@@ -33944,7 +33998,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_increases_from_balance",
-          "line": 147,
+          "line": 149,
           "called": [
             "ActorId",
             "Amount",
@@ -33961,7 +34015,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_decreases_to_balance",
-          "line": 167,
+          "line": 169,
           "called": [
             "ActorId",
             "Amount",
@@ -33978,7 +34032,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_other_actor_untouched",
-          "line": 187,
+          "line": 189,
           "called": [
             "ActorId",
             "Amount",
@@ -33995,13 +34049,13 @@
         {
           "kind": "theorem",
           "name": "swap_from_arithmetic",
-          "line": 227,
+          "line": 229,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "ammSwap_fromResource_supply_increase",
-          "line": 237,
+          "line": 239,
           "called": [
             "ActorId",
             "Amount",
@@ -34020,13 +34074,13 @@
         {
           "kind": "theorem",
           "name": "swap_to_arithmetic",
-          "line": 267,
+          "line": 269,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "ammSwap_toResource_supply_decrease",
-          "line": 277,
+          "line": 279,
           "called": [
             "ActorId",
             "Amount",
@@ -34046,7 +34100,7 @@
         {
           "kind": "instance",
           "name": "ammSwap_localTo",
-          "line": 330,
+          "line": 332,
           "called": [
             "ActorId",
             "Amount",
@@ -34060,7 +34114,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_freezePreserving",
-          "line": 348,
+          "line": 350,
           "called": [
             "ActorId",
             "Amount",
@@ -34074,7 +34128,7 @@
         {
           "kind": "instance",
           "name": "ammSwap_freezePreserving_empty",
-          "line": 363,
+          "line": 365,
           "called": [
             "ActorId",
             "Amount",
@@ -34088,7 +34142,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_not_conservative_at_from",
-          "line": 375,
+          "line": 377,
           "called": [
             "ActorId",
             "Amount",
@@ -34104,7 +34158,7 @@
         {
           "kind": "theorem",
           "name": "ammSwap_not_monotonic_at_to",
-          "line": 391,
+          "line": 393,
           "called": [
             "ActorId",
             "Amount",
@@ -34476,19 +34530,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 72,
+          "line": 73,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 73,
+          "line": 74,
           "called": []
         },
         {
           "kind": "def",
           "name": "claimBudgetRefund",
-          "line": 89,
+          "line": 94,
           "called": [
             "ActorId",
             "Amount",
@@ -34505,7 +34559,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_apply_eq_transfer",
-          "line": 108,
+          "line": 118,
           "called": [
             "ActorId",
             "Amount",
@@ -34522,13 +34576,13 @@
         {
           "kind": "theorem",
           "name": "refund_arithmetic",
-          "line": 127,
+          "line": 137,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_conserves",
-          "line": 139,
+          "line": 149,
           "called": [
             "ActorId",
             "Amount",
@@ -34550,7 +34604,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_other_resource_untouched",
-          "line": 179,
+          "line": 189,
           "called": [
             "ActorId",
             "Amount",
@@ -34569,7 +34623,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_does_not_touch_other_resources",
-          "line": 197,
+          "line": 207,
           "called": [
             "ActorId",
             "Amount",
@@ -34588,7 +34642,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_conserves_other_resource",
-          "line": 208,
+          "line": 218,
           "called": [
             "ActorId",
             "Amount",
@@ -34607,7 +34661,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_pool_debited",
-          "line": 229,
+          "line": 239,
           "called": [
             "ActorId",
             "Amount",
@@ -34627,7 +34681,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_claimant_credited",
-          "line": 251,
+          "line": 261,
           "called": [
             "ActorId",
             "Amount",
@@ -34647,7 +34701,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_other_actor_untouched",
-          "line": 274,
+          "line": 284,
           "called": [
             "ActorId",
             "Amount",
@@ -34667,7 +34721,7 @@
         {
           "kind": "instance",
           "name": "claimBudgetRefund_isConservative",
-          "line": 297,
+          "line": 307,
           "called": [
             "ActorId",
             "Amount",
@@ -34685,7 +34739,7 @@
         {
           "kind": "instance",
           "name": "claimBudgetRefund_isMonotonic",
-          "line": 311,
+          "line": 321,
           "called": [
             "ActorId",
             "Amount",
@@ -34702,7 +34756,7 @@
         {
           "kind": "instance",
           "name": "claimBudgetRefund_localTo",
-          "line": 323,
+          "line": 333,
           "called": [
             "ActorId",
             "Amount",
@@ -34719,7 +34773,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_freezePreserving",
-          "line": 340,
+          "line": 350,
           "called": [
             "ActorId",
             "Amount",
@@ -34736,7 +34790,7 @@
         {
           "kind": "instance",
           "name": "claimBudgetRefund_freezePreserving_empty",
-          "line": 358,
+          "line": 368,
           "called": [
             "ActorId",
             "Amount",
@@ -34762,19 +34816,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 43,
+          "line": 44,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 44,
+          "line": 45,
           "called": []
         },
         {
           "kind": "def",
           "name": "deposit",
-          "line": 69,
+          "line": 70,
           "called": [
             "ActorId",
             "Amount",
@@ -34788,7 +34842,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_deposit",
-          "line": 119,
+          "line": 124,
           "called": [
             "ActorId",
             "Amount",
@@ -34804,7 +34858,7 @@
         {
           "kind": "theorem",
           "name": "deposit_other_resource_untouched",
-          "line": 138,
+          "line": 143,
           "called": [
             "ActorId",
             "Amount",
@@ -34818,7 +34872,7 @@
         {
           "kind": "theorem",
           "name": "deposit_does_not_touch_other_resources",
-          "line": 152,
+          "line": 158,
           "called": [
             "ActorId",
             "Amount",
@@ -34833,7 +34887,7 @@
         {
           "kind": "theorem",
           "name": "deposit_conserves_other_resource",
-          "line": 162,
+          "line": 168,
           "called": [
             "ActorId",
             "Amount",
@@ -34848,7 +34902,7 @@
         {
           "kind": "theorem",
           "name": "deposit_other_actor_untouched",
-          "line": 176,
+          "line": 182,
           "called": [
             "ActorId",
             "Amount",
@@ -34863,7 +34917,7 @@
         {
           "kind": "theorem",
           "name": "deposit_not_conservative",
-          "line": 197,
+          "line": 204,
           "called": [
             "ActorId",
             "Amount",
@@ -34871,6 +34925,7 @@
             "ResourceId",
             "deposit",
             "genesisState",
+            "getBalance",
             "totalSupply_after_deposit",
             "totalSupply_genesis_eq_zero"
           ]
@@ -34878,7 +34933,7 @@
         {
           "kind": "instance",
           "name": "deposit_isMonotonic",
-          "line": 215,
+          "line": 226,
           "called": [
             "ActorId",
             "Amount",
@@ -34892,7 +34947,7 @@
         {
           "kind": "instance",
           "name": "deposit_localTo",
-          "line": 231,
+          "line": 242,
           "called": [
             "ActorId",
             "Amount",
@@ -34905,7 +34960,7 @@
         {
           "kind": "theorem",
           "name": "deposit_freezePreserving",
-          "line": 247,
+          "line": 258,
           "called": [
             "ActorId",
             "Amount",
@@ -34918,7 +34973,7 @@
         {
           "kind": "instance",
           "name": "deposit_freezePreserving_empty",
-          "line": 264,
+          "line": 275,
           "called": [
             "ActorId",
             "Amount",
@@ -34940,19 +34995,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 4,
+          "line": 5,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 5,
+          "line": 6,
           "called": []
         },
         {
           "kind": "def",
           "name": "depositWithFee",
-          "line": 8,
+          "line": 15,
           "called": [
             "ActorId",
             "Amount",
@@ -34966,7 +35021,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_other_resource_untouched",
-          "line": 18,
+          "line": 28,
           "called": [
             "ActorId",
             "Amount",
@@ -35013,19 +35068,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 45,
+          "line": 46,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 46,
+          "line": 47,
           "called": []
         },
         {
           "kind": "def",
           "name": "distributeOthers",
-          "line": 70,
+          "line": 71,
           "called": [
             "ActorId",
             "Amount",
@@ -35041,7 +35096,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_other_resource_untouched",
-          "line": 132,
+          "line": 138,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35053,7 +35108,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_excluded_untouched",
-          "line": 154,
+          "line": 160,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35065,7 +35120,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_other_resource_untouched",
-          "line": 187,
+          "line": 193,
           "called": [
             "ActorId",
             "Amount",
@@ -35079,7 +35134,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_does_not_touch_other_resources",
-          "line": 202,
+          "line": 208,
           "called": [
             "ActorId",
             "Amount",
@@ -35094,7 +35149,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_conserves_other_resource",
-          "line": 212,
+          "line": 218,
           "called": [
             "ActorId",
             "Amount",
@@ -35109,7 +35164,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_excluded_unchanged",
-          "line": 225,
+          "line": 231,
           "called": [
             "ActorId",
             "Amount",
@@ -35125,7 +35180,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_totalSupply",
-          "line": 245,
+          "line": 251,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35139,7 +35194,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_distributeOthers",
-          "line": 273,
+          "line": 279,
           "called": [
             "ActorId",
             "Amount",
@@ -35155,7 +35210,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_isMonotonic",
-          "line": 289,
+          "line": 295,
           "called": [
             "ActorId",
             "Amount",
@@ -35169,7 +35224,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_not_conservative",
-          "line": 311,
+          "line": 323,
           "called": [
             "ActorId",
             "Amount",
@@ -35183,6 +35238,7 @@
             "bulkRecipients",
             "distributeOthers",
             "genesisState",
+            "getBalance",
             "maxRecipientsPerBulkAction",
             "mem_bulkRecipients_iff",
             "setBalance",
@@ -35192,7 +35248,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_localTo",
-          "line": 391,
+          "line": 433,
           "called": [
             "ActorId",
             "Amount",
@@ -35205,7 +35261,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_freezePreserving",
-          "line": 405,
+          "line": 447,
           "called": [
             "ActorId",
             "Amount",
@@ -35218,7 +35274,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_freezePreserving_empty",
-          "line": 421,
+          "line": 463,
           "called": [
             "ActorId",
             "Amount",
@@ -35422,19 +35478,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 34,
+          "line": 35,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 35,
+          "line": 36,
           "called": []
         },
         {
           "kind": "def",
           "name": "mint",
-          "line": 47,
+          "line": 53,
           "called": [
             "ActorId",
             "Amount",
@@ -35448,7 +35504,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_mint",
-          "line": 108,
+          "line": 115,
           "called": [
             "ActorId",
             "Amount",
@@ -35464,7 +35520,7 @@
         {
           "kind": "theorem",
           "name": "mint_other_resource_untouched",
-          "line": 138,
+          "line": 145,
           "called": [
             "ActorId",
             "Amount",
@@ -35478,7 +35534,7 @@
         {
           "kind": "theorem",
           "name": "mint_does_not_touch_other_resources",
-          "line": 154,
+          "line": 161,
           "called": [
             "ActorId",
             "Amount",
@@ -35493,7 +35549,7 @@
         {
           "kind": "theorem",
           "name": "mint_conserves_other_resource",
-          "line": 164,
+          "line": 171,
           "called": [
             "ActorId",
             "Amount",
@@ -35508,13 +35564,14 @@
         {
           "kind": "theorem",
           "name": "mint_not_conservative",
-          "line": 183,
+          "line": 190,
           "called": [
             "ActorId",
             "Amount",
             "IsConservative",
             "ResourceId",
             "genesisState",
+            "getBalance",
             "mint",
             "totalSupply_after_mint",
             "totalSupply_genesis_eq_zero"
@@ -35523,7 +35580,7 @@
         {
           "kind": "instance",
           "name": "mint_isMonotonic",
-          "line": 206,
+          "line": 218,
           "called": [
             "ActorId",
             "Amount",
@@ -35537,7 +35594,7 @@
         {
           "kind": "instance",
           "name": "mint_localTo",
-          "line": 223,
+          "line": 235,
           "called": [
             "ActorId",
             "Amount",
@@ -35550,7 +35607,7 @@
         {
           "kind": "theorem",
           "name": "mint_freezePreserving",
-          "line": 240,
+          "line": 252,
           "called": [
             "ActorId",
             "Amount",
@@ -35563,7 +35620,7 @@
         {
           "kind": "instance",
           "name": "mint_freezePreserving_empty",
-          "line": 255,
+          "line": 267,
           "called": [
             "ActorId",
             "Amount",
@@ -35585,19 +35642,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 46,
+          "line": 47,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 47,
+          "line": 48,
           "called": []
         },
         {
           "kind": "def",
           "name": "proportionalDilute",
-          "line": 72,
+          "line": 73,
           "called": [
             "ActorId",
             "Amount",
@@ -35614,7 +35671,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_at_r_other_resource_untouched",
-          "line": 157,
+          "line": 164,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35625,7 +35682,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_at_r_excluded_untouched",
-          "line": 174,
+          "line": 181,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35637,7 +35694,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_other_resource_untouched",
-          "line": 199,
+          "line": 206,
           "called": [
             "ActorId",
             "Amount",
@@ -35651,7 +35708,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_does_not_touch_other_resources",
-          "line": 214,
+          "line": 221,
           "called": [
             "ActorId",
             "Amount",
@@ -35666,7 +35723,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_conserves_other_resource",
-          "line": 223,
+          "line": 230,
           "called": [
             "ActorId",
             "Amount",
@@ -35681,7 +35738,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_excluded_unchanged",
-          "line": 234,
+          "line": 241,
           "called": [
             "ActorId",
             "Amount",
@@ -35697,7 +35754,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_proportional_totalSupply",
-          "line": 253,
+          "line": 260,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35711,7 +35768,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_proportionalDilute",
-          "line": 279,
+          "line": 286,
           "called": [
             "ActorId",
             "Amount",
@@ -35728,7 +35785,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_supply_nondecreasing",
-          "line": 302,
+          "line": 309,
           "called": [
             "ActorId",
             "Amount",
@@ -35743,7 +35800,7 @@
         {
           "kind": "theorem",
           "name": "list_div_sum_mul_le",
-          "line": 320,
+          "line": 327,
           "called": [
             "ActorId"
           ]
@@ -35751,7 +35808,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_distributed_le_totalReward",
-          "line": 358,
+          "line": 365,
           "called": [
             "ActorId",
             "Amount",
@@ -35770,7 +35827,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_isMonotonic",
-          "line": 384,
+          "line": 391,
           "called": [
             "ActorId",
             "Amount",
@@ -35784,7 +35841,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_not_conservative",
-          "line": 408,
+          "line": 421,
           "called": [
             "ActorId",
             "Amount",
@@ -35811,7 +35868,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_localTo",
-          "line": 517,
+          "line": 562,
           "called": [
             "ActorId",
             "Amount",
@@ -35824,7 +35881,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_freezePreserving",
-          "line": 532,
+          "line": 577,
           "called": [
             "ActorId",
             "Amount",
@@ -35837,7 +35894,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_freezePreserving_empty",
-          "line": 549,
+          "line": 594,
           "called": [
             "ActorId",
             "Amount",
@@ -35859,19 +35916,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 69,
+          "line": 70,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 70,
+          "line": 71,
           "called": []
         },
         {
           "kind": "def",
           "name": "reclaimAmmReserves",
-          "line": 91,
+          "line": 92,
           "called": [
             "ActorId",
             "Amount",
@@ -35885,7 +35942,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_other_resource_untouched",
-          "line": 111,
+          "line": 114,
           "called": [
             "ActorId",
             "Amount",
@@ -35900,7 +35957,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_does_not_touch_other_resources",
-          "line": 129,
+          "line": 132,
           "called": [
             "ActorId",
             "Amount",
@@ -35916,7 +35973,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_zeroes_reserve",
-          "line": 143,
+          "line": 146,
           "called": [
             "ActorId",
             "Amount",
@@ -35933,7 +35990,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_credits_pool",
-          "line": 162,
+          "line": 165,
           "called": [
             "ActorId",
             "Amount",
@@ -35950,7 +36007,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_other_actor_untouched",
-          "line": 180,
+          "line": 183,
           "called": [
             "ActorId",
             "Amount",
@@ -35967,13 +36024,13 @@
         {
           "kind": "theorem",
           "name": "reclaim_conservation_arithmetic",
-          "line": 209,
+          "line": 212,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_conserves_at",
-          "line": 219,
+          "line": 222,
           "called": [
             "ActorId",
             "Amount",
@@ -35992,7 +36049,7 @@
         {
           "kind": "instance",
           "name": "reclaimAmmReserves_isConservative",
-          "line": 247,
+          "line": 250,
           "called": [
             "ActorId",
             "Amount",
@@ -36008,7 +36065,7 @@
         {
           "kind": "instance",
           "name": "reclaimAmmReserves_localTo",
-          "line": 264,
+          "line": 267,
           "called": [
             "ActorId",
             "Amount",
@@ -36022,7 +36079,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_freezePreserving",
-          "line": 278,
+          "line": 281,
           "called": [
             "ActorId",
             "Amount",
@@ -36036,7 +36093,7 @@
         {
           "kind": "instance",
           "name": "reclaimAmmReserves_freezePreserving_empty",
-          "line": 291,
+          "line": 294,
           "called": [
             "ActorId",
             "Amount",
@@ -36107,19 +36164,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 40,
+          "line": 41,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 41,
+          "line": 42,
           "called": []
         },
         {
           "kind": "def",
           "name": "reward",
-          "line": 57,
+          "line": 63,
           "called": [
             "ActorId",
             "Amount",
@@ -36133,7 +36190,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_reward",
-          "line": 103,
+          "line": 110,
           "called": [
             "ActorId",
             "Amount",
@@ -36149,7 +36206,7 @@
         {
           "kind": "theorem",
           "name": "reward_other_resource_untouched",
-          "line": 127,
+          "line": 134,
           "called": [
             "ActorId",
             "Amount",
@@ -36163,7 +36220,7 @@
         {
           "kind": "theorem",
           "name": "reward_does_not_touch_other_resources",
-          "line": 143,
+          "line": 150,
           "called": [
             "ActorId",
             "Amount",
@@ -36178,7 +36235,7 @@
         {
           "kind": "theorem",
           "name": "reward_conserves_other_resource",
-          "line": 154,
+          "line": 161,
           "called": [
             "ActorId",
             "Amount",
@@ -36193,7 +36250,7 @@
         {
           "kind": "instance",
           "name": "reward_isMonotonic",
-          "line": 169,
+          "line": 176,
           "called": [
             "ActorId",
             "Amount",
@@ -36207,13 +36264,14 @@
         {
           "kind": "theorem",
           "name": "reward_not_conservative",
-          "line": 193,
+          "line": 200,
           "called": [
             "ActorId",
             "Amount",
             "IsConservative",
             "ResourceId",
             "genesisState",
+            "getBalance",
             "reward",
             "totalSupply_after_reward",
             "totalSupply_genesis_eq_zero"
@@ -36222,7 +36280,7 @@
         {
           "kind": "instance",
           "name": "reward_localTo",
-          "line": 208,
+          "line": 220,
           "called": [
             "ActorId",
             "Amount",
@@ -36235,7 +36293,7 @@
         {
           "kind": "theorem",
           "name": "reward_freezePreserving",
-          "line": 222,
+          "line": 234,
           "called": [
             "ActorId",
             "Amount",
@@ -36248,7 +36306,7 @@
         {
           "kind": "instance",
           "name": "reward_freezePreserving_empty",
-          "line": 237,
+          "line": 249,
           "called": [
             "ActorId",
             "Amount",
@@ -36270,19 +36328,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 3,
+          "line": 4,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 4,
+          "line": 5,
           "called": []
         },
         {
           "kind": "def",
           "name": "topUpActionBudget",
-          "line": 7,
+          "line": 14,
           "called": [
             "ActorId",
             "Amount",
@@ -36306,19 +36364,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 52,
+          "line": 53,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 53,
+          "line": 54,
           "called": []
         },
         {
           "kind": "def",
           "name": "topUpActionBudgetFor",
-          "line": 70,
+          "line": 76,
           "called": [
             "ActorId",
             "Amount",
@@ -36333,7 +36391,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_apply_eq_transfer",
-          "line": 84,
+          "line": 94,
           "called": [
             "ActorId",
             "Amount",
@@ -36348,13 +36406,13 @@
         {
           "kind": "theorem",
           "name": "topUpFor_arithmetic",
-          "line": 102,
+          "line": 112,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_conserves",
-          "line": 114,
+          "line": 124,
           "called": [
             "ActorId",
             "Amount",
@@ -36374,7 +36432,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_totalSupply_invariant",
-          "line": 154,
+          "line": 164,
           "called": [
             "ActorId",
             "Amount",
@@ -36391,7 +36449,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_other_resource_untouched",
-          "line": 171,
+          "line": 181,
           "called": [
             "ActorId",
             "Amount",
@@ -36408,7 +36466,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_does_not_touch_other_resources",
-          "line": 190,
+          "line": 200,
           "called": [
             "ActorId",
             "Amount",
@@ -36425,7 +36483,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_conserves_other_resource",
-          "line": 202,
+          "line": 212,
           "called": [
             "ActorId",
             "Amount",
@@ -36442,7 +36500,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_signer_debited",
-          "line": 222,
+          "line": 232,
           "called": [
             "ActorId",
             "Amount",
@@ -36460,7 +36518,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_pool_credited",
-          "line": 245,
+          "line": 255,
           "called": [
             "ActorId",
             "Amount",
@@ -36478,7 +36536,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_other_actor_untouched",
-          "line": 269,
+          "line": 279,
           "called": [
             "ActorId",
             "Amount",
@@ -36496,7 +36554,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_isConservative",
-          "line": 293,
+          "line": 303,
           "called": [
             "ActorId",
             "Amount",
@@ -36512,7 +36570,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_isMonotonic",
-          "line": 309,
+          "line": 319,
           "called": [
             "ActorId",
             "Amount",
@@ -36527,7 +36585,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_localTo",
-          "line": 322,
+          "line": 332,
           "called": [
             "ActorId",
             "Amount",
@@ -36542,7 +36600,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_freezePreserving",
-          "line": 340,
+          "line": 350,
           "called": [
             "ActorId",
             "Amount",
@@ -36557,7 +36615,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_freezePreserving_empty",
-          "line": 359,
+          "line": 369,
           "called": [
             "ActorId",
             "Amount",
@@ -36581,19 +36639,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 42,
+          "line": 43,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 43,
+          "line": 44,
           "called": []
         },
         {
           "kind": "def",
           "name": "transfer",
-          "line": 60,
+          "line": 76,
           "called": [
             "ActorId",
             "Amount",
@@ -36609,13 +36667,13 @@
         {
           "kind": "theorem",
           "name": "transfer_arithmetic",
-          "line": 170,
+          "line": 192,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "transfer_conserves",
-          "line": 187,
+          "line": 209,
           "called": [
             "ActorId",
             "Amount",
@@ -36635,7 +36693,7 @@
         {
           "kind": "theorem",
           "name": "transfer_other_resource_untouched",
-          "line": 231,
+          "line": 253,
           "called": [
             "ActorId",
             "Amount",
@@ -36652,7 +36710,7 @@
         {
           "kind": "theorem",
           "name": "transfer_does_not_touch_other_resources",
-          "line": 255,
+          "line": 277,
           "called": [
             "ActorId",
             "Amount",
@@ -36669,7 +36727,7 @@
         {
           "kind": "theorem",
           "name": "transfer_conserves_other_resource",
-          "line": 268,
+          "line": 290,
           "called": [
             "ActorId",
             "Amount",
@@ -36686,7 +36744,7 @@
         {
           "kind": "instance",
           "name": "transfer_isConservative",
-          "line": 283,
+          "line": 305,
           "called": [
             "ActorId",
             "Amount",
@@ -36702,7 +36760,7 @@
         {
           "kind": "instance",
           "name": "transfer_isMonotonic",
-          "line": 296,
+          "line": 318,
           "called": [
             "ActorId",
             "Amount",
@@ -36717,7 +36775,7 @@
         {
           "kind": "instance",
           "name": "transfer_localTo",
-          "line": 309,
+          "line": 331,
           "called": [
             "ActorId",
             "Amount",
@@ -36732,7 +36790,7 @@
         {
           "kind": "theorem",
           "name": "transfer_freezePreserving",
-          "line": 328,
+          "line": 350,
           "called": [
             "ActorId",
             "Amount",
@@ -36747,7 +36805,7 @@
         {
           "kind": "instance",
           "name": "transfer_freezePreserving_empty",
-          "line": 349,
+          "line": 371,
           "called": [
             "ActorId",
             "Amount",
@@ -43174,6 +43232,7 @@
             "refund_other_actor_untouched",
             "refund_pays_exact_amount_from_pool",
             "refund_pre_iff_pool_solvent",
+            "refund_pre_implies_pool_solvent",
             "refundableBudget",
             "refundableBudget_eq_zero_at_free_tier",
             "refundableBudget_eq_zero_of_le_reserves",
@@ -45553,7 +45612,7 @@
         {
           "kind": "def",
           "name": "writeFixtureFile",
-          "line": 232,
+          "line": 233,
           "called": [
             "TestCase",
             "fixtureName",
@@ -45563,7 +45622,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 239,
+          "line": 240,
           "called": [
             "EventCbe",
             "LegalKernel.Test.Bridge.CrossCheck",
@@ -53758,7 +53817,7 @@
         {
           "kind": "def",
           "name": "transferByteLength",
-          "line": 168,
+          "line": 169,
           "called": [
             "Action",
             "TestCase",
@@ -53769,7 +53828,7 @@
         {
           "kind": "def",
           "name": "actionRoundtripAPI",
-          "line": 180,
+          "line": 181,
           "called": [
             "Action",
             "Action.fieldsBounded",
@@ -53781,7 +53840,7 @@
         {
           "kind": "def",
           "name": "actionInjectiveAPI",
-          "line": 190,
+          "line": 191,
           "called": [
             "Action",
             "Action.fieldsBounded",
@@ -53792,7 +53851,7 @@
         {
           "kind": "def",
           "name": "depositRT",
-          "line": 203,
+          "line": 204,
           "called": [
             "Action",
             "TestCase",
@@ -53803,7 +53862,7 @@
         {
           "kind": "def",
           "name": "withdrawRT",
-          "line": 220,
+          "line": 221,
           "called": [
             "Action",
             "TestCase",
@@ -53815,7 +53874,7 @@
         {
           "kind": "def",
           "name": "depositVsMintBytes",
-          "line": 239,
+          "line": 240,
           "called": [
             "Action",
             "TestCase",
@@ -53826,7 +53885,7 @@
         {
           "kind": "def",
           "name": "withdrawVsBurnBytes",
-          "line": 250,
+          "line": 251,
           "called": [
             "Action",
             "TestCase",
@@ -53837,7 +53896,7 @@
         {
           "kind": "def",
           "name": "withdrawHighBitDistinguishability",
-          "line": 270,
+          "line": 271,
           "called": [
             "Action",
             "TestCase",
@@ -53848,7 +53907,7 @@
         {
           "kind": "def",
           "name": "withdrawHighBitRoundtrip",
-          "line": 298,
+          "line": 299,
           "called": [
             "Action",
             "TestCase",
@@ -53859,7 +53918,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyEmptyRT",
-          "line": 321,
+          "line": 322,
           "called": [
             "Action",
             "TestCase"
@@ -53868,7 +53927,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyMultiRT",
-          "line": 335,
+          "line": 336,
           "called": [
             "Action",
             "TestCase"
@@ -53877,7 +53936,7 @@
         {
           "kind": "def",
           "name": "revokeLocalPolicyRT",
-          "line": 351,
+          "line": 352,
           "called": [
             "Action",
             "TestCase"
@@ -53886,7 +53945,7 @@
         {
           "kind": "def",
           "name": "lpCtorDistinguishability",
-          "line": 365,
+          "line": 366,
           "called": [
             "Action",
             "TestCase"
@@ -53895,7 +53954,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyDistinguishesPolicy",
-          "line": 378,
+          "line": 379,
           "called": [
             "Action",
             "TestCase"
@@ -53904,7 +53963,7 @@
         {
           "kind": "def",
           "name": "revokeLocalPolicyTagAgreement",
-          "line": 393,
+          "line": 394,
           "called": [
             "Action",
             "TestCase"
@@ -53913,7 +53972,7 @@
         {
           "kind": "def",
           "name": "tagMatchesEncodeTagAPI",
-          "line": 409,
+          "line": 410,
           "called": [
             "Action",
             "Action.tag",
@@ -53925,7 +53984,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeRT",
-          "line": 423,
+          "line": 424,
           "called": [
             "Action",
             "TestCase",
@@ -53936,7 +53995,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetRT",
-          "line": 435,
+          "line": 436,
           "called": [
             "Action",
             "TestCase",
@@ -53947,7 +54006,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeVsDepositBytes",
-          "line": 448,
+          "line": 449,
           "called": [
             "Action",
             "TestCase",
@@ -53958,7 +54017,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetVsTransferBytes",
-          "line": 460,
+          "line": 461,
           "called": [
             "Action",
             "TestCase",
@@ -53969,7 +54028,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeTagPin",
-          "line": 471,
+          "line": 472,
           "called": [
             "Action.tag",
             "TestCase",
@@ -53980,7 +54039,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetTagPin",
-          "line": 479,
+          "line": 480,
           "called": [
             "Action.tag",
             "TestCase",
@@ -53991,7 +54050,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeFieldInjective",
-          "line": 488,
+          "line": 489,
           "called": [
             "Action",
             "TestCase",
@@ -54001,7 +54060,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetFieldInjective",
-          "line": 499,
+          "line": 500,
           "called": [
             "Action",
             "TestCase",
@@ -54011,7 +54070,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForRT",
-          "line": 512,
+          "line": 513,
           "called": [
             "Action",
             "TestCase",
@@ -54022,7 +54081,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForVsTopUpActionBudgetBytes",
-          "line": 527,
+          "line": 528,
           "called": [
             "Action",
             "TestCase",
@@ -54033,7 +54092,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForTagPin",
-          "line": 538,
+          "line": 539,
           "called": [
             "Action.tag",
             "TestCase",
@@ -54044,7 +54103,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForFieldInjective",
-          "line": 549,
+          "line": 550,
           "called": [
             "Action",
             "TestCase",
@@ -54054,7 +54113,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundRT",
-          "line": 563,
+          "line": 564,
           "called": [
             "Action",
             "TestCase",
@@ -54065,7 +54124,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundTagPin",
-          "line": 575,
+          "line": 576,
           "called": [
             "Action.tag",
             "TestCase",
@@ -54076,7 +54135,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundVsTopUpBytes",
-          "line": 584,
+          "line": 585,
           "called": [
             "Action",
             "TestCase",
@@ -54087,7 +54146,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundFieldInjective",
-          "line": 597,
+          "line": 598,
           "called": [
             "Action",
             "TestCase",
@@ -54097,13 +54156,13 @@
         {
           "kind": "def",
           "name": "sampleAddr",
-          "line": 611,
+          "line": 612,
           "called": []
         },
         {
           "kind": "def",
           "name": "sampleDispute",
-          "line": 632,
+          "line": 633,
           "called": [
             "challenger"
           ]
@@ -54111,13 +54170,13 @@
         {
           "kind": "def",
           "name": "sampleVerdict",
-          "line": 640,
+          "line": 641,
           "called": []
         },
         {
           "kind": "def",
           "name": "sampleActions",
-          "line": 647,
+          "line": 648,
           "called": [
             "Action",
             "ammSwap",
@@ -54143,7 +54202,7 @@
         {
           "kind": "def",
           "name": "requiredActionTag",
-          "line": 676,
+          "line": 677,
           "called": [
             "Action",
             "ammSwap",
@@ -54166,7 +54225,7 @@
         {
           "kind": "def",
           "name": "actionSweepCoversAllTags",
-          "line": 705,
+          "line": 706,
           "called": [
             "Action.tag",
             "TestCase",
@@ -54178,7 +54237,7 @@
         {
           "kind": "def",
           "name": "actionSweepRoundtrips",
-          "line": 717,
+          "line": 718,
           "called": [
             "Action",
             "Action.decode",
@@ -54191,7 +54250,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 732,
+          "line": 733,
           "called": [
             "ActionTests",
             "LegalKernel.Test.Encoding",
@@ -54907,7 +54966,7 @@
     {
       "module": "LegalKernel.Test.Encoding.Injectivity",
       "path": "LegalKernel/Test/Encoding/Injectivity.lean",
-      "declaration_count": 106,
+      "declaration_count": 107,
       "declarations": [
         {
           "kind": "namespace",
@@ -56027,7 +56086,7 @@
         {
           "kind": "def",
           "name": "test_amountHead_separates_the_2_64_collision",
-          "line": 1675,
+          "line": 1680,
           "called": [
             "TestCase",
             "assert",
@@ -56037,8 +56096,18 @@
         },
         {
           "kind": "def",
+          "name": "test_amountHead_separates_the_2_128_collision",
+          "line": 1706,
+          "called": [
+            "TestCase",
+            "assert",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "test_amountHead_roundtrips_above_2_64",
-          "line": 1693,
+          "line": 1722,
           "called": [
             "Stream",
             "TestCase",
@@ -56050,7 +56119,7 @@
         {
           "kind": "def",
           "name": "test_amountHead_never_aliases_uint_head",
-          "line": 1707,
+          "line": 1738,
           "called": [
             "TestCase",
             "assert",
@@ -56061,7 +56130,7 @@
         {
           "kind": "def",
           "name": "test_encodeAmount_injective_api",
-          "line": 1720,
+          "line": 1751,
           "called": [
             "TestCase",
             "encodeAmount",
@@ -56071,7 +56140,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1732,
+          "line": 1763,
           "called": [
             "InjectivityTests",
             "LegalKernel.Test.Encoding",
@@ -56083,6 +56152,7 @@
             "test_HasInjective_instances",
             "test_amountHead_never_aliases_uint_head",
             "test_amountHead_roundtrips_above_2_64",
+            "test_amountHead_separates_the_2_128_collision",
             "test_amountHead_separates_the_2_64_collision",
             "test_balanceMap_encodeAsBytes_distinguishes",
             "test_balanceMap_encodeAsBytes_injective_api",
@@ -72141,7 +72211,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 225,
+          "line": 226,
           "called": [
             "runAll"
           ]

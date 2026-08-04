@@ -317,13 +317,25 @@ def tests : List TestCase :=
         -- claim", so the success domains still agree byte-for-byte.
         --
         -- An earlier form of both decoders read bytes[1..9] LE and
-        -- IGNORED the tag.  That is what let a 17-byte amount cell
+        -- IGNORED the tag.  That is what let a 33-byte amount cell
         -- pass as its own low 64 bits — a wrong balance, silently,
         -- on the cell values a bisection game settles against.
         let bytes : ByteArray := ByteArray.mk
           #[0xFF, 0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         assertEq (expected := 0) (actual := decodeCellNat bytes)
           "unrecognised tag must not yield a value"
+    }
+  , { name := "decodeCellNat: the tag byte is the wire constant"
+    , body := do
+        -- Pinned as a literal because it IS the wire: Solidity's
+        -- `CBEDecode.TAG_AMOUNT` must carry the same byte, and the
+        -- probes below hard-code it.  It moved when the body widened
+        -- so a stale decoder fails on the tag instead of reading a
+        -- 33-byte value as 17 and mis-parsing the remainder.
+        assertEq (expected := (0x06 : UInt8)) (actual := Encoding.cbeTagAmount)
+          "cbeTagAmount is the byte the Solidity mirror expects"
+        assertEq (expected := (0x00 : UInt8)) (actual := Encoding.cbeTagUint)
+          "cbeTagUint is unchanged"
     }
   , { name := "decodeCellNat: the tag selects the payload width"
     , body := do
@@ -334,26 +346,52 @@ def tests : List TestCase :=
         let payload : ByteArray := ByteArray.mk
           #[0xEF, 0xBE, 0xAD, 0xDE, 0x00, 0x00, 0x00, 0x00]
         let narrow := ByteArray.mk #[0x00] ++ payload
-        let truncatedWide := ByteArray.mk #[0x01] ++ payload
+        let truncatedWide := ByteArray.mk #[0x06] ++ payload
         assertEq (expected := 0xDEADBEEF) (actual := decodeCellNat narrow)
           "uint tag + 8 payload bytes reads the value"
         assertEq (expected := 0) (actual := decodeCellNat truncatedWide)
           "amount tag + only 8 payload bytes is malformed, not truncated"
-        -- The full-width amount cell for the same value.
-        let wide := ByteArray.mk #[0x01] ++ payload ++
-          ByteArray.mk #[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        -- The full-width amount cell for the same value: 1 tag byte
+        -- plus 32 body bytes.
+        let wide := ByteArray.mk #[0x06] ++ payload ++
+          ByteArray.mk
+            #[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        assertEq (expected := 33) (actual := wide.size)
+          "an amount cell is 1 tag byte + 32 body bytes"
         assertEq (expected := 0xDEADBEEF) (actual := decodeCellNat wide)
-          "amount tag + 16 payload bytes reads the value"
+          "amount tag + 32 payload bytes reads the value"
     }
   , { name := "decodeCellNat: a value above 2^64 survives the amount head"
     , body := do
-        -- 2^64 exactly: the boundary the narrow head truncated to 0.
+        -- 2^64 exactly: the boundary the 8-byte head truncated to 0.
         let wide : ByteArray := ByteArray.mk
-          #[0x01,
+          #[0x06,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         assertEq (expected := 18446744073709551616) (actual := decodeCellNat wide)
           "2^64 decodes exactly, not to 0"
+    }
+  , { name := "decodeCellNat: a value above 2^128 survives the amount head"
+    , body := do
+        -- 2^128 exactly: the boundary the 16-byte body truncated to 0,
+        -- and 0 is `canonicalAbsentValue` for a balance cell — so under
+        -- the retired width this cell read as one that does not exist.
+        -- The byte at index 17 is the low byte of the second 16-byte
+        -- half, i.e. the `2^128` place.
+        let wide : ByteArray := ByteArray.mk
+          #[0x06,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        assertEq
+          (expected := 340282366920938463463374607431768211456)
+          (actual := decodeCellNat wide)
+          "2^128 decodes exactly, not to 0 (the absent value)"
     }
   , { name := "decodeCellNat: trailing bytes past the tagged width are malformed"
     , body := do

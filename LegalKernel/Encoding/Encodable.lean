@@ -222,7 +222,7 @@ theorem nat_encode_injective (n₁ n₂ : Nat) (h₁ : n₁ < 256 ^ 8) (h₂ : n
            = Except.ok (n₂, []) := r₁.symm.trans r₂
   exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
 
-/-! ### `Amount` (CBE 128-bit amount head; `< 2^128` round-trip)
+/-! ### `Amount` (CBE 256-bit amount head; `< 2^256` round-trip)
 
 `Amount` is `Nat` (`Kernel.lean`), so it cannot carry its own
 `Encodable` instance without colliding with `instEncodableNat`.  The
@@ -239,23 +239,23 @@ through the narrow head therefore made `State.encode` non-injective on
 ordinary reachable states, and with it the L1 state root: two states
 whose balances differ by exactly `2^64` committed to the same value. -/
 
-/-- Encode an `Amount` as a 17-byte CBE amount head (`cbeTagAmount` +
-    16 little-endian bytes). -/
+/-- Encode an `Amount` as a 33-byte CBE amount head (`cbeTagAmount` +
+    32 little-endian bytes). -/
 def encodeAmount (n : Nat) : Stream :=
   cborAmountHeadEncode n
 
-/-- Decode an `Amount` from a 17-byte CBE amount head. -/
+/-- Decode an `Amount` from a 33-byte CBE amount head. -/
 def decodeAmount (s : Stream) : Except DecodeError (Nat × Stream) :=
   cborAmountHeadDecode s
 
 /-- Amount round-trip (with suffix): for `n < 2^128`, decoding
     `encodeAmount n ++ rest` returns `(n, rest)`. -/
-theorem amount_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 16) :
+theorem amount_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 32) :
     decodeAmount (encodeAmount n ++ rest) = .ok (n, rest) :=
   cborAmountHeadRoundtrip_append n rest h
 
 /-- Amount round-trip (empty suffix). -/
-theorem amount_roundtrip_empty (n : Nat) (h : n < 256 ^ 16) :
+theorem amount_roundtrip_empty (n : Nat) (h : n < 256 ^ 32) :
     decodeAmount (encodeAmount n) = .ok (n, []) :=
   cborAmountHeadRoundtrip n h
 
@@ -264,7 +264,7 @@ theorem amount_roundtrip_empty (n : Nat) (h : n < 256 ^ 16) :
     path required, which is what moves it out of the reachable range —
     the entire ETH supply is about `2^87` wei. -/
 theorem encodeAmount_injective (n₁ n₂ : Nat)
-    (h₁ : n₁ < 256 ^ 16) (h₂ : n₂ < 256 ^ 16)
+    (h₁ : n₁ < 256 ^ 32) (h₂ : n₂ < 256 ^ 32)
     (h : encodeAmount n₁ = encodeAmount n₂) : n₁ = n₂ :=
   cborAmountHeadEncode_injective h₁ h₂ h
 
@@ -299,7 +299,7 @@ hypothesis on the injectivity theorems (`< 2^128` here rather than the
 `< 2^64` the narrow head demanded). -/
 
 /-- A value-carrying `Amount` in a slot whose codec is chosen by
-    typeclass resolution.  Selects the 17-byte amount head where the
+    typeclass resolution.  Selects the 33-byte amount head where the
     bare `Nat` would select the 9-byte identifier head. -/
 structure AmountValue where
   /-- The underlying amount. -/
@@ -324,7 +324,7 @@ theorem AmountValue.mk_injective {n₁ n₂ : Nat}
     amount head's `< 2^128`, so it is not reachable by a wei-denominated
     balance (the entire ETH supply is about `2^87` wei). -/
 theorem amountValue_roundtrip (a : AmountValue) (rest : Stream)
-    (h : a.val < 256 ^ 16) :
+    (h : a.val < 256 ^ 32) :
     Encodable.decode (T := AmountValue) (Encodable.encode a ++ rest) = .ok (a, rest) := by
   show (match decodeAmount (encodeAmount a.val ++ rest) with
     | .ok (n, rest) => Except.ok ((⟨n⟩ : AmountValue), rest)
@@ -332,7 +332,7 @@ theorem amountValue_roundtrip (a : AmountValue) (rest : Stream)
   rw [amount_roundtrip a.val rest h]
 
 /-- Bounded `AmountValue` round-trip (empty suffix). -/
-theorem amountValue_roundtrip_empty (a : AmountValue) (h : a.val < 256 ^ 16) :
+theorem amountValue_roundtrip_empty (a : AmountValue) (h : a.val < 256 ^ 32) :
     Encodable.decode (T := AmountValue) (Encodable.encode a) = .ok (a, []) := by
   have := amountValue_roundtrip a [] h
   simpa using this
@@ -340,7 +340,7 @@ theorem amountValue_roundtrip_empty (a : AmountValue) (h : a.val < 256 ^ 16) :
 /-- Bounded `AmountValue` injectivity: in-range wrapped amounts with
     equal encodings are equal. -/
 theorem amountValue_encode_injective (a₁ a₂ : AmountValue)
-    (h₁ : a₁.val < 256 ^ 16) (h₂ : a₂.val < 256 ^ 16)
+    (h₁ : a₁.val < 256 ^ 32) (h₂ : a₂.val < 256 ^ 32)
     (h : Encodable.encode (T := AmountValue) a₁ = Encodable.encode a₂) : a₁ = a₂ := by
   have r₁ := amountValue_roundtrip_empty a₁ h₁
   have r₂ := amountValue_roundtrip_empty a₂ h₂

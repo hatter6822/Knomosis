@@ -539,7 +539,7 @@ def decodeMap {K V : Type} [Encodable K] [Encodable V]
 
 /-! ## Amount-valued maps (128-bit values)
 
-A balance map's VALUES are amounts and so ride the 17-byte
+A balance map's VALUES are amounts and so ride the 33-byte
 `cbeTagAmount` head, while its KEYS are `ActorId`s and stay on the
 8-byte uint head.  `encodeSortedPairs` / `decodeMap` select the value
 codec by `Encodable` resolution, and `Amount` reduces to `Nat`, which
@@ -558,7 +558,7 @@ carrier, so amount-valued maps consume them unchanged. -/
 /-- Project a `(ActorId, Amount)` pair into the `(Nat, AmountValue)`
     carrier the CBE map combinators encode: the key drops to `Nat` (the
     8-byte uint head) and the value rises into `AmountValue` (the
-    17-byte amount head).
+    33-byte amount head).
 
     Named rather than inlined so the injectivity proofs can state the
     `proj`-injectivity obligation of `List.map_inj_right` against a
@@ -596,7 +596,7 @@ begins. -/
 
 /-- Encode a `BalanceMap` (the inner per-resource `TreeMap ActorId
     Amount`).  Produces a sorted-pair-list CBE map: each key on the
-    8-byte uint head, each balance on the 17-byte amount head (via the
+    8-byte uint head, each balance on the 33-byte amount head (via the
     `AmountValue` carrier `balanceMapPair` projects into). -/
 def BalanceMap.encode (bm : BalanceMap) : Stream :=
   encodeSortedPairs (bm.toList.map balanceMapPair)
@@ -634,7 +634,7 @@ def State.encode (s : State) : Stream :=
 
     Each key is a CBE-decoded `Nat`; by the codec invariant it lies
     in `[0, 2^64)` and converts to `UInt64` exactly via `toUInt64`.
-    Each value is read through `AmountValue`, i.e. off the 17-byte
+    Each value is read through `AmountValue`, i.e. off the 33-byte
     amount head — the symmetric inverse of `balanceMapPair`. -/
 def BalanceMap.decode (s : Stream) : Except DecodeError (BalanceMap × Stream) :=
   match decodeMap (K := Nat) (V := AmountValue) s with
@@ -1300,8 +1300,8 @@ theorem pendingWithdrawal_encode_deterministic
     triple. -/
 theorem depositRecord_roundtrip
     (rec : Bridge.DepositRecord) (rest : Stream)
-    (h : rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 16 ∧
-         rec.poolAmount < 256 ^ 16 ∧ rec.budgetGrant < 256 ^ 8) :
+    (h : rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 32 ∧
+         rec.poolAmount < 256 ^ 32 ∧ rec.budgetGrant < 256 ^ 8) :
     Bridge.DepositRecord.decode (Bridge.DepositRecord.encode rec ++ rest) =
     .ok (rec, rest) := by
   unfold Bridge.DepositRecord.encode Bridge.DepositRecord.decode
@@ -1358,7 +1358,7 @@ theorem depositRecord_roundtrip
 theorem pendingWithdrawal_roundtrip
     (wd : Bridge.PendingWithdrawal) (rest : Stream)
     (h_res : wd.resource.toNat < 256 ^ 8)
-    (h_amt : wd.amount < 256 ^ 16)
+    (h_amt : wd.amount < 256 ^ 32)
     (h_idx : wd.l2LogIndex < 256 ^ 8) :
     Bridge.PendingWithdrawal.decode (Bridge.PendingWithdrawal.encode wd ++ rest) =
     .ok (wd, rest) := by

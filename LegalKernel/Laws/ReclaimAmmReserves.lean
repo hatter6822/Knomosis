@@ -9,6 +9,7 @@
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
 import Lex.DSL.Law
 
 /-!
@@ -94,7 +95,9 @@ def reclaimAmmReserves (r : ResourceId) (amount : Amount)
   pre := fun s =>
     getBalance s r reserveActor = amount ∧
     reserveActor ≠ poolActor ∧
-    amount > 0
+    amount > 0 ∧
+    AmountBounded (setBalance s r reserveActor (getBalance s r reserveActor - amount))
+      r poolActor amount
   decPre := fun _ => inferInstance
   apply_impl := fun s =>
     let s1 := setBalance s r reserveActor
@@ -310,7 +313,10 @@ lexlaw reserved_gp_reclaimAmmReserves where
   lex_pre             :=
     fun s => getBalance s r reserveActor = amount ∧
              reserveActor ≠ poolActor ∧
-             amount > 0
+             amount > 0 ∧
+             LegalKernel.Laws.AmountBounded
+               (setBalance s r reserveActor (getBalance s r reserveActor - amount))
+               r poolActor amount
   lex_impl            :=
     fun s =>
       let s1 := setBalance s r reserveActor

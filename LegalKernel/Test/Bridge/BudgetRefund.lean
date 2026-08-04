@@ -527,6 +527,7 @@ def tests : List TestCase :=
         let _a12 := @refundAmount_le_deposit_fee
         let _a13 := @refundAmount_le_max
         let _a14 := @refund_pre_iff_pool_solvent
+        let _a14b := @refund_pre_implies_pool_solvent
         let _a15 := @refund_pays_exact_amount_from_pool
         let _a16 := @refund_conserves_supply
         let _a17 := @refund_other_actor_untouched

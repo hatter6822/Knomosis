@@ -136,8 +136,8 @@ namespace) yields a `Stream = List UInt8`; we pack it into a
 the recipient budget cell. -/
 
 /-- Encode an `Action` with Lean's canonical `Action.encode` and return
-    the packed byte stream (88 bytes for `depositWithFee`: six 9-byte
-    uint heads plus two 17-byte amount heads). -/
+    the packed byte stream (120 bytes for `depositWithFee`: six 9-byte
+    uint heads plus two 33-byte amount heads). -/
 def actionBytes (a : Action) : ByteArray :=
   ByteArray.mk (Encodable.encode (T := Action) a).toArray
 
@@ -502,7 +502,7 @@ def encodeFeeSplitInput (e : Entry) : ByteArray :=
     |>.append (beBytes e.depositId 8)
 
 /-- The `.cxsf` records: `input = 58-byte FeeSplitInput`,
-    `expected = actionCbe (88) ‖ recipientBudgetCbe (18) = 106 bytes`.
+    `expected = actionCbe (120) ‖ recipientBudgetCbe (18) = 138 bytes`.
     The Rust consumer splits `expected` at offset 72. -/
 def cxsfRecords : List (ByteArray × ByteArray) :=
   allEntries.map (fun e => (encodeFeeSplitInput e, e.actionCbe.append e.recipientBudgetCbe))
@@ -661,11 +661,11 @@ def tests : List TestCase :=
           if e.recipientBudgetCbe.toList ≠ expected.toList then
             throw <| IO.userError s!"recipient cell mismatch (expected epoch 0 balance budgetGrant) in {e.category}"
     }
-  , { name := "GP.6.5: every actionCbe is 88 bytes; tag head = uint(19)"
+  , { name := "GP.6.5: every actionCbe is 120 bytes; tag head = uint(19)"
     , body := do
         for e in allEntries do
-          if e.actionCbe.size ≠ 88 then
-            throw <| IO.userError s!"actionCbe size {e.actionCbe.size} ≠ 88 in {e.category}"
+          if e.actionCbe.size ≠ 120 then
+            throw <| IO.userError s!"actionCbe size {e.actionCbe.size} ≠ 120 in {e.category}"
           let bs := e.actionCbe.toList
           -- byte[0] is the CBE uint type-tag 0x00; byte[1..9] is the
           -- constructor index 19 as an 8-byte LE Nat.
@@ -701,10 +701,10 @@ def tests : List TestCase :=
           "0x" ++
           "001300000000000000" ++ "000100000000000000" ++
           "000700000000000000" ++ "000200000000000000" ++
-          -- userAmount 950 | poolAmount 50 — 17-byte amount heads
+          -- userAmount 950 | poolAmount 50 — 33-byte amount heads
           -- (tag 0x01 + 16 LE body bytes)
-          "01b6030000000000000000000000000000" ++
-          "0132000000000000000000000000000000" ++
+          "06b603000000000000000000000000000000000000000000000000000000000000" ++
+          "063200000000000000000000000000000000000000000000000000000000000000" ++
           -- budgetGrant 50 | depositId 42
           "003200000000000000" ++ "002a00000000000000"
         if actionHex ≠ expectedAction then
@@ -743,10 +743,10 @@ def tests : List TestCase :=
     , body := do
         -- Pick the canonical grid triple (amount 10^9, feeBps 1000,
         -- wpbu 10^9) and assert ETH vs BOLD action bytes differ ONLY at
-        -- the resource-field LE low byte (index 10 in the 88-byte
+        -- the resource-field LE low byte (index 10 in the 120-byte
         -- stream: 9-byte tag head + 1-byte r type-tag, then r's LE low
         -- byte).  The resource field precedes both amount fields, so
-        -- widening the amounts to 17-byte heads moves the STREAM
+        -- widening the amounts to 33-byte heads moves the STREAM
         -- LENGTH but not this offset.  ETH = 0x00, BOLD = 0x01; all
         -- other bytes equal.
         let key (rid : Nat) :=
@@ -757,9 +757,9 @@ def tests : List TestCase :=
         | some eth, some bold =>
           let eb := eth.actionCbe.toList
           let bb := bold.actionCbe.toList
-          if eb.length ≠ 88 ∨ bb.length ≠ 88 then
-            throw <| IO.userError "twin action bytes not 88 long"
-          let diffs := (List.range 88).filter (fun i =>
+          if eb.length ≠ 120 ∨ bb.length ≠ 120 then
+            throw <| IO.userError "twin action bytes not 120 long"
+          let diffs := (List.range 120).filter (fun i =>
             (eb.getD i 0) ≠ (bb.getD i 0))
           if diffs ≠ [10] then
             throw <| IO.userError s!"resourceId-flip differs at indices {diffs}, expected [10]"
@@ -767,13 +767,13 @@ def tests : List TestCase :=
             throw <| IO.userError "resourceId byte not 0x00 (ETH) / 0x01 (BOLD)"
         | _, _ => throw <| IO.userError "missing canonical ETH/BOLD twin for resourceId-flip"
     }
-  , { name := "GP.6.5: every .cxsf input is 58 bytes; expected is 106 bytes"
+  , { name := "GP.6.5: every .cxsf input is 58 bytes; expected is 138 bytes"
     , body := do
         for rec in cxsfRecords do
           if rec.1.size ≠ 58 then
             throw <| IO.userError s!".cxsf input size {rec.1.size} ≠ 58"
-          if rec.2.size ≠ 106 then
-            throw <| IO.userError s!".cxsf expected size {rec.2.size} ≠ 106"
+          if rec.2.size ≠ 138 then
+            throw <| IO.userError s!".cxsf expected size {rec.2.size} ≠ 138"
     }
   , { name := "GP.6.5: feeSplit reference anchors (reused DepositFeeSplit.feeSplit)"
     , body := do

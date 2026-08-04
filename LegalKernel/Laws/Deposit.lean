@@ -39,6 +39,7 @@ imported by `LegalKernel.lean` for re-export to deployments and by
 import LegalKernel.Kernel
 import LegalKernel.Conservation
 import LegalKernel.Bridge.State
+import LegalKernel.Laws.AmountBound
 import Lex.DSL.Law
 
 namespace LegalKernel
@@ -69,7 +70,7 @@ namespace Laws
     layering. -/
 def deposit (r : ResourceId) (recipient : ActorId) (amount : Amount)
     (_depositId : Bridge.DepositId) : Transition where
-  pre        := fun _ => True
+  pre        := fun s => AmountBounded s r recipient amount
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     setBalance s r recipient (getBalance s r recipient + amount)
@@ -93,7 +94,8 @@ lexlaw legalkernel_deposit where
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (recipient : ActorId)
                       (amount : Amount) (_depositId : Bridge.DepositId)
-  lex_pre             := fun _ => True
+  lex_pre             := fun s =>
+                                LegalKernel.Laws.AmountBounded s r recipient amount
   lex_impl            :=
     fun s => setBalance s r recipient (getBalance s r recipient + amount)
   -- Per plan §19.4 LX.26: `deposit` is `mint`-style: claims
@@ -115,15 +117,18 @@ example (r : ResourceId) (recipient : ActorId) (amount : Amount)
 /-- Per-resource accounting: total supply at `r` increases by exactly
     `amount` after a deposit at `r`.  Direct consequence of the §8.1
     master-lemma `totalSupply_setBalance` after rewriting `step_impl`
-    via the `True` precondition.  Mirrors `totalSupply_after_mint`
-    in proof shape. -/
+    via the precondition.  Mirrors `totalSupply_after_mint` in proof
+    shape, `hpre` included: the precondition used to be `True`, so
+    this took no witness, but a deposit that would carry the
+    recipient over `Laws.maxAmount` is now a no-op and the supply
+    equation genuinely does not hold there. -/
 theorem totalSupply_after_deposit
     (r : ResourceId) (recipient : ActorId) (amount : Amount)
-    (depositId : Bridge.DepositId) (s : State) :
+    (depositId : Bridge.DepositId) (s : State)
+    (hpre : (deposit r recipient amount depositId).pre s) :
     TotalSupply (step_impl s (deposit r recipient amount depositId)) r =
     TotalSupply s r + amount := by
   rw [step_impl]
-  have hpre : (deposit r recipient amount depositId).pre s := trivial
   simp only [if_pos hpre]
   show TotalSupply ((deposit r recipient amount depositId).apply_impl s) r =
        TotalSupply s r + amount
@@ -142,12 +147,13 @@ theorem deposit_other_resource_untouched
     (step_impl s (deposit r recipient amount depositId)).balances[r']? =
     s.balances[r']? := by
   rw [step_impl]
-  have hpre : (deposit r recipient amount depositId).pre s := trivial
-  simp only [if_pos hpre]
-  show ((deposit r recipient amount depositId).apply_impl s).balances[r']? =
-       s.balances[r']?
-  simp only [deposit, setBalance]
-  rw [RBMap.find?_insert_other _ r r' _ h]
+  by_cases hpre : (deposit r recipient amount depositId).pre s
+  · simp only [if_pos hpre]
+    show ((deposit r recipient amount depositId).apply_impl s).balances[r']? =
+         s.balances[r']?
+    simp only [deposit, setBalance]
+    rw [RBMap.find?_insert_other _ r r' _ h]
+  · simp only [if_neg hpre]
 
 /-- Pointwise per-actor balance preservation at any `r' ≠ r`. -/
 theorem deposit_does_not_touch_other_resources
@@ -181,13 +187,14 @@ theorem deposit_other_actor_untouched
     getBalance (step_impl s (deposit r recipient amount depositId)) r recipient' =
     getBalance s r recipient' := by
   rw [step_impl]
-  have hpre : (deposit r recipient amount depositId).pre s := trivial
-  simp only [if_pos hpre]
-  show getBalance ((deposit r recipient amount depositId).apply_impl s) r recipient' =
-       getBalance s r recipient'
-  simp only [deposit]
-  exact getBalance_setBalance_other s r r recipient recipient'
-    (getBalance s r recipient + amount) (Or.inr hne)
+  by_cases hpre : (deposit r recipient amount depositId).pre s
+  · simp only [if_pos hpre]
+    show getBalance ((deposit r recipient amount depositId).apply_impl s) r recipient' =
+         getBalance s r recipient'
+    simp only [deposit]
+    exact getBalance_setBalance_other s r r recipient recipient'
+      (getBalance s r recipient + amount) (Or.inr hne)
+  · simp only [if_neg hpre]
 
 /-! ## Non-conservation -/
 
@@ -198,12 +205,16 @@ theorem deposit_other_actor_untouched
 theorem deposit_not_conservative
     (r : ResourceId) (recipient : ActorId) (amount : Amount)
     (depositId : Bridge.DepositId)
-    (hpos : amount > 0) :
+    (hpos : amount > 0) (hbound : amount < maxAmount) :
     ¬ IsConservative (deposit r recipient amount depositId) := by
   intro hcons
-  have hpre : (deposit r recipient amount depositId).pre genesisState := trivial
+  -- The ceiling conjunct is discharged at genesis, where every
+  -- balance reads `0`, so the credited value is `amount` itself.
+  have hpre : (deposit r recipient amount depositId).pre genesisState := by
+    show getBalance genesisState r recipient + amount < maxAmount
+    simpa [getBalance, genesisState] using hbound
   have hcons_r := hcons.conserves r genesisState hpre
-  rw [totalSupply_after_deposit r recipient amount depositId genesisState] at hcons_r
+  rw [totalSupply_after_deposit r recipient amount depositId genesisState hpre] at hcons_r
   rw [totalSupply_genesis_eq_zero r] at hcons_r
   simp at hcons_r
   exact absurd hcons_r (Nat.pos_iff_ne_zero.mp hpos)
@@ -218,10 +229,10 @@ instance deposit_isMonotonic
     (depositId : Bridge.DepositId) :
     IsMonotonic (deposit r recipient amount depositId) where
   monotone := by
-    intro r' s _hpre
+    intro r' s hpre
     by_cases hr : r = r'
     · subst hr
-      have h := totalSupply_after_deposit r recipient amount depositId s
+      have h := totalSupply_after_deposit r recipient amount depositId s hpre
       omega
     · have h := deposit_conserves_other_resource r r' recipient amount depositId s hr
       omega
