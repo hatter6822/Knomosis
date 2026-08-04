@@ -80,7 +80,7 @@ pub const CBE_TAG_BYTES: u8 = 0x02;
 /// `Encoding.CBOR.cbeTagAmount`.
 pub const CBE_TAG_AMOUNT: u8 = 0x06;
 
-/// Length of a CBE amount head (1-byte tag + 16-byte LE u128).
+/// Length of a CBE amount head (1-byte tag + 32-byte LE body).
 pub const AMOUNT_HEAD_LEN: usize = 33;
 
 /// The signing-input domain prefix.  Mirrors Lean's
@@ -113,7 +113,7 @@ fn write_head(out: &mut Vec<u8>, tag: u8, n: u64) {
     write_u64_le(out, n);
 }
 
-/// Encode a CBE amount head: `CBE_TAG_AMOUNT` + 16-byte LE value.
+/// Encode a CBE amount head: `CBE_TAG_AMOUNT` + 32-byte LE value.
 /// Mirrors Lean's `Encoding.CBOR.cborAmountHeadEncode`.
 fn write_amount_head(out: &mut Vec<u8>, n: u128) {
     out.push(CBE_TAG_AMOUNT);
@@ -404,7 +404,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             // `.claimBudgetRefund` arm:
             //   gasResource ‖ budgetUnits ‖ weiPerBudgetUnit ‖ poolActor.
             // `weiPerBudgetUnit` is a wei-denominated RATE, so it rides
-            // the 17-byte amount head; `budgetUnits` is a unit COUNT and
+            // the 33-byte amount head; `budgetUnits` is a unit COUNT and
             // stays on the 9-byte uint head, as does tag-20's
             // budgetIncrement.
             out.extend_from_slice(&encode_u64(*gas_resource));
@@ -455,7 +455,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
 
 /// Encode an `Amount` (`u128` on the Rust side) as a CBE amount head.
 ///
-/// Infallible: the 16-byte amount head represents every `u128`.  The
+/// Infallible: the 32-byte amount body represents every `u128`.  The
 /// earlier form routed through [`encode_u128_checked`] and rejected
 /// anything `>= 2^64` — a bound a wei-denominated amount crosses at
 /// ~18.45 ETH, so the runtime could not express an amount the kernel
@@ -467,7 +467,7 @@ fn encode_amount(amount: u128) -> Vec<u8> {
 /// Encode a `Nonce` as a CBE uint on the 8-byte head.
 ///
 /// A nonce is a per-actor COUNTER, not a value: it must stay on the
-/// 8-byte `CBE_TAG_UINT` head even as amounts move to the 16-byte
+/// 8-byte `CBE_TAG_UINT` head even as amounts move to the 32-byte
 /// `CBE_TAG_AMOUNT` head.  Previously the nonce went through
 /// [`encode_amount`], which would have widened it in lockstep with
 /// real amounts and desynchronised the SIGNING INPUT from Lean's
@@ -654,7 +654,7 @@ mod tests {
         let encoded = encode_action(&action).unwrap();
         // Layout: tag(0) ++ r(0) ++ sender(1) ++ receiver(2) ++ amount(100).
         // The four identifier-shaped components are 9-byte CBE uint
-        // heads; `amount` is value-carrying and rides the 17-byte
+        // heads; `amount` is value-carrying and rides the 33-byte
         // amount head.
         assert_eq!(encoded.len(), HEAD_LEN * 4 + AMOUNT_HEAD_LEN);
         // tag is at offset 0.

@@ -410,11 +410,19 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     }
 
     /// @dev A CBE amount value, for the forged-balance control.
+    ///
+    ///      Spelled out here rather than reusing `CBEEncode.amountValue`
+    ///      on purpose: this builds the FORGERY the verifier must
+    ///      reject, so it has to be able to construct a value the
+    ///      production encoder would not — and that only works while it
+    ///      owns its own bytes.  It must still be WELL-FORMED, or the
+    ///      test would prove the shape check works rather than the
+    ///      pre-root check.
     function _amountValue(uint256 n) private pure returns (bytes memory out) {
-        out = new bytes(17);
-        out[0] = 0x01;
+        out = new bytes(33);
+        out[0] = 0x06;
         uint256 v = n;
-        for (uint256 i = 0; i < 16; i++) {
+        for (uint256 i = 0; i < 32; i++) {
             out[1 + i] = bytes1(uint8(v & 0xFF));
             v >>= 8;
         }

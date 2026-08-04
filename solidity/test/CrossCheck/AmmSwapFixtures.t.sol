@@ -244,8 +244,8 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             bytes memory cbeBytes = vm.parseBytes(cbeHex);
             assertEq(
                 cbeBytes.length,
-                70,
-                "CBE must be 70 bytes (tag + 3 x 9-byte uint heads + 2 x 17-byte amount heads)"
+                102,
+                "CBE must be 102 bytes (tag + 3 x 9-byte uint heads + 2 x 33-byte amount heads)"
             );
         }
     }

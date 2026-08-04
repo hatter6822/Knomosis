@@ -380,13 +380,21 @@ contract StepVMCrossCheck is CrossCheckFramework {
         vm.expectRevert(
             abi.encodeWithSelector(CBEEncode.CBEValueTooWide.selector, 1 << 64, 8));
         this.encodeUintExternal(1 << 64);
-        vm.expectRevert(
-            abi.encodeWithSelector(CBEEncode.CBEValueTooWide.selector, 1 << 128, 16));
-        this.encodeAmountExternal(1 << 128);
+        // The amount head has NO such rejection, and that is the point
+        // rather than an omission: its width is the EVM word, so every
+        // `uint256` fits and there is nothing to reject.  Closing C-3
+        // meant making the ceiling unreachable, not merely far away —
+        // a head that can refuse a value is a head a value can be
+        // truncated by.
+        assertEq(
+            CBEEncode.amountValue(type(uint256).max).length,
+            33,
+            "the widest possible amount still encodes"
+        );
         // ...and the largest representable value of each width does NOT
         // revert, so the bound is rejecting only what it must.
         assertEq(CBEEncode.uintValue(type(uint64).max).length, 9, "uint max encodes");
-        assertEq(CBEEncode.amountValue(type(uint128).max).length, 17, "amount max encodes");
+        assertEq(CBEEncode.amountValue(type(uint128).max).length, 33, "amount max encodes");
         // Round-trip against the step VM's own decoders — the ones
         // the fold reads proven cell values through, so an encoder
         // that disagreed with them would build a leaf no opening
@@ -923,7 +931,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         observed to fire is indistinguishable from an absent
     ///         one, so both directions are checked.
     function test_writeSet_refuses_only_the_bulk_pair() public {
-        bytes memory fields = new bytes(72);
+        // Long enough for EVERY adjudicable kind's `_need` floor: the
+        // widest is `depositWithFee` at 104 bytes once both amounts
+        // ride the 32-byte field.
+        bytes memory fields = new bytes(104);
         vm.expectRevert(
             abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(6)));
         this.deriveWriteSetExternal(6, fields, 7, 0);

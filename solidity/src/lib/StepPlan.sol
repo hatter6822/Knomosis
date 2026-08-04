@@ -73,29 +73,34 @@ library StepPlan {
         returns (uint64 grantRecipient, uint256 grantAmount, uint256 refundExtra)
     {
         if (actionKind == 19) {
-            // depositWithFee: recipient @8, budgetGrant @56.
+            // depositWithFee: recipient @8, budgetGrant @88 — it
+            // follows BOTH 32-byte amounts.
             return (
                 uint64(StepWrites.readFieldUint(fields, 8, 8)),
-                StepWrites.readFieldUint(fields, 56, 8),
+                StepWrites.readFieldUint(fields, 88, 8),
                 0
             );
         }
         if (actionKind == 20) {
-            // topUpActionBudget: the SIGNER, budgetIncrement @24.
-            return (signer, StepWrites.readFieldUint(fields, 24, 8), 0);
+            // topUpActionBudget: the SIGNER, budgetIncrement @40 —
+            // it follows the 32-byte gasAmount at 8.
+            return (signer, StepWrites.readFieldUint(fields, 40, 8), 0);
         }
         if (actionKind == 21) {
-            // topUpActionBudgetFor: recipient @0, budgetIncrement @32.
+            // topUpActionBudgetFor: recipient @0, budgetIncrement @48
+            // — it follows the 32-byte gasAmount at 16.
             return (
                 uint64(StepWrites.readFieldUint(fields, 0, 8)),
-                StepWrites.readFieldUint(fields, 32, 8),
+                StepWrites.readFieldUint(fields, 48, 8),
                 0
             );
         }
         if (actionKind == 22) {
             // claimBudgetRefund burns the units it cashes out, on top
             // of the action cost — which is what stops a refund from
-            // being a free round trip.  budgetUnits @8.
+            // being a free round trip.  budgetUnits @8 — UNCHANGED by
+            // the amount widening: it PRECEDES `weiPerBudgetUnit`,
+            // which is the field that widened.
             return (0, 0, StepWrites.readFieldUint(fields, 8, 8));
         }
         return (0, 0, 0);

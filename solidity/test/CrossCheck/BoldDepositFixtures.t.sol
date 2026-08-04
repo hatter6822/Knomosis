@@ -407,8 +407,8 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             assertEq(
                 string(abi.encodePacked(budget[0], budget[1])), "0x", "recipientBudgetCbe 0x prefix"
             );
-            // 88 bytes => "0x" + 176 hex chars
-            assertEq(action.length, 2 + 176, "actionCbe decodes to 88 bytes");
+            // 120 bytes => "0x" + 240 hex chars
+            assertEq(action.length, 2 + 240, "actionCbe decodes to 120 bytes");
             // 18 bytes => "0x" + 36 hex chars
             assertEq(budget.length, 2 + 36, "recipientBudgetCbe decodes to 18 bytes");
         }
