@@ -815,7 +815,7 @@ library StepWrites {
         // Balance cells are kind 0; registry 2; localPolicy 3;
         // bridgeConsumed 4; bridgePending 5; bridgeNextWdId 6.
         if (actionKind == 0) {                          // transfer
-            _need(actionKind, fields, 40);
+            _need(actionKind, fields, 56);
             out = new Cell[](4);
             uint64 r = _fieldUint64(fields, 0);
             out[0] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 8)});
@@ -823,7 +823,7 @@ library StepWrites {
             _appendUniform(out, 2, signer);
         } else if (actionKind == 1 || actionKind == 2 || actionKind == 5) {
             // mint / burn / reward: `r || actor || amount`.
-            _need(actionKind, fields, 32);
+            _need(actionKind, fields, 48);
             out = new Cell[](3);
             out[0] = Cell({
                 kind: 0, keyA: _fieldUint64(fields, 0), keyB: _fieldUint64(fields, 8)});
@@ -840,14 +840,15 @@ library StepWrites {
             out[0] = Cell({kind: 3, keyA: signer, keyB: 0});
             _appendUniform(out, 1, signer);
         } else if (actionKind == 13) {                  // deposit
-            _need(actionKind, fields, 40);
+            _need(actionKind, fields, 56);
             out = new Cell[](4);
             out[0] = Cell({
                 kind: 0, keyA: _fieldUint64(fields, 0), keyB: _fieldUint64(fields, 8)});
             _appendUniform(out, 1, signer);
-            out[3] = Cell({kind: 4, keyA: _fieldUint64(fields, 32), keyB: 0});
+            // depositId sits AFTER the 32-byte amount, at 48.
+            out[3] = Cell({kind: 4, keyA: _fieldUint64(fields, 48), keyB: 0});
         } else if (actionKind == 14) {                  // withdraw
-            _need(actionKind, fields, 32);
+            _need(actionKind, fields, 48);
             out = new Cell[](5);
             out[0] = Cell({
                 kind: 0, keyA: _fieldUint64(fields, 0), keyB: _fieldUint64(fields, 8)});
@@ -857,44 +858,49 @@ library StepWrites {
             // which is why `Action.stateWriteCells` exists.
             out[4] = Cell({kind: 5, keyA: nextWdIdPre, keyB: 0});
         } else if (actionKind == 19) {                  // depositWithFee
-            _need(actionKind, fields, 72);
+            _need(actionKind, fields, 104);
             out = new Cell[](6);
             uint64 r = _fieldUint64(fields, 0);
             uint64 recipient = _fieldUint64(fields, 8);
             out[0] = Cell({kind: 0, keyA: r, keyB: recipient});
             out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 16)});
-            out[2] = Cell({kind: 4, keyA: _fieldUint64(fields, 64), keyB: 0});
+            // depositId sits after BOTH 32-byte amounts and budgetGrant.
+            out[2] = Cell({kind: 4, keyA: _fieldUint64(fields, 96), keyB: 0});
             _appendUniform(out, 3, signer);
             out[5] = Cell({kind: 13, keyA: recipient, keyB: 0});
         } else if (actionKind == 20 || actionKind == 22) {
             // topUpActionBudget / claimBudgetRefund: `gr || _ || _ || pa`.
-            _need(actionKind, fields, 40);
+            // The middle pair straddles a 32-byte amount, so `pa` is
+            // at 48 rather than 32.
+            _need(actionKind, fields, 56);
             out = new Cell[](4);
             uint64 gr = _fieldUint64(fields, 0);
             out[0] = Cell({kind: 0, keyA: gr, keyB: signer});
-            out[1] = Cell({kind: 0, keyA: gr, keyB: _fieldUint64(fields, 32)});
+            out[1] = Cell({kind: 0, keyA: gr, keyB: _fieldUint64(fields, 48)});
             _appendUniform(out, 2, signer);
         } else if (actionKind == 21) {                  // topUpActionBudgetFor
-            _need(actionKind, fields, 48);
+            _need(actionKind, fields, 64);
             out = new Cell[](5);
             uint64 gr = _fieldUint64(fields, 8);
             out[0] = Cell({kind: 0, keyA: gr, keyB: signer});
-            out[1] = Cell({kind: 0, keyA: gr, keyB: _fieldUint64(fields, 40)});
+            out[1] = Cell({kind: 0, keyA: gr, keyB: _fieldUint64(fields, 56)});
             _appendUniform(out, 2, signer);
             out[4] = Cell({kind: 13, keyA: _fieldUint64(fields, 0), keyB: 0});
         } else if (actionKind == 23) {                  // ammSwap
-            _need(actionKind, fields, 56);
+            // The reserve actor follows BOTH 32-byte amounts.
+            _need(actionKind, fields, 88);
             out = new Cell[](4);
-            uint64 reserveActor = _fieldUint64(fields, 48);
+            uint64 reserveActor = _fieldUint64(fields, 80);
             out[0] = Cell({kind: 0, keyA: _fieldUint64(fields, 0), keyB: reserveActor});
             out[1] = Cell({kind: 0, keyA: _fieldUint64(fields, 8), keyB: reserveActor});
             _appendUniform(out, 2, signer);
         } else if (actionKind == 24) {                  // reclaimAmmReserves
-            _need(actionKind, fields, 40);
+            // Both actors follow the 32-byte amount at offset 8.
+            _need(actionKind, fields, 56);
             out = new Cell[](4);
             uint64 r = _fieldUint64(fields, 0);
-            out[0] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 24)});
-            out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 32)});
+            out[0] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 40)});
+            out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 48)});
             _appendUniform(out, 2, signer);
         } else {
             // The kernel-identity family (3, 8, 9, 10, 11, 17, 18):

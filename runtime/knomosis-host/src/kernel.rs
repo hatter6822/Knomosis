@@ -810,8 +810,9 @@ pub mod mock {
                 v
             }
             fn amt(n: u128) -> Vec<u8> {
-                let mut v = vec![0x01u8];
+                let mut v = vec![0x06u8];
                 v.extend_from_slice(&n.to_le_bytes());
+                v.extend_from_slice(&[0u8; 16]);
                 v
             }
             let k = MockKernel::new();

@@ -222,7 +222,7 @@ fn fee_split_corpus_resource_parametric_equivalence() {
     for (key, (eth, bold)) in &paired {
         if let (Some(eth_bytes), Some(bold_bytes)) = (eth, bold) {
             paired_count += 1;
-            // Equal lengths (both `Action::DepositWithFee` = 88 bytes).
+            // Equal lengths (both `Action::DepositWithFee` = 120 bytes).
             assert_eq!(
                 eth_bytes.len(),
                 bold_bytes.len(),
@@ -361,13 +361,13 @@ fn fee_split_corpus_all_records_are_deposit_with_fee() {
             19,
             "record {i}: constructor tag != 19 (DepositWithFee)"
         );
-        // Total length is exactly 88 bytes: 6 × 9-byte CBE uint heads
+        // Total length is exactly 120 bytes: 6 × 9-byte CBE uint heads
         // (tag, r, recipient, poolActor, budgetGrant, depositId) +
-        // 2 × 17-byte amount heads (userAmount, poolAmount).
+        // 2 × 33-byte amount heads (userAmount, poolAmount).
         assert_eq!(
             record.expected.len(),
-            88,
-            "record {i}: expected bytes != 88 (DepositWithFee CBE length)"
+            120,
+            "record {i}: expected bytes != 120 (DepositWithFee CBE length)"
         );
     }
 }

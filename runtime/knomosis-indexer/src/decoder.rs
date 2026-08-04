@@ -1365,35 +1365,38 @@ mod tests {
         };
         let bytes = encode_event(&e);
         // tag(9) + resource(9) + recipient(9) + pool_actor(9)
-        // + user_amount(17) + pool_amount(17) + budget_grant(9)
-        // + deposit_id(9) = 88 bytes.  The two wei-denominated
-        // amounts are 17 bytes; `budget_grant` is a UNIT count and
+        // + user_amount(33) + pool_amount(33) + budget_grant(9)
+        // + deposit_id(9) = 120 bytes.  The two wei-denominated
+        // amounts are 33 bytes; `budget_grant` is a UNIT count and
         // stays 9.
-        assert_eq!(bytes.len(), 88);
+        assert_eq!(bytes.len(), 120);
         // Tag head: 0x00 + 8-byte LE 16.
         assert_eq!(bytes[0], CBE_TAG_UINT);
         assert_eq!(&bytes[1..9], &16u64.to_le_bytes());
         // Resource head.
         assert_eq!(bytes[9], CBE_TAG_UINT);
         assert_eq!(&bytes[10..18], &1u64.to_le_bytes());
-        // user_amount at 36..53 on the amount head.
+        // user_amount at 36..69 on the amount head.  The `u128` value
+        // occupies the LOW 16 body bytes; the high 16 are zero, which
+        // is what an over-wide value would have to disturb.
         assert_eq!(bytes[36], CBE_TAG_AMOUNT);
         assert_eq!(&bytes[37..53], &4u128.to_le_bytes());
-        // pool_amount at 53..70 on the amount head.
-        assert_eq!(bytes[53], CBE_TAG_AMOUNT);
-        assert_eq!(&bytes[54..70], &5u128.to_le_bytes());
-        // budget_grant at 70..79 — a UNIT count, so the narrow head.
-        assert_eq!(bytes[70], CBE_TAG_UINT);
-        assert_eq!(&bytes[71..79], &6u64.to_le_bytes());
-        // Spot-check field-7 (deposit_id) head at 79..88.
-        assert_eq!(bytes[79], CBE_TAG_UINT);
-        assert_eq!(&bytes[80..88], &7u64.to_le_bytes());
+        assert_eq!(&bytes[53..69], &[0u8; 16], "amount high half is zero");
+        // pool_amount at 69..102 on the amount head.
+        assert_eq!(bytes[69], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[70..86], &5u128.to_le_bytes());
+        // budget_grant at 102..111 — a UNIT count, so the narrow head.
+        assert_eq!(bytes[102], CBE_TAG_UINT);
+        assert_eq!(&bytes[103..111], &6u64.to_le_bytes());
+        // Spot-check field-7 (deposit_id) head at 111..120.
+        assert_eq!(bytes[111], CBE_TAG_UINT);
+        assert_eq!(&bytes[112..120], &7u64.to_le_bytes());
     }
 
     /// GP tag-19 wire-layout: `DelegatedActionBudgetTopUp` is
     /// 6 narrow fields (tag, recipient, signer, gas_resource,
     /// budget_increment, pool_actor) × 9 = 54 bytes + the
-    /// wei-denominated `gas_amount` on the 17-byte amount head = 71.
+    /// wei-denominated `gas_amount` on the 33-byte amount head = 87.
     #[test]
     fn delegated_action_budget_top_up_byte_layout() {
         let e = Event::DelegatedActionBudgetTopUp {
@@ -1405,7 +1408,7 @@ mod tests {
             pool_actor: 1,
         };
         let bytes = encode_event(&e);
-        assert_eq!(bytes.len(), 71);
+        assert_eq!(bytes.len(), 87);
         // Tag head: 0x00 + 8-byte LE 19.
         assert_eq!(bytes[0], CBE_TAG_UINT);
         assert_eq!(&bytes[1..9], &19u64.to_le_bytes());
@@ -1416,12 +1419,12 @@ mod tests {
         // Second field: signer = 77.
         assert_eq!(bytes[18], CBE_TAG_UINT);
         assert_eq!(&bytes[19..27], &77u64.to_le_bytes());
-        // gas_amount at 36..53 on the amount head; budget_increment
+        // gas_amount at 36..69 on the amount head; budget_increment
         // that follows is a UNIT count and stays narrow.
         assert_eq!(bytes[36], CBE_TAG_AMOUNT);
         assert_eq!(&bytes[37..53], &10u128.to_le_bytes());
-        assert_eq!(bytes[53], CBE_TAG_UINT);
-        assert_eq!(&bytes[54..62], &100u64.to_le_bytes());
+        assert_eq!(bytes[69], CBE_TAG_UINT);
+        assert_eq!(&bytes[70..78], &100u64.to_le_bytes());
     }
 
     /// Tag 17 (`ActionBudgetTopUp`) and tag 19
@@ -1649,9 +1652,10 @@ mod tests {
             bytes.push(CBE_TAG_UINT);
             bytes.extend_from_slice(&n.to_le_bytes());
         }
-        // amount on the amount head.
+        // amount on the (33-byte) amount head: tag + 32 LE body.
         bytes.push(CBE_TAG_AMOUNT);
         bytes.extend_from_slice(&3u128.to_le_bytes());
+        bytes.extend_from_slice(&[0u8; 16]);
         // recipient_l1: 21-byte byte string (one off).
         bytes.push(0x02);
         bytes.extend_from_slice(&21u64.to_le_bytes());
@@ -1697,9 +1701,9 @@ mod tests {
         };
         let bytes = encode_event(&e);
         // 3 identifier fields on the 9-byte uint head (tag, resource,
-        // actor) + 2 value fields on the 17-byte amount head
-        // (old_value, new_value) = 27 + 34 = 61 bytes.
-        assert_eq!(bytes.len(), 61);
+        // actor) + 2 value fields on the 33-byte amount head
+        // (old_value, new_value) = 27 + 66 = 93 bytes.
+        assert_eq!(bytes.len(), 93);
         // tag = 0 at bytes 0..9.
         assert_eq!(bytes[0], CBE_TAG_UINT);
         assert_eq!(&bytes[1..9], &0u64.to_le_bytes());
@@ -1709,14 +1713,15 @@ mod tests {
         // actor = 2 at bytes 18..27.
         assert_eq!(bytes[18], CBE_TAG_UINT);
         assert_eq!(&bytes[19..27], &2u64.to_le_bytes());
-        // old_value = 3 at bytes 27..44 — the amount tag, then 16 LE
+        // old_value = 3 at bytes 27..60 — the amount tag, then 32 LE
         // bytes.  The tag is what keeps a balance from being read at
         // the identifier width (and vice versa).
         assert_eq!(bytes[27], CBE_TAG_AMOUNT);
         assert_eq!(&bytes[28..44], &3u128.to_le_bytes());
-        // new_value = 4 at bytes 44..61.
-        assert_eq!(bytes[44], CBE_TAG_AMOUNT);
-        assert_eq!(&bytes[45..61], &4u128.to_le_bytes());
+        assert_eq!(&bytes[44..60], &[0u8; 16], "amount high half is zero");
+        // new_value = 4 at bytes 60..93.
+        assert_eq!(bytes[60], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[61..77], &4u128.to_le_bytes());
     }
 
     /// A balance above `2^64` round-trips.  This is the value the
@@ -1749,6 +1754,11 @@ mod tests {
         bytes.extend_from_slice(&3u64.to_le_bytes());
         bytes.push(CBE_TAG_AMOUNT);
         bytes.extend_from_slice(&4u128.to_le_bytes());
+        // The high half, so the frame is long enough for the decoder to
+        // REACH the tag check.  Without it `read_amount` would run out
+        // of bytes first and report `UnexpectedEnd`, and the test would
+        // pass for the wrong reason.
+        bytes.extend_from_slice(&[0u8; 16]);
         assert!(matches!(
             decode_event(&bytes),
             Err(DecodeError::BadHeadTag {

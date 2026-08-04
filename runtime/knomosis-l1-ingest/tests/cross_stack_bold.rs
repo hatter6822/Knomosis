@@ -14,15 +14,15 @@
 //! corpus (`FixtureKind::L1IngestBold`, on-disk tag 7) and, for every
 //! record, asserts that the Lean-authored `expected` bytes equal an
 //! INDEPENDENT Rust recompute.  Each record's `expected` field is the
-//! 106-byte concatenation
+//! 138-byte concatenation
 //!
 //! ```text
-//!   expected[0..88]   = encode_action(Action::DepositWithFee { .. })  (88 bytes)
-//!   expected[88..106] = recipient post-deposit ActorBudget CBE        (18 bytes)
+//!   expected[0..120]   = encode_action(Action::DepositWithFee { .. }) (120 bytes)
+//!   expected[120..138] = recipient post-deposit ActorBudget CBE       (18 bytes)
 //! ```
 //!
 //! The action half is 6 × 9-byte CBE uint heads (tag, r, recipient,
-//! poolActor, budgetGrant, depositId) + 2 × 17-byte amount heads
+//! poolActor, budgetGrant, depositId) + 2 × 33-byte amount heads
 //! (userAmount, poolAmount).  The budget tail stays 18 bytes: both of
 //! its fields are counters, not wei.
 //!
@@ -69,14 +69,14 @@ use knomosis_l1_ingest::fixture::{
 };
 
 /// The byte length of every corpus record's `expected` field: the
-/// 88-byte `DepositWithFee` action CBE plus the 18-byte recipient
+/// 120-byte `DepositWithFee` action CBE plus the 18-byte recipient
 /// `ActorBudget` CBE.
-const EXPECTED_RECORD_BYTES: usize = 106;
+const EXPECTED_RECORD_BYTES: usize = 138;
 
 /// The byte length of the `DepositWithFee` action half: 6 × 9-byte
-/// CBE uint heads + 2 × 17-byte CBE amount heads (`userAmount` and
+/// CBE uint heads + 2 × 33-byte CBE amount heads (`userAmount` and
 /// `poolAmount` are wei-denominated).
-const ACTION_HALF_BYTES: usize = 88;
+const ACTION_HALF_BYTES: usize = 120;
 
 /// Key for the ETH/BOLD pairing map: the six fee-split inputs that
 /// determine the encoded Action bytes (excluding `resource_id`,
@@ -140,14 +140,14 @@ fn bold_corpus_round_trip() {
     );
 
     for (i, record) in fixture.records().iter().enumerate() {
-        // The record's `expected` is exactly 106 bytes: 88-byte action
+        // The record's `expected` is exactly 138 bytes: 120-byte action
         // CBE + 18-byte budget CBE.  A wrong length means the Lean
         // fixture layout drifted — fail loudly with the diagnostic.
         assert_eq!(
             record.expected.len(),
             EXPECTED_RECORD_BYTES,
             "record {i}: expected length {} != {EXPECTED_RECORD_BYTES} \
-             (action 88 + budget 18); fixture layout drift?",
+             (action 120 + budget 18); fixture layout drift?",
             record.expected.len()
         );
 
@@ -609,7 +609,7 @@ fn bold_corpus_clamp_coverage() {
 
 /// Sanity: every record's expected bytes lead with the
 /// `DepositWithFee` constructor (tag 19) and are exactly 106 bytes
-/// (88-byte action + 18-byte budget).  Pins the corpus's wire-format
+/// (120-byte action + 18-byte budget).  Pins the corpus's wire-format
 /// identity at the per-record level.
 #[test]
 fn bold_corpus_all_records_are_deposit_with_fee() {
@@ -619,7 +619,7 @@ fn bold_corpus_all_records_are_deposit_with_fee() {
             record.expected.len(),
             EXPECTED_RECORD_BYTES,
             "record {i}: expected bytes != {EXPECTED_RECORD_BYTES} \
-             (DepositWithFee 88 + ActorBudget 18)"
+             (DepositWithFee 120 + ActorBudget 18)"
         );
         // Leading CBE uint head: tag = 19.
         assert_eq!(

@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0c6ab9b1346d082971fde3664546d2df4591dc199849c32f8b508a1f335b7484"
+    "source_digest": "8b3df3d58c7bc48e263435e3fbd119fe88e873269a5e95cd01ac267a763f02cb"
   },
   "summary": {
     "module_count": 99,
-    "declaration_count": 2103
+    "declaration_count": 2104
   },
   "modules": [
     {
@@ -1283,7 +1283,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 2083,
+          "line": 2081,
           "called": [
             "InvalidProof"
           ]
@@ -1291,13 +1291,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 2121,
+          "line": 2119,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 2125,
+          "line": 2123,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -1308,31 +1308,31 @@
         {
           "kind": "event",
           "name": "BoldCircuitClosed",
-          "line": 2168,
+          "line": 2166,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitOpened",
-          "line": 2171,
+          "line": 2169,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitClosedByAutoTrigger",
-          "line": 2177,
+          "line": 2175,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldTvlCapUpdated",
-          "line": 2182,
+          "line": 2180,
           "called": []
         },
         {
           "kind": "function",
           "name": "closeBoldCircuit",
-          "line": 2189,
+          "line": 2187,
           "called": [
             "BoldCircuitClosed",
             "onlyBoldCircuitBreaker"
@@ -1341,7 +1341,7 @@
         {
           "kind": "function",
           "name": "openBoldCircuit",
-          "line": 2198,
+          "line": 2196,
           "called": [
             "BoldCircuitOpened",
             "onlyBoldCircuitBreaker"
@@ -1350,7 +1350,7 @@
         {
           "kind": "function",
           "name": "closeBoldCircuitIfAnyLiquityBranchShutdown",
-          "line": 2227,
+          "line": 2225,
           "called": [
             "AutoCircuitTriggerDisabled",
             "BoldCircuitClosedByAutoTrigger",
@@ -1361,7 +1361,7 @@
         {
           "kind": "function",
           "name": "_readLiquityShutdownTime",
-          "line": 2277,
+          "line": 2275,
           "called": [
             "LiquityV2ReadFailed"
           ]
@@ -1369,7 +1369,7 @@
         {
           "kind": "function",
           "name": "setBoldTvlCap",
-          "line": 2300,
+          "line": 2298,
           "called": [
             "BoldTvlCapExceedsGlobal",
             "BoldTvlCapUpdated",
@@ -1379,7 +1379,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 2312,
+          "line": 2310,
           "called": []
         }
       ]
@@ -3496,13 +3496,13 @@
         {
           "kind": "function",
           "name": "_leafPreimage",
-          "line": 585,
+          "line": 588,
           "called": []
         },
         {
           "kind": "function",
           "name": "_deriveConsumed",
-          "line": 600,
+          "line": 603,
           "called": []
         }
       ]
@@ -3991,39 +3991,39 @@
         {
           "kind": "error",
           "name": "CBEUnexpectedEof",
-          "line": 67,
+          "line": 76,
           "called": []
         },
         {
           "kind": "error",
           "name": "CBEInvalidMajorType",
-          "line": 70,
+          "line": 79,
           "called": []
         },
         {
           "kind": "error",
           "name": "CBEInvalidLength",
-          "line": 74,
+          "line": 83,
           "called": []
         },
         {
           "kind": "error",
           "name": "CBESizeMismatch",
-          "line": 79,
+          "line": 88,
           "called": []
         },
         {
           "kind": "function",
           "name": "readUint64LE",
-          "line": 89,
+          "line": 98,
           "called": [
             "CBEUnexpectedEof"
           ]
         },
         {
           "kind": "function",
-          "name": "readUint128LE",
-          "line": 121,
+          "name": "readUint256LE",
+          "line": 134,
           "called": [
             "CBEUnexpectedEof"
           ]
@@ -4031,7 +4031,7 @@
         {
           "kind": "function",
           "name": "readHead",
-          "line": 148,
+          "line": 161,
           "called": [
             "CBEInvalidMajorType",
             "CBEUnexpectedEof",
@@ -4041,7 +4041,7 @@
         {
           "kind": "function",
           "name": "readUint",
-          "line": 164,
+          "line": 177,
           "called": [
             "readHead"
           ]
@@ -4049,17 +4049,17 @@
         {
           "kind": "function",
           "name": "readAmount",
-          "line": 178,
+          "line": 191,
           "called": [
             "CBEInvalidMajorType",
             "CBEUnexpectedEof",
-            "readUint128LE"
+            "readUint256LE"
           ]
         },
         {
           "kind": "function",
           "name": "readBytes",
-          "line": 195,
+          "line": 208,
           "called": [
             "CBEInvalidLength",
             "readHead"
@@ -4068,7 +4068,7 @@
         {
           "kind": "function",
           "name": "readBytesExact",
-          "line": 217,
+          "line": 230,
           "called": [
             "CBESizeMismatch",
             "readBytes"
@@ -4077,7 +4077,7 @@
         {
           "kind": "function",
           "name": "readBytes32Exact",
-          "line": 230,
+          "line": 243,
           "called": [
             "readBytesExact"
           ]
@@ -4085,7 +4085,7 @@
         {
           "kind": "function",
           "name": "readAddressExact",
-          "line": 247,
+          "line": 260,
           "called": [
             "readBytesExact"
           ]
@@ -4093,7 +4093,7 @@
         {
           "kind": "function",
           "name": "readArrayHead",
-          "line": 266,
+          "line": 279,
           "called": [
             "readHead"
           ]
@@ -4101,7 +4101,7 @@
         {
           "kind": "function",
           "name": "readMapHead",
-          "line": 276,
+          "line": 289,
           "called": [
             "readHead"
           ]
@@ -4109,7 +4109,7 @@
         {
           "kind": "function",
           "name": "peekTag",
-          "line": 291,
+          "line": 304,
           "called": [
             "CBEUnexpectedEof"
           ]
@@ -4117,7 +4117,7 @@
         {
           "kind": "function",
           "name": "assertFullyConsumed",
-          "line": 304,
+          "line": 317,
           "called": [
             "CBEInvalidLength"
           ]
@@ -4138,13 +4138,13 @@
         {
           "kind": "error",
           "name": "CBEValueTooWide",
-          "line": 55,
+          "line": 60,
           "called": []
         },
         {
           "kind": "function",
           "name": "_leBytes",
-          "line": 63,
+          "line": 71,
           "called": [
             "CBEValueTooWide"
           ]
@@ -4152,7 +4152,7 @@
         {
           "kind": "function",
           "name": "uintValue",
-          "line": 87,
+          "line": 95,
           "called": [
             "_leBytes"
           ]
@@ -4160,7 +4160,7 @@
         {
           "kind": "function",
           "name": "amountValue",
-          "line": 100,
+          "line": 112,
           "called": [
             "_leBytes"
           ]
@@ -4168,7 +4168,7 @@
         {
           "kind": "function",
           "name": "bytesValue",
-          "line": 114,
+          "line": 126,
           "called": [
             "_leBytes"
           ]
@@ -4176,7 +4176,7 @@
         {
           "kind": "function",
           "name": "epochBudgetValue",
-          "line": 134,
+          "line": 146,
           "called": [
             "uintValue"
           ]
@@ -4741,7 +4741,7 @@
         {
           "kind": "function",
           "name": "_planRefundBalances",
-          "line": 242,
+          "line": 264,
           "called": []
         }
       ]
@@ -4786,7 +4786,7 @@
     {
       "module": "StepWrites",
       "path": "solidity/src/lib/StepWrites.sol",
-      "declaration_count": 45,
+      "declaration_count": 46,
       "declarations": [
         {
           "kind": "library",
@@ -4815,7 +4815,7 @@
         {
           "kind": "function",
           "name": "_readUint",
-          "line": 76,
+          "line": 78,
           "called": [
             "MalformedCellValue"
           ]
@@ -4823,7 +4823,7 @@
         {
           "kind": "function",
           "name": "decodeNonce",
-          "line": 94,
+          "line": 96,
           "called": [
             "MalformedCellValue",
             "_readUint"
@@ -4832,7 +4832,7 @@
         {
           "kind": "function",
           "name": "_readAmount",
-          "line": 104,
+          "line": 106,
           "called": [
             "MalformedCellValue"
           ]
@@ -4840,7 +4840,7 @@
         {
           "kind": "function",
           "name": "decodeAmount",
-          "line": 125,
+          "line": 127,
           "called": [
             "MalformedCellValue",
             "_readAmount"
@@ -4849,7 +4849,7 @@
         {
           "kind": "function",
           "name": "readFieldUint",
-          "line": 141,
+          "line": 143,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -4857,7 +4857,7 @@
         {
           "kind": "function",
           "name": "decodeActorBudget",
-          "line": 155,
+          "line": 157,
           "called": [
             "ActorBudget",
             "MalformedCellValue",
@@ -4867,7 +4867,7 @@
         {
           "kind": "function",
           "name": "decodeBudgetPolicy",
-          "line": 174,
+          "line": 176,
           "called": [
             "BudgetPolicy",
             "MalformedCellValue",
@@ -4877,7 +4877,7 @@
         {
           "kind": "function",
           "name": "deriveNonce",
-          "line": 201,
+          "line": 203,
           "called": [
             "decodeNonce"
           ]
@@ -4885,7 +4885,7 @@
         {
           "kind": "function",
           "name": "_normalise",
-          "line": 215,
+          "line": 217,
           "called": [
             "ActorBudget"
           ]
@@ -4893,7 +4893,7 @@
         {
           "kind": "function",
           "name": "_topUp",
-          "line": 230,
+          "line": 232,
           "called": [
             "ActorBudget",
             "_normalise"
@@ -4902,7 +4902,7 @@
         {
           "kind": "function",
           "name": "_consume",
-          "line": 246,
+          "line": 248,
           "called": [
             "ActorBudget",
             "_normalise"
@@ -4911,13 +4911,13 @@
         {
           "kind": "function",
           "name": "refundConsumeExtra",
-          "line": 269,
+          "line": 271,
           "called": []
         },
         {
           "kind": "function",
           "name": "applyGrantAt",
-          "line": 291,
+          "line": 293,
           "called": [
             "ActorBudget",
             "_topUp"
@@ -4926,7 +4926,7 @@
         {
           "kind": "function",
           "name": "deriveEpochBudget",
-          "line": 325,
+          "line": 327,
           "called": [
             "ActorBudget",
             "BudgetPolicy",
@@ -4936,78 +4936,96 @@
         },
         {
           "kind": "function",
-          "name": "deriveTransferBalances",
-          "line": 382,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "deriveCreditBalance",
+          "name": "creditFits",
           "line": 400,
           "called": []
         },
         {
           "kind": "function",
+          "name": "deriveTransferBalances",
+          "line": 408,
+          "called": [
+            "creditFits"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "deriveCreditBalance",
+          "line": 432,
+          "called": [
+            "creditFits"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "deriveDebitBalance",
-          "line": 409,
+          "line": 441,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveDepositBalance",
-          "line": 424,
-          "called": []
+          "line": 458,
+          "called": [
+            "creditFits"
+          ]
         },
         {
           "kind": "function",
           "name": "deriveChainPair",
-          "line": 442,
+          "line": 476,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveTopUpBalances",
-          "line": 463,
+          "line": 497,
           "called": [
+            "creditFits",
             "deriveChainPair"
           ]
         },
         {
           "kind": "function",
           "name": "deriveDepositWithFeeBalances",
-          "line": 485,
-          "called": []
+          "line": 528,
+          "called": [
+            "creditFits"
+          ]
         },
         {
           "kind": "function",
           "name": "deriveAmmSwapBalances",
-          "line": 505,
-          "called": []
+          "line": 551,
+          "called": [
+            "creditFits"
+          ]
         },
         {
           "kind": "function",
           "name": "deriveReclaimBalances",
-          "line": 522,
+          "line": 569,
           "called": [
+            "creditFits",
             "deriveChainPair"
           ]
         },
         {
           "kind": "function",
           "name": "deriveRegistryCellValue",
-          "line": 554,
+          "line": 608,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveDeclaredPolicyCellValue",
-          "line": 578,
+          "line": 632,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveRegistryFromFields",
-          "line": 593,
+          "line": 647,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -5015,25 +5033,25 @@
         {
           "kind": "function",
           "name": "deriveRevokedPolicyCellValue",
-          "line": 612,
+          "line": 666,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveConsumedCellValue",
-          "line": 625,
+          "line": 679,
           "called": []
         },
         {
           "kind": "function",
           "name": "derivePendingCellValue",
-          "line": 644,
+          "line": 698,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveNextWdIdCellValue",
-          "line": 664,
+          "line": 718,
           "called": [
             "decodeNonce"
           ]
@@ -5041,37 +5059,37 @@
         {
           "kind": "struct",
           "name": "Cell",
-          "line": 677,
+          "line": 731,
           "called": []
         },
         {
           "kind": "error",
           "name": "ActionNotAdjudicable",
-          "line": 691,
+          "line": 745,
           "called": []
         },
         {
           "kind": "function",
           "name": "isAdjudicable",
-          "line": 704,
+          "line": 758,
           "called": []
         },
         {
           "kind": "error",
           "name": "ActionFieldsTooShort",
-          "line": 709,
+          "line": 763,
           "called": []
         },
         {
           "kind": "function",
           "name": "_fieldUint64",
-          "line": 715,
+          "line": 769,
           "called": []
         },
         {
           "kind": "function",
           "name": "_appendUniform",
-          "line": 728,
+          "line": 782,
           "called": [
             "Cell"
           ]
@@ -5079,7 +5097,7 @@
         {
           "kind": "function",
           "name": "deriveWriteSet",
-          "line": 754,
+          "line": 808,
           "called": [
             "ActionNotAdjudicable",
             "Cell",
@@ -5092,7 +5110,7 @@
         {
           "kind": "function",
           "name": "_need",
-          "line": 858,
+          "line": 918,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -5100,7 +5118,7 @@
         {
           "kind": "function",
           "name": "canonicalAbsentValue",
-          "line": 889,
+          "line": 949,
           "called": [
             "ActionNotAdjudicable"
           ]
@@ -5108,7 +5126,7 @@
         {
           "kind": "function",
           "name": "isCanonicallyAbsent",
-          "line": 930,
+          "line": 990,
           "called": [
             "canonicalAbsentValue"
           ]
@@ -5116,7 +5134,7 @@
         {
           "kind": "function",
           "name": "deriveEpochBudgetCellValue",
-          "line": 941,
+          "line": 1001,
           "called": [
             "ActorBudget",
             "decodeActorBudget",
@@ -7606,7 +7624,7 @@
         {
           "kind": "function",
           "name": "test_sanity_withdrawalEffects",
-          "line": 1109,
+          "line": 1110,
           "called": [
             "MockBoldOz",
             "balanceOf"
@@ -7615,7 +7633,7 @@
         {
           "kind": "function",
           "name": "_signStateRoot",
-          "line": 1143,
+          "line": 1144,
           "called": [
             "_signStateRootAs",
             "bridge"
@@ -7624,7 +7642,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3DisasterRecoveryTest",
-          "line": 1157,
+          "line": 1158,
           "called": [
             "BenchmarkGasV1_3Base",
             "KnomosisAmmDisasterRecoveryMultisig"
@@ -7633,7 +7651,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1166,
+          "line": 1167,
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "_deployBridgeWithRecovery",
@@ -7646,7 +7664,7 @@
         {
           "kind": "function",
           "name": "test_gas_confirmDisable_nonFinal",
-          "line": 1192,
+          "line": 1193,
           "called": [
             "_bench"
           ]
@@ -7654,7 +7672,7 @@
         {
           "kind": "function",
           "name": "test_gas_confirmDisable_executes",
-          "line": 1209,
+          "line": 1210,
           "called": [
             "_bench"
           ]
@@ -7662,13 +7680,13 @@
         {
           "kind": "function",
           "name": "test_sanity_disasterRecoveryScenarioAssumptions",
-          "line": 1226,
+          "line": 1227,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3StepVMRootTest",
-          "line": 1267,
+          "line": 1268,
           "called": [
             "BenchmarkGasV1_3Base",
             "KnomosisStepVMRoot",
@@ -7678,7 +7696,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1280,
+          "line": 1281,
           "called": [
             "KnomosisStepVMRoot",
             "_requireKeccakLinked",
@@ -7689,7 +7707,7 @@
         {
           "kind": "function",
           "name": "test_gas_executeStepToRootMulti_distinctCells",
-          "line": 1299,
+          "line": 1300,
           "called": [
             "_bench",
             "encodeMultiProbeCall",
@@ -7701,7 +7719,7 @@
         {
           "kind": "function",
           "name": "test_gas_executeStepToRootMulti_duplicateCell",
-          "line": 1323,
+          "line": 1324,
           "called": [
             "_bench",
             "encodeMultiProbeCall",
@@ -7713,7 +7731,7 @@
         {
           "kind": "function",
           "name": "test_sanity_stepVMRootMultiScenarioAssumptions",
-          "line": 1345,
+          "line": 1346,
           "called": [
             "_runMulti",
             "loadOpenedCells",
@@ -7724,7 +7742,7 @@
         {
           "kind": "function",
           "name": "_runMulti",
-          "line": 1387,
+          "line": 1388,
           "called": [
             "encodeMultiProbeCall",
             "probeGapMask",
@@ -17638,7 +17656,7 @@
         },
         {
           "kind": "function",
-          "name": "_leBytes16",
+          "name": "_leBytes32",
           "line": 41,
           "called": []
         },
@@ -17653,15 +17671,15 @@
         {
           "kind": "function",
           "name": "_cbeAmount",
-          "line": 57,
+          "line": 58,
           "called": [
-            "_leBytes16"
+            "_leBytes32"
           ]
         },
         {
           "kind": "function",
           "name": "_cbeBytes",
-          "line": 62,
+          "line": 63,
           "called": [
             "_leBytes8"
           ]
@@ -17669,7 +17687,7 @@
         {
           "kind": "function",
           "name": "_cbeArrayHead",
-          "line": 69,
+          "line": 70,
           "called": [
             "_leBytes8"
           ]
@@ -17677,7 +17695,7 @@
         {
           "kind": "function",
           "name": "_encodeWithdrawalLeaf",
-          "line": 81,
+          "line": 82,
           "called": [
             "_cbeAmount",
             "_cbeBytes",
@@ -17687,7 +17705,7 @@
         {
           "kind": "function",
           "name": "_encodeWithdrawalProof",
-          "line": 99,
+          "line": 100,
           "called": [
             "_cbeArrayHead",
             "_cbeBytes",
