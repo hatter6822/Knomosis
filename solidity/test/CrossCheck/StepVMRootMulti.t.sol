@@ -3,6 +3,7 @@ pragma solidity 0.8.20;
 
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {SmtMultiVerifier} from "src/lib/SmtMultiVerifier.sol";
+import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
 import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 
@@ -73,23 +74,15 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
         assertGt(n, 0, "the corpus must carry multiproof goldens");
-        string memory report = "";
-        uint256 bad = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
-            (bool ok, bytes32 got, bytes memory err) = _tryProbe(raw, base);
-            bytes32 want = probePostRoot(raw, base);
-            if (ok && got == want) continue;
-            bad++;
-            report = _note(
-                report, raw, base,
-                ok
-                    ? string.concat(
-                        "got ", vm.toString(got), ", want ", vm.toString(want))
-                    : string.concat("reverted ", vm.toString(err))
-            );
+            beginEntry(_probeLabel(raw, base));
+            try this.probe(loadProbeInput(raw, base)) returns (bytes32 got) {
+                checkEq(got, probePostRoot(raw, base), "post-root disagrees with Lean");
+            } catch (bytes memory err) {
+                recordFailure(string.concat("reverted ", describeRevert(err)));
+            }
         }
-        _reportProbes("post-roots disagreeing with Lean", report, bad, n);
     }
 
     /// @notice **The merged fold moves the root on every probe.**
@@ -108,21 +101,16 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         string memory raw = readFixture(STEP_VM_FIXTURE);
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
-        string memory report = "";
-        uint256 bad = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
-            (bool ok, bytes32 got, bytes memory err) = _tryProbe(raw, base);
-            if (ok && got != probePreRoot(raw, base)) continue;
-            bad++;
-            report = _note(
-                report, raw, base,
-                ok
-                    ? string.concat("the fold left the root at ", vm.toString(got))
-                    : string.concat("reverted ", vm.toString(err))
-            );
+            beginEntry(_probeLabel(raw, base));
+            try this.probe(loadProbeInput(raw, base)) returns (bytes32 got) {
+                checkTrue(
+                    got != probePreRoot(raw, base), "the fold left the root alone");
+            } catch (bytes memory err) {
+                recordFailure(string.concat("reverted ", describeRevert(err)));
+            }
         }
-        _reportProbes("probes whose fold did not move the root", report, bad, n);
     }
 
     /* ---------------------------------------------------------- */
@@ -150,11 +138,11 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         string memory raw = readFixture(STEP_VM_FIXTURE);
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
-        string memory report = "";
-        uint256 bad = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
-            KnomosisStepVMRoot.OpenedCell[] memory cells = loadOpenedCells(raw, base);
+            beginEntry(_probeLabel(raw, base));
+            ProbeInput memory input = loadProbeInput(raw, base);
+            KnomosisStepVMRoot.OpenedCell[] memory cells = input.cells;
             // Reverse: the maximal permutation, and the one a naive
             // implementation reading positionally is most likely to
             // survive by accident on a two-cell frontier.
@@ -162,21 +150,15 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
                 (cells[a], cells[cells.length - 1 - a]) =
                     (cells[cells.length - 1 - a], cells[a]);
             }
-            (bool ok, bytes32 got, bytes memory err) = _tryCall(
-                raw, base, cells, probeGapMask(raw, base), probeSiblings(raw, base)
-            );
-            bytes32 want = probePostRoot(raw, base);
-            if (ok && got == want) continue;
-            bad++;
-            report = _note(
-                report, raw, base,
-                ok
-                    ? string.concat(
-                        "reversed to ", vm.toString(got), ", want ", vm.toString(want))
-                    : string.concat("reversed frontier reverted ", vm.toString(err))
-            );
+            input.cells = cells;
+            try this.probe(input) returns (bytes32 got) {
+                checkEq(
+                    got, probePostRoot(raw, base), "a reversed frontier changed the root");
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("reversed frontier reverted ", describeRevert(err)));
+            }
         }
-        _reportProbes("probes a reversed frontier changed", report, bad, n);
     }
 
     /* ---------------------------------------------------------- */
@@ -207,13 +189,15 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
             new KnomosisStepVMRoot.OpenedCell[](cells.length + 1);
         for (uint256 i = 0; i < cells.length; i++) dup[i] = cells[i];
         dup[cells.length] = cells[0];
+        ProbeInput memory input = loadProbeInput(raw, base);
+        input.cells = dup;
         vm.expectRevert(
             abi.encodeWithSelector(
                 KnomosisStepVMRoot.FrontierLengthMismatch.selector,
                 cells.length, dup.length
             )
         );
-        _call(raw, base, dup, probeGapMask(raw, base), probeSiblings(raw, base));
+        this.probe(input);
     }
 
     /// @notice **Omitting a cell is rejected.**
@@ -232,13 +216,15 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         KnomosisStepVMRoot.OpenedCell[] memory short_ =
             new KnomosisStepVMRoot.OpenedCell[](cells.length - 1);
         for (uint256 i = 0; i < short_.length; i++) short_[i] = cells[i];
+        ProbeInput memory input = loadProbeInput(raw, base);
+        input.cells = short_;
         vm.expectRevert(
             abi.encodeWithSelector(
                 KnomosisStepVMRoot.FrontierLengthMismatch.selector,
                 cells.length, short_.length
             )
         );
-        _call(raw, base, short_, probeGapMask(raw, base), probeSiblings(raw, base));
+        this.probe(input);
     }
 
     /// @notice **A forged pre-value is rejected.**
@@ -270,7 +256,9 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         // forged fold produced, so the expectation names only the
         // selector: the second word is a hash of the tampered input.
         vm.expectPartialRevert(KnomosisStepVMRoot.PreRootMismatch.selector);
-        _call(raw, base, cells, probeGapMask(raw, base), probeSiblings(raw, base));
+        ProbeInput memory input = loadProbeInput(raw, base);
+        input.cells = cells;
+        this.probe(input);
     }
 
     /// @notice **A wire short by one sibling is rejected, not padded.**
@@ -291,13 +279,15 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         bytes memory sibs = probeSiblings(raw, base);
         bytes memory short_ = new bytes(sibs.length - 32);
         for (uint256 b = 0; b < short_.length; b++) short_[b] = sibs[b];
+        ProbeInput memory input = loadProbeInput(raw, base);
+        input.siblings = short_;
         vm.expectRevert(
             abi.encodeWithSelector(
                 SmtMultiVerifier.MultiProofSiblingCount.selector,
                 sibs.length, short_.length
             )
         );
-        _call(raw, base, loadOpenedCells(raw, base), probeGapMask(raw, base), short_);
+        this.probe(input);
     }
 
     /// @notice **The two bulk variants are not adjudicable here either.**
@@ -334,10 +324,11 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     ///         is a property of the write set, not of the opening
     ///         scheme, so it outlives the entry point that first
     ///         asserted it.
-    function test_isAdjudicable_excludes_exactly_the_bulk_pair() public pure {
+    function test_isAdjudicable_excludes_exactly_the_bulk_pair() public {
         for (uint256 k = 0; k <= 30; k++) {
+            beginEntry(string.concat("#", vm.toString(k)));
             bool expected = k <= 24 && k != 6 && k != 7;
-            assertEq(
+            checkEq(
                 StepWrites.isAdjudicable(uint8(k)), expected,
                 string.concat("adjudicability at kind ", vm.toString(k))
             );
@@ -359,7 +350,7 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     ///         timeout.  Checked here alongside the two facts that make
     ///         the bound meaningful: the widest frontier is what the
     ///         plan said it was, and no probe exceeds it.
-    function test_the_opening_cap_is_derived_from_the_write_set() public view {
+    function test_the_opening_cap_is_derived_from_the_write_set() public {
         vmRoot.assertConsistent();
         // `depositWithFee` writes six cells; plus the policy cell.
         assertEq(vmRoot.widestFrontier(new bytes(128)), 7, "widest frontier");
@@ -373,25 +364,245 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         string memory raw = readFixture(STEP_VM_FIXTURE);
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
         uint256 cap = vmRoot.widestFrontier(new bytes(128));
-        string memory report = "";
-        uint256 bad = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
-            uint256 cells = vm.parseJsonUint(raw, string.concat(base, ".cellCount"));
-            if (cells <= cap) continue;
-            bad++;
-            report = _note(
-                report, raw, base,
-                string.concat(
-                    "opens ", vm.toString(cells), " cells, cap ", vm.toString(cap))
+            beginEntry(_probeLabel(raw, base));
+            checkLe(
+                vm.parseJsonUint(raw, string.concat(base, ".cellCount")),
+                cap,
+                "probe exceeds the derived widest frontier"
             );
         }
-        _reportProbes("probes exceeding the derived widest frontier", report, bad, n);
+    }
+
+
+    /* ---------------------------------------------------------- */
+    /* The one call every check goes through                      */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Run a probe.
+    ///
+    /// @dev    External on purpose, and it is the ONLY path to the
+    ///         subject.  A corpus walk wraps it in `try` so a reverting
+    ///         probe is reported and the walk continues; a negative
+    ///         control puts `vm.expectRevert` in front of it so the
+    ///         revert is asserted.  `expectRevert` sees a revert
+    ///         propagated through a `this.` call, so the two uses differ
+    ///         in exactly one property — whether the failure is caught —
+    ///         rather than in what they send.
+    ///
+    ///         Previously these were two functions, and two functions
+    ///         with the same argument tuple is precisely where the
+    ///         measured call and the checked call drift apart.
+    function probe(ProbeInput calldata input) external view returns (bytes32) {
+        return vmRoot.executeStepToRootMulti(
+            input.preRoot,
+            input.actionKind,
+            input.actionFields,
+            input.signer,
+            input.logIndex,
+            input.cells,
+            input.gapMask,
+            input.siblings
+        );
+    }
+
+    /* ---------------------------------------------------------- */
+    /* Naming the reverts                                         */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Render this stack's custom errors by name.
+    ///
+    /// @dev    Every arm matches `Contract.Error.selector`, so RENAMING
+    ///         or REMOVING an error breaks the build rather than
+    ///         silently mislabelling the failure this exists to
+    ///         explain.  The remaining drift — an error ADDED and left
+    ///         undescribed — degrades to hex, and
+    ///         `test_every_declared_error_is_described` is what stops
+    ///         that going unnoticed.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        override
+        returns (string memory)
+    {
+        bytes4 s = revertSelector(err);
+        if (s == KnomosisStepVMRoot.WriteSetMismatch.selector) {
+            return _withArgs("WriteSetMismatch", err);
+        }
+        if (s == KnomosisStepVMRoot.TooManyCellOpenings.selector) {
+            return _withArgs("TooManyCellOpenings", err);
+        }
+        if (s == KnomosisStepVMRoot.FrontierMissingCell.selector) {
+            return _withArgs("FrontierMissingCell", err);
+        }
+        if (s == KnomosisStepVMRoot.FrontierLengthMismatch.selector) {
+            return _withArgs("FrontierLengthMismatch", err);
+        }
+        if (s == KnomosisStepVMRoot.PreRootMismatch.selector) {
+            return _withArgs("PreRootMismatch", err);
+        }
+        if (s == StepWrites.MalformedCellValue.selector) {
+            return _withArgs("MalformedCellValue", err);
+        }
+        // Reaches the verifier's ABI through `StepWrites`' encoder, and
+        // was missing here until the completeness test below said so —
+        // which is the case that test exists for.
+        if (s == CBEEncode.CBEValueTooWide.selector) {
+            return _withArgs("CBEValueTooWide", err);
+        }
+        if (s == StepWrites.ActionNotAdjudicable.selector) {
+            return _withArgs("ActionNotAdjudicable", err);
+        }
+        if (s == StepWrites.ActionFieldsTooShort.selector) {
+            return _withArgs("ActionFieldsTooShort", err);
+        }
+        if (s == SmtMultiVerifier.MultiProofTooManyCells.selector) {
+            return _withArgs("MultiProofTooManyCells", err);
+        }
+        if (s == SmtMultiVerifier.MultiProofEmpty.selector) {
+            return _withArgs("MultiProofEmpty", err);
+        }
+        if (s == SmtMultiVerifier.MultiProofNotStrictlySorted.selector) {
+            return _withArgs("MultiProofNotStrictlySorted", err);
+        }
+        if (s == SmtMultiVerifier.MultiProofMaskLength.selector) {
+            return _withArgs("MultiProofMaskLength", err);
+        }
+        if (s == SmtMultiVerifier.MultiProofPadding.selector) {
+            return _withArgs("MultiProofPadding", err);
+        }
+        if (s == SmtMultiVerifier.MultiProofSiblingCount.selector) {
+            return _withArgs("MultiProofSiblingCount", err);
+        }
+        return super.describeRevert(err);
+    }
+
+    /// @dev `Name(0x<abi-encoded args>)`.  The arguments stay hex
+    ///      because their types are not recoverable from the selector;
+    ///      the NAME is what a reader needed.
+    function _withArgs(string memory name, bytes memory err)
+        private
+        pure
+        returns (string memory)
+    {
+        bytes memory args = _body(err);
+        return args.length == 0
+            ? string.concat(name, "()")
+            : string.concat(name, "(", vm.toString(args), ")");
+    }
+
+    /// @notice **Every error these contracts declare has a name here.**
+    ///
+    /// @dev    The completeness half of `describeRevert`.  The compiler
+    ///         catches a renamed or deleted error; nothing catches one
+    ///         that is ADDED and never described, which would surface a
+    ///         real failure as four anonymous bytes.  So the ABI is read
+    ///         back from the compiled artifact and every declared error
+    ///         is required to render as something other than its own hex.
+    ///
+    ///         Reading `out/` is why `foundry.toml` grants it read
+    ///         access.  The walk probes indices until the parse fails
+    ///         because forge exposes no array-length path — and it
+    ///         passes the artifact PATH rather than its contents, so the
+    ///         megabyte of JSON lives in the callee's fresh memory and
+    ///         is discarded per call instead of accumulating.
+    function test_every_declared_error_is_described() public {
+        string[3] memory artifacts = [
+            "out/KnomosisStepVMRoot.sol/KnomosisStepVMRoot.json",
+            "out/SmtMultiVerifier.sol/SmtMultiVerifier.json",
+            "out/StepWrites.sol/StepWrites.json"
+        ];
+        uint256 seen = 0;
+        for (uint256 a = 0; a < artifacts.length; a++) {
+            for (uint256 i = 0; ; i++) {
+                string memory kind;
+                try this.abiEntryType(artifacts[a], i) returns (string memory k) {
+                    kind = k;
+                } catch {
+                    break;
+                }
+                if (keccak256(bytes(kind)) != keccak256("error")) continue;
+                string memory sig = this.abiErrorSignature(artifacts[a], i);
+                beginEntry(string.concat(artifacts[a], " ", sig));
+                seen++;
+                // A well-formed instance of the error: its selector plus
+                // one zero word, which covers every argument list these
+                // errors have.
+                bytes memory sample =
+                    abi.encodePacked(bytes4(keccak256(bytes(sig))), new bytes(64));
+                checkFalse(
+                    keccak256(bytes(describeRevert(sample)))
+                        == keccak256(bytes(vm.toString(sample))),
+                    "declared error renders as raw hex: add it to describeRevert"
+                );
+            }
+        }
+        beginEntry("");
+        assertGt(seen, 0, "no errors found: artifact path or ABI shape changed");
+    }
+
+    /// @dev The `type` of ABI entry `i`.  Reverts past the end, which
+    ///      is how the walk above finds the end.
+    function abiEntryType(string calldata artifact, uint256 i)
+        external
+        view
+        returns (string memory)
+    {
+        return vm.parseJsonString(
+            vm.readFile(artifact), string.concat(".abi[", vm.toString(i), "].type"));
+    }
+
+    /// @dev The canonical signature of the error at ABI entry `i`.
+    function abiErrorSignature(string calldata artifact, uint256 i)
+        external
+        view
+        returns (string memory sig)
+    {
+        string memory e = string.concat(".abi[", vm.toString(i), "]");
+        sig = string.concat(
+            vm.parseJsonString(vm.readFile(artifact), string.concat(e, ".name")), "(");
+        for (uint256 k = 0; ; k++) {
+            string memory t;
+            try this.abiInputType(artifact, i, k) returns (string memory s) {
+                t = s;
+            } catch {
+                break;
+            }
+            sig = string.concat(sig, k > 0 ? "," : "", t);
+        }
+        sig = string.concat(sig, ")");
+    }
+
+    /// @dev The `type` of input `k` of ABI entry `i`.  Reverts past the
+    ///      end of the input list.
+    function abiInputType(string calldata artifact, uint256 i, uint256 k)
+        external
+        view
+        returns (string memory)
+    {
+        return vm.parseJsonString(
+            vm.readFile(artifact),
+            string.concat(".abi[", vm.toString(i), "].inputs[", vm.toString(k), "].type")
+        );
     }
 
     /* ---------------------------------------------------------- */
     /* Helpers                                                    */
     /* ---------------------------------------------------------- */
+
+    /// @dev A probe's report label: the index says where to look, the
+    ///      VARIANT says what shape broke.  Both, because an index
+    ///      alone sends the reader back to the corpus to find out what
+    ///      they are looking at.
+    function _probeLabel(string memory raw, string memory base)
+        private
+        pure
+        returns (string memory)
+    {
+        return string.concat(
+            base, " (", vm.parseJsonString(raw, string.concat(base, ".variant")), ")");
+    }
 
     /// @dev The first multiproof probe opening at least `k` cells.
     function _probeWithAtLeast(string memory raw, uint256 k)
@@ -423,111 +634,6 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         revert("no multiproof probe carries a sibling");
     }
 
-    /* ---------------------------------------------------------- */
-    /* Revert-tolerant probing, for the corpus walks               */
-    /* ---------------------------------------------------------- */
-
-    /// @dev `_call`, but returning the failure instead of raising it.
-    ///
-    ///      The corpus walks need this and the negative controls must
-    ///      NOT have it: a control asserts one specific revert and wants
-    ///      `vm.expectRevert` to see it, whereas a walk that stops at the
-    ///      first bad probe reports the corpus as one broken entry when
-    ///      several may be broken.  Both go through
-    ///      `encodeMultiProbeCall`, so the two paths cannot drift in what
-    ///      they actually send.
-    ///
-    ///      A revert is caught rather than allowed to propagate because
-    ///      it is the MORE opaque failure of the two: a value mismatch at
-    ///      least names its probe, while `FrontierMissingCell(2)` escaping
-    ///      the loop names a cell index in an unidentified probe.
-    ///
-    ///      The returndata is reported as raw hex rather than decoded to
-    ///      an error name.  Decoding would need a selector table, and a
-    ///      table that fell behind the contract's errors would mislabel
-    ///      the failure it exists to explain — worse than four bytes the
-    ///      reader can grep for.
-    function _tryCall(
-        string memory raw,
-        string memory base,
-        KnomosisStepVMRoot.OpenedCell[] memory cells,
-        bytes memory gapMask,
-        bytes memory siblings
-    ) private view returns (bool ok, bytes32 root, bytes memory err) {
-        bytes memory ret;
-        (ok, ret) = address(vmRoot).staticcall(
-            encodeMultiProbeCall(raw, base, cells, gapMask, siblings)
-        );
-        if (ok) root = abi.decode(ret, (bytes32));
-        else err = ret;
-    }
-
-    /// @dev `_tryCall` on the probe's own published frontier and wire.
-    function _tryProbe(string memory raw, string memory base)
-        private
-        view
-        returns (bool ok, bytes32 root, bytes memory err)
-    {
-        return _tryCall(
-            raw, base, loadOpenedCells(raw, base),
-            probeGapMask(raw, base), probeSiblings(raw, base)
-        );
-    }
-
-    /// @dev Append one probe's failure to a running report, naming the
-    ///      VARIANT as well as the index — the index says where to look
-    ///      and the variant says what shape broke, which is what turns a
-    ///      list of failures into a diagnosis.
-    function _note(
-        string memory report,
-        string memory raw,
-        string memory base,
-        string memory detail
-    ) private pure returns (string memory) {
-        return string.concat(
-            report, "\n  ", base, " (",
-            vm.parseJsonString(raw, string.concat(base, ".variant")),
-            "): ", detail
-        );
-    }
-
-    /// @dev Fail once, with every probe that failed.
-    function _reportProbes(
-        string memory what,
-        string memory report,
-        uint256 bad,
-        uint256 n
-    ) private pure {
-        assertTrue(
-            bytes(report).length == 0,
-            string.concat(
-                what, ": ", vm.toString(bad), " of ", vm.toString(n),
-                " probes:", report
-            )
-        );
-    }
-
-    /// @dev The call, with caller-supplied frontier and wire so the
-    ///      negative controls can perturb either.
-    function _call(
-        string memory raw,
-        string memory base,
-        KnomosisStepVMRoot.OpenedCell[] memory cells,
-        bytes memory gapMask,
-        bytes memory siblings
-    ) private view returns (bytes32) {
-        return vmRoot.executeStepToRootMulti(
-            probePreRoot(raw, base),
-            uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
-            vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
-            uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
-            vm.parseJsonUint(raw, string.concat(base, ".l2LogIndex")),
-            cells,
-            gapMask,
-            siblings
-        );
-    }
-
     /// @dev A CBE amount value, for the forged-balance control.
     ///
     ///      Spelled out here rather than reusing `CBEEncode.amountValue`
@@ -546,4 +652,5 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
             v >>= 8;
         }
     }
+
 }

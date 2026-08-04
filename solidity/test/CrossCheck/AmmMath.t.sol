@@ -110,9 +110,10 @@ contract AmmMathCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             uint256 got = AmmMath.getAmountOut(e.amountIn, e.reserveIn, e.reserveOut, e.feeBps);
-            assertEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
+            checkEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
         }
     }
 
@@ -132,8 +133,9 @@ contract AmmMathCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertLt(e.expectedOut, e.reserveOut, "no-drain violated (output >= reserveOut)");
+            checkLt(e.expectedOut, e.reserveOut, "no-drain violated (output >= reserveOut)");
         }
     }
 
@@ -151,10 +153,11 @@ contract AmmMathCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             uint256 kBefore = e.reserveIn * e.reserveOut;
             uint256 kAfter = (e.reserveIn + e.amountIn) * (e.reserveOut - e.expectedOut);
-            assertLe(kBefore, kAfter, "k decreased across the swap");
+            checkLe(kBefore, kAfter, "k decreased across the swap");
         }
     }
 

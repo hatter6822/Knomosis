@@ -1304,11 +1304,7 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
             address(this),
             address(vmRoot),
             0,
-            encodeMultiProbeCall(
-                raw, multiDistinctBase, loadOpenedCells(raw, multiDistinctBase),
-                probeGapMask(raw, multiDistinctBase),
-                probeSiblings(raw, multiDistinctBase)
-            ),
+            encodeMultiProbeCall(loadProbeInput(raw, multiDistinctBase)),
             true
         );
     }
@@ -1328,11 +1324,7 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
             address(this),
             address(vmRoot),
             0,
-            encodeMultiProbeCall(
-                raw, multiDuplicateBase, loadOpenedCells(raw, multiDuplicateBase),
-                probeGapMask(raw, multiDuplicateBase),
-                probeSiblings(raw, multiDuplicateBase)
-            ),
+            encodeMultiProbeCall(loadProbeInput(raw, multiDuplicateBase)),
             true
         );
     }
@@ -1390,10 +1382,10 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
         string memory base,
         KnomosisStepVMRoot.OpenedCell[] memory cells
     ) private view returns (bytes32 root) {
-        (bool ok, bytes memory out) = address(vmRoot).staticcall(
-            encodeMultiProbeCall(
-                raw, base, cells, probeGapMask(raw, base), probeSiblings(raw, base))
-        );
+        ProbeInput memory input = loadProbeInput(raw, base);
+        input.cells = cells;
+        (bool ok, bytes memory out) =
+            address(vmRoot).staticcall(encodeMultiProbeCall(input));
         assertTrue(ok, "multiproof probe reverted");
         root = abi.decode(out, (bytes32));
     }

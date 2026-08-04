@@ -45,6 +45,7 @@ contract DepositReceiptHashCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             uint256 chainid     = vm.parseJsonUint(raw, string.concat(base, ".chainid"));
             address contractAddr = vm.parseJsonAddress(raw, string.concat(base, ".contractAddr"));
             bytes32 knomosisTag    = vm.parseJsonBytes32(raw, string.concat(base, ".knomosisVersionTag"));
@@ -70,11 +71,11 @@ contract DepositReceiptHashCrossCheck is CrossCheckFramework {
             // bits to a 32-byte word, and equal values < 2^64 always
             // yield equal 32-byte words regardless of the static
             // type used to encode.
-            assertLt(resourceId, 1 << 64, "resourceId out of uint64 range");
-            assertLt(nonce, 1 << 64, "depositorNonce out of uint64 range");
+            checkLt(resourceId, 1 << 64, "resourceId out of uint64 range");
+            checkLt(nonce, 1 << 64, "depositorNonce out of uint64 range");
 
             bytes32 did = keccak256(abi.encode(chainid, contractAddr, knomosisTag));
-            assertEq(did, expectedDid, "deploymentId mismatch");
+            checkEq(did, expectedDid, "deploymentId mismatch");
 
             // No `uint64(...)` cast is needed: under the bound
             // checks above, encoding `resourceId` / `nonce` as
@@ -85,14 +86,14 @@ contract DepositReceiptHashCrossCheck is CrossCheckFramework {
             bytes32 actual = keccak256(
                 abi.encode(did, depositor, resourceId, token, amount, nonce)
             );
-            assertEq(actual, expectedHash, "receiptHash mismatch");
+            checkEq(actual, expectedHash, "receiptHash mismatch");
         }
     }
 
     /// @notice Replay-distinguishability sub-suite.  The 8
     ///         replay-resistance corners (header offset = 32; +0..+7)
     ///         produce 8 distinct hashes.
-    function test_replay_resistance_distinct() public view {
+    function test_replay_resistance_distinct() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         // Layout per Lean's `buildFixture`:
@@ -107,14 +108,15 @@ contract DepositReceiptHashCrossCheck is CrossCheckFramework {
             hashes[i] = vm.parseJsonBytes32(raw, string.concat(base, ".expectedHash"));
         }
         for (uint256 i = 0; i < 8; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             for (uint256 j = i + 1; j < 8; j++) {
-                assertTrue(hashes[i] != hashes[j], "replay-resistance hashes collided");
+                checkTrue(hashes[i] != hashes[j], "replay-resistance hashes collided");
             }
         }
     }
 
     /// @notice The 16 deployment-replay corners produce 16 distinct hashes.
-    function test_deployment_replay_distinct() public view {
+    function test_deployment_replay_distinct() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         bytes32[] memory hashes = new bytes32[](16);
@@ -123,8 +125,9 @@ contract DepositReceiptHashCrossCheck is CrossCheckFramework {
             hashes[i] = vm.parseJsonBytes32(raw, string.concat(base, ".expectedHash"));
         }
         for (uint256 i = 0; i < 16; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             for (uint256 j = i + 1; j < 16; j++) {
-                assertTrue(hashes[i] != hashes[j], "deployment-replay hashes collided");
+                checkTrue(hashes[i] != hashes[j], "deployment-replay hashes collided");
             }
         }
     }

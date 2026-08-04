@@ -76,27 +76,63 @@ abstract contract StepVMRootProbeHarness is CrossCheckFramework {
         }
     }
 
+    /// @notice Everything one probe feeds the verifier.
+    ///
+    /// @dev    The single description of a probe.  Every consumer —
+    ///         the corpus walks, the negative controls that perturb one
+    ///         field, and the gas benchmark — starts from this struct,
+    ///         so there is no second spelling of the argument tuple for
+    ///         the measured call and the checked call to drift apart
+    ///         in.  Perturbing a control is now assigning to a named
+    ///         field rather than re-passing five positional arguments.
+    struct ProbeInput {
+        bytes32 preRoot;
+        uint8 actionKind;
+        bytes actionFields;
+        uint64 signer;
+        uint256 logIndex;
+        KnomosisStepVMRoot.OpenedCell[] cells;
+        bytes gapMask;
+        bytes siblings;
+    }
+
+    /// @notice Load a probe's published inputs.
+    function loadProbeInput(string memory raw, string memory base)
+        internal
+        pure
+        returns (ProbeInput memory input)
+    {
+        input = ProbeInput({
+            preRoot: probePreRoot(raw, base),
+            actionKind: uint8(
+                vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
+            actionFields: vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
+            signer: uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
+            logIndex: vm.parseJsonUint(raw, string.concat(base, ".l2LogIndex")),
+            cells: loadOpenedCells(raw, base),
+            gapMask: probeGapMask(raw, base),
+            siblings: probeSiblings(raw, base)
+        });
+    }
+
     /// @notice The canonical `executeStepToRootMulti` calldata for a
-    ///         probe, with caller-supplied cells and wire so a negative
-    ///         control can perturb either.
-    function encodeMultiProbeCall(
-        string memory raw,
-        string memory base,
-        KnomosisStepVMRoot.OpenedCell[] memory cells,
-        bytes memory gapMask,
-        bytes memory siblings
-    ) internal pure returns (bytes memory) {
+    ///         probe.
+    function encodeMultiProbeCall(ProbeInput memory input)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodeCall(
             KnomosisStepVMRoot.executeStepToRootMulti,
             (
-                probePreRoot(raw, base),
-                uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
-                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
-                uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
-                vm.parseJsonUint(raw, string.concat(base, ".l2LogIndex")),
-                cells,
-                gapMask,
-                siblings
+                input.preRoot,
+                input.actionKind,
+                input.actionFields,
+                input.signer,
+                input.logIndex,
+                input.cells,
+                input.gapMask,
+                input.siblings
             )
         );
     }

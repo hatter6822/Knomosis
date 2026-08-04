@@ -66,6 +66,7 @@ contract EcdsaVerifyCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             // Use vm.parseJsonAddress for the documented address-typed
             // field — the audit-pass replaces a less idiomatic
             // `abi.decode(vm.parseJson(...), (address))` form that
@@ -84,14 +85,14 @@ contract EcdsaVerifyCrossCheck is CrossCheckFramework {
 
             // Malformed: length check is the contract's first short-circuit.
             if (outcomeHash == keccak256(abi.encodePacked("malformed"))) {
-                assertTrue(sig.length != 65, "malformed sig length should be != 65");
+                checkTrue(sig.length != 65, "malformed sig length should be != 65");
                 continue;
             }
 
             // High-s: ECDSA.tryRecover returns the InvalidSignatureS error.
             if (outcomeHash == keccak256(abi.encodePacked("highS"))) {
                 (address rec, ECDSA.RecoverError err, ) = digest.tryRecover(sig);
-                assertTrue(
+                checkTrue(
                     err == ECDSA.RecoverError.InvalidSignatureS || rec == address(0),
                     "highS sig should be flagged"
                 );
@@ -101,9 +102,9 @@ contract EcdsaVerifyCrossCheck is CrossCheckFramework {
             // Verifies + wrongSigner share the same recovery code path.
             (address recovered, , ) = digest.tryRecover(sig);
             if (outcomeHash == keccak256(abi.encodePacked("verifies"))) {
-                assertEq(recovered, expectedSigner, "verifies: recovered should match");
+                checkEq(recovered, expectedSigner, "verifies: recovered should match");
             } else if (outcomeHash == keccak256(abi.encodePacked("wrongSigner"))) {
-                assertTrue(recovered != expectedSigner, "wrongSigner: should not match");
+                checkTrue(recovered != expectedSigner, "wrongSigner: should not match");
             }
         }
     }

@@ -47,7 +47,7 @@ contract CellKeyCrossCheck is CrossCheckFramework {
     /// The pre-image layout, checked for every corpus entry.  This
     /// is the assertion that actually constrains the derivation: it
     /// runs regardless of which hash the fixture was built with.
-    function test_preimage_layout_matches_lean() public view {
+    function test_preimage_layout_matches_lean() public {
         string memory json = _fixture();
         _requireIdentifier(json, ".identifier", IDENTIFIER);
         uint256 count = vm.parseJsonUint(json, ".count");
@@ -55,6 +55,7 @@ contract CellKeyCrossCheck is CrossCheckFramework {
 
         for (uint256 i = 0; i < count; ++i) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             uint8 kind = uint8(vm.parseJsonUint(json, string.concat(base, ".kind")));
             uint256 keyA = _parseDecimalString(json, string.concat(base, ".keyA"));
             uint256 keyB = _parseDecimalString(json, string.concat(base, ".keyB"));
@@ -73,8 +74,8 @@ contract CellKeyCrossCheck is CrossCheckFramework {
             // `StepVMMerkle.deriveCellSmtKey` hashes.
             bytes memory actual = abi.encodePacked(kind, keyA, keyB);
 
-            assertEq(actual.length, 65, "pre-image must be 1 + 32 + 32 bytes");
-            assertEq(
+            checkEq(actual.length, 65, "pre-image must be 1 + 32 + 32 bytes");
+            checkEq(
                 vm.toString(actual),
                 expected,
                 string.concat("pre-image mismatch at entry ", vm.toString(i))
@@ -86,13 +87,14 @@ contract CellKeyCrossCheck is CrossCheckFramework {
     /// Under the FNV-1a-64 fallback the Lean `keyHex` column is not
     /// a keccak hash, so this fails loudly rather than comparing
     /// something meaningless.
-    function test_derived_key_matches_lean() public view {
+    function test_derived_key_matches_lean() public {
         string memory json = _fixture();
         _requireIdentifier(json, ".identifier", IDENTIFIER);
         _requireKeccakLinked(json, ".isKeccak256Linked");
         uint256 count = vm.parseJsonUint(json, ".count");
         for (uint256 i = 0; i < count; ++i) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             uint8 kind = uint8(vm.parseJsonUint(json, string.concat(base, ".kind")));
             uint256 keyA = _parseDecimalString(json, string.concat(base, ".keyA"));
             uint256 keyB = _parseDecimalString(json, string.concat(base, ".keyB"));
@@ -100,7 +102,7 @@ contract CellKeyCrossCheck is CrossCheckFramework {
                 vm.parseJsonString(json, string.concat(base, ".keyHex"));
 
             bytes32 derived = StepVMMerkle.deriveCellSmtKey(kind, keyA, keyB);
-            assertEq(
+            checkEq(
                 vm.toString(abi.encodePacked(derived)),
                 expected,
                 string.concat("key mismatch at entry ", vm.toString(i))

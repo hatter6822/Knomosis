@@ -74,6 +74,7 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes32 predDid =
                 vm.parseJsonBytes32(raw, string.concat(base, ".predecessorDeploymentId"));
             bytes32 succDid =
@@ -110,7 +111,7 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
             // and is safe" — preferable to leaving the warning in
             // the build output where it would erode the
             // zero-warning posture documented in CLAUDE.md.
-            assertLt(logIdx, 1 << 64, "logIdx out of uint64 range");
+            checkLt(logIdx, 1 << 64, "logIdx out of uint64 range");
 
             // Truncation safe: the assertLt above proves `logIdx < 2^64`,
             // so the `uint64(logIdx)` cast is exact (no value loss).
@@ -129,7 +130,7 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
                 vm.parseJsonBytes32(raw, string.concat(base, ".expectedDigest"));
             bytes32 actual = KnomosisEip712.digest(ds, sh);
 
-            assertEq(actual, expected, "digest mismatch");
+            checkEq(actual, expected, "digest mismatch");
         }
     }
 
@@ -176,7 +177,7 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
 
     /// @notice Cross-replay distinguishability: 4 cross-replay entries
     ///         (indices 24..28) produce 4 distinct expectedDigest values.
-    function test_cross_replay_distinct() public view {
+    function test_cross_replay_distinct() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         bytes32[] memory digests = new bytes32[](4);
@@ -185,8 +186,9 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
             digests[i] = vm.parseJsonBytes32(raw, string.concat(base, ".expectedDigest"));
         }
         for (uint256 i = 0; i < 4; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             for (uint256 j = i + 1; j < 4; j++) {
-                assertTrue(digests[i] != digests[j], "cross-replay digests collided");
+                checkTrue(digests[i] != digests[j], "cross-replay digests collided");
             }
         }
     }

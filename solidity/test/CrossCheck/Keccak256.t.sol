@@ -62,6 +62,7 @@ contract Keccak256CrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes memory input =
                 vm.parseJsonBytes(raw, string.concat(base, ".input"));
             bytes32 expected =
@@ -69,7 +70,7 @@ contract Keccak256CrossCheck is CrossCheckFramework {
             bytes32 actual = keccak256(input);
             string memory label =
                 vm.parseJsonString(raw, string.concat(base, ".label"));
-            assertEq(actual, expected, string.concat("keccak mismatch at ", label));
+            checkEq(actual, expected, string.concat("keccak mismatch at ", label));
         }
     }
 

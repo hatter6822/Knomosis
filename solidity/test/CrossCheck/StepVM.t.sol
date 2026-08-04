@@ -68,7 +68,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         plus the 5 Workstream-GP variants
     ///         (depositWithFee + topUpActionBudget +
     ///         topUpActionBudgetFor + claimBudgetRefund + ammSwap).
-    function test_perVariant_counts() public view {
+    function test_perVariant_counts() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             revert("fixture missing");
         }
@@ -104,8 +104,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
             ".countReclaimAmmReserves"
         ];
         for (uint256 i = 0; i < variantKeys.length; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             uint256 c = vm.parseJsonUint(raw, variantKeys[i]);
-            assertEq(c, 10, string.concat(variantKeys[i], " should be 10"));
+            checkEq(c, 10, string.concat(variantKeys[i], " should be 10"));
         }
     }
 
@@ -120,10 +121,11 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory id = vm.parseJsonString(raw, string.concat(base, ".fixtureId"));
             string memory variant = vm.parseJsonString(raw, string.concat(base, ".actionVariant"));
-            assertGt(bytes(id).length, 0, "non-empty fixtureId");
-            assertGt(bytes(variant).length, 0, "non-empty actionVariant");
+            checkGt(bytes(id).length, 0, "non-empty fixtureId");
+            checkGt(bytes(variant).length, 0, "non-empty actionVariant");
         }
     }
 
@@ -143,13 +145,14 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 adversarialCount = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory revertReason =
                 vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
             string memory postCommit =
                 vm.parseJsonString(raw, string.concat(base, ".expectedPostStateCommitHex"));
             // If revertReason != "null", postCommit must also be "null".
             if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
-                assertEq(postCommit, "null", "adversarial entry must have null postCommit");
+                checkEq(postCommit, "null", "adversarial entry must have null postCommit");
                 adversarialCount++;
             }
         }
@@ -173,12 +176,13 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 happyCount = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory revertReason =
                 vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
             if (keccak256(bytes(revertReason)) == keccak256(bytes("null"))) {
                 string memory postCommit =
                     vm.parseJsonString(raw, string.concat(base, ".expectedPostStateCommitHex"));
-                assertEq(bytes(postCommit).length, 66, "happy postCommit is '0x' + 64 hex chars");
+                checkEq(bytes(postCommit).length, 66, "happy postCommit is '0x' + 64 hex chars");
                 happyCount++;
             }
         }
@@ -240,13 +244,14 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///      have witnessCommitHex matching the fixture's
     ///      preStateCommitHex.  Extracted to keep the outer
     ///      driver's stack shallow.
-    function _assertWitnessBinding(string memory raw, string memory base) internal pure {
+    function _assertWitnessBinding(string memory raw, string memory base) internal {
         string memory preStateHex =
             vm.parseJsonString(raw, string.concat(base, ".preStateCommitHex"));
         uint256 nProofs = vm.parseJsonUint(raw, string.concat(base, ".cellProofsCount"));
         for (uint256 j = 0; j < nProofs; j++) {
+            beginEntry(string.concat("#", vm.toString(j)));
             string memory cpBase = string.concat(base, ".cellProofs[", vm.toString(j), "]");
-            assertEq(
+            checkEq(
                 vm.parseJsonString(raw, string.concat(cpBase, ".witnessCommitHex")),
                 preStateHex,
                 string.concat("witnessCommitHex != preStateCommitHex for ", cpBase)
@@ -256,14 +261,14 @@ contract StepVMCrossCheck is CrossCheckFramework {
             // intake, so a corpus entry that failed this would be one
             // the contract rejects — a fixture proving nothing.
             bytes memory pd = vm.parseJsonBytes(raw, string.concat(cpBase, ".proofDataHex"));
-            assertTrue(pd.length > 0, string.concat("empty proofData for ", cpBase));
-            assertEq(pd.length % 32, 0, string.concat("misaligned proofData for ", cpBase));
+            checkTrue(pd.length > 0, string.concat("empty proofData for ", cpBase));
+            checkEq(pd.length % 32, 0, string.concat("misaligned proofData for ", cpBase));
             // The tree's geometry: a 32-byte bitmask plus at most one
             // sibling per level.  Spelled here rather than read off the
             // step VM — the multiproof entry point derives its wire's
             // EXACT length from the key set and has no opinion about a
             // single-cell opening's cap.
-            assertLe(
+            checkLe(
                 pd.length,
                 32 * (1 + 256),
                 string.concat("oversize proofData for ", cpBase)
@@ -293,6 +298,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes32 expected =
                 vm.parseJsonBytes32(raw, string.concat(base, ".expectedActionCommitHex"));
             uint8 kind =
@@ -301,7 +307,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat")));
             bytes memory fields =
                 vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
-            assertEq(
+            checkEq(
                 LogChain.actionCommitMemory(kind, signer, fields),
                 expected,
                 string.concat("actionCommit mismatch at ", base)
@@ -337,6 +343,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".cbeEncoderGoldensCount");
         assertGt(n, 0, "the corpus must carry encoder goldens");
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             string memory base =
                 string.concat(".cbeEncoderGoldens[", vm.toString(i), "]");
             string memory kind =
@@ -346,16 +353,16 @@ contract StepVMCrossCheck is CrossCheckFramework {
             bytes32 kindHash = keccak256(bytes(kind));
             if (kindHash == keccak256("uint")) {
                 uint256 v = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
-                assertEq(CBEEncode.uintValue(v), expected,
+                checkEq(CBEEncode.uintValue(v), expected,
                     string.concat("uint encoder mismatch at ", base));
             } else if (kindHash == keccak256("amount")) {
                 uint256 v = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
-                assertEq(CBEEncode.amountValue(v), expected,
+                checkEq(CBEEncode.amountValue(v), expected,
                     string.concat("amount encoder mismatch at ", base));
             } else if (kindHash == keccak256("bytes")) {
                 bytes memory payload =
                     vm.parseJsonBytes(raw, string.concat(base, ".payloadHex"));
-                assertEq(CBEEncode.bytesValue(payload), expected,
+                checkEq(CBEEncode.bytesValue(payload), expected,
                     string.concat("bytes encoder mismatch at ", base));
             } else {
                 revert(string.concat("unknown golden kind at ", base));
@@ -401,9 +408,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
         // verifies.
         uint64[4] memory probes = [uint64(0), 1, 0xFF, type(uint64).max];
         for (uint256 i = 0; i < probes.length; i++) {
-            assertEq(StepWrites.decodeNonce(CBEEncode.uintValue(probes[i])),
+            beginEntry(string.concat("#", vm.toString(i)));
+            checkEq(StepWrites.decodeNonce(CBEEncode.uintValue(probes[i])),
                 uint256(probes[i]), "uint round-trip");
-            assertEq(StepWrites.decodeAmount(CBEEncode.amountValue(probes[i])),
+            checkEq(StepWrites.decodeAmount(CBEEncode.amountValue(probes[i])),
                 uint256(probes[i]), "amount round-trip");
         }
     }
@@ -714,6 +722,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".absentValueGoldensCount");
         assertGt(n, 0, "the corpus must carry absence goldens");
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             string memory base =
                 string.concat(".absentValueGoldens[", vm.toString(i), "]");
             uint8 cellKind =
@@ -721,8 +730,8 @@ contract StepVMCrossCheck is CrossCheckFramework {
             bytes memory expected =
                 vm.parseJsonBytes(raw, string.concat(base, ".absentValueHex"));
             bytes memory got = StepWrites.canonicalAbsentValue(cellKind);
-            assertEq(got, expected, string.concat("absence mismatch at ", base));
-            assertTrue(
+            checkEq(got, expected, string.concat("absence mismatch at ", base));
+            checkTrue(
                 StepWrites.isCanonicallyAbsent(cellKind, got),
                 string.concat("the marker must classify as absent at ", base)
             );
@@ -784,6 +793,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
         assertGt(n, 0, "the corpus must carry multiproof goldens");
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             string memory base =
                 string.concat(".multiProofGoldens[", vm.toString(i), "]");
             bytes32 foldRoot =
@@ -794,11 +804,11 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex"));
             // The fold's target is the production advance's published
             // root — so the number the flip aims at is the right one.
-            assertEq(foldRoot, published,
+            checkEq(foldRoot, published,
                 string.concat("fold != published root at ", base));
             // ...and not the pre-root, so a fold that did nothing
             // would fail the first assertion rather than pass it.
-            assertTrue(foldRoot != preRoot,
+            checkTrue(foldRoot != preRoot,
                 string.concat("the fold did not move the root at ", base));
         }
     }
@@ -872,7 +882,6 @@ contract StepVMCrossCheck is CrossCheckFramework {
     /// @dev External so `fields` arrives in calldata.
     function assertWriteSetExternal(string calldata raw, string calldata base)
         external
-        view
     {
         uint8 kind =
             uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte")));
@@ -905,13 +914,14 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 m = vm.parseJsonUint(raw, string.concat(base, ".cellCount"));
         assertEq(got.length, m, string.concat("cell count at ", base));
         for (uint256 j = 0; j < m; j++) {
+            beginEntry(string.concat("#", vm.toString(j)));
             string memory c = string.concat(base, ".cells[", vm.toString(j), "]");
-            assertEq(uint256(got[j].kind),
+            checkEq(uint256(got[j].kind),
                 vm.parseJsonUint(raw, string.concat(c, ".cellKind")),
                 string.concat("cellKind at ", c));
-            assertEq(got[j].keyA, vm.parseJsonUint(raw, string.concat(c, ".keyA")),
+            checkEq(got[j].keyA, vm.parseJsonUint(raw, string.concat(c, ".keyA")),
                 string.concat("keyA at ", c));
-            assertEq(got[j].keyB, vm.parseJsonUint(raw, string.concat(c, ".keyB")),
+            checkEq(got[j].keyB, vm.parseJsonUint(raw, string.concat(c, ".keyB")),
                 string.concat("keyB at ", c));
         }
     }
@@ -949,8 +959,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
         this.deriveWriteSetExternal(25, fields, 7, 0);
         // ...and every adjudicable kind still derives.
         for (uint8 k = 0; k <= 24; k++) {
+            beginEntry(string.concat("#", vm.toString(k)));
             if (k == 6 || k == 7) continue;
-            assertGe(this.deriveWriteSetExternal(k, fields, 7, 0).length, 2,
+            checkGe(this.deriveWriteSetExternal(k, fields, 7, 0).length, 2,
                 "every adjudicable kind writes at least the uniform pair");
         }
     }
@@ -992,6 +1003,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory revertReason =
                 vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
             if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
@@ -1000,7 +1012,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 continue;
             }
             uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            assertLe(kind, 24, string.concat("actionKindByte out of range for ", base));
+            checkLe(kind, 24, string.concat("actionKindByte out of range for ", base));
         }
     }
 
@@ -1017,6 +1029,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory revertReason =
                 vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
             if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
@@ -1024,19 +1037,19 @@ contract StepVMCrossCheck is CrossCheckFramework {
             }
             string memory fields = vm.parseJsonString(raw, string.concat(base, ".actionFieldsHex"));
             bytes memory b = bytes(fields);
-            assertGe(b.length, 2, string.concat("actionFieldsHex too short for ", base));
+            checkGe(b.length, 2, string.concat("actionFieldsHex too short for ", base));
             // Compare against the literal `0` (0x30) and `x` (0x78) bytes
             // via byte-array literals rather than string-to-bytes1 casts
             // (the latter trips forge-lint's unsafe-typecast warning even
             // though both literals are exactly 1 byte).
-            assertEq(
+            checkEq(
                 b[0], bytes1(0x30), string.concat("actionFieldsHex missing 0x prefix for ", base)
             );
-            assertEq(
+            checkEq(
                 b[1], bytes1(0x78), string.concat("actionFieldsHex missing 0x prefix for ", base)
             );
             // Even length (after 0x).
-            assertEq(b.length % 2, 0, string.concat("actionFieldsHex has odd length for ", base));
+            checkEq(b.length % 2, 0, string.concat("actionFieldsHex has odd length for ", base));
         }
     }
 
@@ -1067,6 +1080,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         assertGt(n, 0, "packedLayoutGoldens present");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".packedLayoutGoldens[", vm.toString(i), "]");
+            beginEntry(base);
             uint256 width = vm.parseJsonUint(raw, string.concat(base, ".width"));
             // valueHex is a 32-byte BE hex string; parseJsonUint reads it
             // losslessly into a uint256 (no JSON-float precision loss).
@@ -1075,14 +1089,14 @@ contract StepVMCrossCheck is CrossCheckFramework {
             if (width == 64) {
                 // casting to `uint64` is safe: a width-64 golden carries a
                 // value < 2^64 (the Lean side emits it as a uint64 field).
-                assertEq(
+                checkEq(
                     // forge-lint: disable-next-line(unsafe-typecast)
                     abi.encodePacked(uint64(value)),
                     leanEnc,
                     "uint64BE != abi.encodePacked(uint64)"
                 );
             } else {
-                assertEq(
+                checkEq(
                     abi.encodePacked(uint256(value)),
                     leanEnc,
                     "uint256BE != abi.encodePacked(uint256)"

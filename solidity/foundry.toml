@@ -17,7 +17,13 @@ fs_permissions = [
     # docs/sepolia_deployment_runbook.md.
     { access = "read-write", path = "./deployments" },
     { access = "read", path = "./test/CrossCheck/fixtures" },
-    { access = "read", path = "./test/goldens" }
+    { access = "read", path = "./test/goldens" },
+    # `StepVMRootMulti.t.sol::test_every_declared_error_is_described` reads the
+    # compiled ABI back to prove its revert-name table covers every error the
+    # verifier path declares.  A table that fell behind would mislabel the
+    # failure it exists to explain, so completeness is checked rather than
+    # maintained by hand.
+    { access = "read", path = "./out" }
 ]
 gas_reports = ["*"]
 verbosity = 2

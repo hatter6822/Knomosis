@@ -151,15 +151,16 @@ contract MultiProofCrossCheck is CrossCheckFramework {
     ///         — the symptom would be a revert inside every root
     ///         assertion below.  Checking it here separates "the orders
     ///         disagree" from "the fold disagrees".
-    function test_published_cells_are_in_ascending_path_order() public view {
+    function test_published_cells_are_in_ascending_path_order() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; ++i) {
+            beginEntry(string.concat("#", vm.toString(i)));
             bytes32[] memory ks = _keys(raw, i);
             string memory name = vm.parseJsonString(raw, string.concat(_probe(i), ".name"));
             for (uint256 c = 0; c + 1 < ks.length; ++c) {
-                assertLt(
+                checkLt(
                     proxy.pathIndexOf(ks[c]),
                     proxy.pathIndexOf(ks[c + 1]),
                     string.concat("probe ", name, ": cells not in ascending path order")
@@ -177,15 +178,16 @@ contract MultiProofCrossCheck is CrossCheckFramework {
     ///         single most load-bearing agreement in the wire format,
     ///         because every length check downstream is computed from
     ///         it.
-    function test_derived_gap_count_matches_the_published_one() public view {
+    function test_derived_gap_count_matches_the_published_one() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; ++i) {
+            beginEntry(string.concat("#", vm.toString(i)));
             string memory p = _probe(i);
             string memory name = vm.parseJsonString(raw, string.concat(p, ".name"));
             uint256 want = vm.parseJsonUint(raw, string.concat(p, ".gapCount"));
-            assertEq(
+            checkEq(
                 proxy.gapCountOf(_keys(raw, i)),
                 want,
                 string.concat("probe ", name, ": derived gap count")
@@ -197,22 +199,23 @@ contract MultiProofCrossCheck is CrossCheckFramework {
     ///         count implies: `ceil(G/8)` mask bytes and `32 *
     ///         popcount(mask)` sibling bytes.  Binding-independent, for
     ///         the same reason as the gap count.
-    function test_published_wire_lengths_match_the_derived_shape() public view {
+    function test_published_wire_lengths_match_the_derived_shape() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; ++i) {
+            beginEntry(string.concat("#", vm.toString(i)));
             string memory p = _probe(i);
             string memory name = vm.parseJsonString(raw, string.concat(p, ".name"));
             uint256 g = proxy.gapCountOf(_keys(raw, i));
             bytes memory mask = vm.parseJsonBytes(raw, string.concat(p, ".gapMaskHex"));
             bytes memory sibs = vm.parseJsonBytes(raw, string.concat(p, ".siblingsHex"));
-            assertEq(mask.length, (g + 7) / 8, string.concat("probe ", name, ": mask length"));
+            checkEq(mask.length, (g + 7) / 8, string.concat("probe ", name, ": mask length"));
             uint256 popcount = 0;
             for (uint256 b = 0; b < g; ++b) {
                 popcount += (uint256(uint8(mask[b >> 3])) >> (b & 7)) & 1;
             }
-            assertEq(sibs.length, popcount * 32, string.concat("probe ", name, ": sibling bytes"));
+            checkEq(sibs.length, popcount * 32, string.concat("probe ", name, ": sibling bytes"));
         }
     }
 
@@ -262,18 +265,19 @@ contract MultiProofCrossCheck is CrossCheckFramework {
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; ++i) {
+            beginEntry(string.concat("#", vm.toString(i)));
             string memory p = _probe(i);
             string memory name = vm.parseJsonString(raw, string.concat(p, ".name"));
             bytes32[] memory ks = _keys(raw, i);
             bytes memory mask = vm.parseJsonBytes(raw, string.concat(p, ".gapMaskHex"));
             bytes memory sibs = vm.parseJsonBytes(raw, string.concat(p, ".siblingsHex"));
 
-            assertEq(
+            checkEq(
                 proxy.foldFromKeys(ks, _leaves(raw, i, false), mask, sibs),
                 vm.parseJsonBytes32(raw, string.concat(p, ".preStateRootHex")),
                 string.concat("probe ", name, ": pre-state root")
             );
-            assertEq(
+            checkEq(
                 proxy.foldFromKeys(ks, _leaves(raw, i, true), mask, sibs),
                 vm.parseJsonBytes32(raw, string.concat(p, ".postStateRootHex")),
                 string.concat("probe ", name, ": post-state root")
@@ -294,8 +298,9 @@ contract MultiProofCrossCheck is CrossCheckFramework {
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; ++i) {
+            beginEntry(string.concat("#", vm.toString(i)));
             string memory p = _probe(i);
-            assertTrue(
+            checkTrue(
                 vm.parseJsonBytes32(raw, string.concat(p, ".preStateRootHex"))
                     != vm.parseJsonBytes32(raw, string.concat(p, ".postStateRootHex")),
                 string.concat(
@@ -321,11 +326,12 @@ contract MultiProofCrossCheck is CrossCheckFramework {
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; ++i) {
+            beginEntry(string.concat("#", vm.toString(i)));
             string memory p = _probe(i);
             bytes32[] memory ks = _keys(raw, i);
             bytes32[] memory ls = _leaves(raw, i, false);
             ls[0] = bytes32(uint256(ls[0]) ^ 1);
-            assertTrue(
+            checkTrue(
                 proxy.foldFromKeys(
                     ks,
                     ls,

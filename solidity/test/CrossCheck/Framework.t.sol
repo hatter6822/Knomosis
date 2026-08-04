@@ -117,6 +117,242 @@ abstract contract CrossCheckFramework is Test {
     function hexToBytes(string memory hexStr) internal pure returns (bytes memory) {
         return vm.parseBytes(hexStr);
     }
+
+    /* ------------------------------------------------------------ */
+    /* Corpus walks: report EVERY failing entry, not the first       */
+    /* ------------------------------------------------------------ */
+
+    /// @dev These suites replay whole corpora in a single test body,
+    ///      so a per-entry `assertEq` makes the FIRST bad entry the
+    ///      only one anybody sees.  That is not a cosmetic problem:
+    ///      when the CBE amount head widened to 32 bytes and three
+    ///      `StepPlan` offsets were left behind, the walk named one
+    ///      probe and stopped, so a defect affecting every
+    ///      grant-bearing variant read as one variant's.  Establishing
+    ///      the true extent took hand-run mutations against a corpus
+    ///      the suite was already holding.
+    ///
+    ///      `check*` is `assert*` that records and keeps walking:
+    ///      forge-std's `fail()` sets the failure flag without
+    ///      reverting, forge reports the test as failed once the body
+    ///      returns, and every `log_named_string` emitted on the way
+    ///      is printed.  A walk therefore names all of its bad
+    ///      entries in one run.
+    ///
+    ///      Two consequences worth knowing.  A test using these cannot
+    ///      be `view` or `pure`, because `fail()` writes.  And a
+    ///      REVERT inside the loop still ends it — soft assertions do
+    ///      not help there — which is what `tryStatic` and
+    ///      `describeRevert` below are for.
+
+    /// @dev The corpus entry the following checks belong to.  Held
+    ///      here rather than threaded through every call so converting
+    ///      a walk costs one `beginEntry` line, not an edit at each
+    ///      assertion.
+    string private _entryLabel;
+
+    /// @notice Name the corpus entry that subsequent `check*` calls
+    ///         are about.  Call once per loop iteration.
+    function beginEntry(string memory label) internal {
+        _entryLabel = label;
+    }
+
+    /// @notice Record a failure against the current entry and keep
+    ///         walking.
+    function recordFailure(string memory what) internal {
+        emit log_named_string(
+            "entry",
+            bytes(_entryLabel).length == 0
+                ? what
+                : string.concat(_entryLabel, ": ", what)
+        );
+        fail();
+    }
+
+    /// @notice `assertTrue`, recorded rather than raised.
+    function checkTrue(bool ok, string memory what) internal {
+        if (!ok) recordFailure(what);
+    }
+
+    /// @notice `assertFalse`, recorded rather than raised.
+    function checkFalse(bool bad, string memory what) internal {
+        if (bad) recordFailure(what);
+    }
+
+    /// @notice `assertEq` over `bytes32`, recorded rather than raised.
+    function checkEq(bytes32 got, bytes32 want, string memory what) internal {
+        if (got == want) return;
+        recordFailure(
+            string.concat(what, ": got ", vm.toString(got), ", want ", vm.toString(want))
+        );
+    }
+
+    /// @notice `assertEq` over `uint256`, recorded rather than raised.
+    function checkEq(uint256 got, uint256 want, string memory what) internal {
+        if (got == want) return;
+        recordFailure(
+            string.concat(what, ": got ", vm.toString(got), ", want ", vm.toString(want))
+        );
+    }
+
+    /// @notice `assertEq` over `bool`, recorded rather than raised.
+    function checkEq(bool got, bool want, string memory what) internal {
+        if (got == want) return;
+        recordFailure(
+            string.concat(what, ": got ", vm.toString(got), ", want ", vm.toString(want))
+        );
+    }
+
+    /// @notice `assertEq` over `address`, recorded rather than raised.
+    function checkEq(address got, address want, string memory what) internal {
+        if (got == want) return;
+        recordFailure(
+            string.concat(what, ": got ", vm.toString(got), ", want ", vm.toString(want))
+        );
+    }
+
+    /// @notice `assertEq` over `bytes`, recorded rather than raised.
+    function checkEq(bytes memory got, bytes memory want, string memory what)
+        internal
+    {
+        if (keccak256(got) == keccak256(want)) return;
+        recordFailure(
+            string.concat(what, ": got ", vm.toString(got), ", want ", vm.toString(want))
+        );
+    }
+
+    /// @notice `assertEq` over `string`, recorded rather than raised.
+    function checkEq(string memory got, string memory want, string memory what)
+        internal
+    {
+        if (keccak256(bytes(got)) == keccak256(bytes(want))) return;
+        recordFailure(string.concat(what, ": got '", got, "', want '", want, "'"));
+    }
+
+    /// @notice `assertLe`, recorded rather than raised.
+    function checkLe(uint256 got, uint256 bound, string memory what) internal {
+        if (got <= bound) return;
+        recordFailure(
+            string.concat(what, ": ", vm.toString(got), " exceeds ", vm.toString(bound))
+        );
+    }
+
+    /// @notice `assertLt`, recorded rather than raised.
+    function checkLt(uint256 got, uint256 bound, string memory what) internal {
+        if (got < bound) return;
+        recordFailure(
+            string.concat(
+                what, ": ", vm.toString(got), " is not below ", vm.toString(bound))
+        );
+    }
+
+    /// @notice `assertGe`, recorded rather than raised.
+    function checkGe(uint256 got, uint256 bound, string memory what) internal {
+        if (got >= bound) return;
+        recordFailure(
+            string.concat(what, ": ", vm.toString(got), " is under ", vm.toString(bound))
+        );
+    }
+
+    /// @notice `assertGt`, recorded rather than raised.
+    function checkGt(uint256 got, uint256 bound, string memory what) internal {
+        if (got > bound) return;
+        recordFailure(
+            string.concat(
+                what, ": ", vm.toString(got), " does not exceed ", vm.toString(bound))
+        );
+    }
+
+    /* ------------------------------------------------------------ */
+    /* Revert tolerance                                              */
+    /* ------------------------------------------------------------ */
+
+    /// @notice Call `target` with `data`, returning the failure
+    ///         instead of raising it.
+    ///
+    /// @dev    The half soft assertions cannot cover.  A value
+    ///         mismatch at least names its entry; a revert escaping a
+    ///         corpus walk named none at all — the case that started
+    ///         this reported `FrontierMissingCell(2)`, a cell index
+    ///         inside an unidentified probe, with the rest of the
+    ///         corpus unexamined.
+    function tryStatic(address target, bytes memory data)
+        internal
+        view
+        returns (bool ok, bytes memory ret)
+    {
+        (ok, ret) = target.staticcall(data);
+    }
+
+    /// @notice Record a reverting corpus entry.  Returns `ok` so a
+    ///         walk reads `if (!checkNoRevert(...)) continue;`.
+    function checkNoRevert(bool ok, bytes memory err, string memory what)
+        internal
+        returns (bool)
+    {
+        if (!ok) recordFailure(string.concat(what, ": reverted ", describeRevert(err)));
+        return ok;
+    }
+
+    /// @notice Render revert data as a name where one is known.
+    ///
+    /// @dev    Handles the two the compiler emits plus the empty
+    ///         revert; a suite with its own custom errors overrides
+    ///         this and falls back to `super` for the rest.  Every
+    ///         selector an override matches is written
+    ///         `Contract.Error.selector`, so RENAMING or REMOVING an
+    ///         error is a compile error rather than silent drift, and
+    ///         a suite that overrides is expected to carry the
+    ///         completeness test that catches the remaining case — an
+    ///         error ADDED and not described, which degrades to hex.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        virtual
+        returns (string memory)
+    {
+        if (err.length == 0) return "(empty revert)";
+        // Below four bytes there is no selector to read, and `_body`
+        // would underflow.  A reporter that panicked on malformed
+        // revert data would destroy the diagnosis it exists to give.
+        if (err.length < 4) return vm.toString(err);
+        bytes4 sel = revertSelector(err);
+        if (sel == bytes4(keccak256("Error(string)"))) {
+            return string.concat("Error('", abi.decode(_body(err), (string)), "')");
+        }
+        if (sel == bytes4(keccak256("Panic(uint256)"))) {
+            uint256 code = abi.decode(_body(err), (uint256));
+            return string.concat("Panic(", _panicName(code), ")");
+        }
+        return vm.toString(err);
+    }
+
+    /// @dev The leading four bytes of revert data.  Spelled out rather
+    ///      than `bytes4(err)` so the read is explicitly bounded.
+    function revertSelector(bytes memory err) internal pure returns (bytes4 sel) {
+        if (err.length < 4) return bytes4(0);
+        sel = bytes4(bytes.concat(err[0], err[1], err[2], err[3]));
+    }
+
+    /// @dev Revert data with the four selector bytes removed.
+    function _body(bytes memory err) internal pure returns (bytes memory out) {
+        out = new bytes(err.length - 4);
+        for (uint256 i = 0; i < out.length; i++) out[i] = err[i + 4];
+    }
+
+    /// @dev The Solidity panic codes a corpus walk actually hits.
+    function _panicName(uint256 code) private pure returns (string memory) {
+        if (code == 0x01) return "assert";
+        if (code == 0x11) return "arithmetic overflow";
+        if (code == 0x12) return "division by zero";
+        if (code == 0x21) return "invalid enum";
+        if (code == 0x22) return "bad storage bytes";
+        if (code == 0x31) return "pop on empty array";
+        if (code == 0x32) return "array index out of bounds";
+        if (code == 0x41) return "excessive allocation";
+        if (code == 0x51) return "zero-initialised function";
+        return vm.toString(code);
+    }
 }
 
 /// @title FrameworkSmokeTest
@@ -218,4 +454,5 @@ contract FrameworkSmokeTest is CrossCheckFramework {
             "knomosis/y/v4"
         );
     }
+
 }

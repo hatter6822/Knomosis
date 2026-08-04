@@ -145,12 +145,13 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             if (e.reserveIn == 0 || e.reserveOut == 0 || e.amountIn == 0 || e.feeBps >= 10000) {
                 continue;
             }
             uint256 got = AmmMath.getAmountOut(e.amountIn, e.reserveIn, e.reserveOut, e.feeBps);
-            assertEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
+            checkEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
         }
     }
 
@@ -167,11 +168,12 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             if (e.reserveIn == 0 || e.reserveOut == 0 || e.amountIn == 0 || e.feeBps >= 10000) {
                 continue;
             }
-            assertLt(e.expectedOut, e.reserveOut, "no-drain violated");
+            checkLt(e.expectedOut, e.reserveOut, "no-drain violated");
         }
     }
 
@@ -188,8 +190,9 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertLe(e.kBefore, e.kAfter, "k decreased across the swap");
+            checkLe(e.kBefore, e.kAfter, "k decreased across the swap");
         }
     }
 
@@ -206,9 +209,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             bool expected = e.expectedOut >= e.minAmountOut;
-            assertEq(e.slippageSatisfied, expected, "slippage flag mismatch");
+            checkEq(e.slippageSatisfied, expected, "slippage flag mismatch");
         }
     }
 
@@ -240,9 +244,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
 
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory cbeHex = vm.parseJsonString(raw, string.concat(base, ".expectedCbe"));
             bytes memory cbeBytes = vm.parseBytes(cbeHex);
-            assertEq(
+            checkEq(
                 cbeBytes.length,
                 102,
                 "CBE must be 102 bytes (tag + 3 x 9-byte uint heads + 2 x 33-byte amount heads)"
@@ -264,9 +269,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertEq(e.newReserveIn, e.reserveIn + e.amountIn, "newReserveIn mismatch");
-            assertEq(e.newReserveOut, e.reserveOut - e.expectedOut, "newReserveOut mismatch");
+            checkEq(e.newReserveIn, e.reserveIn + e.amountIn, "newReserveIn mismatch");
+            checkEq(e.newReserveOut, e.reserveOut - e.expectedOut, "newReserveOut mismatch");
         }
     }
 
@@ -284,9 +290,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertEq(e.reserveActorCreditFrom, e.amountIn, "reserveActorCreditFrom != amountIn");
-            assertEq(e.reserveActorDebitTo, e.expectedOut, "reserveActorDebitTo != expectedOut");
+            checkEq(e.reserveActorCreditFrom, e.amountIn, "reserveActorCreditFrom != amountIn");
+            checkEq(e.reserveActorDebitTo, e.expectedOut, "reserveActorDebitTo != expectedOut");
         }
     }
 
@@ -307,10 +314,11 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
 
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory cbeHex = vm.parseJsonString(raw, string.concat(base, ".expectedCbe"));
             bytes memory cbeBytes = vm.parseBytes(cbeHex);
-            assertEq(uint8(cbeBytes[0]), 0x00, "first byte must be 0x00 (CBE Nat type)");
-            assertEq(uint8(cbeBytes[1]), 0x17, "second byte must be 0x17 (= 23, ammSwap tag LE)");
+            checkEq(uint8(cbeBytes[0]), 0x00, "first byte must be 0x00 (CBE Nat type)");
+            checkEq(uint8(cbeBytes[1]), 0x17, "second byte must be 0x17 (= 23, ammSwap tag LE)");
         }
     }
 

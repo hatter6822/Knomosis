@@ -120,12 +120,13 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
     /// @notice Per-entry arithmetic cross-check.  Recompute the split
     ///         and assert it matches the fixture, plus conservation and
     ///         the budget cap.  Runs in every binding mode.
-    function test_perEntry_split_matches() public view {
+    function test_perEntry_split_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
 
             uint256 msgValue = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".msgValue")));
             uint256 feeBps = vm.parseJsonUint(raw, string.concat(base, ".chosenFeeBps"));
@@ -142,25 +143,25 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             // admissible on-chain ranges) and the rate / budget to uint64
             // range (the contract's types); assert them so a corrupt
             // fixture fails loudly here.
-            assertLe(feeBps, 5000, "feeBps out of admissible range");
-            assertLe(seedRatio, 8000, "ammSeedRatioBps out of admissible range");
-            assertLt(rate, 1 << 64, "rate out of uint64 range");
-            assertLt(fixBudget, 1 << 64, "budgetGrant out of uint64 range");
+            checkLe(feeBps, 5000, "feeBps out of admissible range");
+            checkLe(seedRatio, 8000, "ammSeedRatioBps out of admissible range");
+            checkLt(rate, 1 << 64, "rate out of uint64 range");
+            checkLt(fixBudget, 1 << 64, "budgetGrant out of uint64 range");
 
             (uint256 u, uint256 p, uint64 g) = FeeSplitMath.split(msgValue, feeBps, rate);
             (uint256 ammSeed, uint256 freePool) = FeeSplitMath.ammSeedSplit(p, seedRatio);
 
-            assertEq(u, fixUser, "userAmount mismatch");
-            assertEq(p, fixPool, "poolAmount mismatch");
-            assertEq(ammSeed, fixSeed, "ammSeedAmount mismatch (GP.11.2)");
-            assertEq(uint256(g), fixBudget, "budgetGrant mismatch");
+            checkEq(u, fixUser, "userAmount mismatch");
+            checkEq(p, fixPool, "poolAmount mismatch");
+            checkEq(ammSeed, fixSeed, "ammSeedAmount mismatch (GP.11.2)");
+            checkEq(uint256(g), fixBudget, "budgetGrant mismatch");
 
             // Conservation + cap, independent of the fixture's stored
             // split.
-            assertEq(u + p, msgValue, "conservation: userAmount + poolAmount == msgValue");
-            assertEq(ammSeed + freePool, p, "conservation: ammSeed + freePool == poolAmount");
-            assertLe(ammSeed, p, "ammSeed never exceeds the pool fee");
-            assertLe(uint256(g), uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT), "budget within cap");
+            checkEq(u + p, msgValue, "conservation: userAmount + poolAmount == msgValue");
+            checkEq(ammSeed + freePool, p, "conservation: ammSeed + freePool == poolAmount");
+            checkLe(ammSeed, p, "ammSeed never exceeds the pool fee");
+            checkLe(uint256(g), uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT), "budget within cap");
         }
     }
 
@@ -177,6 +178,7 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
 
             uint256 chainid = vm.parseJsonUint(raw, string.concat(base, ".chainid"));
             address contractAddr = vm.parseJsonAddress(raw, string.concat(base, ".contractAddr"));
@@ -199,18 +201,18 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             // as uint64; asserting `< 2^64` guarantees the reference's
             // uint256 abi.encode yields the identical 32-byte words (so
             // the recomputed hash is byte-equal to the contract's).
-            assertLt(resourceId, 1 << 64, "resourceId out of uint64 range");
-            assertLt(budgetGrant, 1 << 64, "budgetGrant out of uint64 range");
-            assertLt(nonce, 1 << 64, "depositorNonce out of uint64 range");
+            checkLt(resourceId, 1 << 64, "resourceId out of uint64 range");
+            checkLt(budgetGrant, 1 << 64, "budgetGrant out of uint64 range");
+            checkLt(nonce, 1 << 64, "depositorNonce out of uint64 range");
 
             bytes32 did = keccak256(abi.encode(chainid, contractAddr, tag));
-            assertEq(did, expectedDid, "deploymentId mismatch");
+            checkEq(did, expectedDid, "deploymentId mismatch");
 
             // GP.11.2: the receiptHash binds ammSeedAmount after poolAmount.
             bytes32 actual = FeeSplitMath.receiptHash(
                 did, sender, resourceId, token, userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce
             );
-            assertEq(actual, expectedHash, "receiptHash mismatch");
+            checkEq(actual, expectedHash, "receiptHash mismatch");
         }
     }
 
@@ -268,12 +270,13 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
     ///         mode -- it pins the receiptHash field order + widths
     ///         cross-stack even when the keccak256-gated full-hash check
     ///         is skipped under the FNV fallback.
-    function test_perEntry_receiptTail_layout() public view {
+    function test_perEntry_receiptTail_layout() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             address sender = vm.parseJsonAddress(raw, string.concat(base, ".sender"));
             uint256 resourceId = vm.parseJsonUint(raw, string.concat(base, ".resourceId"));
             address token = vm.parseJsonAddress(raw, string.concat(base, ".token"));
@@ -289,7 +292,7 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             bytes memory solTail = abi.encode(
                 sender, resourceId, token, userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce
             );
-            assertEq(solTail, leanTail, "receiptHash preimage-tail layout mismatch");
+            checkEq(solTail, leanTail, "receiptHash preimage-tail layout mismatch");
         }
     }
 
@@ -316,6 +319,7 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
         address depositor = address(0xA11CE);
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             uint256 msgValue = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".msgValue")));
             uint256 feeBps = vm.parseJsonUint(raw, string.concat(base, ".chosenFeeBps"));
             uint256 rate = vm.parseJsonUint(raw, string.concat(base, ".weiPerBudgetUnit"));
@@ -326,9 +330,9 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             uint256 fixBudget = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
 
             // Fixture-integrity bounds matching the contract's ABI widths.
-            assertLe(feeBps, 5000, "feeBps out of admissible range");
-            assertLe(seedRatio, 8000, "ammSeedRatioBps out of admissible range");
-            assertLt(rate, 1 << 64, "rate out of uint64 range");
+            checkLe(feeBps, 5000, "feeBps out of admissible range");
+            checkLe(seedRatio, 8000, "ammSeedRatioBps out of admissible range");
+            checkLt(rate, 1 << 64, "rate out of uint64 range");
 
             // Deploy at the fixture's exchange rate AND seed ratio so the
             // emitted ammSeedAmount matches the Lean value.  Narrowing is
@@ -344,12 +348,12 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             (uint256 u, uint256 p, uint256 ammSeed, uint64 g, uint64 nonce, bytes32 rh) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
 
-            assertEq(u, fixUser, "live userAmount != Lean fixture");
-            assertEq(p, fixPool, "live poolAmount != Lean fixture");
-            assertEq(ammSeed, fixSeed, "live ammSeedAmount != Lean fixture (GP.11.2)");
-            assertEq(uint256(g), fixBudget, "live budgetGrant != Lean fixture");
+            checkEq(u, fixUser, "live userAmount != Lean fixture");
+            checkEq(p, fixPool, "live poolAmount != Lean fixture");
+            checkEq(ammSeed, fixSeed, "live ammSeedAmount != Lean fixture (GP.11.2)");
+            checkEq(uint256(g), fixBudget, "live budgetGrant != Lean fixture");
             // The live reserve grew by exactly the seed.
-            assertEq(bridge.ammReserveEth(), ammSeed, "live reserve != emitted ammSeedAmount");
+            checkEq(bridge.ammReserveEth(), ammSeed, "live reserve != emitted ammSeedAmount");
 
             // The bridge computes receiptHash with real keccak256 over
             // ITS OWN deploymentId + the emitted fields; re-derive via the
@@ -357,7 +361,7 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             bytes32 recomputed = FeeSplitMath.receiptHash(
                 bridge.deploymentId(), depositor, 0, address(0), u, p, ammSeed, g, nonce
             );
-            assertEq(recomputed, rh, "live receiptHash recipe inconsistent");
+            checkEq(recomputed, rh, "live receiptHash recipe inconsistent");
         }
     }
 

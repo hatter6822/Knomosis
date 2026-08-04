@@ -148,19 +148,20 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
     /// @notice Hash-independent arithmetic recompute: `FeeSplitMath.split`
     ///         reproduces every entry's split exactly; conservation and the
     ///         budget-cap bound hold.
-    function test_perEntry_split_matches() public view {
+    function test_perEntry_split_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = _count(raw);
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             (uint256 u, uint256 p, uint64 b) =
                 FeeSplitMath.split(e.amount, e.chosenFeeBps, e.weiPerBudgetUnit);
-            assertEq(u, e.userAmount, "userAmount mismatch");
-            assertEq(p, e.poolAmount, "poolAmount mismatch");
-            assertEq(uint256(b), uint256(e.budgetGrant), "budgetGrant mismatch");
-            assertEq(u + p, e.amount, "conservation user+pool==amount");
-            assertLe(
+            checkEq(u, e.userAmount, "userAmount mismatch");
+            checkEq(p, e.poolAmount, "poolAmount mismatch");
+            checkEq(uint256(b), uint256(e.budgetGrant), "budgetGrant mismatch");
+            checkEq(u + p, e.amount, "conservation user+pool==amount");
+            checkLe(
                 uint256(b),
                 uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT),
                 "budget within cap"
@@ -174,14 +175,14 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
     ///         `budgetGrant`.
     function test_perEntry_budgetGrant_equals_recipientBudgetAfter()
         public
-        view
     {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = _count(raw);
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertEq(
+            checkEq(
                 e.recipientBudgetAfter,
                 e.budgetGrant,
                 "recipientBudgetAfter == budgetGrant"
@@ -223,7 +224,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
     ///         `depositId` in the key prevents a cross-amount
     ///         calibration entry (distinct `depositId`) from being
     ///         mistaken for a grid twin.
-    function test_grid_resource_agnosticism() public view {
+    function test_grid_resource_agnosticism() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = _count(raw);
@@ -233,6 +234,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         }
         uint256 pairs = 0;
         for (uint256 a = 0; a < n; a++) {
+            beginEntry(string.concat("#", vm.toString(a)));
             if (entries[a].resourceId != RESOURCE_BOLD) continue;
             for (uint256 b = 0; b < n; b++) {
                 if (entries[b].resourceId != RESOURCE_ETH) continue;
@@ -242,13 +244,13 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
                         && entries[a].weiPerBudgetUnit == entries[b].weiPerBudgetUnit
                         && entries[a].depositId == entries[b].depositId
                 ) {
-                    assertEq(
+                    checkEq(
                         entries[a].userAmount, entries[b].userAmount, "parity userAmount"
                     );
-                    assertEq(
+                    checkEq(
                         entries[a].poolAmount, entries[b].poolAmount, "parity poolAmount"
                     );
-                    assertEq(
+                    checkEq(
                         entries[a].budgetGrant, entries[b].budgetGrant, "parity budgetGrant"
                     );
                     pairs++;
@@ -268,7 +270,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
     ///         spec's floor-division-residue tolerance is a conservative
     ///         bound this corpus beats).  Distinct from the same-amount
     ///         `test_grid_resource_agnosticism`.
-    function test_usd_calibration_parity() public view {
+    function test_usd_calibration_parity() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = _count(raw);
@@ -282,33 +284,34 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         uint256 ratio = 3000;
         uint256 pairs = 0;
         for (uint256 a = 0; a < n; a++) {
+            beginEntry(string.concat("#", vm.toString(a)));
             if (entries[a].resourceId != RESOURCE_ETH) continue;
             if (entries[a].depositId < 2000) continue; // calibration block only
             for (uint256 b = 0; b < n; b++) {
                 if (entries[b].resourceId != RESOURCE_BOLD) continue;
                 if (entries[b].depositId != entries[a].depositId) continue;
                 // Cross-amount, calibrated rates.
-                assertTrue(
+                checkTrue(
                     entries[a].amount != entries[b].amount,
                     "calibration legs must carry different amounts"
                 );
-                assertEq(entries[a].weiPerBudgetUnit, rateEth, "ETH leg rate != 1e12");
-                assertEq(entries[b].weiPerBudgetUnit, rateBold, "BOLD leg rate != 3e15");
-                assertEq(
+                checkEq(entries[a].weiPerBudgetUnit, rateEth, "ETH leg rate != 1e12");
+                checkEq(entries[b].weiPerBudgetUnit, rateBold, "BOLD leg rate != 3e15");
+                checkEq(
                     entries[b].amount, ratio * entries[a].amount, "amounts not in 3000:1 ratio"
                 );
-                assertEq(
+                checkEq(
                     entries[a].amount * rateBold,
                     entries[b].amount * rateEth,
                     "calibration pair not USD-aligned"
                 );
                 // Headline: equal budget grants despite different inputs.
-                assertEq(
+                checkEq(
                     entries[a].budgetGrant,
                     entries[b].budgetGrant,
                     "USD-calibration parity broken: budget_eth != budget_bold"
                 );
-                assertGt(entries[a].budgetGrant, 0, "calibration pair has a zero budget grant");
+                checkGt(entries[a].budgetGrant, 0, "calibration pair has a zero budget grant");
                 pairs++;
             }
         }
@@ -325,6 +328,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
         address depositor = address(0xA11CE);
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             if (e.resourceId != RESOURCE_BOLD) continue;
             KnomosisBridge bridge = _deployBoldBridge(e.weiPerBudgetUnit);
@@ -336,9 +340,9 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             bridge.depositBoldWithFee(e.amount, e.chosenFeeBps);
             (uint256 u, uint256 p, uint64 b) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
-            assertEq(u, e.userAmount, "live bold userAmount != fixture");
-            assertEq(p, e.poolAmount, "live bold poolAmount != fixture");
-            assertEq(uint256(b), uint256(e.budgetGrant), "live bold budgetGrant != fixture");
+            checkEq(u, e.userAmount, "live bold userAmount != fixture");
+            checkEq(p, e.poolAmount, "live bold poolAmount != fixture");
+            checkEq(uint256(b), uint256(e.budgetGrant), "live bold budgetGrant != fixture");
         }
     }
 
@@ -356,6 +360,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         uint256 n = _count(raw);
         address depositor = address(0xA11CE);
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             if (e.resourceId != RESOURCE_ETH) continue;
             KnomosisBridge bridge = _deployBridge(e.weiPerBudgetUnit, 1);
@@ -365,9 +370,9 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             bridge.depositETHWithFee{value: e.amount}(e.chosenFeeBps);
             (uint256 u, uint256 p, uint64 b) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
-            assertEq(u, e.userAmount, "live eth userAmount != fixture");
-            assertEq(p, e.poolAmount, "live eth poolAmount != fixture");
-            assertEq(uint256(b), uint256(e.budgetGrant), "live eth budgetGrant != fixture");
+            checkEq(u, e.userAmount, "live eth userAmount != fixture");
+            checkEq(p, e.poolAmount, "live eth poolAmount != fixture");
+            checkEq(uint256(b), uint256(e.budgetGrant), "live eth budgetGrant != fixture");
         }
     }
 
@@ -384,12 +389,13 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
     ///         9-byte CBE uint head to the 17-byte amount head, taking the
     ///         action from 72 to 88 bytes.  `budgetGrant` is a UNIT count
     ///         and stays narrow, so `recipientBudgetCbe` is unchanged.
-    function test_actionCbe_wellformed() public view {
+    function test_actionCbe_wellformed() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = _count(raw);
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes memory action =
                 bytes(vm.parseJsonString(raw, string.concat(base, ".actionCbe")));
             bytes memory budget = bytes(
@@ -399,18 +405,18 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             // (no `bytes1(string)` truncating cast — keeps `forge lint`
             // clean while pinning the exact "0x" hex-string prefix the
             // Lean `hexFromBytes` serializer emits).
-            assertGe(action.length, 2, "actionCbe has 0x prefix");
-            assertGe(budget.length, 2, "recipientBudgetCbe has 0x prefix");
-            assertEq(
+            checkGe(action.length, 2, "actionCbe has 0x prefix");
+            checkGe(budget.length, 2, "recipientBudgetCbe has 0x prefix");
+            checkEq(
                 string(abi.encodePacked(action[0], action[1])), "0x", "actionCbe 0x prefix"
             );
-            assertEq(
+            checkEq(
                 string(abi.encodePacked(budget[0], budget[1])), "0x", "recipientBudgetCbe 0x prefix"
             );
             // 120 bytes => "0x" + 240 hex chars
-            assertEq(action.length, 2 + 240, "actionCbe decodes to 120 bytes");
+            checkEq(action.length, 2 + 240, "actionCbe decodes to 120 bytes");
             // 18 bytes => "0x" + 36 hex chars
-            assertEq(budget.length, 2 + 36, "recipientBudgetCbe decodes to 18 bytes");
+            checkEq(budget.length, 2 + 36, "recipientBudgetCbe decodes to 18 bytes");
         }
     }
 
@@ -424,30 +430,31 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
     ///         `Encodable Nat`): `[0x00][epoch 8B LE]` then
     ///         `[0x00][budgetGrant 8B LE]`.  Previously this field was only
     ///         length/prefix-checked Solidity-side.
-    function test_recipientBudgetCbe_decodes_to_budgetGrant() public view {
+    function test_recipientBudgetCbe_decodes_to_budgetGrant() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = _count(raw);
         for (uint256 i = 0; i < n; i++) {
             Entry memory e = _loadEntry(raw, i);
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             // Decode the hex string to its 18 raw bytes.
             bytes memory cbe =
                 hexToBytes(vm.parseJsonString(raw, string.concat(base, ".recipientBudgetCbe")));
-            assertEq(cbe.length, 18, "recipientBudgetCbe must be 18 bytes");
+            checkEq(cbe.length, 18, "recipientBudgetCbe must be 18 bytes");
 
             // Head 1 — lastSeenEpoch: CBE uint type-tag 0x00 then an
             // all-zero 8-byte LE value (genesis epoch 0).
-            assertEq(uint8(cbe[0]), 0x00, "epoch CBE type-tag != 0x00");
+            checkEq(uint8(cbe[0]), 0x00, "epoch CBE type-tag != 0x00");
             for (uint256 j = 1; j < 9; j++) {
-                assertEq(uint8(cbe[j]), 0x00, "lastSeenEpoch LE byte != 0 (expected epoch 0)");
+                checkEq(uint8(cbe[j]), 0x00, "lastSeenEpoch LE byte != 0 (expected epoch 0)");
             }
 
             // Head 2 — budgetBalance: CBE uint type-tag 0x00 then the
             // 8-byte LITTLE-endian `budgetGrant`.  Reassemble and compare
             // against the fixture's scalar budgetGrant (which the live
             // contract independently corroborates elsewhere).
-            assertEq(uint8(cbe[9]), 0x00, "budget CBE type-tag != 0x00");
+            checkEq(uint8(cbe[9]), 0x00, "budget CBE type-tag != 0x00");
             // Accumulate in uint256 so both shift operands share a type
             // (no solc-3149 mixed-width warning, no forge-lint truncating
             // cast).  The reassembled value is < 2^64 by construction
@@ -456,9 +463,9 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             for (uint256 k = 0; k < 8; k++) {
                 decoded |= uint256(uint8(cbe[10 + k])) << (8 * k);
             }
-            assertEq(decoded, uint256(e.budgetGrant), "decoded budget tail != budgetGrant");
+            checkEq(decoded, uint256(e.budgetGrant), "decoded budget tail != budgetGrant");
             // Cross-tie: the scalar the other tests use IS this byte field.
-            assertEq(
+            checkEq(
                 decoded, uint256(e.recipientBudgetAfter), "decoded budget tail != recipientBudgetAfter"
             );
         }

@@ -35,12 +35,13 @@ contract BisectionGameCrossCheck is CrossCheckFramework {
         // log₂(logLength) + 1 (per H.4.3c convergence theorem).
         for (uint256 i = 0; i < happyCount; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             uint256 logLen = vm.parseJsonUint(raw, string.concat(base, ".logLength"));
             uint256 rounds = vm.parseJsonUint(raw, string.concat(base, ".expectedRoundCount"));
             // log₂(logLen) ≤ 64 for any reasonable logLen ≤ 2^64.
             // A simple check: rounds ≤ 64 (the MAX_BISECTION_DEPTH bound).
             logLen;
-            assertLe(rounds, 64, "rounds within MAX_BISECTION_DEPTH");
+            checkLe(rounds, 64, "rounds within MAX_BISECTION_DEPTH");
         }
     }
 
@@ -53,8 +54,9 @@ contract BisectionGameCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory status = vm.parseJsonString(raw, string.concat(base, ".expectedFinalStatus"));
-            assertGt(bytes(status).length, 0, "non-empty expectedFinalStatus");
+            checkGt(bytes(status).length, 0, "non-empty expectedFinalStatus");
         }
     }
 }
