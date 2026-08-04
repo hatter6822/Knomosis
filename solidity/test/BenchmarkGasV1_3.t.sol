@@ -1091,15 +1091,16 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         assertTrue(bridge.isStateRootFinalised(BOLD_ROOT_LOG_INDEX), "BOLD root finalised");
         assertFalse(bridge.withdrawalLeafRedeemed(keccak256(ethLeaf)), "ETH leaf unredeemed");
         assertFalse(bridge.withdrawalLeafRedeemed(keccak256(boldLeaf)), "BOLD leaf unredeemed");
-        // Canonical proof-blob size: cbeBytes(64-byte leaf) = 73, cbeUint
+        // Canonical proof-blob size: cbeBytes(80-byte leaf) = 89, cbeUint
         // index = 9, array head = 9, 64 x cbeBytes(32-byte sibling) = 64
-        // x 41 = 2624; total 2715 bytes.  Pins the proof shape the
-        // benchmark's ~2.7 kB calldata figure rests on.  The leaf grew
-        // 56 -> 64 bytes with C-1: its `amount` field moved from the
-        // 9-byte CBE uint head to the 17-byte amount head.
-        assertEq(ethProof.length, 2715, "canonical proof blob is 2715 bytes");
-        assertEq(boldProof.length, 2715, "canonical proof blob is 2715 bytes");
-        assertEq(ethLeaf.length, 64, "canonical leaf blob is 64 bytes");
+        // x 41 = 2624; total 2731 bytes.  Pins the proof shape the
+        // benchmark's ~2.7 kB calldata figure rests on.  The leaf has
+        // grown twice with the amount head: 56 -> 64 with C-1 (uint
+        // head -> 17-byte amount head), then 64 -> 80 closing C-3
+        // (17 -> 33 bytes, the EVM word).
+        assertEq(ethProof.length, 2731, "canonical proof blob is 2731 bytes");
+        assertEq(boldProof.length, 2731, "canonical proof blob is 2731 bytes");
+        assertEq(ethLeaf.length, 80, "canonical leaf blob is 80 bytes");
         assertGt(alice.balance, 0, "recipient already funded with ETH");
         assertGt(MockBoldOz(BOLD).balanceOf(alice), 0, "recipient holds residual BOLD");
     }

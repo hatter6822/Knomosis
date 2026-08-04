@@ -18,8 +18,8 @@ pragma solidity ^0.8.20;
 ///
 ///         **Head widths are load-bearing.**  `_cbeUint` is the 9-byte
 ///         head (tag 0x00 + 8 LE) for identifiers, log indices, lengths
-///         and budget-UNIT counts; `_cbeAmount` is the 17-byte head
-///         (tag 0x01 + 16 LE) for value-carrying amounts.  Using the
+///         and budget-UNIT counts; `_cbeAmount` is the 33-byte head
+///         (tag 0x06 + 32 LE) for value-carrying amounts.  Using the
 ///         wrong one shifts every following field, and the production
 ///         decoder rejects the tag rather than silently truncating.
 abstract contract CbeTestEncoder {
@@ -37,11 +37,11 @@ abstract contract CbeTestEncoder {
         }
     }
 
-    /// @notice 16 little-endian bytes of a uint128 (the CBE amount
+    /// @notice 32 little-endian bytes of a uint256 (the CBE amount
     ///         head's value form).
-    function _leBytes16(uint128 v) internal pure returns (bytes memory out) {
-        out = new bytes(16);
-        for (uint256 i = 0; i < 16; i++) {
+    function _leBytes32(uint256 v) internal pure returns (bytes memory out) {
+        out = new bytes(32);
+        for (uint256 i = 0; i < 32; i++) {
             // forge-lint: disable-next-line(unsafe-typecast)
             out[i] = bytes1(uint8(v >> (8 * i)));
         }
@@ -52,11 +52,12 @@ abstract contract CbeTestEncoder {
         return bytes.concat(hex"00", _leBytes8(v));
     }
 
-    /// @notice CBE amount: tag 0x01 + 16 LE value bytes.  Value-carrying
-    ///         fields only — a wei-denominated amount crosses `2^64` at
-    ///         ~18.45 ETH, which the uint head truncated.
-    function _cbeAmount(uint128 v) internal pure returns (bytes memory) {
-        return bytes.concat(hex"01", _leBytes16(v));
+    /// @notice CBE amount: tag 0x06 + 32 LE value bytes.  Value-carrying
+    ///         fields only.  The width is the EVM word, so no value a
+    ///         test can construct is one the head cannot carry — which
+    ///         is the property finding C-3 turned on.
+    function _cbeAmount(uint256 v) internal pure returns (bytes memory) {
+        return bytes.concat(hex"06", _leBytes32(v));
     }
 
     /// @notice CBE byte string: tag 0x02 + 8 LE length + payload.
@@ -75,10 +76,10 @@ abstract contract CbeTestEncoder {
     // Withdrawal leaf + proof blobs
     // ------------------------------------------------------------------
 
-    /// @notice The canonical 64-byte `PendingWithdrawal` leaf blob,
+    /// @notice The canonical 80-byte `PendingWithdrawal` leaf blob,
     ///         matching `KnomosisBridge._decodePendingWithdrawal`:
-    ///         9 (resourceId) + 29 (recipient) + 17 (amount) + 9
-    ///         (l2LogIndex).
+    ///         9 (resourceId) + 29 (recipient) + 33 (amount) + 9
+    ///         (l2LogIndex) = 80 bytes.
     function _encodeWithdrawalLeaf(
         uint64 resourceId,
         address recipient,
