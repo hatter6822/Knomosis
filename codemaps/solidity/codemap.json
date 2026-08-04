@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "8b3df3d58c7bc48e263435e3fbd119fe88e873269a5e95cd01ac267a763f02cb"
+    "source_digest": "6f765a26322b0c22dbb72f65d5239782f905917c7b4c9cf4b473787a5b7b594d"
   },
   "summary": {
     "module_count": 99,
@@ -4733,7 +4733,7 @@
         {
           "kind": "function",
           "name": "planBalances",
-          "line": 118,
+          "line": 123,
           "called": [
             "_planRefundBalances"
           ]
@@ -4741,7 +4741,7 @@
         {
           "kind": "function",
           "name": "_planRefundBalances",
-          "line": 264,
+          "line": 269,
           "called": []
         }
       ]
@@ -12660,19 +12660,19 @@
         {
           "kind": "function",
           "name": "encodeUintExternal",
-          "line": 403,
+          "line": 411,
           "called": []
         },
         {
           "kind": "function",
           "name": "encodeAmountExternal",
-          "line": 408,
+          "line": 416,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_uniformWrites_match_lean",
-          "line": 432,
+          "line": 440,
           "called": [
             "_assertUniformWrite",
             "_skipWithReason",
@@ -12683,25 +12683,25 @@
         {
           "kind": "function",
           "name": "_assertUniformWrite",
-          "line": 448,
+          "line": 456,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_uniformWrites_are_fail_closed",
-          "line": 484,
+          "line": 492,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveNonceExternal",
-          "line": 501,
+          "line": 509,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_balanceWrites_match_lean",
-          "line": 525,
+          "line": 533,
           "called": [
             "_assertBalanceWrite",
             "_skipWithReason",
@@ -12712,13 +12712,13 @@
         {
           "kind": "function",
           "name": "_assertBalanceWrite",
-          "line": 541,
+          "line": 549,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recordWrites_match_lean",
-          "line": 596,
+          "line": 604,
           "called": [
             "_assertRecordWrite",
             "_skipWithReason",
@@ -12729,31 +12729,31 @@
         {
           "kind": "function",
           "name": "_assertRecordWrite",
-          "line": 612,
+          "line": 620,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveRegistryFromFieldsExternal",
-          "line": 651,
+          "line": 659,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveDeclaredPolicyExternal",
-          "line": 660,
+          "line": 668,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_nextWdIdWrite_advances_by_one",
-          "line": 672,
+          "line": 680,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_canonicalAbsentValues_match_lean",
-          "line": 699,
+          "line": 707,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12763,13 +12763,13 @@
         {
           "kind": "function",
           "name": "test_canonicalAbsence_rejects_present_values",
-          "line": 732,
+          "line": 740,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_the_fold_reaches_the_published_root",
-          "line": 768,
+          "line": 776,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12780,7 +12780,7 @@
         {
           "kind": "function",
           "name": "test_leafPreimage_is_reconstructible",
-          "line": 821,
+          "line": 829,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12790,7 +12790,7 @@
         {
           "kind": "function",
           "name": "test_writeSet_matches_lean",
-          "line": 849,
+          "line": 857,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12800,25 +12800,25 @@
         {
           "kind": "function",
           "name": "assertWriteSetExternal",
-          "line": 864,
+          "line": 872,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveWriteSetExternal",
-          "line": 911,
+          "line": 919,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_writeSet_refuses_only_the_bulk_pair",
-          "line": 924,
+          "line": 932,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 946,
+          "line": 957,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12829,7 +12829,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 974,
+          "line": 985,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12839,7 +12839,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 999,
+          "line": 1010,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12849,7 +12849,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 1048,
+          "line": 1059,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12859,7 +12859,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 1095,
+          "line": 1106,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -13058,7 +13058,7 @@
         {
           "kind": "function",
           "name": "_amountValue",
-          "line": 412,
+          "line": 420,
           "called": []
         }
       ]

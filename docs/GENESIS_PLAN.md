@@ -3488,16 +3488,29 @@ the two laws share ONE list: a per-law filter would have left
 `proportionalDilute`'s side.
 
 **Scope.**  "Balance zero" and "cell canonically absent" coincide only
-below the CBE amount head's `2^128` range, because `encodeAmount`
-truncates modulo `2^128`.  That is the standing
-`ExtendedState.CanonicalBounds.base_amt` assumption, and it is
-deliberately not re-enforced in these two preconditions: a balance
-that large makes the root blind to a cell for *every* law — `transfer`'s
-precondition already reads `true` on one of two root-identical states —
-so it is a property of §8.9's commitment rather than of the recipient
-list.  Recorded as finding **C-3**;
-`FaultProof.balanceCell_absent_iff_balance_zero` carries the bound as
-an explicit hypothesis rather than assuming it silently.
+below the CBE amount head's range, because `encodeAmount` truncates
+modulo its own width.  That was finding **C-3**, and it is closed —
+but not by these two preconditions, and deliberately so: a balance at
+the modulus makes the root blind to a cell for *every* law
+(`transfer`'s precondition read `true` on one of two root-identical
+states), so it is a property of §8.9's commitment rather than of the
+recipient list, and a per-law filter would have treated one symptom
+while reading as if the rest were safe.
+
+What closed it is two changes at the right layers.  The head is now
+`2^256` — the EVM word, so there is no wider fixed width to migrate to
+next — and the ceiling is a precondition conjunct
+(`Laws.AmountBounded`) on every crediting law, stated over the
+post-debit state so a self-transfer is bounded by the sender's balance
+rather than by twice it.  `FaultProof.canonicalBounds_base_amt_of_reachable`
+then discharges `ExtendedState.CanonicalBounds.base_amt` over
+reachability rather than carrying it as an assumption, so the bound is
+a checked property of reachable states.  Width alone would not have
+sufficed: any fixed-width encoder aliases at its own modulus, and
+`AmountBounded` is exactly `< Laws.maxAmount`, so the first colliding
+value is the first excluded one.
+`FaultProof.balanceCell_absent_iff_balance_zero` still carries the
+bound as an explicit hypothesis rather than assuming it silently.
 
 ### Phase 4: DSL and Serialization
 

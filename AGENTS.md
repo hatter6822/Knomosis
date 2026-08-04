@@ -244,7 +244,8 @@ knomosis/
 │   │                             depositWithFee, topUpActionBudget,
 │   │                             topUpActionBudgetFor, claimBudgetRefund,
 │   │                             ammSwap, reclaimAmmReserves, dispute
-│   │                             pipeline, local-policy laws)
+│   │                             pipeline, local-policy laws) plus
+│   │                             AmountBound (the shared credit ceiling)
 │   ├── Authority/             -- Crypto, Action, Identity, Nonce, LocalPolicy,
 │   │                             LocalPolicySemantics, SignedAction, ActorBudget
 │   ├── Encoding/              -- CBE codec (CBOR, Encodable, Action, Event,
@@ -265,7 +266,8 @@ knomosis/
 │   │                             BridgeReachable + chain-level conservation (CA)
 │   ├── FaultProof/            -- Workstream H: state-commitment, bisection game,
 │   │                             convergence/honesty/settlement theorems, SMT
-│   │                             cell proofs, step-VM coherence
+│   │                             cell proofs, step-VM coherence,
+│   │                             BoundsReachable (discharges CanonicalBounds)
 │   └── Test/                  -- IO-based test harness; one suite per module
 ├── Lex/                       -- Workstream LX — the Lex programming language
 │   ├── IndexRegistry.txt      -- frozen action-index registry (append-only)
@@ -644,6 +646,10 @@ The Genesis Plan promises a small set of type-level guarantees
 | Phase 2 | Transfer conserves supply | `transfer_conserves` | `Laws/Transfer.lean` |
 | Phase 2 | Conservation typeclass | `IsConservative`, `ConservativeLawSet` | `Conservation.lean` |
 | Phase 2 | Global supply preservation | `total_supply_global` | `Conservation.lean` |
+| C-3 | Credits stay under the head's modulus | `AmountBounded` (a conjunct of every crediting `pre`) | `Laws/AmountBound.lean` |
+| C-3 | ...inductively, over the whole state | `balancesBounded_apply_impl` | `FaultProof/BoundsReachable.lean` |
+| C-3 | ...so `CanonicalBounds.base_amt` is discharged, not assumed | `canonicalBounds_base_amt_of_reachable` | `FaultProof/BoundsReachable.lean` |
+| C-3 | Trace-length bound on the 8-byte heads | `expectsNonce_le_of_reachableIn` | `FaultProof/BoundsReachable.lean` |
 | Phase 3 | Action compilation injective | `Action.compile_injective` | `Authority/Action.lean` |
 | Phase 3 | Nonce uniqueness | `nonce_uniqueness` | `Authority/SignedAction.lean` |
 | Phase 3 | Replay impossible | `replay_impossible` | `Authority/SignedAction.lean` |
@@ -814,7 +820,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.12.1`) — the single
+the `lakefile.lean` `version` field (currently `0.13.0`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the
@@ -907,12 +913,20 @@ full catalogue):
   twin sat under it — one advances, one no-ops), both bulk laws agree
   on a state holding one, and — the negative control — the retired rule
   is rebuilt in the test and shown to fork the post-root on the same
-  fixture pair, so nothing above passes vacuously.  Carries the one
-  `OBLIGATION:` case the filter does NOT close: `encodeAmount`
-  truncates at `2^128`, so a balance at a multiple of it reads
-  canonically absent, and the case exhibits `transfer` forking on the
-  same pair to show the gap belongs to the commitment rather than to
-  the bulk pair (finding C-3).
+  fixture pair, so nothing above passes vacuously.  Carries the closed
+  form of finding C-3, which this suite recorded as an open obligation
+  until v0.13.0: the `2^128` pair that used to share a root while
+  reaching different post-roots is now root-DISTINCT, and the residual
+  collision — any fixed-width encoder aliases at its own modulus — is
+  unreachable rather than merely wider, since `Laws.AmountBounded` is
+  exactly `< Laws.maxAmount` and so excludes precisely the first
+  colliding value.
+- `faultproof-bounds-reachable` — the C-3 discharge: the amount ceiling
+  is exhibited as a real constraint (a state AT it is representable and
+  unbounded) before anything is proved about it, then the laws are shown
+  refusing to reach one — a crossing credit is a NO-OP, not a truncated
+  write.  Includes the self-transfer corner that a conjunct stated over
+  the pre-state would wrongly refuse.
 - `events-extract` — per-action event emission, including the bulk-law
   path, which had no coverage at all until `Events.affectedActors` was
   found to be a fourth spelling of the recipient rule.  Its three cases

@@ -195,51 +195,60 @@ def tests : List TestCase :=
         assert (decide ((Laws.distributeOthers 1 3 7).pre base.base))
           "...and on its root-identical twin"
     }
-  , { name := "OBLIGATION: the zero filter is exact only below 2^128"
+  , { name := "the 2^128 aliasing pair is closed, and its successor is unreachable"
     , body := do
-        -- What the filter does NOT close, stated where someone will
-        -- trip over it.  `Encoding.encodeAmount` is a 16-byte
-        -- little-endian body, so it truncates modulo `2^128`: a balance
-        -- that is a nonzero multiple of `2^128` encodes exactly as
-        -- `encodeAmount 0`, its cell reads canonically ABSENT, and the
-        -- root cannot see it — while `kv.2 != 0` still says `true`, so
-        -- it is still a recipient.  The C-2 fixture pair reappears.
+        -- This case used to record finding C-3 as an open obligation.
+        -- `encodeAmount` had a 16-byte body, so a balance at a nonzero
+        -- multiple of `2^128` encoded byte-for-byte as `encodeAmount 0`
+        -- — which IS `canonicalAbsentValue (.balance _ _)`.
+        -- `stateCellEntries` drops canonically-absent cells, so the
+        -- balance had no leaf and the published root could not see it,
+        -- while `kv.2 != 0` still called it a recipient.  Two states
+        -- differing only there shared a root and reached different
+        -- post-roots, so the pre-state root stopped being a sufficient
+        -- statistic for the transition — the premise the fault proof
+        -- rests on.
         --
-        -- Deliberately NOT closed by bounding this law's precondition.
-        -- The blind spot belongs to the COMMITMENT, not to the
-        -- recipient list: the `transfer` control at the end forks on
-        -- the same pair through a law that has nothing to do with bulk,
-        -- so a per-law bound would treat one symptom of a global
-        -- property and read as if the rest were safe.  Recorded as
-        -- C-3 in `docs/audits/19-findings-and-followups.md`;
-        -- `balanceCell_absent_iff_balance_zero` carries the bound as an
-        -- explicit hypothesis rather than assuming it silently.
-        let big : Nat := 256 ^ 32
+        -- Both halves are now closed, and they are closed differently.
+        let old : Nat := 256 ^ 16
         let base := LegalKernel.setBalance { balances := ∅ } 1 1 10
-        let withBig := LegalKernel.setBalance base 1 2 big
+        let withOld := LegalKernel.setBalance base 1 2 old
         let e (x : LegalKernel.State) : ExtendedState :=
           { ExtendedState.empty with base := x }
-        assertEq (expected := (LegalKernel.Encoding.encodeAmount 0))
-          (actual := (LegalKernel.Encoding.encodeAmount big))
-          "2^128 encodes as zero — the truncation, exhibited"
-        assertEq (expected := (commitExtendedState (e base)).toList)
-          (actual := (commitExtendedState (e withBig)).toList)
-          "so a 2^128 balance is invisible to the published root"
-        -- Hence the recipient sets diverge, and so do the post-roots.
-        assert ((Laws.bulkRecipients withBig 1 9).length
-                  != (Laws.bulkRecipients base 1 9).length)
-          "OBLIGATION: the recipient sets still diverge at 2^128"
-        let pB := step_impl withBig (Laws.distributeOthers 1 9 7)
-        let pA := step_impl base    (Laws.distributeOthers 1 9 7)
-        assert ((commitExtendedState (e pB)).toList
-                  != (commitExtendedState (e pA)).toList)
-          "OBLIGATION: bulk post-roots still fork at 2^128"
-        -- The control that scopes it.  `transfer` forks on the SAME
-        -- pair, through its precondition, with no bulk law in sight.
-        assert (decide ((Laws.transfer 1 2 3 5).pre withBig))
-          "transfer's precondition reads true on the invisible balance"
+        -- 1. The encoder no longer collides at the retired modulus.
+        assert (LegalKernel.Encoding.encodeAmount old
+                  != LegalKernel.Encoding.encodeAmount 0)
+          "2^128 no longer encodes as zero"
+        -- 2. So the root SEES the balance, and the pair that used to
+        --    alias is now root-distinct.  This is the violation itself
+        --    closing: the two states differ, and their roots differ.
+        assert ((commitExtendedState (e withOld)).toList
+                  != (commitExtendedState (e base)).toList)
+          "the pair is root-distinct — the sufficient statistic holds"
+        -- 3. The `transfer` control that scoped the finding as GLOBAL
+        --    rather than bulk-specific still reads differently across
+        --    the pair, and that is now correct rather than a fork: the
+        --    states are distinguishable, so a law may distinguish them.
+        assert (decide ((Laws.transfer 1 2 3 5).pre withOld))
+          "transfer's precondition reads true on the visible balance"
         assert (!decide ((Laws.transfer 1 2 3 5).pre base))
-          "...and false on its root-identical twin: NOT bulk-specific"
+          "...and false where there is no balance — now agreeing with the root"
+        -- 4. The residual.  Any fixed-width encoder aliases at its OWN
+        --    modulus, so the collision did not vanish, it moved to
+        --    `Laws.maxAmount`.  What closes it there is not width but
+        --    reachability: `AmountBounded` is a conjunct of every
+        --    crediting precondition and is exactly `< maxAmount`, so
+        --    the first colliding value is the first excluded one.
+        assertEq (expected := LegalKernel.Encoding.encodeAmount 0)
+          (actual := LegalKernel.Encoding.encodeAmount Laws.maxAmount)
+          "the ceiling still aliases arithmetically — width alone never fixes this"
+        let atCeiling := LegalKernel.setBalance { balances := ∅ } 1 1
+          (Laws.maxAmount - 1)
+        assert (!decide ((Laws.mint 1 1 1).pre atCeiling))
+          "...but no credit reaches it: the step is refused"
+        assertEq (expected := Laws.maxAmount - 1)
+          (actual := LegalKernel.getBalance (step_impl atCeiling (Laws.mint 1 1 1)) 1 1)
+          "and the refusal is a no-op, not a truncated write"
     }
   , { name := "each sub-step writes exactly one balance cell"
     , body := do
