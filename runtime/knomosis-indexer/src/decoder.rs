@@ -53,7 +53,7 @@ pub const CBE_TAG_UINT: u8 = 0x00;
 /// `Encoding.CBOR.cbeTagAmount`.  Distinct from [`CBE_TAG_UINT`] so a
 /// widened amount field can never alias an adjacent identifier field
 /// in a concatenated layout.
-pub const CBE_TAG_AMOUNT: u8 = 0x01;
+pub const CBE_TAG_AMOUNT: u8 = 0x06;
 
 /// CBE tag byte for a byte string.  Matches Lean's
 /// `Encoding.CBOR.cbeTagBytes`.
@@ -63,7 +63,7 @@ pub const CBE_TAG_BYTES: u8 = 0x02;
 pub const HEAD_LEN: usize = 9;
 
 /// Length of a CBE amount head (1-byte tag + 16-byte LE u128).
-pub const AMOUNT_HEAD_LEN: usize = 17;
+pub const AMOUNT_HEAD_LEN: usize = 33;
 
 /// 20-byte byte string is the standard EthAddress encoding (head
 /// + 20 payload bytes = 29 bytes total).
@@ -103,6 +103,24 @@ pub enum DecodeError {
         expected: u8,
         /// Tag actually read.
         actual: u8,
+    },
+    /// An amount's high 16 bytes were non-zero, so the value does not
+    /// fit this crate's `u128` `Amount`.
+    ///
+    /// The wire carries 32 bytes because the Lean state root does
+    /// (finding C-3: a narrower head makes a large balance read as the
+    /// canonically-absent value, and the root goes blind to it).  This
+    /// crate is a read-side view and represents an amount as `u128`,
+    /// so it FAILS on a value it cannot hold rather than truncating —
+    /// truncating is the exact defect the widening exists to remove,
+    /// and a read view that silently halves a balance is worse than
+    /// one that says it cannot read it.
+    ///
+    /// Unreachable in practice: `2^128` wei is ~`3.4e20` ETH.
+    #[error("amount at offset {offset} exceeds this decoder's u128 range")]
+    AmountTooWide {
+        /// Byte offset of the offending amount head.
+        offset: usize,
     },
     /// A byte-string field declared a length exceeding
     /// `HARD_MAX_BYTE_STRING_LEN`.
@@ -213,14 +231,17 @@ impl<'a> Cursor<'a> {
         Ok(n)
     }
 
-    /// Read a CBE amount head (tag 0x01 + 16-byte LE u128).
+    /// Read a CBE amount head (tag 0x06 + 32-byte LE value).
     ///
-    /// `Amount` is `u128` on this side and `Nat` on Lean's, so the
-    /// 16-byte head makes the round-trip lossless where the 8-byte
-    /// head truncated: a wei-denominated balance crosses `2^64` at
-    /// ~18.45 ETH.  Rejects the uint tag rather than accepting either
-    /// width — one logical value must have exactly one byte form, or
-    /// the state root it feeds stops binding.
+    /// The head is 32 bytes because Lean's is: the width is the EVM
+    /// word, so no value the L1 can hold is one the head cannot carry.
+    /// `Amount` is `u128` here and `Nat` on Lean's side, so the top 16
+    /// bytes are REQUIRED to be zero and an over-wide value is a
+    /// decode error, never a truncation (see `AmountTooWide`).
+    ///
+    /// Rejects the uint tag rather than accepting either width — one
+    /// logical value must have exactly one byte form, or the state
+    /// root it feeds stops binding.
     fn read_amount(&mut self) -> Result<u128, DecodeError> {
         let head_offset = self.offset;
         let buf = self.read_bytes(AMOUNT_HEAD_LEN)?;
@@ -232,8 +253,14 @@ impl<'a> Cursor<'a> {
                 actual: tag,
             });
         }
+        // Little-endian: bytes 1..17 are the low half, 17..33 the high.
+        if buf[17..AMOUNT_HEAD_LEN].iter().any(|&b| b != 0) {
+            return Err(DecodeError::AmountTooWide {
+                offset: head_offset,
+            });
+        }
         let mut n_buf = [0u8; 16];
-        n_buf.copy_from_slice(&buf[1..AMOUNT_HEAD_LEN]);
+        n_buf.copy_from_slice(&buf[1..17]);
         Ok(u128::from_le_bytes(n_buf))
     }
 
@@ -472,10 +499,14 @@ fn write_uint(out: &mut Vec<u8>, n: u64) {
     out.extend_from_slice(&n.to_le_bytes());
 }
 
-/// Encode a CBE amount head (tag 0x01 + 16-byte LE u128) into `out`.
+/// Encode a CBE amount head (tag 0x06 + 32-byte LE value) into `out`.
+///
+/// `n` is a `u128`, so the high 16 bytes are always zero — the encoder
+/// cannot produce a value its own decoder would reject.
 fn write_amount_head(out: &mut Vec<u8>, n: u128) {
     out.push(CBE_TAG_AMOUNT);
     out.extend_from_slice(&n.to_le_bytes());
+    out.extend_from_slice(&[0u8; 16]);
 }
 
 /// Encode a CBE byte string into `out`.

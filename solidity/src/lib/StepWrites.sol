@@ -65,8 +65,10 @@ library StepWrites {
     /// @notice CBE uint head width: tag + 8 little-endian bytes.
     uint256 internal constant CBE_UINT_LEN = 9;
 
-    /// @notice CBE amount head width: tag + 16 little-endian bytes.
-    uint256 internal constant CBE_AMOUNT_LEN = 17;
+    /// @notice CBE amount head width: tag + 32 little-endian bytes.
+    ///         The width is the EVM word, so no balance this verifier
+    ///         can hold is one the head cannot carry (finding C-3).
+    uint256 internal constant CBE_AMOUNT_LEN = 33;
 
     /* ---------------------------------------------------------- */
     /* Decoding                                                   */
@@ -97,7 +99,7 @@ library StepWrites {
         return _readUint(value, 0);
     }
 
-    /// @dev Read one CBE amount at `offset`.  The 17-byte sibling of
+    /// @dev Read one CBE amount at `offset`.  The 33-byte sibling of
     ///      `_readUint`, and a SEPARATE tag: a balance and a counter
     ///      holding the same number are different cell values, which is
     ///      what stops a proof opening one from being replayed as the
@@ -109,7 +111,7 @@ library StepWrites {
     {
         if (data.length < offset + CBE_AMOUNT_LEN) revert MalformedCellValue();
         if (uint8(data[offset]) != CBEEncode.CBE_TAG_AMOUNT) revert MalformedCellValue();
-        for (uint256 i = 0; i < 16; i++) {
+        for (uint256 i = 0; i < 32; i++) {
             v |= uint256(uint8(data[offset + 1 + i])) << (8 * i);
         }
     }
@@ -134,7 +136,7 @@ library StepWrites {
     /// @dev    The action-field reader, BIG-endian — the CBE heads are
     ///         little-endian and both orders live in this library, so
     ///         the two are named apart rather than sharing one.  Widths
-    ///         are 8 for identifiers and 16 for amounts, per
+    ///         are 8 for identifiers and 32 for amounts, per
     ///         `actionFieldsForL1`; a caller passing the wrong one
     ///         still decodes to a plausible number, which is why the
     ///         offsets are pinned by `writeSetGoldens` over the ACTUAL
@@ -380,6 +382,30 @@ library StepWrites {
     ///         state, so when the two coincide the net change is zero.
     ///         Debiting and crediting independently would move the root
     ///         on a self-transfer, which any actor can submit cheaply.
+    /// @notice The C-3 ceiling on a credit, as the L1 evaluates it.
+    ///
+    /// @dev    Mirrors `Laws.AmountBounded`: `bal + amount <
+    ///         Laws.maxAmount`.  `maxAmount` is `2^256` — the EVM word
+    ///         — so on this side the conjunct is EXACTLY "the sum does
+    ///         not wrap a `uint256`", and no `MAX_AMOUNT` constant is
+    ///         needed or even representable.  That is why the Lean
+    ///         ceiling was set to the word width rather than to some
+    ///         round number below it.
+    ///
+    ///         `unchecked` is load-bearing.  Solidity's checked
+    ///         arithmetic REVERTS on overflow, and a revert is not a
+    ///         no-op: `step_impl` is `if pre then apply_impl else id`,
+    ///         so an over-ceiling credit must leave the cells alone,
+    ///         not abort the step.  A reverting verifier would refuse
+    ///         to adjudicate a step the L2 correctly no-opped.
+    function creditFits(uint256 bal, uint256 amount)
+        internal
+        pure
+        returns (bool)
+    {
+        unchecked { return bal + amount >= bal; }
+    }
+
     function deriveTransferBalances(
         uint256 senderBal,
         uint256 receiverBal,
@@ -387,8 +413,14 @@ library StepWrites {
         uint64 receiver,
         uint256 amount
     ) internal pure returns (uint256 newSender, uint256 newReceiver) {
+        // The ceiling reads the receiver from the POST-DEBIT state,
+        // exactly as `Laws.transfer`'s conjunct does: on a
+        // self-transfer the credited value is `senderBal`, not
+        // `senderBal + amount`, so bounding against the pre-state
+        // would refuse a step that moves no cell at all.
         if (amount > 0 && amount <= senderBal) {
             if (sender == receiver) return (senderBal, senderBal);
+            if (!creditFits(receiverBal, amount)) return (senderBal, receiverBal);
             return (senderBal - amount, receiverBal + amount);
         }
         return (senderBal, receiverBal);
@@ -403,7 +435,7 @@ library StepWrites {
         pure
         returns (uint256)
     {
-        return amount > 0 ? bal + amount : bal;
+        return (amount > 0 && creditFits(bal, amount)) ? bal + amount : bal;
     }
 
     /// @notice `burn` / `withdraw`: debit under a sufficiency check.
@@ -415,19 +447,21 @@ library StepWrites {
         return (amount > 0 && amount <= bal) ? bal - amount : bal;
     }
 
-    /// @notice `deposit`: an UNCONDITIONAL credit.
-    /// @dev    `Laws.deposit.pre` is `True` — a bridge deposit's
-    ///         admissibility is settled by the bridge gate (the
-    ///         consumed-deposit cell, the attested receipt), not by the
-    ///         kernel transition.  Separate from `deriveCreditBalance`
-    ///         for exactly that reason: reusing the positivity-guarded
-    ///         one would silently no-op a legitimate zero deposit.
+    /// @notice `deposit`: a credit with no positivity clause.
+    /// @dev    A bridge deposit's admissibility is settled by the
+    ///         bridge gate (the consumed-deposit cell, the attested
+    ///         receipt), not by the kernel transition, so
+    ///         `Laws.deposit.pre` carries no `amount > 0` — it was
+    ///         literally `True` until the C-3 ceiling landed.  Separate
+    ///         from `deriveCreditBalance` for exactly that reason:
+    ///         reusing the positivity-guarded one would silently no-op
+    ///         a legitimate zero deposit.
     function deriveDepositBalance(uint256 bal, uint256 amount)
         internal
         pure
         returns (uint256)
     {
-        return bal + amount;
+        return creditFits(bal, amount) ? bal + amount : bal;
     }
 
     /// @notice The chained same-resource pair: write `x`, then write
@@ -470,6 +504,11 @@ library StepWrites {
         bool sufficient
     ) internal pure returns (uint256 newPayer, uint256 newPool) {
         if (!sufficient) return (payerBal, poolBal);
+        // The credit leg reads the POST-DEBIT pool, matching the law's
+        // conjunct; when payer and pool coincide the credited value is
+        // the payer's own balance back.
+        uint256 creditPre = payer == poolActor ? payerBal - gasAmount : poolBal;
+        if (!creditFits(creditPre, gasAmount)) return (payerBal, poolBal);
         return deriveChainPair(payerBal, poolBal, payer, poolActor, gasAmount, gasAmount);
     }
 
@@ -478,11 +517,15 @@ library StepWrites {
     ///         The chained pair with TWO credits rather than a
     ///         debit/credit, so it cannot route through
     ///         `deriveChainPair` (whose `x` leg subtracts).
-    ///         `Laws.depositWithFee.pre` is `True`, like `deposit`'s —
-    ///         a bridge deposit's admissibility is settled by the
-    ///         bridge gate — so there is no branch, and the `x == y`
-    ///         case (a recipient who IS the pool actor) still has to
-    ///         net both credits onto one cell.
+    ///         `Laws.depositWithFee.pre` carries no positivity clause,
+    ///         like `deposit`'s — a bridge deposit's admissibility is
+    ///         settled by the bridge gate — so the only branch is the
+    ///         C-3 ceiling, and the `x == y` case (a recipient who IS
+    ///         the pool actor) still has to net both credits onto one
+    ///         cell.  Both legs are bounded, the second against the
+    ///         state the first already wrote: bounding them
+    ///         independently would miss their SUM when the two actors
+    ///         coincide.
     function deriveDepositWithFeeBalances(
         uint256 recipientBal,
         uint256 poolBal,
@@ -491,8 +534,11 @@ library StepWrites {
         uint256 userAmount,
         uint256 poolAmount
     ) internal pure returns (uint256 newRecipient, uint256 newPool) {
+        if (!creditFits(recipientBal, userAmount)) return (recipientBal, poolBal);
         uint256 nx = recipientBal + userAmount;
-        uint256 ny = (recipient == poolActor ? nx : poolBal) + poolAmount;
+        uint256 creditPre = recipient == poolActor ? nx : poolBal;
+        if (!creditFits(creditPre, poolAmount)) return (recipientBal, poolBal);
+        uint256 ny = creditPre + poolAmount;
         return (recipient == poolActor ? ny : nx, ny);
     }
 
@@ -511,7 +557,8 @@ library StepWrites {
         uint256 amountIn,
         uint256 amountOut
     ) internal pure returns (uint256 newFrom, uint256 newTo) {
-        if (toBal >= amountOut && fromResource != toResource && amountIn > 0) {
+        if (toBal >= amountOut && fromResource != toResource && amountIn > 0
+                && creditFits(fromBal, amountIn)) {
             return (fromBal + amountIn, toBal - amountOut);
         }
         return (fromBal, toBal);
@@ -527,7 +574,14 @@ library StepWrites {
         uint64 poolActor,
         uint256 amount
     ) internal pure returns (uint256 newReserve, uint256 newPool) {
-        if (reserveBal == amount && reserveActor != poolActor && amount > 0) {
+        // `reserveActor != poolActor` is a precondition conjunct, so
+        // the credit leg always reads the pool's own pre-value here;
+        // the post-debit form is kept anyway to mirror the law rather
+        // than to rely on that conjunct holding.
+        if (reserveBal == amount && reserveActor != poolActor && amount > 0
+                && creditFits(
+                    reserveActor == poolActor ? reserveBal - amount : poolBal,
+                    amount)) {
             return deriveChainPair(
                 reserveBal, poolBal, reserveActor, poolActor, amount, amount);
         }

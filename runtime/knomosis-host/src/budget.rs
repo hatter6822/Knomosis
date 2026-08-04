@@ -115,7 +115,7 @@ const CBE_TAG_UINT: u8 = 0x00;
 
 /// CBE type tag for value-carrying amounts.  Mirrors Lean's
 /// `Encoding.CBOR.cbeTagAmount`.
-const CBE_TAG_AMOUNT: u8 = 0x01;
+const CBE_TAG_AMOUNT: u8 = 0x06;
 
 /// CBE type tag for byte strings.  Mirrors Lean's
 /// `Encoding.CBOR.cbeTagBytes`.
@@ -132,7 +132,7 @@ const HEAD_LEN: usize = 9;
 /// Length of a CBE amount head: 1 type-tag byte + 16-byte
 /// little-endian value.  Mirrors Lean's
 /// `Encoding.CBOR.cborAmountHeadEncode` output width.
-const AMOUNT_HEAD_LEN: usize = 17;
+const AMOUNT_HEAD_LEN: usize = 33;
 
 /// Append a CBE uint head (`CBE_TAG_UINT` + 8-byte LE value) to
 /// `out`.  Mirrors `Encodable.encode (T := Nat)`.
@@ -628,11 +628,22 @@ pub enum BudgetDecodeError {
         /// The tag byte actually found.
         found: u8,
     },
+    /// A CBE amount head carried a value above this crate's `u128`
+    /// range.  The wire is 32 bytes wide because the Lean state root
+    /// is; representing an amount as `u128` here is a deliberate
+    /// narrowing, so the over-wide case fails closed rather than
+    /// wrapping.  Unreachable in practice: `2^128` wei is ~`3.4e20`
+    /// ETH.
+    #[error("amount at offset {offset} exceeds this decoder's u128 range")]
+    AmountTooWide {
+        /// Byte offset of the bad head.
+        offset: usize,
+    },
     /// A CBE amount head carried the wrong type tag.  In particular
     /// this fires when a value-carrying field arrives on the narrower
     /// uint head, which must be rejected rather than accepted at
     /// either width — one logical value, one byte form.
-    #[error("expected CBE amount tag 0x01 at offset {offset}, found 0x{found:02x}")]
+    #[error("expected CBE amount tag 0x06 at offset {offset}, found 0x{found:02x}")]
     ExpectedAmount {
         /// Byte offset of the bad head.
         offset: usize,
@@ -761,7 +772,7 @@ impl<'a> CbeCursor<'a> {
         self.read_uint().map(|_| ())
     }
 
-    /// Read a CBE amount head (tag `0x01` + 16-byte LE value),
+    /// Read a CBE amount head (tag `0x06` + 32-byte LE value),
     /// advancing the cursor by [`AMOUNT_HEAD_LEN`].
     ///
     /// Value-carrying fields ride this head; identifiers, nonces and
@@ -786,8 +797,17 @@ impl<'a> CbeCursor<'a> {
                 found: head[0],
             });
         }
+        // Little-endian: bytes 1..17 are the low half, 17..33 the
+        // high.  An `Amount` is `u128` on this side and `Nat` on
+        // Lean's, so an over-wide value is REJECTED rather than
+        // truncated — truncation is finding C-3 itself, and this
+        // decoder feeds the budget admission gate, where reading a
+        // halved amount would admit a step the L2 refuses.
+        if head[17..AMOUNT_HEAD_LEN].iter().any(|&b| b != 0) {
+            return Err(BudgetDecodeError::AmountTooWide { offset: self.pos });
+        }
         let mut le = [0u8; 16];
-        le.copy_from_slice(&head[1..AMOUNT_HEAD_LEN]);
+        le.copy_from_slice(&head[1..17]);
         self.pos = end;
         Ok(u128::from_le_bytes(le))
     }
@@ -1553,13 +1573,14 @@ mod tests {
         v
     }
 
-    /// A CBE amount field: `[0x01] ++ LE16(n)`.  The value-carrying
+    /// A CBE amount field: `[0x06] ++ LE32(n)`.  The value-carrying
     /// counterpart of [`u`]; using the wrong one shifts every
-    /// subsequent field by 8 bytes, which is exactly the failure the
+    /// subsequent field by 24 bytes, which is exactly the failure the
     /// decoder's tag check now surfaces.
     fn amt(n: u128) -> Vec<u8> {
         let mut v = vec![CBE_TAG_AMOUNT];
         v.extend_from_slice(&n.to_le_bytes());
+        v.extend_from_slice(&[0u8; 16]);
         v
     }
 

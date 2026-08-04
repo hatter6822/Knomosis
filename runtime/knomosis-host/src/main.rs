@@ -289,11 +289,12 @@ mod tests {
         v
     }
 
-    /// A CBE amount head: `[0x01] ++ LE16(n)`.  Value-carrying
+    /// A CBE amount head: `[0x06] ++ LE32(n)`.  Value-carrying
     /// fields ride this head; identifiers and nonces do not.
     fn cbe_amount(n: u128) -> Vec<u8> {
-        let mut v = vec![0x01u8];
+        let mut v = vec![0x06u8];
         v.extend_from_slice(&n.to_le_bytes());
+        v.extend_from_slice(&[0u8; 16]);
         v
     }
 

@@ -2074,9 +2074,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         uint256 off = 0;
         (wd.resourceId, off) = CBEDecode.readUint(leafBlob, off);
         (wd.recipientL1, off) = CBEDecode.readAddressExact(leafBlob, off);
-        uint128 amount128;
-        (amount128, off) = CBEDecode.readAmount(leafBlob, off);
-        wd.amount = uint256(amount128);
+        (wd.amount, off) = CBEDecode.readAmount(leafBlob, off);
         (wd.l2LogIndex, off) = CBEDecode.readUint(leafBlob, off);
         CBEDecode.assertFullyConsumed(leafBlob, off);
     }

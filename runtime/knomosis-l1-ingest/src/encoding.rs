@@ -78,10 +78,10 @@ pub const CBE_TAG_BYTES: u8 = 0x02;
 
 /// CBE tag byte for a value-carrying amount.  Matches Lean's
 /// `Encoding.CBOR.cbeTagAmount`.
-pub const CBE_TAG_AMOUNT: u8 = 0x01;
+pub const CBE_TAG_AMOUNT: u8 = 0x06;
 
 /// Length of a CBE amount head (1-byte tag + 16-byte LE u128).
-pub const AMOUNT_HEAD_LEN: usize = 17;
+pub const AMOUNT_HEAD_LEN: usize = 33;
 
 /// The signing-input domain prefix.  Mirrors Lean's
 /// `Authority.Crypto.signedActionDomain`.  Bytes here MUST equal
@@ -118,13 +118,19 @@ fn write_head(out: &mut Vec<u8>, tag: u8, n: u64) {
 fn write_amount_head(out: &mut Vec<u8>, n: u128) {
     out.push(CBE_TAG_AMOUNT);
     out.extend_from_slice(&n.to_le_bytes());
+    // The high 16 bytes of the 32-byte little-endian body.  `n` is a
+    // `u128`, so they are always zero here; the head is 32 bytes wide
+    // because Lean's is, and Lean's is because the state root must be
+    // able to see any balance the L1 can hold (finding C-3).
+    out.extend_from_slice(&[0u8; 16]);
 }
 
-/// Encode a `u128` as a CBE amount (tag 0x01 + 16-byte LE).  Mirrors
+/// Encode a `u128` as a CBE amount (tag 0x06 + 32-byte LE).  Mirrors
 /// Lean's `Encoding.Encodable.encodeAmount`.
 ///
-/// Total, unlike [`encode_u128_checked`]: the 16-byte head covers the
-/// whole `u128` range, which is why value-carrying fields moved to it.
+/// Total, unlike [`encode_u128_checked`]: the 32-byte head covers the
+/// whole `u128` range with 16 bytes to spare, which is why
+/// value-carrying fields ride it.
 #[must_use]
 pub fn encode_amount_u128(value: u128) -> Vec<u8> {
     let mut out = Vec::with_capacity(AMOUNT_HEAD_LEN);

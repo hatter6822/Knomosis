@@ -124,71 +124,77 @@ library StepPlan {
         uint256 pre1
     ) internal pure returns (uint256 new0, uint256 new1) {
         if (actionKind == 0) {
-            // transfer: r @0, sender @8, receiver @16, amount @24 (16).
+            // transfer: r @0, sender @8, receiver @16, amount @24 (32).
             return StepWrites.deriveTransferBalances(
                 pre0, pre1,
                 uint64(StepWrites.readFieldUint(fields, 8, 8)),
                 uint64(StepWrites.readFieldUint(fields, 16, 8)),
-                StepWrites.readFieldUint(fields, 24, 16)
+                StepWrites.readFieldUint(fields, 24, 32)
             );
         }
         if (actionKind == 1 || actionKind == 5) {
-            // mint / reward: one credit under a positivity check.
+            // mint / reward: one credit under a positivity check
+            // and the C-3 ceiling.  amount @16 (32).
             return (
                 StepWrites.deriveCreditBalance(
-                    pre0, StepWrites.readFieldUint(fields, 16, 16)),
+                    pre0, StepWrites.readFieldUint(fields, 16, 32)),
                 pre1
             );
         }
         if (actionKind == 2 || actionKind == 14) {
             // burn / withdraw: one debit under a sufficiency check.
+            // A debit needs no ceiling conjunct — subtraction only
+            // shrinks.  amount @16 (32).
             return (
                 StepWrites.deriveDebitBalance(
-                    pre0, StepWrites.readFieldUint(fields, 16, 16)),
+                    pre0, StepWrites.readFieldUint(fields, 16, 32)),
                 pre1
             );
         }
         if (actionKind == 13) {
-            // deposit: an UNCONDITIONAL credit — `Laws.deposit.pre` is
-            // `True`, so a legitimate ZERO deposit must not no-op.
+            // deposit: an unconditional credit apart from the C-3
+            // ceiling — `Laws.deposit.pre` carries no positivity
+            // clause, so a legitimate ZERO deposit must not no-op.
+            // (It WAS literally `True` until the ceiling landed.)
+            // amount @16 (32).
             return (
                 StepWrites.deriveDepositBalance(
-                    pre0, StepWrites.readFieldUint(fields, 16, 16)),
+                    pre0, StepWrites.readFieldUint(fields, 16, 32)),
                 pre1
             );
         }
         if (actionKind == 19) {
             // depositWithFee: recipient @8, poolActor @16,
-            // userAmount @24 (16), poolAmount @40 (16).
+            // userAmount @24 (32), poolAmount @56 (32).
             return StepWrites.deriveDepositWithFeeBalances(
                 pre0, pre1,
                 uint64(StepWrites.readFieldUint(fields, 8, 8)),
                 uint64(StepWrites.readFieldUint(fields, 16, 8)),
-                StepWrites.readFieldUint(fields, 24, 16),
-                StepWrites.readFieldUint(fields, 40, 16)
+                StepWrites.readFieldUint(fields, 24, 32),
+                StepWrites.readFieldUint(fields, 56, 32)
             );
         }
         if (actionKind == 20) {
-            // topUpActionBudget: gasAmount @8 (16), poolActor @32.
+            // topUpActionBudget: gasAmount @8 (32), poolActor @48.
             // Sufficiency only — there is NO positivity conjunct, so a
             // zero top-up is an admissible no-op.
-            uint256 gasAmount = StepWrites.readFieldUint(fields, 8, 16);
+            uint256 gasAmount = StepWrites.readFieldUint(fields, 8, 32);
             return StepWrites.deriveTopUpBalances(
                 pre0, pre1, signer,
-                uint64(StepWrites.readFieldUint(fields, 32, 8)),
+                uint64(StepWrites.readFieldUint(fields, 48, 8)),
                 gasAmount, gasAmount <= pre0
             );
         }
         if (actionKind == 21) {
-            // topUpActionBudgetFor: recipient @0, gasAmount @16 (16),
-            // poolActor @40.  The delegated form's precondition carries
+            // topUpActionBudgetFor: recipient @0, gasAmount @16 (32),
+            // poolActor @56.  The delegated form's precondition carries
             // `recipient != signer` — a self-delegation is a NO-OP
             // rather than a top-up, and a derivation blind to that
             // would move balances the advance leaves alone.
-            uint256 gasAmount = StepWrites.readFieldUint(fields, 16, 16);
+            uint256 gasAmount = StepWrites.readFieldUint(fields, 16, 32);
             return StepWrites.deriveTopUpBalances(
                 pre0, pre1, signer,
-                uint64(StepWrites.readFieldUint(fields, 40, 8)),
+                uint64(StepWrites.readFieldUint(fields, 56, 8)),
                 gasAmount,
                 gasAmount <= pre0
                     && uint64(StepWrites.readFieldUint(fields, 0, 8)) != signer
@@ -199,25 +205,25 @@ library StepPlan {
         }
         if (actionKind == 23) {
             // ammSwap: fromResource @0, toResource @8, amountIn @16
-            // (16), amountOut @32 (16).  The one variant touching two
+            // (32), amountOut @48 (32).  The one variant touching two
             // DIFFERENT resources, so the cells are independent.
             return StepWrites.deriveAmmSwapBalances(
                 pre0, pre1,
                 uint64(StepWrites.readFieldUint(fields, 0, 8)),
                 uint64(StepWrites.readFieldUint(fields, 8, 8)),
-                StepWrites.readFieldUint(fields, 16, 16),
-                StepWrites.readFieldUint(fields, 32, 16)
+                StepWrites.readFieldUint(fields, 16, 32),
+                StepWrites.readFieldUint(fields, 48, 32)
             );
         }
         if (actionKind == 24) {
-            // reclaimAmmReserves: amount @8 (16), reserveActor @24,
-            // poolActor @32.  The precondition is an EQUALITY, not a
+            // reclaimAmmReserves: amount @8 (32), reserveActor @40,
+            // poolActor @48.  The precondition is an EQUALITY, not a
             // sufficiency, so a partial reclaim is a no-op.
             return StepWrites.deriveReclaimBalances(
                 pre0, pre1,
-                uint64(StepWrites.readFieldUint(fields, 24, 8)),
-                uint64(StepWrites.readFieldUint(fields, 32, 8)),
-                StepWrites.readFieldUint(fields, 8, 16)
+                uint64(StepWrites.readFieldUint(fields, 40, 8)),
+                uint64(StepWrites.readFieldUint(fields, 48, 8)),
+                StepWrites.readFieldUint(fields, 8, 32)
             );
         }
         // The variants that write no balance cell at all.
@@ -236,22 +242,46 @@ library StepPlan {
     ///      writes are order-sensitive and those write the same value
     ///      twice.
     ///
-    ///      `budgetUnits` is bounded below `2^64` and
-    ///      `weiPerBudgetUnit` below `2^128`, so the payout can reach
-    ///      ~`2^192` — the product is computed in `uint256`, never a
-    ///      narrower type.
+    ///      **The product can exceed a `uint256`, and must not
+    ///      revert.**  `budgetUnits` is bounded below `2^64` and
+    ///      `weiPerBudgetUnit` now rides the 32-byte amount field, so
+    ///      the payout can reach ~`2^320`.  Lean computes it as a
+    ///      `Nat`, which does not overflow; checked `uint256`
+    ///      arithmetic here would REVERT, and a revert is not a no-op
+    ///      — the two stacks would disagree on a step an honest
+    ///      sequencer can be handed.
+    ///
+    ///      An overflowing product is instead treated as a failed
+    ///      precondition, which is exactly what it is: the payout
+    ///      exceeds `2^256`, no pool balance can cover it (every
+    ///      balance is under `Laws.maxAmount = 2^256` by
+    ///      `FaultProof.canonicalBounds_base_amt_of_reachable`), so
+    ///      `getBalance pool >= refundAmount` is false on the Lean
+    ///      side too and the law no-ops on both.
+    ///
+    ///      Before the widening `weiPerBudgetUnit` was capped below
+    ///      `2^128`, so the product topped out at ~`2^192` and fitted;
+    ///      the overflow path is new with the wider field.
     function _planRefundBalances(
         bytes calldata fields,
         uint64 signer,
         uint256 claimantPre,
         uint256 poolPre
     ) private pure returns (uint256 newClaimant, uint256 newPool) {
-        uint256 refundAmount = StepWrites.readFieldUint(fields, 8, 8)
-            * StepWrites.readFieldUint(fields, 16, 16);
+        uint256 units = StepWrites.readFieldUint(fields, 8, 8);
+        uint256 rate = StepWrites.readFieldUint(fields, 16, 32);
+        uint256 refundAmount;
+        bool fits;
+        unchecked {
+            refundAmount = units * rate;
+            // `units == 0` makes the product zero and the division
+            // guard undefined, so it is admitted directly.
+            fits = units == 0 || refundAmount / units == rate;
+        }
         (newPool, newClaimant) = StepWrites.deriveTopUpBalances(
             poolPre, claimantPre,
-            uint64(StepWrites.readFieldUint(fields, 32, 8)), signer,
-            refundAmount, refundAmount <= poolPre
+            uint64(StepWrites.readFieldUint(fields, 48, 8)), signer,
+            refundAmount, fits && refundAmount <= poolPre
         );
     }
 }

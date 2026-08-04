@@ -39,11 +39,17 @@ library CBEDecode {
     // ------------------------------------------------------------------
 
     uint8 internal constant TAG_UINT = 0x00;
-    /// @notice CBE type tag for a value-carrying amount (16-byte LE
+    /// @notice CBE type tag for a value-carrying amount (32-byte LE
     ///         payload).  Distinct from `TAG_UINT` so a widened amount
     ///         field can never alias an adjacent identifier field in a
     ///         concatenated layout.
-    uint8 internal constant TAG_AMOUNT = 0x01;
+    ///
+    ///         `0x06`, not the `0x01` it was: the tag moved with the
+    ///         width so a stale peer fails closed on an unexpected tag
+    ///         rather than reading 17 of 33 bytes and mis-parsing the
+    ///         rest of the stream.  `0x04`/`0x05` are array/map, so
+    ///         `0x06` is the next free value.
+    uint8 internal constant TAG_AMOUNT = 0x06;
     uint8 internal constant TAG_BYTES = 0x02;
     uint8 internal constant TAG_TEXT = 0x03;
     uint8 internal constant TAG_ARRAY = 0x04;
@@ -54,11 +60,14 @@ library CBEDecode {
     ///         budget-unit counts.
     uint256 internal constant HEAD_SIZE = 9;
 
-    /// @notice Length of a CBE amount head: 1 type byte + 16 LE value
-    ///         bytes.  Value-carrying fields only — a wei-denominated
-    ///         amount crosses `2^64` at ~18.45 ETH, so the narrow head
-    ///         truncated them.
-    uint256 internal constant AMOUNT_HEAD_SIZE = 17;
+    /// @notice Length of a CBE amount head: 1 type byte + 32 LE value
+    ///         bytes.  Value-carrying fields only.  The width is the
+    ///         EVM word, so no value this contract can hold is one the
+    ///         head cannot carry — the property finding C-3 turned on,
+    ///         since a truncating head makes a balance read as the
+    ///         canonically-absent value and the state root goes blind
+    ///         to it.
+    uint256 internal constant AMOUNT_HEAD_SIZE = 33;
 
     // ------------------------------------------------------------------
     // Custom errors
@@ -112,29 +121,33 @@ library CBEDecode {
     }
 
     // ------------------------------------------------------------------
-    // Primitive: read 16 LE bytes as uint128
+    // Primitive: read 32 LE bytes as uint256
     // ------------------------------------------------------------------
 
-    /// @notice Read 16 little-endian bytes from `buf` starting at
-    ///         `offset` and return the Nat-equivalent uint128 value
+    /// @notice Read 32 little-endian bytes from `buf` starting at
+    ///         `offset` and return the Nat-equivalent uint256 value
     ///         plus the next-offset.  Reverts on EOF.
-    /// @dev    Mirrors `natFromBytesLE rest 16` in Lean.
-    function readUint128LE(bytes calldata buf, uint256 offset)
+    /// @dev    Mirrors `natFromBytesLE rest 32` in Lean.  The 16-byte
+    ///         `readUint128LE` this replaces is gone rather than kept
+    ///         alongside: a narrower amount reader returns a truncated
+    ///         value instead of failing, which is the quiet half of
+    ///         finding C-3.
+    function readUint256LE(bytes calldata buf, uint256 offset)
         internal
         pure
-        returns (uint128 value, uint256 nextOffset)
+        returns (uint256 value, uint256 nextOffset)
     {
-        if (offset + 16 > buf.length) revert CBEUnexpectedEof();
-        uint128 acc = 0;
+        if (offset + 32 > buf.length) revert CBEUnexpectedEof();
+        uint256 acc = 0;
         unchecked {
-            // The loop runs exactly 16 times, so `8 * i < 128` always
-            // and the accumulator stays within `[0, 2^128 - 1]`.
-            for (uint128 i = 0; i < 16; ++i) {
-                acc |= uint128(uint8(buf[offset + uint256(i)])) << (8 * i);
+            // The loop runs exactly 32 times, so `8 * i < 256` always
+            // and the accumulator stays within `[0, 2^256 - 1]`.
+            for (uint256 i = 0; i < 32; ++i) {
+                acc |= uint256(uint8(buf[offset + i])) << (8 * i);
             }
         }
         value = acc;
-        nextOffset = offset + 16;
+        nextOffset = offset + 32;
     }
 
     // ------------------------------------------------------------------
@@ -170,7 +183,7 @@ library CBEDecode {
         return readHead(buf, offset, TAG_UINT);
     }
 
-    /// @notice Decode a CBE amount (tag 0x01 + 16 LE bytes).
+    /// @notice Decode a CBE amount (tag 0x06 + 32 LE bytes).
     /// @dev    Mirrors `cborAmountHeadDecode` in Lean.  Rejects
     ///         `TAG_UINT` rather than accepting either width: one
     ///         logical value must have exactly one byte form, or a peer
@@ -179,12 +192,12 @@ library CBEDecode {
     function readAmount(bytes calldata buf, uint256 offset)
         internal
         pure
-        returns (uint128 value, uint256 nextOffset)
+        returns (uint256 value, uint256 nextOffset)
     {
         if (offset >= buf.length) revert CBEUnexpectedEof();
         uint8 gotTag = uint8(buf[offset]);
         if (gotTag != TAG_AMOUNT) revert CBEInvalidMajorType(gotTag, TAG_AMOUNT);
-        (value, nextOffset) = readUint128LE(buf, offset + 1);
+        (value, nextOffset) = readUint256LE(buf, offset + 1);
     }
 
     /// @notice Decode a CBE byte string (tag 0x02 + length head +

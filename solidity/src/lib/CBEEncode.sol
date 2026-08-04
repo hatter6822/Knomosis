@@ -26,7 +26,7 @@ pragma solidity 0.8.20;
 ///         | value  | tag  | payload                    | total |
 ///         |--------|------|----------------------------|-------|
 ///         | uint   | 0x00 | 8 bytes, LITTLE-endian     | 9     |
-///         | amount | 0x01 | 16 bytes, LITTLE-endian    | 17    |
+///         | amount | 0x06 | 32 bytes, LITTLE-endian    | 33    |
 ///         | bytes  | 0x02 | 8-byte LE length, then raw | 9 + n |
 ///
 ///         **Little-endian, and that is not a typo.**  The CBE head is
@@ -46,7 +46,12 @@ library CBEEncode {
     /// @notice The uint tag.  Mirrors `Encoding.cbeTagUint`.
     uint8 internal constant CBE_TAG_UINT = 0x00;
     /// @notice The amount tag.  Mirrors `Encoding.cbeTagAmount`.
-    uint8 internal constant CBE_TAG_AMOUNT = 0x01;
+    ///
+    /// @dev    `0x06`, not the `0x01` it was.  The tag moved with the
+    ///         width so a stale decoder fails closed on an unexpected
+    ///         tag rather than reading a 33-byte value as 17 and
+    ///         mis-parsing every byte after it.
+    uint8 internal constant CBE_TAG_AMOUNT = 0x06;
     /// @notice The byte-string tag.  Mirrors `Encoding.cbeTagBytes`.
     uint8 internal constant CBE_TAG_BYTES = 0x02;
 
@@ -57,10 +62,13 @@ library CBEEncode {
 
     /// @dev Little-endian fixed-width serialisation of `n` into
     ///      `widthBytes` bytes.  Reverts rather than truncating: a
-    ///      silent truncation is how a balance above `2^128` would
-    ///      encode as its low bits and hash to a leaf for a DIFFERENT
-    ///      balance, which is exactly the class of bug a fault proof
-    ///      exists to catch.
+    ///      silent truncation is how an over-wide value would encode
+    ///      as its low bits and hash to a leaf for a DIFFERENT value,
+    ///      which is exactly the class of bug a fault proof exists to
+    ///      catch — and it is finding C-3, which reached the amount
+    ///      head itself before the width moved to 32 bytes.  At
+    ///      `widthBytes == 32` the range check is vacuous by
+    ///      construction, since every `uint256` fits.
     function _leBytes(uint256 n, uint256 widthBytes)
         private
         pure
@@ -89,17 +97,21 @@ library CBEEncode {
         return bytes.concat(bytes1(CBE_TAG_UINT), _leBytes(n, 8));
     }
 
-    /// @notice Encode an `Amount` as the canonical 17-byte CBE amount.
+    /// @notice Encode an `Amount` as the canonical 33-byte CBE amount.
     ///
     /// @dev    The form every balance cell takes.  A SEPARATE tag from
     ///         the uint, so a balance and a counter holding the same
     ///         number are different cell values — which is what stops
     ///         a proof opening one from being replayed as the other.
     ///
-    /// @param  n the value; must be below `2^128`.
-    /// @return the 17-byte encoding.
+    /// @param  n the value; must be below `2^256` — i.e. any
+    ///         `uint256`, so `_leBytes` cannot reject it.  That is the
+    ///         point of the width: the EVM word and the CBE amount head
+    ///         now have the same ceiling, and `Laws.maxAmount` is that
+    ///         same `2^256`.
+    /// @return the 33-byte encoding.
     function amountValue(uint256 n) internal pure returns (bytes memory) {
-        return bytes.concat(bytes1(CBE_TAG_AMOUNT), _leBytes(n, 16));
+        return bytes.concat(bytes1(CBE_TAG_AMOUNT), _leBytes(n, 32));
     }
 
     /// @notice Encode a byte string as the canonical CBE byte string.

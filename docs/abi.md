@@ -30,13 +30,45 @@ the cited Lean / Solidity / Rust code; this document tracks it.
 > bootstrap fresh"; for research-stage software this is acceptable
 > and was the explicit choice in the audit-3 plan.
 
-> **128-bit amount ABI break.**  Value-carrying fields — balances,
-> transfer / mint / burn / reward amounts, deposit and withdrawal
-> amounts, fee splits, gas amounts and the budget→gas rate — moved
-> from the 9-byte CBE uint head (`0x00` + 8 LE) to a 17-byte CBE
-> **amount** head (`0x01` + 16 LE).  The `actionFieldsForL1` layout
-> the L1 step VM reads made the same move, `uint64BE → uint128BE`,
-> and so did the fault-proof balance *cell values*.
+> **256-bit amount ABI break (finding C-3).**  Value-carrying fields
+> — balances, transfer / mint / burn / reward amounts, deposit and
+> withdrawal amounts, fee splits, gas amounts and the budget→gas rate
+> — ride a 33-byte CBE **amount** head (`0x06` + 32 LE).  The
+> `actionFieldsForL1` layout the L1 step VM reads made the same move,
+> `uint64BE → uint256BE`, and so did the fault-proof balance *cell
+> values*.
+>
+> **This is the SECOND widening of these fields.**  They went `0x00`
+> + 8 LE → `0x01` + 16 LE first, then `0x01` + 16 LE → `0x06` + 32 LE.
+> The tag moved with the width the second time so a stale peer fails
+> closed on an unexpected tag rather than reading 17 of 33 bytes and
+> mis-parsing the rest of the stream; the first widening reused
+> `0x01` and had no such guard.
+>
+> **Why twice.**  The first widening moved the ceiling without
+> establishing it, so the same defect recurred one modulus up: a
+> balance at a nonzero multiple of the head's range encodes exactly
+> as `encodeAmount 0`, which IS the canonically-absent cell value, so
+> the state root cannot see the balance at all.  Two states differing
+> only there share a root and reach different post-roots — the
+> pre-state root stops being a sufficient statistic for the
+> transition.
+>
+> **Why this is the last one.**  `2^256` is the EVM word, so no
+> mirrored L1 surface can hold a value the head cannot carry, and the
+> ceiling is now *enforced* (`Laws.AmountBounded`, a precondition
+> conjunct on every crediting law) and *proved unreachable*
+> (`FaultProof.canonicalBounds_base_amt_of_reachable`) rather than
+> assumed.  On the Solidity side the conjunct is exactly "the
+> `uint256` sum does not wrap", which is why no `MAX_AMOUNT` constant
+> appears — it would not be representable.
+>
+> **Rust decoders narrow deliberately.**  `knomosis-indexer`,
+> `knomosis-host` and `knomosis-l1-ingest` represent an `Amount` as
+> `u128`, so they REJECT a wire value whose high 16 bytes are
+> non-zero (`AmountTooWide`) rather than truncating.  Truncation is
+> the defect being removed; a read view that says it cannot read a
+> balance is strictly better than one that silently halves it.
 >
 > **Why.**  The 8-byte head truncates modulo `2^64`, which a
 > wei-denominated balance crosses at ~18.45 ETH — and balances
@@ -2547,10 +2579,10 @@ bytes proofBlob, bytes leafBlob)` function expects:
   * `leafBlob` — CBE-encoded `PendingWithdrawal`:
       uint   resourceId   (CBE: 9 bytes)
       bytes  recipientL1  (CBE: 1 tag + 8 length + 20 payload = 29 bytes)
-      amount amount       (CBE: 1 tag + 16 LE = 17 bytes)
+      amount amount       (CBE: 1 tag + 32 LE = 33 bytes)
       uint   l2LogIndex   (9 bytes)
-      → total: 64 bytes (the audit-2 lossless 20-byte address
-        encoding, plus the amount on the 17-byte head).
+      → total: 80 bytes (the audit-2 lossless 20-byte address
+        encoding, plus the amount on the 33-byte head).
   * `proofBlob` — CBE encoding of the `WithdrawalProof`
     (post-audit-2; mirrors Lean's `WithdrawalProof` shape
     with variable-size leaf and siblings):

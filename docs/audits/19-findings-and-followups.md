@@ -35,7 +35,7 @@ findings outside the TCB.  Their dispositions:
 | **B-4a** — terminate ABI drift | `knomosis-faultproof-observer/src/submitter.rs` | **Closed.**  Rust moved to the contract's 5-argument form, and the selector table is now pinned against `method_selectors.json`, emitted from the COMPILED artifacts by `solidity/scripts/export_method_selectors.py` and gated in `ci-solidity.yml` — so the pin can no longer re-derive its expectation from the string it tests. |
 | **B-4b** — game-model fidelity (Lean/Rust) | `FaultProof/Game.lean`, `FaultProof/Step.lean`, observer `game.rs` | **Closed.**  `kernelStepApply` computes through `stepVMHash` instead of echoing the responder's `postStateCommit`; `terminateOnSingleStep` dropped `claimedPostCommit` and reads both sides from the game state; `submitMidpoint` carries only a commit and the index is derived, which made the convergence bound logarithmic (`bisection_converges_in_log_rounds`). |
 | **C-2** — a bulk step's post-state not determined by the pre-state root | `Laws/BulkBound.lean`'s `bulkRecipients` | **Closed.**  Zero-valued balance entries have no leaf in the commitment tree but were counted as recipients, so `distributeOthers` paid an actor the root cannot see — two root-identical pre-states reached different post-roots, and `BulkBounded` disagreed across the same pair so one advanced and one no-oped.  The recipient list now drops them, and all four spellings collapse to the one definition. |
-| **C-3** — the commitment is blind to balances at multiples of 2^128 | `Encoding.encodeAmount` (16-byte body) | **Open, scoped.**  Such a balance encodes as `encodeAmount 0`, so its cell reads canonically absent and the root does not carry it — breaking `transfer`'s precondition as readily as a bulk credit.  Covered by the standing `CanonicalBounds.base_amt` assumption, which is assumed rather than enforced; 2^41× beyond reachable supply.  Deliberately not patched in one law — see the section below. |
+| **C-3** — the commitment is blind to balances at multiples of the amount head's modulus | `Encoding.encodeAmount` | **Closed.**  The head is `2^256` (the EVM word), the ceiling is a precondition conjunct on every crediting law (`Laws.AmountBounded`), and it is proved unreachable rather than assumed (`FaultProof.canonicalBounds_base_amt_of_reachable`).  See the section below for why widening alone would have left it open. |
 | **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **CLOSED — the game calls `KnomosisStepVMRoot.executeStepToRoot`, which returns a post-state ROOT folded from derived cell writes, so both sides of the terminal comparison are the same construction.**  What survives is a cleanup (the old recipe is still compiled); see the section below. |
 
 ### Open critical: the fault-proof commit-recipe split
@@ -285,7 +285,7 @@ that on the SAME fixture pair it reaches **different** post-roots — so
 the first two cannot pass vacuously, and the defect is exhibited rather
 than described.
 
-### C-3 — Open: the commitment is blind to balances at multiples of 2^128
+### C-3 — Closed: the commitment is blind to balances at multiples of the head's modulus
 
 **Severity: critical in kind, remote in reach.**  Surfaced while
 auditing C-2, and deliberately **not** fixed there, because fixing it
@@ -315,16 +315,50 @@ value the root does not carry.  The blind spot belongs to the
 **commitment**, not to `bulkRecipients`, and bounding one law would
 treat a symptom while reading as if the rest were safe.
 
-**Standing mitigation.**  This is the
-`ExtendedState.CanonicalBounds.base_amt` assumption (`∀ balance,
-< 256^16`), which every commitment-injectivity theorem already carries
-as an explicit hypothesis.  It is assumed at the runtime boundary, not
-enforced by the kernel: `Amount = Nat` is unbounded and `mint`'s
-precondition is `amount > 0`.  C-1 moved the head from `2^64` to
-`2^128` precisely to put the bound out of reachable range — the entire
-ETH supply is about `2^87` wei — so the residual is 2^41× beyond
-anything a real deployment reaches, but it is an assumption rather than
-a theorem and should be recorded as one.
+**Why widening alone does not close it.**  C-1 had already moved the
+head once, `2^64` → `2^128`, on the reasoning that the entire ETH
+supply is about `2^87` wei so the new ceiling was out of reach.  That
+moved the ceiling without ever *establishing* it, and the defect simply
+recurred one modulus up — which is how this finding came to be written
+against a head that had already been "fixed".
+
+The load-bearing gap was not the width.  It was that
+`ExtendedState.CanonicalBounds.base_amt` — the hypothesis every
+commitment-injectivity and terminal-step theorem carries — was
+**established nowhere**: a search for it in conclusion position
+returned empty.  A hypothesis nothing discharges is not a mitigation;
+it is a record of what would have to be true.
+
+**How it was closed.**  Three things together, none sufficient alone:
+
+  * the head is `2^256`, the width of an EVM word, so no mirrored L1
+    surface can hold a value it cannot carry.  The tag moved `0x01` →
+    `0x06` with it, so a stale peer fails closed on an unexpected tag
+    rather than reading 17 of 33 bytes and mis-parsing the rest;
+  * the ceiling is **enforced**: `Laws.AmountBounded` is a precondition
+    conjunct on all twelve balance-crediting sites
+    (`Laws/AmountBound.lean`).  Cell-local by construction, so the L1
+    verifier can evaluate it from the single cell it already opens —
+    on that side it is exactly "the `uint256` sum does not wrap";
+  * the ceiling is **proved unreachable**:
+    `FaultProof.balancesBounded_apply_impl` makes the bound inductive
+    across all twenty-five variants and
+    `canonicalBounds_base_amt_of_reachable` composes it along a trace.
+
+**Where enforcement belongs, corrected.**  An earlier draft of this
+entry recommended the admission layer, "where it can cover every
+value-carrying cell at once".  That was wrong on a fact: the terminal
+step adjudicates `productionApplyBudget`, not the admission gate, so a
+bound the gate imposes is one the fault proof never reads.  It also
+had the failure mode backwards — `step_impl` is
+`if pre then apply_impl else id`, so a precondition conjunct makes an
+over-ceiling credit a **no-op**, which is what the L1 can reproduce; an
+admission rejection is not a state transition at all.
+
+**Residual.**  `base_amt` is one of `CanonicalBounds`' twenty-five
+fields.  The others are still hypotheses, and for two distinct reasons
+rather than one missing lemma — see "CanonicalBounds' remaining
+fields" below.
 
 **What was done instead of patching it:**
 
@@ -346,11 +380,33 @@ a theorem and should be recorded as one.
     and `transfer`, so the gap cannot be quietly forgotten and its true
     radius is on the record.
 
-**To close it** a deployment must either enforce the bound at
-admission (a supply cap, or a per-cell check in the admission gate) or
-widen the amount head and re-derive `CanonicalBounds`.  Enforcement
-belongs at the admission layer, where it can cover every value-carrying
-cell at once, not in individual laws.
+### CanonicalBounds' remaining fields — open, and two different problems
+
+`canonicalBounds_base_amt_of_reachable` discharges the amount field.
+The other twenty-four remain hypotheses, and they do **not** all
+succumb to the same argument:
+
+  * **Trace-length-bounded** — the `< 256^8` map-length fields
+    (`base_outer_len`, `nonces_len`, `registry_len`, …) and the `2^64`
+    value fields (`nonces_val`, `eb_val`).  Each step adds at most a
+    bounded number of entries and advances a nonce by exactly one, so
+    `2^64` needs on the order of `10^13` actions.  This is why those
+    fields were deliberately **not** widened: the nonce and
+    epoch-budget cells are the two that EVERY action writes, so 24
+    extra bytes each would run against the multiproof's measured
+    −48% calldata win.  The argument is stated where it can be checked
+    — `FaultProof.expectsNonce_le_of_reachableIn` over the
+    step-indexed `AdmissibleReachableIn` — and its conclusion is
+    honestly `≤ start + n`, not an unconditional `< 2^64`, because
+    nothing in the step relation bounds trace length.
+  * **Payload-bounded** — the size fields (`registry_size`, `lp_size`,
+    `bs_cons_size`, …).  These are bounded by what a submitter puts on
+    the wire, so closing them needs an admission-layer cap on action
+    field widths, which no gate currently imposes.  Unlike the amount
+    ceiling, this one genuinely does belong at admission: an over-long
+    public key is not a state transition whose effect the L1 must
+    reproduce, it is a message the deployment should never have
+    accepted.
 
 ### Closed: a bulk action could exceed what the game can decompose
 

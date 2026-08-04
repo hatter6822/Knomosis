@@ -564,14 +564,17 @@ contract KnomosisStepVMRoot {
             return _deriveConsumed(actionKind, actionFields);
         }
         if (kind == CELL_BRIDGE_PENDING) {
-            if (actionFields.length < 52) {
+            // withdraw: r @0, sender @8, amount @16 (32), then the
+            // 20-byte L1 address at @48 — the address moved with the
+            // amount, so the length floor moves from 52 to 68.
+            if (actionFields.length < 68) {
                 revert StepWrites.ActionFieldsTooShort(
                     actionKind, actionFields.length);
             }
             return StepWrites.derivePendingCellValue(
                 StepWrites.readFieldUint(actionFields, 0, 8),
-                actionFields[32:52],
-                StepWrites.readFieldUint(actionFields, 16, 16),
+                actionFields[48:68],
+                StepWrites.readFieldUint(actionFields, 16, 32),
                 l2LogIndex
             );
         }
@@ -604,20 +607,20 @@ contract KnomosisStepVMRoot {
         returns (bytes memory)
     {
         if (actionKind == 13) {
-            // deposit: r @0, amount @16 (16).
+            // deposit: r @0, amount @16 (32).
             return StepWrites.deriveConsumedCellValue(
                 StepWrites.readFieldUint(fields, 0, 8),
-                StepWrites.readFieldUint(fields, 16, 16),
+                StepWrites.readFieldUint(fields, 16, 32),
                 0, 0
             );
         }
-        // depositWithFee: r @0, userAmount @24 (16), poolAmount @40
-        // (16), budgetGrant @56.
+        // depositWithFee: r @0, userAmount @24 (32), poolAmount @56
+        // (32), budgetGrant @88.
         return StepWrites.deriveConsumedCellValue(
             StepWrites.readFieldUint(fields, 0, 8),
-            StepWrites.readFieldUint(fields, 24, 16),
-            StepWrites.readFieldUint(fields, 40, 16),
-            StepWrites.readFieldUint(fields, 56, 8)
+            StepWrites.readFieldUint(fields, 24, 32),
+            StepWrites.readFieldUint(fields, 56, 32),
+            StepWrites.readFieldUint(fields, 88, 8)
         );
     }
 }

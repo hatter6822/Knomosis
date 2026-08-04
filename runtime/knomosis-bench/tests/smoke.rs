@@ -359,12 +359,12 @@ fn smoke_fixture_deterministic_with_seed() {
     let f2 = generate(&cfg).expect("generate 2");
     assert_eq!(f1.actor_pubkeys, f2.actor_pubkeys);
     assert_eq!(*f1.payloads, *f2.payloads);
-    // Per-payload length is the documented 144 bytes for Transfer:
+    // Per-payload length is the documented 160 bytes for Transfer:
     // seven 9-byte CBE uint heads (tag, r, sender, receiver, signer,
-    // nonce, sig-length) + one 17-byte amount head + the 64-byte
+    // nonce, sig-length) + one 33-byte amount head + the 64-byte
     // signature.
     for p in f1.payloads.iter() {
-        assert_eq!(p.len(), 144);
+        assert_eq!(p.len(), 160);
     }
 }
 
