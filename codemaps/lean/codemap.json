@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "044813ab8184b46f1369571a967ce69583ebd946537dc12f1d9dd8bf44fda713"
+    "source_digest": "93d07e4df2fd133aba17b3fcf3f86b08d1856455a2ba01c08dd39f23870f95e9"
   },
   "summary": {
-    "module_count": 337,
-    "declaration_count": 5913
+    "module_count": 340,
+    "declaration_count": 5949
   },
   "modules": [
     {
@@ -20519,6 +20519,309 @@
       ]
     },
     {
+      "module": "LegalKernel.FaultProof.BoundsReachable",
+      "path": "LegalKernel/FaultProof/BoundsReachable.lean",
+      "declaration_count": 20,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 63,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 64,
+          "called": [
+            "LegalKernel.Bridge"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "BalancesBounded",
+          "line": 80,
+          "called": [
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "canonicalBounds_base_amt_of_balancesBounded",
+          "line": 89,
+          "called": [
+            "BalancesBounded",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_setBalance",
+          "line": 110,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_setBalance_sub",
+          "line": 130,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "balancesBounded_setBalance",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_setBalance_self",
+          "line": 140,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "balancesBounded_setBalance",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_bulk_foldl",
+          "line": 165,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "balancesBounded_setBalance",
+            "getBalance_setBalance_other",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_apply_impl",
+          "line": 207,
+          "called": [
+            "Action",
+            "Action.toTransition",
+            "ActorId",
+            "State",
+            "ammSwap",
+            "balancesBounded_bulk_foldl",
+            "balancesBounded_setBalance",
+            "balancesBounded_setBalance_sub",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "distributeOthers",
+            "freezeResource",
+            "mint",
+            "poolActor",
+            "proportionalDilute",
+            "receiver",
+            "reclaimAmmReserves",
+            "reward",
+            "sender",
+            "sumOthers",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_step_impl",
+          "line": 262,
+          "called": [
+            "Action",
+            "Action.toTransition",
+            "ActorId",
+            "State",
+            "balancesBounded_apply_impl",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "inductive",
+          "name": "AdmissibleReachable",
+          "line": 283,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "deploymentId",
+            "es",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "admissibleReachable_of_bridgeReachable",
+          "line": 303,
+          "called": [
+            "AdmissibleReachable",
+            "AuthorityPolicy",
+            "BridgeReachable",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "es",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "expectsNonce_admissible_step_le",
+          "line": 329,
+          "called": [
+            "ActorId",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "advanceNonce",
+            "apply_bridge_admissible_with",
+            "base",
+            "es",
+            "expectsNonce",
+            "expectsNonce_advance_other",
+            "expectsNonce_strict_mono"
+          ]
+        },
+        {
+          "kind": "inductive",
+          "name": "AdmissibleReachableIn",
+          "line": 356,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "deploymentId",
+            "es",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "expectsNonce_le_of_reachableIn",
+          "line": 376,
+          "called": [
+            "ActorId",
+            "AdmissibleReachableIn",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "apply_bridge_admissible_with",
+            "es",
+            "expectsNonce",
+            "expectsNonce_admissible_step_le",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "expectsNonce_lt_of_reachableIn",
+          "line": 406,
+          "called": [
+            "ActorId",
+            "AdmissibleReachableIn",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "es",
+            "expectsNonce",
+            "expectsNonce_le_of_reachableIn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_admissible_step",
+          "line": 417,
+          "called": [
+            "AuthorityPolicy",
+            "BalancesBounded",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "apply_bridge_admissible_with_base",
+            "balancesBounded_step_impl",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_of_admissibleReachable",
+          "line": 434,
+          "called": [
+            "AdmissibleReachable",
+            "AuthorityPolicy",
+            "BalancesBounded",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "balancesBounded_admissible_step",
+            "es",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balancesBounded_genesis",
+          "line": 445,
+          "called": [
+            "BalancesBounded",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "canonicalBounds_base_amt_of_reachable",
+          "line": 469,
+          "called": [
+            "AdmissibleReachable",
+            "AuthorityPolicy",
+            "BalancesBounded",
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "PublicKey",
+            "Signature",
+            "balancesBounded_of_admissibleReachable",
+            "canonicalBounds_base_amt_of_balancesBounded",
+            "es"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.FaultProof.Cell",
       "path": "LegalKernel/FaultProof/Cell.lean",
       "declaration_count": 16,
@@ -33941,6 +34244,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "Transition",
             "ammReserveActor",
@@ -34173,6 +34477,148 @@
             "getBalance",
             "setBalance",
             "step_impl"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Laws.AmountBound",
+      "path": "LegalKernel/Laws/AmountBound.lean",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Laws",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "maxAmount",
+          "line": 76,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "AmountBounded",
+          "line": 93,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "maxAmount"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "AmountBounded.decidable",
+          "line": 103,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AmountBounded",
+            "ResourceId",
+            "State"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "AmountBoundedAll",
+          "line": 128,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AmountBounded",
+            "ResourceId",
+            "State"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "AmountBoundedAll.decidable",
+          "line": 135,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AmountBoundedAll",
+            "ResourceId",
+            "State"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "amountBoundedAll_mem",
+          "line": 164,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AmountBounded",
+            "AmountBoundedAll",
+            "ResourceId",
+            "State"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "amountBounded_credit_lt",
+          "line": 177,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AmountBounded",
+            "ResourceId",
+            "State",
+            "getBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getBalance_setBalance_lt_of_amountBounded",
+          "line": 186,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AmountBounded",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_same",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "amountBounded_pre_lt",
+          "line": 197,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AmountBounded",
+            "ResourceId",
+            "State",
+            "getBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "sub_lt_of_lt",
+          "line": 206,
+          "called": [
+            "ActorId",
+            "Amount",
+            "Laws",
+            "LegalKernel",
+            "ResourceId",
+            "State",
+            "getBalance"
           ]
         }
       ]
@@ -34546,6 +34992,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "Transition",
             "claimant",
@@ -34832,6 +35279,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "State",
             "Transition",
@@ -34926,6 +35374,7 @@
             "deposit",
             "genesisState",
             "getBalance",
+            "maxAmount",
             "totalSupply_after_deposit",
             "totalSupply_genesis_eq_zero"
           ]
@@ -35011,6 +35460,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "Transition",
             "getBalance",
@@ -35084,6 +35534,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBoundedAll",
             "BulkBounded",
             "ResourceId",
             "State",
@@ -35228,6 +35679,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBoundedAll",
             "BalanceMap",
             "BulkBounded",
             "IsConservative",
@@ -35239,6 +35691,7 @@
             "distributeOthers",
             "genesisState",
             "getBalance",
+            "maxAmount",
             "maxRecipientsPerBulkAction",
             "mem_bulkRecipients_iff",
             "setBalance",
@@ -35494,6 +35947,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "State",
             "Transition",
@@ -35572,6 +36026,7 @@
             "ResourceId",
             "genesisState",
             "getBalance",
+            "maxAmount",
             "mint",
             "totalSupply_after_mint",
             "totalSupply_genesis_eq_zero"
@@ -35658,6 +36113,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBoundedAll",
             "BulkBounded",
             "ResourceId",
             "State",
@@ -35855,6 +36311,7 @@
             "genesisState",
             "getBalance",
             "getBalance_setBalance_other",
+            "maxAmount",
             "maxRecipientsPerBulkAction",
             "mem_bulkRecipients_iff",
             "proportionalDilute",
@@ -35932,6 +36389,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "Transition",
             "getBalance",
@@ -36180,6 +36638,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "State",
             "Transition",
@@ -36272,6 +36731,7 @@
             "ResourceId",
             "genesisState",
             "getBalance",
+            "maxAmount",
             "reward",
             "totalSupply_after_reward",
             "totalSupply_genesis_eq_zero"
@@ -36344,6 +36804,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "Laws",
             "LegalKernel",
             "ResourceId",
@@ -36380,6 +36841,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "Transition",
             "gasResource",
@@ -36655,6 +37117,7 @@
           "called": [
             "ActorId",
             "Amount",
+            "AmountBounded",
             "ResourceId",
             "State",
             "Transition",
@@ -51237,6 +51700,7 @@
           "name": "tests",
           "line": 45,
           "called": [
+            "AmountBounded",
             "BalanceMap",
             "ConservativeLawSet",
             "FreezePreserving",
@@ -58009,6 +58473,66 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.FaultProof.BoundsReachable",
+      "path": "LegalKernel/Test/FaultProof/BoundsReachable.lean",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.FaultProof.BoundsReachable",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "stateAt",
+          "line": 40,
+          "called": [
+            "BalanceMap",
+            "ResourceId",
+            "State"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "nearMax",
+          "line": 45,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 48,
+          "called": [
+            "BalanceMap",
+            "BalancesBounded",
+            "ExtendedState.empty",
+            "LegalKernel.Test.FaultProof.BoundsReachable",
+            "ResourceId",
+            "State",
+            "TestCase",
+            "admissibleReachable_of_bridgeReachable",
+            "assert",
+            "assertEq",
+            "balancesBounded_admissible_step",
+            "balancesBounded_apply_impl",
+            "balancesBounded_genesis",
+            "balancesBounded_of_admissibleReachable",
+            "balancesBounded_step_impl",
+            "canonicalBounds_base_amt_of_balancesBounded",
+            "canonicalBounds_base_amt_of_reachable",
+            "expectsNonce_admissible_step_le",
+            "expectsNonce_le_of_reachableIn",
+            "expectsNonce_lt_of_reachableIn",
+            "getBalance",
+            "nearMax",
+            "stateAt",
+            "step_impl"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.FaultProof.Cell",
       "path": "LegalKernel/Test/FaultProof/Cell.lean",
       "declaration_count": 2,
@@ -61414,6 +61938,7 @@
             "emptyState",
             "fixtureF1",
             "getBalance",
+            "maxAmount",
             "setBalance",
             "step_impl",
             "totalSupply_after_distributeOthers"
@@ -61570,6 +62095,7 @@
             "fixtureF2",
             "fixtureF4",
             "getBalance",
+            "maxAmount",
             "proportionalDilute",
             "proportionalDilute_distributed_le_totalReward",
             "proportionalDilute_excluded_unchanged",
