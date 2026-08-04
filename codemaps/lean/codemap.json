@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "93d07e4df2fd133aba17b3fcf3f86b08d1856455a2ba01c08dd39f23870f95e9"
+    "source_digest": "8fde1e9f422df7b3684355a464374b3f4cc35f91614fdb62422704fd80227a14"
   },
   "summary": {
     "module_count": 340,
-    "declaration_count": 5949
+    "declaration_count": 5947
   },
   "modules": [
     {
@@ -29425,7 +29425,7 @@
     {
       "module": "LegalKernel.FaultProof.StepVMCoherence",
       "path": "LegalKernel/FaultProof/StepVMCoherence.lean",
-      "declaration_count": 21,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "namespace",
@@ -29457,36 +29457,22 @@
         },
         {
           "kind": "def",
-          "name": "uint128BE",
-          "line": 197,
-          "called": []
-        },
-        {
-          "kind": "def",
           "name": "uint256BE",
-          "line": 219,
+          "line": 203,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "uint64BE_size",
-          "line": 255,
+          "line": 239,
           "called": [
             "uint64BE"
           ]
         },
         {
           "kind": "theorem",
-          "name": "uint128BE_size",
-          "line": 260,
-          "called": [
-            "uint128BE"
-          ]
-        },
-        {
-          "kind": "theorem",
           "name": "uint256BE_size",
-          "line": 265,
+          "line": 244,
           "called": [
             "uint256BE"
           ]
@@ -29494,7 +29480,7 @@
         {
           "kind": "def",
           "name": "actionKindByte",
-          "line": 274,
+          "line": 253,
           "called": [
             "Action",
             "ammSwap",
@@ -29517,13 +29503,13 @@
         {
           "kind": "def",
           "name": "actionKindByteCases",
-          "line": 338,
+          "line": 317,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionFieldsForL1",
-          "line": 377,
+          "line": 356,
           "called": [
             "Action",
             "Dispute",
@@ -29550,7 +29536,7 @@
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "transfer",
-            "uint128BE",
+            "uint256BE",
             "uint64BE",
             "withdraw"
           ]
@@ -29558,7 +29544,7 @@
         {
           "kind": "def",
           "name": "l1ActionCommitBytes",
-          "line": 527,
+          "line": 506,
           "called": [
             "uint64BE"
           ]
@@ -29566,7 +29552,7 @@
         {
           "kind": "def",
           "name": "l1ActionCommit",
-          "line": 533,
+          "line": 512,
           "called": [
             "Action",
             "ActorId",
@@ -29578,13 +29564,13 @@
         {
           "kind": "def",
           "name": "l1NextEntryHash",
-          "line": 543,
+          "line": 522,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "l1ActionCommit_size",
-          "line": 549,
+          "line": 528,
           "called": [
             "Action",
             "ActorId",
@@ -29594,7 +29580,7 @@
         {
           "kind": "theorem",
           "name": "l1NextEntryHash_size",
-          "line": 554,
+          "line": 533,
           "called": [
             "l1NextEntryHash"
           ]
@@ -29602,19 +29588,19 @@
         {
           "kind": "def",
           "name": "decodeCellNat",
-          "line": 602,
+          "line": 581,
           "called": []
         },
         {
           "kind": "def",
           "name": "readUint64BE",
-          "line": 644,
+          "line": 623,
           "called": []
         },
         {
           "kind": "def",
-          "name": "readUint128BE",
-          "line": 669,
+          "name": "readUint256BE",
+          "line": 653,
           "called": [
             "readUint64BE"
           ]
@@ -29622,7 +29608,7 @@
         {
           "kind": "def",
           "name": "sliceFrom",
-          "line": 676,
+          "line": 663,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -59908,7 +59894,7 @@
             "productionApply",
             "productionApplyBudget",
             "proportionalDilute",
-            "readUint128BE",
+            "readUint256BE",
             "readUint64BE",
             "reclaimAmmReserves",
             "refundRate",

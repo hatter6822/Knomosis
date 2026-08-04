@@ -183,23 +183,23 @@ def tests : List TestCase :=
           "reclaimAmmReserves"
     }
     -- ## actionFieldsForL1: byte-shape pinning
-  , { name := "actionFieldsForL1: transfer produces 40 bytes"
+  , { name := "actionFieldsForL1: transfer produces 56 bytes"
     , body := do
         let bytes := actionFieldsForL1 (.transfer 0 0 0 0)
-        assertEq (expected := 40) (actual := bytes.size)
-          "transfer fields = 3 × uint64BE + 1 × uint128BE = 40 bytes"
+        assertEq (expected := 56) (actual := bytes.size)
+          "transfer fields = 3 × uint64BE + 1 × uint256BE = 56 bytes"
     }
-  , { name := "actionFieldsForL1: mint produces 24 bytes"
+  , { name := "actionFieldsForL1: mint produces 48 bytes"
     , body := do
         let bytes := actionFieldsForL1 (.mint 0 0 0)
-        assertEq (expected := 32) (actual := bytes.size)
-          "mint fields = 2 × uint64BE + 1 × uint128BE = 32 bytes"
+        assertEq (expected := 48) (actual := bytes.size)
+          "mint fields = 2 × uint64BE + 1 × uint256BE = 48 bytes"
     }
-  , { name := "actionFieldsForL1: burn produces 24 bytes"
+  , { name := "actionFieldsForL1: burn produces 48 bytes"
     , body := do
         let bytes := actionFieldsForL1 (.burn 0 0 0)
-        assertEq (expected := 32) (actual := bytes.size)
-          "burn fields = 2 × uint64BE + 1 × uint128BE = 32 bytes"
+        assertEq (expected := 48) (actual := bytes.size)
+          "burn fields = 2 × uint64BE + 1 × uint256BE = 48 bytes"
     }
   , { name := "actionFieldsForL1: freezeResource produces 8 bytes"
     , body := do
@@ -207,29 +207,29 @@ def tests : List TestCase :=
         assertEq (expected := 8) (actual := bytes.size)
           "freezeResource fields = 1 × uint64BE = 8 bytes"
     }
-  , { name := "actionFieldsForL1: reward produces 24 bytes"
+  , { name := "actionFieldsForL1: reward produces 48 bytes"
     , body := do
         let bytes := actionFieldsForL1 (.reward 0 0 0)
-        assertEq (expected := 32) (actual := bytes.size)
-          "reward fields = 2 × uint64BE + 1 × uint128BE = 32 bytes"
+        assertEq (expected := 48) (actual := bytes.size)
+          "reward fields = 2 × uint64BE + 1 × uint256BE = 48 bytes"
     }
-  , { name := "actionFieldsForL1: distributeOthers produces 24 bytes"
+  , { name := "actionFieldsForL1: distributeOthers produces 48 bytes"
     , body := do
         let bytes := actionFieldsForL1 (.distributeOthers 0 0 0)
-        assertEq (expected := 32) (actual := bytes.size)
-          "distributeOthers fields = 2 × uint64BE + 1 × uint128BE = 32 bytes"
+        assertEq (expected := 48) (actual := bytes.size)
+          "distributeOthers fields = 2 × uint64BE + 1 × uint256BE = 48 bytes"
     }
-  , { name := "actionFieldsForL1: proportionalDilute produces 24 bytes"
+  , { name := "actionFieldsForL1: proportionalDilute produces 48 bytes"
     , body := do
         let bytes := actionFieldsForL1 (.proportionalDilute 0 0 0)
-        assertEq (expected := 32) (actual := bytes.size)
-          "proportionalDilute fields = 2 × uint64BE + 1 × uint128BE = 32 bytes"
+        assertEq (expected := 48) (actual := bytes.size)
+          "proportionalDilute fields = 2 × uint64BE + 1 × uint256BE = 48 bytes"
     }
-  , { name := "actionFieldsForL1: deposit produces 32 bytes"
+  , { name := "actionFieldsForL1: deposit produces 56 bytes"
     , body := do
         let bytes := actionFieldsForL1 (.deposit 0 0 0 0)
-        assertEq (expected := 40) (actual := bytes.size)
-          "deposit fields = 3 × uint64BE + 1 × uint128BE = 40 bytes"
+        assertEq (expected := 56) (actual := bytes.size)
+          "deposit fields = 3 × uint64BE + 1 × uint256BE = 56 bytes"
     }
   , { name := "actionFieldsForL1: revokeLocalPolicy is empty"
     , body := do
@@ -247,16 +247,20 @@ def tests : List TestCase :=
         assertEq (expected := (0 : UInt8)) (actual := bytes.data[0]!)
           "r=1 in BE: byte 0 = 0"
     }
-  , { name := "actionFieldsForL1: transfer encodes amount=0x42 at byte 39"
+  , { name := "actionFieldsForL1: transfer encodes amount=0x42 at byte 55"
     , body := do
         let bytes := actionFieldsForL1 (.transfer 0 0 0 0x42)
-        -- amount is the last 16 bytes (BE), so bytes[39] is its LSB.
-        assertEq (expected := (0x42 : UInt8)) (actual := bytes.data[39]!)
-          "amount=0x42 in BE: byte 39 = 0x42"
-        -- ... and the 8 bytes the narrow layout would have used for
-        -- the amount are now the value's high half, i.e. zero here.
-        assertEq (expected := (0 : UInt8)) (actual := bytes.data[31]!)
-          "amount high half is zero for a small amount"
+        -- amount is the last 32 bytes (BE), so bytes[55] is its LSB.
+        assertEq (expected := (0x42 : UInt8)) (actual := bytes.data[55]!)
+          "amount=0x42 in BE: byte 55 = 0x42"
+        -- The amount's most-significant byte, zero for a small value.
+        assertEq (expected := (0 : UInt8)) (actual := bytes.data[24]!)
+          "amount high byte is zero for a small amount"
+        -- Byte 39 is where the RETIRED 16-byte layout put this LSB.
+        -- Pinned at zero so a stack still reading the old width fails
+        -- here rather than silently adjudicating a different number.
+        assertEq (expected := (0 : UInt8)) (actual := bytes.data[39]!)
+          "the retired layout's LSB position now holds a zero"
     }
     -- ## readUint64BE: round-trip correctness
   , { name := "readUint64BE: zero array reads 0"
@@ -426,7 +430,7 @@ def tests : List TestCase :=
         let r := readUint64BE bytes 0
         let s := readUint64BE bytes 8
         let rcv := readUint64BE bytes 16
-        let amt := readUint128BE bytes 24
+        let amt := readUint256BE bytes 24
         assertEq (expected := 10) (actual := r) "r = 10"
         assertEq (expected := 20) (actual := s) "sender = 20"
         assertEq (expected := 30) (actual := rcv) "receiver = 30"
@@ -438,7 +442,7 @@ def tests : List TestCase :=
           (.mint (100 : UInt64) (200 : UInt64) (300 : Nat))
         assertEq (expected := 100) (actual := readUint64BE bytes 0) "r"
         assertEq (expected := 200) (actual := readUint64BE bytes 8) "to"
-        assertEq (expected := 300) (actual := readUint128BE bytes 16) "amount"
+        assertEq (expected := 300) (actual := readUint256BE bytes 16) "amount"
     }
   , { name := "cross-stack: deposit field layout matches Solidity decoder"
     , body := do
@@ -446,13 +450,13 @@ def tests : List TestCase :=
           (.deposit (1 : UInt64) (2 : UInt64) (3 : Nat) (4 : Nat))
         assertEq (expected := 1) (actual := readUint64BE bytes 0) "r"
         assertEq (expected := 2) (actual := readUint64BE bytes 8) "recipient"
-        assertEq (expected := 3) (actual := readUint128BE bytes 16) "amount"
-        assertEq (expected := 4) (actual := readUint64BE bytes 32) "depositId"
+        assertEq (expected := 3) (actual := readUint256BE bytes 16) "amount"
+        assertEq (expected := 4) (actual := readUint64BE bytes 48) "depositId"
     }
   , { name := "cross-stack: depositWithFee field layout matches Solidity decoder"
     , body := do
         -- Workstream GP closure: depositWithFee's seven-field layout
-        -- is fixed at 5 × uint64BE + 2 × uint128BE = 72 bytes, the
+        -- is fixed at 5 × uint64BE + 2 × uint256BE = 104 bytes, the
         -- two wide fields being the wei-denominated userAmount and
         -- poolAmount.  This test pins the byte offsets so the
         -- Solidity `_step19` decoder reads each field at the
@@ -460,47 +464,47 @@ def tests : List TestCase :=
         let bytes := actionFieldsForL1
           (.depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
                            (4 : Nat) (5 : Nat) (6 : Nat) (7 : Nat))
-        assertEq (expected := 72) (actual := bytes.size)
-                 "5 × uint64BE + 2 × uint128BE = 72 bytes"
+        assertEq (expected := 104) (actual := bytes.size)
+                 "5 × uint64BE + 2 × uint256BE = 104 bytes"
         assertEq (expected := 1) (actual := readUint64BE bytes 0)   "r"
         assertEq (expected := 2) (actual := readUint64BE bytes 8)   "recipient"
         assertEq (expected := 3) (actual := readUint64BE bytes 16)  "poolActor"
-        assertEq (expected := 4) (actual := readUint128BE bytes 24) "userAmount"
-        assertEq (expected := 5) (actual := readUint128BE bytes 40) "poolAmount"
-        assertEq (expected := 6) (actual := readUint64BE bytes 56)  "budgetGrant"
-        assertEq (expected := 7) (actual := readUint64BE bytes 64)  "depositId"
+        assertEq (expected := 4) (actual := readUint256BE bytes 24) "userAmount"
+        assertEq (expected := 5) (actual := readUint256BE bytes 56) "poolAmount"
+        assertEq (expected := 6) (actual := readUint64BE bytes 88)  "budgetGrant"
+        assertEq (expected := 7) (actual := readUint64BE bytes 96)  "depositId"
     }
   , { name := "cross-stack: topUpActionBudget field layout matches Solidity decoder"
     , body := do
         let bytes := actionFieldsForL1
           (.topUpActionBudget (1 : UInt64) (2 : Nat) (3 : Nat) (4 : UInt64))
-        assertEq (expected := 40) (actual := bytes.size)
-                 "3 × uint64BE + 1 × uint128BE = 40 bytes"
+        assertEq (expected := 56) (actual := bytes.size)
+                 "3 × uint64BE + 1 × uint256BE = 56 bytes"
         assertEq (expected := 1) (actual := readUint64BE bytes 0)   "gasResource"
-        assertEq (expected := 2) (actual := readUint128BE bytes 8)  "gasAmount"
-        assertEq (expected := 3) (actual := readUint64BE bytes 24)  "budgetIncrement"
-        assertEq (expected := 4) (actual := readUint64BE bytes 32)  "poolActor"
+        assertEq (expected := 2) (actual := readUint256BE bytes 8)  "gasAmount"
+        assertEq (expected := 3) (actual := readUint64BE bytes 40)  "budgetIncrement"
+        assertEq (expected := 4) (actual := readUint64BE bytes 48)  "poolActor"
     }
   , { name := "cross-stack: topUpActionBudgetFor field layout matches Solidity decoder"
     , body := do
         -- GP.5.3 closure: topUpActionBudgetFor's five-field layout is
-        -- fixed at 4 × uint64BE + 1 × uint128BE = 48 bytes.  The
+        -- fixed at 4 × uint64BE + 1 × uint256BE = 64 bytes.  The
         -- leading `recipient` field shifts the gas-transfer fields
         -- right by 8 bytes relative to topUpActionBudget; this pins
         -- the byte offsets so the Solidity `_step21` decoder reads
-        -- gasResource at 8, the 16-byte gasAmount at 16, poolActor at
-        -- 40 (recipient at 0 and budgetIncrement at 32 are
+        -- gasResource at 8, the 32-byte gasAmount at 16, poolActor at
+        -- 56 (recipient at 0 and budgetIncrement at 48 are
         -- admission-layer, not hashed).
         let bytes := actionFieldsForL1
           (.topUpActionBudgetFor (1 : UInt64) (2 : UInt64) (3 : Nat)
                                  (4 : Nat) (5 : UInt64))
-        assertEq (expected := 48) (actual := bytes.size)
-                 "4 × uint64BE + 1 × uint128BE = 48 bytes"
+        assertEq (expected := 64) (actual := bytes.size)
+                 "4 × uint64BE + 1 × uint256BE = 64 bytes"
         assertEq (expected := 1) (actual := readUint64BE bytes 0)   "recipient"
         assertEq (expected := 2) (actual := readUint64BE bytes 8)   "gasResource"
-        assertEq (expected := 3) (actual := readUint128BE bytes 16) "gasAmount"
-        assertEq (expected := 4) (actual := readUint64BE bytes 32)  "budgetIncrement"
-        assertEq (expected := 5) (actual := readUint64BE bytes 40)  "poolActor"
+        assertEq (expected := 3) (actual := readUint256BE bytes 16) "gasAmount"
+        assertEq (expected := 4) (actual := readUint64BE bytes 48)  "budgetIncrement"
+        assertEq (expected := 5) (actual := readUint64BE bytes 56)  "poolActor"
     }
   , { name := "OBLIGATION: writeCells declares the nonce for every action"
     , body := do

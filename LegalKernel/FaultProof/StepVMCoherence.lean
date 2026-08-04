@@ -184,39 +184,23 @@ def uint64BE (n : Nat) : ByteArray :=
       ((n >>>  8) &&& 0xFF).toUInt8,
       ( n         &&& 0xFF).toUInt8]
 
-/-- Encode a `Nat` (assumed `< 2^128`) as 16 big-endian bytes.
-    Matches Solidity's `abi.encodePacked(uint128)`.
-
-    The width for *value-carrying* fields in the L1 step-VM calldata
-    layout.  `uint64BE` remains correct for identifiers, log indices
-    and deposit ids, which are `UInt64`-typed at the source and cannot
-    exceed the narrower range; an amount can — a wei-denominated one
-    crosses `2^64` at ~18.45 ETH — and this layout is a *separate*
-    encoding from the CBE codec, with its own truncation boundary.
-    Widening one without the other would leave the fault proof unable
-    to adjudicate a large-amount action. -/
-def uint128BE (n : Nat) : ByteArray :=
-  ByteArray.mk
-    #[((n >>> 120) &&& 0xFF).toUInt8,
-      ((n >>> 112) &&& 0xFF).toUInt8,
-      ((n >>> 104) &&& 0xFF).toUInt8,
-      ((n >>>  96) &&& 0xFF).toUInt8,
-      ((n >>>  88) &&& 0xFF).toUInt8,
-      ((n >>>  80) &&& 0xFF).toUInt8,
-      ((n >>>  72) &&& 0xFF).toUInt8,
-      ((n >>>  64) &&& 0xFF).toUInt8,
-      ((n >>>  56) &&& 0xFF).toUInt8,
-      ((n >>>  48) &&& 0xFF).toUInt8,
-      ((n >>>  40) &&& 0xFF).toUInt8,
-      ((n >>>  32) &&& 0xFF).toUInt8,
-      ((n >>>  24) &&& 0xFF).toUInt8,
-      ((n >>>  16) &&& 0xFF).toUInt8,
-      ((n >>>   8) &&& 0xFF).toUInt8,
-      ( n          &&& 0xFF).toUInt8]
-
 /-- Encode a `Nat` (assumed `< 2^256`) as 32 big-endian bytes.
     Matches Solidity's `abi.encodePacked(uint256)`.  Inlined as
-    a 32-element array literal so `rfl` can decide its size. -/
+    a 32-element array literal so `rfl` can decide its size.
+
+    The width for *value-carrying* fields in the L1 step-VM calldata
+    layout.  `uint64BE` remains correct for identifiers, log indices,
+    deposit ids and unit counts, which are `UInt64`-typed at the
+    source and cannot exceed the narrower range; an amount can, and
+    this layout is a *separate* encoding from the CBE codec with its
+    own truncation boundary.  Widening one without the other would
+    leave the fault proof unable to adjudicate a large-amount action,
+    which is why the two move together.
+
+    A 16-byte `uint256BE` sat here through the previous widening and
+    is gone: nothing should be able to reach for a too-narrow amount
+    encoder by accident, and `Laws.maxAmount` is `2^256` exactly so
+    that this field and the CBE head have the same ceiling. -/
 def uint256BE (n : Nat) : ByteArray :=
   ByteArray.mk
     #[((n >>> 248) &&& 0xFF).toUInt8,
@@ -255,11 +239,6 @@ def uint256BE (n : Nat) : ByteArray :=
 /-- Size of `uint64BE` is exactly 8. -/
 theorem uint64BE_size (n : Nat) : (uint64BE n).size = 8 := by
   unfold uint64BE
-  rfl
-
-/-- Size of `uint128BE` is exactly 16. -/
-theorem uint128BE_size (n : Nat) : (uint128BE n).size = 16 := by
-  unfold uint128BE
   rfl
 
 /-- Size of `uint256BE` is exactly 32. -/
@@ -347,9 +326,9 @@ RegisterIdentity, Deposit, Withdraw): the layout is a sequence of
 fixed-width big-endian fields followed by any variable-length
 trailing payload.  Field width is set by what the field *is*:
 identifiers, log indices, deposit ids and budget-unit counts are
-`uint64BE` (8 bytes); value-carrying amounts are `uint128BE`
-(16 bytes).  This matches the Solidity `_stepXX` decoder's
-`_decodeUint64BE` / `_decodeUint128BE` reads byte-for-byte.
+`uint64BE` (8 bytes); value-carrying amounts are `uint256BE`
+(32 bytes).  This matches the Solidity `_stepXX` decoder's
+`readFieldUint` reads byte-for-byte.
 
 The amount width is not the CBE codec's.  `actionFieldsForL1` is a
 *separate* encoding — untagged, big-endian, fixed-width — read only
@@ -366,7 +345,7 @@ use the Lean-side `Encodable.encode` payload directly, which is
 the most natural cross-stack convention.
 
 **Width discipline.**  Each `uint64BE` produces exactly 8 bytes;
-each `uint128BE` exactly 16; each `uint256BE` exactly 32;
+each `uint256BE` exactly 32;
 variable-length trailers (newKey, pk, recipientL1) are appended
 as-is. -/
 
@@ -377,33 +356,33 @@ as-is. -/
     `Encodable.encode` payload (the L1 step VM only hashes it). -/
 def actionFieldsForL1 : Action → ByteArray
   -- Structured variants: identifiers on `uint64BE`, amounts on
-  -- `uint128BE`, e.g. `uint64BE r || uint64BE sender || ...`
+  -- `uint256BE`, e.g. `uint64BE r || uint64BE sender || ...`
   | .transfer r sender receiver amount =>
       uint64BE r.toNat ++ uint64BE sender.toNat ++
-      uint64BE receiver.toNat ++ uint128BE amount
+      uint64BE receiver.toNat ++ uint256BE amount
   | .mint r to amount =>
-      uint64BE r.toNat ++ uint64BE to.toNat ++ uint128BE amount
+      uint64BE r.toNat ++ uint64BE to.toNat ++ uint256BE amount
   | .burn r fromActor amount =>
-      uint64BE r.toNat ++ uint64BE fromActor.toNat ++ uint128BE amount
+      uint64BE r.toNat ++ uint64BE fromActor.toNat ++ uint256BE amount
   | .freezeResource r =>
       uint64BE r.toNat
   | .replaceKey actor newKey =>
       -- `uint64BE actor || newKey-bytes` (variable trailer).
       uint64BE actor.toNat ++ newKey
   | .reward r to amount =>
-      uint64BE r.toNat ++ uint64BE to.toNat ++ uint128BE amount
+      uint64BE r.toNat ++ uint64BE to.toNat ++ uint256BE amount
   | .distributeOthers r excluded amount =>
-      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint128BE amount
+      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint256BE amount
   | .proportionalDilute r excluded totalReward =>
-      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint128BE totalReward
+      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint256BE totalReward
   | .registerIdentity actor pk =>
       uint64BE actor.toNat ++ pk
   | .deposit r recipient amount depositId =>
       uint64BE r.toNat ++ uint64BE recipient.toNat ++
-      uint128BE amount ++ uint64BE depositId
+      uint256BE amount ++ uint64BE depositId
   | .withdraw r sender amount recipientL1 =>
       uint64BE r.toNat ++ uint64BE sender.toNat ++
-      uint128BE amount ++ Bridge.EthAddress.toBytes recipientL1
+      uint256BE amount ++ Bridge.EthAddress.toBytes recipientL1
   -- Opaque variants: use Lean's CBE encoding (the L1 step VM only
   -- hashes the bytes; structure is internal to both sides).
   | .dispute d =>
@@ -430,26 +409,26 @@ def actionFieldsForL1 : Action → ByteArray
       ByteArray.mk (Encodable.encode (T := Nat) revertFromIdx).toArray
   -- Workstream GP (v1.0): depositWithFee is a structured variant:
   -- `uint64BE resource || uint64BE recipient || uint64BE poolActor ||
-  -- uint128BE userAmount || uint128BE poolAmount || uint64BE budgetGrant
+  -- uint256BE userAmount || uint256BE poolAmount || uint64BE budgetGrant
   -- || uint64BE depositId`.  Mirrors the Solidity `_step19` decoder's
   -- byte-for-byte field reads.  `budgetGrant` is a budget UNIT count
   -- and `depositId` an identifier, so both stay 8 bytes.
   | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
       uint64BE r.toNat ++ uint64BE recipient.toNat ++ uint64BE poolActor.toNat ++
-      uint128BE userAmount ++ uint128BE poolAmount ++ uint64BE budgetGrant ++
+      uint256BE userAmount ++ uint256BE poolAmount ++ uint64BE budgetGrant ++
       uint64BE depositId
   -- topUpActionBudget is a structured variant:
-  -- `uint64BE gasResource || uint128BE gasAmount || uint64BE budgetIncrement ||
+  -- `uint64BE gasResource || uint256BE gasAmount || uint64BE budgetIncrement ||
   -- uint64BE poolActor`.  `gasAmount` is wei-denominated and so rides the
   -- wide field; `budgetIncrement` is a UNIT count and stays 8 bytes.  The
   -- signer is provided separately to the L1 step VM via the SignedAction
   -- payload, not encoded in the action fields.
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
-      uint64BE gasResource.toNat ++ uint128BE gasAmount ++
+      uint64BE gasResource.toNat ++ uint256BE gasAmount ++
       uint64BE budgetIncrement ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.3.4 / GP.5.3): delegated top-up is a structured
   -- variant: `uint64BE recipient || uint64BE gasResource ||
-  -- uint128BE gasAmount || uint64BE budgetIncrement || uint64BE
+  -- uint256BE gasAmount || uint64BE budgetIncrement || uint64BE
   -- poolActor`.  The kernel-state effect mirrors `topUpActionBudget`
   -- (debit signer at gasResource, credit poolActor); `recipient` and
   -- `budgetIncrement` are admission-layer fields (recipient consent +
@@ -459,10 +438,10 @@ def actionFieldsForL1 : Action → ByteArray
   -- execution arm.
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       uint64BE recipient.toNat ++ uint64BE gasResource.toNat ++
-      uint128BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
+      uint256BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.9.1): claimBudgetRefund is a structured variant:
   -- `uint64BE gasResource || uint64BE budgetUnits ||
-  -- uint128BE weiPerBudgetUnit || uint64BE poolActor`.  The kernel-state
+  -- uint256BE weiPerBudgetUnit || uint64BE poolActor`.  The kernel-state
   -- effect (debit poolActor at gasResource by `budgetUnits ×
   -- weiPerBudgetUnit`, credit the signer/claimant) is the MIRROR of
   -- `topUpActionBudget`; `weiPerBudgetUnit` is decoded for layout
@@ -478,25 +457,25 @@ def actionFieldsForL1 : Action → ByteArray
   -- handles its own gas-transfer amount).
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       uint64BE gasResource.toNat ++ uint64BE budgetUnits ++
-      uint128BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
+      uint256BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.11.4): ammSwap is a structured variant:
-  -- `uint64BE fromResource || uint64BE toResource || uint128BE amountIn
-  -- || uint128BE amountOut || uint64BE ammReserveActor`.  The kernel-
+  -- `uint64BE fromResource || uint64BE toResource || uint256BE amountIn
+  -- || uint256BE amountOut || uint64BE ammReserveActor`.  The kernel-
   -- state effect (credit ammReserveActor at fromResource by amountIn,
   -- debit ammReserveActor at toResource by amountOut) is mirrored
   -- byte-for-byte by the Solidity `_stepAmmSwap`.
   | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
       uint64BE fromResource.toNat ++ uint64BE toResource.toNat ++
-      uint128BE amountIn ++ uint128BE amountOut ++ uint64BE ammReserveActor.toNat
+      uint256BE amountIn ++ uint256BE amountOut ++ uint64BE ammReserveActor.toNat
   -- Workstream GP (GP.11.10): reclaimAmmReserves is a structured
-  -- variant: `uint64BE r || uint128BE amount || uint64BE reserveActor
+  -- variant: `uint64BE r || uint256BE amount || uint64BE reserveActor
   -- || uint64BE poolActor`.  The kernel-state effect (debit
   -- reserveActor at r by amount — its entire balance under the
   -- exact-sweep precondition — and credit poolActor the same amount)
   -- is mirrored byte-for-byte by the Solidity
   -- `_stepReclaimAmmReserves`.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
-      uint64BE r.toNat ++ uint128BE amount ++
+      uint64BE r.toNat ++ uint256BE amount ++
       uint64BE reserveActor.toNat ++ uint64BE poolActor.toNat
 
 /-! ## The L1 log-entry chain
@@ -656,21 +635,29 @@ def readUint64BE (bytes : ByteArray) (offset : Nat) : Nat :=
     (b0 <<< 56) ||| (b1 <<< 48) ||| (b2 <<< 40) ||| (b3 <<< 32) |||
     (b4 <<< 24) ||| (b5 <<< 16) ||| (b6 <<< 8) ||| b7
 
-/-- Read a big-endian `uint128` (16 bytes) from `bytes` at offset `o`.
+/-- Read a big-endian `uint256` (32 bytes) from `bytes` at offset `o`.
 
-    **Cross-stack contract.**  The 16-byte counterpart of
-    `readUint64BE`, mirroring Solidity's `_decodeUint128BE(bytes,
-    offset)`, with the same out-of-bounds convention (Lean returns 0;
-    Solidity reverts — both map to "dispatcher cannot produce the
-    responsible party's claim", so the success domains still match
-    byte-for-byte).
+    **Cross-stack contract.**  The 32-byte counterpart of
+    `readUint64BE`, mirroring Solidity's
+    `StepWrites.readFieldUint(fields, offset, 32)`, with the same
+    out-of-bounds convention (Lean returns 0; Solidity reverts — both
+    map to "dispatcher cannot produce the responsible party's claim",
+    so the success domains still match byte-for-byte).
 
     Used for every value-carrying amount field.  Identifiers, log
-    indices, deposit ids and budget-unit counts keep `readUint64BE`. -/
-def readUint128BE (bytes : ByteArray) (offset : Nat) : Nat :=
-  if offset + 16 > bytes.size then 0
+    indices, deposit ids and budget-unit counts keep `readUint64BE`.
+
+    The 16-byte `readUint128BE` that sat here is gone along with its
+    encoder: a too-narrow amount reader is the same footgun on the
+    decode side, and it would silently return a truncated value
+    rather than fail. -/
+def readUint256BE (bytes : ByteArray) (offset : Nat) : Nat :=
+  if offset + 32 > bytes.size then 0
   else
-    (readUint64BE bytes offset) <<< 64 ||| (readUint64BE bytes (offset + 8))
+    (readUint64BE bytes offset) <<< 192 |||
+    (readUint64BE bytes (offset + 8)) <<< 128 |||
+    (readUint64BE bytes (offset + 16)) <<< 64 |||
+    (readUint64BE bytes (offset + 24))
 
 /-- Slice a byte array from `offset` to its end.  Mirrors
     Solidity's `actionFields[offset:]` slice expression. -/
