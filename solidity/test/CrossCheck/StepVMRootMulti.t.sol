@@ -29,6 +29,17 @@ import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 ///         keeps the same evidence one layer up, since Lean asserts
 ///         the two columns agree before it publishes either.
 ///
+///         **Every corpus walk here reports EVERY failing probe**, not
+///         the first.  A fail-fast walk understates a break: when the
+///         amount head widened to 32 bytes and three `StepPlan` offsets
+///         were left behind, the walk named probe 9 and stopped, so the
+///         defect read as one variant's when it was every grant-bearing
+///         variant's.  Establishing that took hand-run mutations; it is
+///         now the failure message.  Reverts are caught for the same
+///         reason and more urgently — a value mismatch at least names
+///         its probe, whereas a revert escaping the loop reported
+///         `FrontierMissingCell(2)` and identified no probe at all.
+///
 ///         The negative controls are where the design actually differs.
 ///         A duplicate cell is not representable (strict ascent after
 ///         the sort is the distinctness check); a permutation is
@@ -62,14 +73,23 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
         assertGt(n, 0, "the corpus must carry multiproof goldens");
+        string memory report = "";
+        uint256 bad = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
-            assertEq(
-                _runProbe(raw, base),
-                probePostRoot(raw, base),
-                string.concat("post-root mismatch at ", base)
+            (bool ok, bytes32 got, bytes memory err) = _tryProbe(raw, base);
+            bytes32 want = probePostRoot(raw, base);
+            if (ok && got == want) continue;
+            bad++;
+            report = _note(
+                report, raw, base,
+                ok
+                    ? string.concat(
+                        "got ", vm.toString(got), ", want ", vm.toString(want))
+                    : string.concat("reverted ", vm.toString(err))
             );
         }
+        _reportProbes("post-roots disagreeing with Lean", report, bad, n);
     }
 
     /// @notice **The merged fold moves the root on every probe.**
@@ -88,13 +108,21 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         string memory raw = readFixture(STEP_VM_FIXTURE);
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
+        string memory report = "";
+        uint256 bad = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
-            assertTrue(
-                _runProbe(raw, base) != probePreRoot(raw, base),
-                string.concat("the fold left the root alone at ", base)
+            (bool ok, bytes32 got, bytes memory err) = _tryProbe(raw, base);
+            if (ok && got != probePreRoot(raw, base)) continue;
+            bad++;
+            report = _note(
+                report, raw, base,
+                ok
+                    ? string.concat("the fold left the root at ", vm.toString(got))
+                    : string.concat("reverted ", vm.toString(err))
             );
         }
+        _reportProbes("probes whose fold did not move the root", report, bad, n);
     }
 
     /* ---------------------------------------------------------- */
@@ -122,6 +150,8 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         string memory raw = readFixture(STEP_VM_FIXTURE);
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
+        string memory report = "";
+        uint256 bad = 0;
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
             KnomosisStepVMRoot.OpenedCell[] memory cells = loadOpenedCells(raw, base);
@@ -132,12 +162,21 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
                 (cells[a], cells[cells.length - 1 - a]) =
                     (cells[cells.length - 1 - a], cells[a]);
             }
-            assertEq(
-                _call(raw, base, cells, probeGapMask(raw, base), probeSiblings(raw, base)),
-                probePostRoot(raw, base),
-                string.concat("a reversed frontier changed the root at ", base)
+            (bool ok, bytes32 got, bytes memory err) = _tryCall(
+                raw, base, cells, probeGapMask(raw, base), probeSiblings(raw, base)
+            );
+            bytes32 want = probePostRoot(raw, base);
+            if (ok && got == want) continue;
+            bad++;
+            report = _note(
+                report, raw, base,
+                ok
+                    ? string.concat(
+                        "reversed to ", vm.toString(got), ", want ", vm.toString(want))
+                    : string.concat("reversed frontier reverted ", vm.toString(err))
             );
         }
+        _reportProbes("probes a reversed frontier changed", report, bad, n);
     }
 
     /* ---------------------------------------------------------- */
@@ -333,13 +372,21 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         if (!fixtureExists(STEP_VM_FIXTURE)) return;
         string memory raw = readFixture(STEP_VM_FIXTURE);
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
+        uint256 cap = vmRoot.widestFrontier(new bytes(128));
+        string memory report = "";
+        uint256 bad = 0;
         for (uint256 i = 0; i < n; i++) {
-            assertLe(
-                vm.parseJsonUint(raw, string.concat(multiProbeBase(i), ".cellCount")),
-                vmRoot.widestFrontier(new bytes(128)),
-                "a corpus probe exceeds the derived widest frontier"
+            string memory base = multiProbeBase(i);
+            uint256 cells = vm.parseJsonUint(raw, string.concat(base, ".cellCount"));
+            if (cells <= cap) continue;
+            bad++;
+            report = _note(
+                report, raw, base,
+                string.concat(
+                    "opens ", vm.toString(cells), " cells, cap ", vm.toString(cap))
             );
         }
+        _reportProbes("probes exceeding the derived widest frontier", report, bad, n);
     }
 
     /* ---------------------------------------------------------- */
@@ -376,15 +423,87 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         revert("no multiproof probe carries a sibling");
     }
 
-    /// @dev Run one probe with its published frontier and wire.
-    function _runProbe(string memory raw, string memory base)
+    /* ---------------------------------------------------------- */
+    /* Revert-tolerant probing, for the corpus walks               */
+    /* ---------------------------------------------------------- */
+
+    /// @dev `_call`, but returning the failure instead of raising it.
+    ///
+    ///      The corpus walks need this and the negative controls must
+    ///      NOT have it: a control asserts one specific revert and wants
+    ///      `vm.expectRevert` to see it, whereas a walk that stops at the
+    ///      first bad probe reports the corpus as one broken entry when
+    ///      several may be broken.  Both go through
+    ///      `encodeMultiProbeCall`, so the two paths cannot drift in what
+    ///      they actually send.
+    ///
+    ///      A revert is caught rather than allowed to propagate because
+    ///      it is the MORE opaque failure of the two: a value mismatch at
+    ///      least names its probe, while `FrontierMissingCell(2)` escaping
+    ///      the loop names a cell index in an unidentified probe.
+    ///
+    ///      The returndata is reported as raw hex rather than decoded to
+    ///      an error name.  Decoding would need a selector table, and a
+    ///      table that fell behind the contract's errors would mislabel
+    ///      the failure it exists to explain — worse than four bytes the
+    ///      reader can grep for.
+    function _tryCall(
+        string memory raw,
+        string memory base,
+        KnomosisStepVMRoot.OpenedCell[] memory cells,
+        bytes memory gapMask,
+        bytes memory siblings
+    ) private view returns (bool ok, bytes32 root, bytes memory err) {
+        bytes memory ret;
+        (ok, ret) = address(vmRoot).staticcall(
+            encodeMultiProbeCall(raw, base, cells, gapMask, siblings)
+        );
+        if (ok) root = abi.decode(ret, (bytes32));
+        else err = ret;
+    }
+
+    /// @dev `_tryCall` on the probe's own published frontier and wire.
+    function _tryProbe(string memory raw, string memory base)
         private
         view
-        returns (bytes32)
+        returns (bool ok, bytes32 root, bytes memory err)
     {
-        return _call(
+        return _tryCall(
             raw, base, loadOpenedCells(raw, base),
             probeGapMask(raw, base), probeSiblings(raw, base)
+        );
+    }
+
+    /// @dev Append one probe's failure to a running report, naming the
+    ///      VARIANT as well as the index — the index says where to look
+    ///      and the variant says what shape broke, which is what turns a
+    ///      list of failures into a diagnosis.
+    function _note(
+        string memory report,
+        string memory raw,
+        string memory base,
+        string memory detail
+    ) private pure returns (string memory) {
+        return string.concat(
+            report, "\n  ", base, " (",
+            vm.parseJsonString(raw, string.concat(base, ".variant")),
+            "): ", detail
+        );
+    }
+
+    /// @dev Fail once, with every probe that failed.
+    function _reportProbes(
+        string memory what,
+        string memory report,
+        uint256 bad,
+        uint256 n
+    ) private pure {
+        assertTrue(
+            bytes(report).length == 0,
+            string.concat(
+                what, ": ", vm.toString(bad), " of ", vm.toString(n),
+                " probes:", report
+            )
         );
     }
 
