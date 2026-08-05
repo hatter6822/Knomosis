@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "759bd1a9502faaa7c0b7ef60570e6f524f3b15f227e374bdef6469c7f2721d0d"
+    "source_digest": "2d975beb9c887ee254fc462cea16cddf5b76a82c2281f9c0e32135aca1be3d84"
   },
   "summary": {
-    "module_count": 340,
-    "declaration_count": 5947
+    "module_count": 342,
+    "declaration_count": 5963
   },
   "modules": [
     {
@@ -836,7 +836,7 @@
     {
       "module": "LegalKernel.Authority.ActorBudget",
       "path": "LegalKernel/Authority/ActorBudget.lean",
-      "declaration_count": 38,
+      "declaration_count": 44,
       "declarations": [
         {
           "kind": "namespace",
@@ -1049,9 +1049,41 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "normalise_budgetBalance_le_max",
+          "line": 186,
+          "called": [
+            "ActorBudget",
+            "normalise",
+            "now"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUp_budgetBalance_le",
+          "line": 201,
+          "called": [
+            "ActorBudget",
+            "normalise_budgetBalance_le_max",
+            "now",
+            "topUp_budgetBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "consume_some_budgetBalance_le",
+          "line": 208,
+          "called": [
+            "ActorBudget",
+            "consume_some_budgetBalance",
+            "normalise_budgetBalance_le_max",
+            "now"
+          ]
+        },
+        {
           "kind": "abbrev",
           "name": "EpochBudgetState",
-          "line": 170,
+          "line": 217,
           "called": [
             "ActorBudget",
             "ActorId"
@@ -1060,13 +1092,13 @@
         {
           "kind": "namespace",
           "name": "EpochBudgetState",
-          "line": 172,
+          "line": 219,
           "called": []
         },
         {
           "kind": "def",
           "name": "empty",
-          "line": 175,
+          "line": 222,
           "called": [
             "EpochBudgetState"
           ]
@@ -1074,7 +1106,7 @@
         {
           "kind": "theorem",
           "name": "empty_is_empty",
-          "line": 177,
+          "line": 224,
           "called": [
             "ActorId",
             "empty"
@@ -1083,7 +1115,7 @@
         {
           "kind": "def",
           "name": "currentBudget",
-          "line": 180,
+          "line": 227,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1095,7 +1127,7 @@
         {
           "kind": "def",
           "name": "consume",
-          "line": 184,
+          "line": 231,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1106,7 +1138,7 @@
         {
           "kind": "def",
           "name": "topUp",
-          "line": 191,
+          "line": 238,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1117,7 +1149,7 @@
         {
           "kind": "theorem",
           "name": "currentBudget_after_consume_self",
-          "line": 215,
+          "line": 262,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1130,7 +1162,7 @@
         {
           "kind": "theorem",
           "name": "currentBudget_after_consume_other",
-          "line": 243,
+          "line": 290,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1142,7 +1174,7 @@
         {
           "kind": "theorem",
           "name": "consume_eq_none_iff",
-          "line": 264,
+          "line": 311,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1155,7 +1187,7 @@
         {
           "kind": "theorem",
           "name": "consume_succeeds_when_sufficient",
-          "line": 293,
+          "line": 340,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1166,7 +1198,7 @@
         {
           "kind": "theorem",
           "name": "currentBudget_after_topUp_self",
-          "line": 306,
+          "line": 353,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1179,7 +1211,7 @@
         {
           "kind": "theorem",
           "name": "currentBudget_after_topUp_other",
-          "line": 322,
+          "line": 369,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1192,7 +1224,7 @@
         {
           "kind": "theorem",
           "name": "currentBudget_floored_at_freeTier",
-          "line": 336,
+          "line": 383,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -1201,9 +1233,41 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "storedBalance",
+          "line": 401,
+          "called": [
+            "ActorId",
+            "EpochBudgetState"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "storedBalance_topUp_le",
+          "line": 409,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "now",
+            "storedBalance",
+            "topUp"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "storedBalance_consume_le",
+          "line": 431,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "consume",
+            "now"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "currentBudget_empty_genesis",
-          "line": 346,
+          "line": 457,
           "called": [
             "ActorId",
             "Authority",
@@ -17282,7 +17346,7 @@
         {
           "kind": "theorem",
           "name": "encodeAmount_injective",
-          "line": 265,
+          "line": 269,
           "called": [
             "cborAmountHeadEncode_injective",
             "encodeAmount"
@@ -17291,7 +17355,7 @@
         {
           "kind": "theorem",
           "name": "encodeAmount_ne_encodeNat",
-          "line": 273,
+          "line": 277,
           "called": [
             "cborAmountHeadEncode_ne_cborHeadEncode",
             "encodeAmount"
@@ -17300,13 +17364,13 @@
         {
           "kind": "structure",
           "name": "AmountValue",
-          "line": 303,
+          "line": 307,
           "called": []
         },
         {
           "kind": "instance",
           "name": "instEncodableAmountValue",
-          "line": 308,
+          "line": 312,
           "called": [
             "AmountValue",
             "Encodable",
@@ -17319,13 +17383,13 @@
         {
           "kind": "theorem",
           "name": "AmountValue.mk_injective",
-          "line": 318,
+          "line": 322,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "amountValue_roundtrip",
-          "line": 325,
+          "line": 329,
           "called": [
             "AmountValue",
             "Stream",
@@ -17337,7 +17401,7 @@
         {
           "kind": "theorem",
           "name": "amountValue_roundtrip_empty",
-          "line": 334,
+          "line": 338,
           "called": [
             "AmountValue",
             "amountValue_roundtrip"
@@ -17346,7 +17410,7 @@
         {
           "kind": "theorem",
           "name": "amountValue_encode_injective",
-          "line": 341,
+          "line": 345,
           "called": [
             "AmountValue",
             "DecodeError",
@@ -17357,19 +17421,19 @@
         {
           "kind": "structure",
           "name": "BoundedNat",
-          "line": 361,
+          "line": 365,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "BoundedNat",
-          "line": 368,
+          "line": 372,
           "called": []
         },
         {
           "kind": "instance",
           "name": "instEncodableBoundedNat",
-          "line": 380,
+          "line": 384,
           "called": [
             "BoundedNat",
             "Encodable",
@@ -17383,7 +17447,7 @@
         {
           "kind": "theorem",
           "name": "boundedNat_roundtrip",
-          "line": 392,
+          "line": 396,
           "called": [
             "BoundedNat",
             "Stream",
@@ -17396,7 +17460,7 @@
         {
           "kind": "theorem",
           "name": "boundedNat_encode_injective",
-          "line": 407,
+          "line": 411,
           "called": [
             "BoundedNat",
             "DecodeError",
@@ -17407,7 +17471,7 @@
         {
           "kind": "def",
           "name": "encodeBytesList",
-          "line": 422,
+          "line": 426,
           "called": [
             "Stream",
             "cbeTagBytes",
@@ -17417,7 +17481,7 @@
         {
           "kind": "def",
           "name": "decodeBytesList",
-          "line": 427,
+          "line": 431,
           "called": [
             "DecodeError",
             "Stream",
@@ -17428,7 +17492,7 @@
         {
           "kind": "instance",
           "name": "instEncodableByteArray",
-          "line": 437,
+          "line": 441,
           "called": [
             "Encodable",
             "decode",
@@ -17440,31 +17504,31 @@
         {
           "kind": "theorem",
           "name": "byteArray_mk_data_toList_toArray",
-          "line": 447,
+          "line": 451,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_data_toList_length",
-          "line": 455,
+          "line": 459,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "list_take_self_length",
-          "line": 463,
+          "line": 467,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "list_drop_self_length",
-          "line": 470,
+          "line": 474,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_roundtrip",
-          "line": 477,
+          "line": 481,
           "called": [
             "Stream",
             "byteArray_data_toList_length",
@@ -17481,7 +17545,7 @@
         {
           "kind": "theorem",
           "name": "byteArray_roundtrip_empty",
-          "line": 501,
+          "line": 505,
           "called": [
             "byteArray_roundtrip"
           ]
@@ -17489,7 +17553,7 @@
         {
           "kind": "theorem",
           "name": "byteArray_encode_injective",
-          "line": 507,
+          "line": 511,
           "called": [
             "DecodeError",
             "Stream",
@@ -17499,7 +17563,7 @@
         {
           "kind": "def",
           "name": "encodeList",
-          "line": 529,
+          "line": 533,
           "called": [
             "Encodable",
             "Stream",
@@ -17510,7 +17574,7 @@
         {
           "kind": "def",
           "name": "decodeListN",
-          "line": 535,
+          "line": 539,
           "called": [
             "DecodeError",
             "Encodable",
@@ -17520,7 +17584,7 @@
         {
           "kind": "instance",
           "name": "instEncodableList",
-          "line": 545,
+          "line": 549,
           "called": [
             "Encodable",
             "cbeTagArray",
@@ -17534,7 +17598,7 @@
         {
           "kind": "def",
           "name": "ElemRoundtrip",
-          "line": 555,
+          "line": 559,
           "called": [
             "Encodable",
             "Stream"
@@ -17543,7 +17607,7 @@
         {
           "kind": "theorem",
           "name": "decodeListN_encode_foldr",
-          "line": 562,
+          "line": 566,
           "called": [
             "ElemRoundtrip",
             "Encodable",
@@ -17554,7 +17618,7 @@
         {
           "kind": "theorem",
           "name": "list_roundtrip",
-          "line": 577,
+          "line": 581,
           "called": [
             "ElemRoundtrip",
             "Encodable",
@@ -17571,7 +17635,7 @@
         {
           "kind": "def",
           "name": "ElemRoundtripIn",
-          "line": 610,
+          "line": 614,
           "called": [
             "Encodable",
             "Stream"
@@ -17580,7 +17644,7 @@
         {
           "kind": "theorem",
           "name": "decodeListN_encode_foldr_bounded",
-          "line": 617,
+          "line": 621,
           "called": [
             "ElemRoundtripIn",
             "Encodable",
@@ -17591,7 +17655,7 @@
         {
           "kind": "theorem",
           "name": "list_roundtrip_bounded",
-          "line": 640,
+          "line": 644,
           "called": [
             "ElemRoundtripIn",
             "Encodable",
@@ -17608,7 +17672,7 @@
         {
           "kind": "instance",
           "name": "instEncodableOption",
-          "line": 660,
+          "line": 664,
           "called": [
             "Encodable",
             "cbeTagArray",
@@ -17622,7 +17686,7 @@
         {
           "kind": "theorem",
           "name": "option_roundtrip",
-          "line": 676,
+          "line": 680,
           "called": [
             "ElemRoundtrip",
             "Encodable",
@@ -17637,7 +17701,7 @@
         {
           "kind": "instance",
           "name": "instEncodableUInt8",
-          "line": 712,
+          "line": 716,
           "called": [
             "Encodable",
             "decode",
@@ -17647,7 +17711,7 @@
         {
           "kind": "instance",
           "name": "instEncodableUInt16",
-          "line": 724,
+          "line": 728,
           "called": [
             "Encodable",
             "decode",
@@ -17657,7 +17721,7 @@
         {
           "kind": "instance",
           "name": "instEncodableUInt32",
-          "line": 736,
+          "line": 740,
           "called": [
             "Encodable",
             "decode",
@@ -17667,7 +17731,7 @@
         {
           "kind": "instance",
           "name": "instEncodableUInt64",
-          "line": 748,
+          "line": 752,
           "called": [
             "Encodable",
             "decode",
@@ -17677,7 +17741,7 @@
         {
           "kind": "theorem",
           "name": "uInt8_roundtrip",
-          "line": 761,
+          "line": 765,
           "called": [
             "Stream",
             "nat_roundtrip"
@@ -17686,7 +17750,7 @@
         {
           "kind": "theorem",
           "name": "uInt16_roundtrip",
-          "line": 786,
+          "line": 790,
           "called": [
             "Stream",
             "nat_roundtrip"
@@ -17695,7 +17759,7 @@
         {
           "kind": "theorem",
           "name": "uInt32_roundtrip",
-          "line": 811,
+          "line": 815,
           "called": [
             "Stream",
             "nat_roundtrip"
@@ -17704,7 +17768,7 @@
         {
           "kind": "theorem",
           "name": "uInt64_roundtrip",
-          "line": 836,
+          "line": 840,
           "called": [
             "Stream",
             "nat_roundtrip"
@@ -17713,13 +17777,13 @@
         {
           "kind": "namespace",
           "name": "Encodable",
-          "line": 899,
+          "line": 903,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "Encodable_via_decode_inj",
-          "line": 910,
+          "line": 914,
           "called": [
             "DecodeError",
             "Encodable",
@@ -17729,7 +17793,7 @@
         {
           "kind": "theorem",
           "name": "Encodable_via_decode_inj_append",
-          "line": 928,
+          "line": 932,
           "called": [
             "Encodable",
             "Encodable_via_decode_inj",
@@ -17739,7 +17803,7 @@
         {
           "kind": "theorem",
           "name": "encodeAsBytes_eq_injective_of_encode_eq_injective",
-          "line": 968,
+          "line": 972,
           "called": [
             "Stream",
             "encode"
@@ -17748,7 +17812,7 @@
         {
           "kind": "theorem",
           "name": "uInt8_encode_injective",
-          "line": 994,
+          "line": 998,
           "called": [
             "Stream",
             "uInt8_roundtrip"
@@ -17757,7 +17821,7 @@
         {
           "kind": "theorem",
           "name": "uInt16_encode_injective",
-          "line": 1000,
+          "line": 1004,
           "called": [
             "Stream",
             "uInt16_roundtrip"
@@ -17766,7 +17830,7 @@
         {
           "kind": "theorem",
           "name": "uInt32_encode_injective",
-          "line": 1006,
+          "line": 1010,
           "called": [
             "Stream",
             "uInt32_roundtrip"
@@ -17775,7 +17839,7 @@
         {
           "kind": "theorem",
           "name": "uInt64_encode_injective",
-          "line": 1012,
+          "line": 1016,
           "called": [
             "Stream",
             "uInt64_roundtrip"
@@ -17784,7 +17848,7 @@
         {
           "kind": "theorem",
           "name": "list_encode_injective",
-          "line": 1030,
+          "line": 1034,
           "called": [
             "DecodeError",
             "ElemRoundtrip",
@@ -17796,7 +17860,7 @@
         {
           "kind": "theorem",
           "name": "option_encode_injective",
-          "line": 1053,
+          "line": 1057,
           "called": [
             "DecodeError",
             "ElemRoundtrip",
@@ -17808,13 +17872,13 @@
         {
           "kind": "namespace",
           "name": "Encodable",
-          "line": 1089,
+          "line": 1093,
           "called": []
         },
         {
           "kind": "class",
           "name": "HasInjective",
-          "line": 1095,
+          "line": 1099,
           "called": [
             "Encodable",
             "Stream"
@@ -17823,13 +17887,13 @@
         {
           "kind": "namespace",
           "name": "HasInjective",
-          "line": 1100,
+          "line": 1104,
           "called": []
         },
         {
           "kind": "instance",
           "name": "instBool",
-          "line": 1103,
+          "line": 1107,
           "called": [
             "HasInjective",
             "bool_encode_injective"
@@ -17838,7 +17902,7 @@
         {
           "kind": "instance",
           "name": "instBoundedNat",
-          "line": 1108,
+          "line": 1112,
           "called": [
             "BoundedNat",
             "HasInjective",
@@ -17848,7 +17912,7 @@
         {
           "kind": "instance",
           "name": "instUInt8",
-          "line": 1112,
+          "line": 1116,
           "called": [
             "HasInjective",
             "uInt8_encode_injective"
@@ -17857,7 +17921,7 @@
         {
           "kind": "instance",
           "name": "instUInt16",
-          "line": 1116,
+          "line": 1120,
           "called": [
             "HasInjective",
             "uInt16_encode_injective"
@@ -17866,7 +17930,7 @@
         {
           "kind": "instance",
           "name": "instUInt32",
-          "line": 1120,
+          "line": 1124,
           "called": [
             "HasInjective",
             "uInt32_encode_injective"
@@ -17875,7 +17939,7 @@
         {
           "kind": "instance",
           "name": "instUInt64",
-          "line": 1126,
+          "line": 1130,
           "called": [
             "Encodable",
             "Encoding",
@@ -18133,7 +18197,7 @@
     {
       "module": "LegalKernel.Encoding.KernelStep",
       "path": "LegalKernel/Encoding/KernelStep.lean",
-      "declaration_count": 23,
+      "declaration_count": 26,
       "declarations": [
         {
           "kind": "namespace",
@@ -18174,8 +18238,33 @@
         },
         {
           "kind": "def",
+          "name": "CellTag.fieldsBounded",
+          "line": 196,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "uint64_key_lt_head",
+          "line": 207,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "cellTag_roundtrip",
+          "line": 223,
+          "called": [
+            "CellTag.decode",
+            "CellTag.encode",
+            "CellTag.fieldsBounded",
+            "Stream",
+            "nat_roundtrip",
+            "uint64_key_lt_head"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "CellProof.encode",
-          "line": 170,
+          "line": 368,
           "called": [
             "ExtendedState",
             "Stream"
@@ -18184,7 +18273,7 @@
         {
           "kind": "def",
           "name": "CellProof.decode",
-          "line": 177,
+          "line": 375,
           "called": [
             "CellProof.encode",
             "DecodeError",
@@ -18199,7 +18288,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.encode",
-          "line": 202,
+          "line": 400,
           "called": [
             "Stream"
           ]
@@ -18207,7 +18296,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.decode",
-          "line": 206,
+          "line": 404,
           "called": [
             "CellProofBundle.encode",
             "DecodeError",
@@ -18220,7 +18309,7 @@
         {
           "kind": "def",
           "name": "SmtCellProof.encode",
-          "line": 226,
+          "line": 424,
           "called": [
             "Stream"
           ]
@@ -18228,7 +18317,7 @@
         {
           "kind": "def",
           "name": "SmtCellProof.decode",
-          "line": 231,
+          "line": 429,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18241,7 +18330,7 @@
         {
           "kind": "def",
           "name": "CellOpening.encode",
-          "line": 245,
+          "line": 443,
           "called": [
             "Stream"
           ]
@@ -18249,7 +18338,7 @@
         {
           "kind": "def",
           "name": "CellOpening.decode",
-          "line": 251,
+          "line": 449,
           "called": [
             "CellOpening.encode",
             "DecodeError",
@@ -18262,7 +18351,7 @@
         {
           "kind": "def",
           "name": "SmtMultiProof.encode",
-          "line": 278,
+          "line": 476,
           "called": [
             "Stream"
           ]
@@ -18270,7 +18359,7 @@
         {
           "kind": "def",
           "name": "SmtMultiProof.decode",
-          "line": 283,
+          "line": 481,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18283,7 +18372,7 @@
         {
           "kind": "def",
           "name": "OpenedCell.encode",
-          "line": 299,
+          "line": 497,
           "called": [
             "Stream"
           ]
@@ -18291,7 +18380,7 @@
         {
           "kind": "def",
           "name": "OpenedCell.decode",
-          "line": 304,
+          "line": 502,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18304,7 +18393,7 @@
         {
           "kind": "def",
           "name": "MultiBundle.encode",
-          "line": 318,
+          "line": 516,
           "called": [
             "Stream"
           ]
@@ -18312,7 +18401,7 @@
         {
           "kind": "def",
           "name": "MultiBundle.decode",
-          "line": 323,
+          "line": 521,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18326,7 +18415,7 @@
         {
           "kind": "def",
           "name": "KernelStep.encode",
-          "line": 341,
+          "line": 539,
           "called": [
             "SignedAction",
             "Stream",
@@ -18336,7 +18425,7 @@
         {
           "kind": "def",
           "name": "KernelStep.decode",
-          "line": 349,
+          "line": 547,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18350,7 +18439,7 @@
         {
           "kind": "theorem",
           "name": "kernelStep_encode_deterministic",
-          "line": 380,
+          "line": 578,
           "called": [
             "KernelStep.encode"
           ]
@@ -18358,7 +18447,7 @@
         {
           "kind": "theorem",
           "name": "cellProof_encode_deterministic",
-          "line": 385,
+          "line": 583,
           "called": [
             "CellProof.encode"
           ]
@@ -18366,7 +18455,7 @@
         {
           "kind": "theorem",
           "name": "cellTag_encode_deterministic",
-          "line": 390,
+          "line": 588,
           "called": [
             "CellTag.encode",
             "Encoding",
@@ -20688,7 +20777,7 @@
         {
           "kind": "theorem",
           "name": "expectsNonce_admissible_step_le",
-          "line": 329,
+          "line": 371,
           "called": [
             "ActorId",
             "AuthorityPolicy",
@@ -20709,7 +20798,7 @@
         {
           "kind": "inductive",
           "name": "AdmissibleReachableIn",
-          "line": 356,
+          "line": 398,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -20726,7 +20815,7 @@
         {
           "kind": "theorem",
           "name": "expectsNonce_le_of_reachableIn",
-          "line": 376,
+          "line": 418,
           "called": [
             "ActorId",
             "AdmissibleReachableIn",
@@ -20744,7 +20833,7 @@
         {
           "kind": "theorem",
           "name": "expectsNonce_lt_of_reachableIn",
-          "line": 406,
+          "line": 448,
           "called": [
             "ActorId",
             "AdmissibleReachableIn",
@@ -20760,7 +20849,7 @@
         {
           "kind": "theorem",
           "name": "balancesBounded_admissible_step",
-          "line": 417,
+          "line": 459,
           "called": [
             "AuthorityPolicy",
             "BalancesBounded",
@@ -20778,7 +20867,7 @@
         {
           "kind": "theorem",
           "name": "balancesBounded_of_admissibleReachable",
-          "line": 434,
+          "line": 476,
           "called": [
             "AdmissibleReachable",
             "AuthorityPolicy",
@@ -20794,7 +20883,7 @@
         {
           "kind": "theorem",
           "name": "balancesBounded_genesis",
-          "line": 445,
+          "line": 487,
           "called": [
             "BalancesBounded",
             "ExtendedState",
@@ -20804,7 +20893,7 @@
         {
           "kind": "theorem",
           "name": "canonicalBounds_base_amt_of_reachable",
-          "line": 469,
+          "line": 511,
           "called": [
             "AdmissibleReachable",
             "AuthorityPolicy",
@@ -34635,7 +34724,7 @@
         {
           "kind": "def",
           "name": "bulkRecipients",
-          "line": 108,
+          "line": 113,
           "called": [
             "ActorId",
             "Amount",
@@ -34646,7 +34735,7 @@
         {
           "kind": "def",
           "name": "BulkBounded",
-          "line": 120,
+          "line": 125,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34658,7 +34747,7 @@
         {
           "kind": "instance",
           "name": "BulkBounded.decidable",
-          "line": 145,
+          "line": 150,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34669,7 +34758,7 @@
         {
           "kind": "theorem",
           "name": "bulkBounded_of_absent",
-          "line": 152,
+          "line": 157,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34681,7 +34770,7 @@
         {
           "kind": "theorem",
           "name": "bulkBounded_of_map_length_le",
-          "line": 160,
+          "line": 165,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34693,7 +34782,7 @@
         {
           "kind": "theorem",
           "name": "mem_bulkRecipients_iff",
-          "line": 169,
+          "line": 174,
           "called": [
             "ActorId",
             "Amount",
@@ -34705,7 +34794,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_key_ne_excluded",
-          "line": 184,
+          "line": 189,
           "called": [
             "ActorId",
             "Amount",
@@ -34718,7 +34807,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_values_ne_zero",
-          "line": 204,
+          "line": 209,
           "called": [
             "ActorId",
             "Amount",
@@ -34731,7 +34820,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_values_sum_eq_sumOthers",
-          "line": 225,
+          "line": 230,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34745,7 +34834,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_keys_pairwise_ne",
-          "line": 243,
+          "line": 248,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34756,7 +34845,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_nodup_keys",
-          "line": 253,
+          "line": 258,
           "called": [
             "ActorId",
             "Laws",
@@ -39767,7 +39856,8 @@
             "LegalKernel.Test.Authority.ActorBudgetTests",
             "TestCase",
             "assert",
-            "assertEq"
+            "assertEq",
+            "freeTier"
           ]
         }
       ]
@@ -42790,6 +42880,33 @@
             "mockVerifyRejectsEmpty",
             "signingInputDeterministicPerDeployment",
             "signingInputDistinguishesDeployments"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.AxiomFootprint",
+      "path": "LegalKernel/Test/AxiomFootprint.lean",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.AxiomFootprint",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "canonicalAxioms",
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 163,
+          "called": [
+            "LegalKernel.Test.AxiomFootprint"
           ]
         }
       ]
@@ -56697,6 +56814,56 @@
             "test_uInt64_encode_injective_api",
             "test_uInt8_encode_injective_api",
             "test_uIntN_distinguishes"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Encoding.KernelStep",
+      "path": "LegalKernel/Test/Encoding/KernelStep.lean",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Encoding.KernelStepTests",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "allTags",
+          "line": 49,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "roundtripsWithResidual",
+          "line": 70,
+          "called": [
+            "CellTag",
+            "CellTag.decode",
+            "CellTag.encode",
+            "Stream"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 77,
+          "called": [
+            "CellTag",
+            "CellTag.decode",
+            "CellTag.encode",
+            "CellTag.fieldsBounded",
+            "LegalKernel.Test.Encoding.KernelStepTests",
+            "TestCase",
+            "allTags",
+            "assert",
+            "assertEq",
+            "cellTag_roundtrip",
+            "roundtripsWithResidual"
           ]
         }
       ]
@@ -72747,7 +72914,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 226,
+          "line": 228,
           "called": [
             "runAll"
           ]

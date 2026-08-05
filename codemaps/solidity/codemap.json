@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "08183af70299c164e2d3aec418ebb8317997292492532db2d6bc5f39f4cff633"
+    "source_digest": "16e33d3db100b8ca2cd1ad502fdaefbdd4e7f5374382da0cb8ef4f9e6ca03a67"
   },
   "summary": {
     "module_count": 103,
@@ -3365,49 +3365,49 @@
         {
           "kind": "error",
           "name": "WriteSetMismatch",
-          "line": 130,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "TooManyCellOpenings",
-          "line": 133,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "FrontierMissingCell",
           "line": 138,
           "called": []
         },
         {
           "kind": "error",
-          "name": "FrontierLengthMismatch",
+          "name": "TooManyCellOpenings",
           "line": 141,
           "called": []
         },
         {
           "kind": "error",
+          "name": "FrontierMissingCell",
+          "line": 146,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "FrontierLengthMismatch",
+          "line": 149,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "PreRootMismatch",
-          "line": 145,
+          "line": 153,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 161,
+          "line": 169,
           "called": []
         },
         {
           "kind": "function",
           "name": "widestFrontier",
-          "line": 193,
+          "line": 201,
           "called": []
         },
         {
           "kind": "function",
           "name": "executeStepToRootMulti",
-          "line": 255,
+          "line": 263,
           "called": [
             "OpenedCell",
             "PreRootMismatch",
@@ -3420,7 +3420,7 @@
         {
           "kind": "function",
           "name": "_nextWdIdPreMulti",
-          "line": 309,
+          "line": 317,
           "called": [
             "OpenedCell"
           ]
@@ -3428,7 +3428,7 @@
         {
           "kind": "function",
           "name": "_findOpened",
-          "line": 324,
+          "line": 332,
           "called": [
             "OpenedCell"
           ]
@@ -3436,7 +3436,7 @@
         {
           "kind": "function",
           "name": "_openedValue",
-          "line": 343,
+          "line": 351,
           "called": [
             "FrontierMissingCell",
             "OpenedCell",
@@ -3446,13 +3446,13 @@
         {
           "kind": "function",
           "name": "_frontierSize",
-          "line": 359,
+          "line": 367,
           "called": []
         },
         {
           "kind": "function",
           "name": "_requireFrontier",
-          "line": 385,
+          "line": 393,
           "called": [
             "FrontierLengthMismatch",
             "FrontierMissingCell",
@@ -3464,7 +3464,7 @@
         {
           "kind": "function",
           "name": "_multiLeaves",
-          "line": 413,
+          "line": 421,
           "called": [
             "OpenedCell",
             "_deriveValueMulti",
@@ -3476,7 +3476,7 @@
         {
           "kind": "function",
           "name": "_planMulti",
-          "line": 485,
+          "line": 493,
           "called": [
             "OpenedCell",
             "_openedValue"
@@ -3485,7 +3485,7 @@
         {
           "kind": "function",
           "name": "_deriveValueMulti",
-          "line": 516,
+          "line": 524,
           "called": [
             "OpenedCell",
             "WriteSetMismatch",
@@ -3496,13 +3496,13 @@
         {
           "kind": "function",
           "name": "_leafPreimage",
-          "line": 588,
+          "line": 596,
           "called": []
         },
         {
           "kind": "function",
           "name": "_deriveConsumed",
-          "line": 603,
+          "line": 611,
           "called": []
         }
       ]
@@ -4152,7 +4152,7 @@
         {
           "kind": "function",
           "name": "uintValue",
-          "line": 95,
+          "line": 101,
           "called": [
             "_leBytes"
           ]
@@ -4160,7 +4160,7 @@
         {
           "kind": "function",
           "name": "amountValue",
-          "line": 112,
+          "line": 118,
           "called": [
             "_leBytes"
           ]
@@ -4168,7 +4168,7 @@
         {
           "kind": "function",
           "name": "bytesValue",
-          "line": 126,
+          "line": 132,
           "called": [
             "_leBytes"
           ]
@@ -4176,7 +4176,7 @@
         {
           "kind": "function",
           "name": "epochBudgetValue",
-          "line": 146,
+          "line": 152,
           "called": [
             "uintValue"
           ]
@@ -5089,7 +5089,7 @@
         {
           "kind": "function",
           "name": "_appendUniform",
-          "line": 782,
+          "line": 787,
           "called": [
             "Cell"
           ]
@@ -5097,7 +5097,7 @@
         {
           "kind": "function",
           "name": "deriveWriteSet",
-          "line": 808,
+          "line": 813,
           "called": [
             "ActionNotAdjudicable",
             "Cell",
@@ -5110,7 +5110,7 @@
         {
           "kind": "function",
           "name": "_need",
-          "line": 918,
+          "line": 923,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -5118,7 +5118,7 @@
         {
           "kind": "function",
           "name": "canonicalAbsentValue",
-          "line": 949,
+          "line": 954,
           "called": [
             "ActionNotAdjudicable"
           ]
@@ -5126,7 +5126,7 @@
         {
           "kind": "function",
           "name": "isCanonicallyAbsent",
-          "line": 990,
+          "line": 995,
           "called": [
             "canonicalAbsentValue"
           ]
@@ -5134,7 +5134,7 @@
         {
           "kind": "function",
           "name": "deriveEpochBudgetCellValue",
-          "line": 1001,
+          "line": 1006,
           "called": [
             "ActorBudget",
             "decodeActorBudget",
@@ -10999,7 +10999,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 389,
+          "line": 394,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -11012,7 +11012,7 @@
         {
           "kind": "function",
           "name": "splitAllExternal",
-          "line": 439,
+          "line": 444,
           "called": []
         }
       ]
@@ -11145,7 +11145,7 @@
         {
           "kind": "function",
           "name": "test_clamp_corners",
-          "line": 364,
+          "line": 369,
           "called": [
             "_assertClampCorner",
             "fixtureExists",
@@ -11155,13 +11155,13 @@
         {
           "kind": "function",
           "name": "_assertClampCorner",
-          "line": 372,
+          "line": 377,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_zeroFee_corner",
-          "line": 391,
+          "line": 396,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11170,7 +11170,7 @@
         {
           "kind": "function",
           "name": "_deployBoldBridge",
-          "line": 415,
+          "line": 420,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -11183,7 +11183,7 @@
         {
           "kind": "function",
           "name": "splitAllExternal",
-          "line": 465,
+          "line": 470,
           "called": []
         }
       ]

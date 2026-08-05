@@ -208,6 +208,17 @@ After any source change, also run:
 * `lake exe count_sorries` — fails on any `sorry` in proof position
   in a kernel-adjacent module (the `Tools.Common.kernelTcbFiles`
   list).  Masks comments, block comments, and string literals.
+  Textual, and its own docstring says so; the elaborator-level check
+  is the axiom-footprint gate below, which sees any `sorry` however
+  spelled because every one introduces `sorryAx`.
+* **The axiom-footprint gate** (`LegalKernel/Test/AxiomFootprint.lean`)
+  — enforces "No custom axioms (ABSOLUTE)" mechanically.
+  `#assert_canonical_axioms` is a *command*, so it runs at
+  elaboration time and a violation is a BUILD error caught by the
+  existing `lake build`; there is no separate binary to invoke.  It
+  collects each headline theorem's real axiom footprint and fails on
+  anything outside `[propext, Classical.choice, Quot.sound]`.  Add a
+  line for every theorem promoted to the type-level-properties table.
 * `lake exe tcb_audit` — fails if a TCB-core module imports anything
   not on `tcb_allowlist.txt` or in `Tools.Common.tcbInternalImports`.
 * `lake exe stub_audit` — catches placeholder-body stubs accompanied
@@ -834,11 +845,11 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 200 | ~164 | `lake test` |
+| Lean | ~3 234 | 167 | `lake test` |
 | Rust | ~2 378 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~923 passed | 65 forge suites | `cd solidity && forge test` |
+| Solidity | ~929 passed | 65 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **923 passed / 0 failed / 0 skipped** — the
+`forge test` runs **929 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -859,7 +870,11 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 923 / 0 / 0.
+reports the same 929 / 0 / 0.  It is not redundant: a bare `lake test`
+runs on the FALLBACK hash, where 25 Lean cross-stack assertions report
+`SKIPPED` rather than comparing anything.  Under the keccak lane that
+count is **zero** — every corpus is checked against real keccak256 on
+both sides.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -868,6 +883,22 @@ full catalogue):
 
 - `authority-signed-budget` — GP.3.2 admission-gate theorems +
   five-round security hardening regression tests.
+- `axiom-footprint` — the presence marker for the build-time
+  "No custom axioms (ABSOLUTE)" gate.  The gate itself is
+  `#assert_canonical_axioms` in
+  `LegalKernel/Test/AxiomFootprint.lean` and has already run by the
+  time the suite executes; the case exists so a `lake test`
+  transcript records that the check is present, since a silent gate
+  and an absent one look identical in the log.
+- `encoding-kernelstep` — the `CellTag` CBE codec, swept over every
+  constructor off an arity-pinned list rather than a sample.  It
+  exists because `CellTag.encode` emitted tags 0..14 while
+  `CellTag.decode` handled 0..6, and nothing noticed: the module's
+  only theorems were `*_encode_deterministic`
+  (`t₁ = t₂ → encode t₁ = encode t₂`, true of every function), and
+  no test called the decoder.  Carries the two negative controls
+  that stop the sweep passing vacuously — an unknown tag must be
+  refused, and no two constructors may share an encoding.
 - `faultproof-terminate` — the openings-only verifier
   (`verifierPostRootMulti`) against the sequencer's fold on nineteen
   probes, plus the forgeries it must refuse: a forged pre-value, a wire
