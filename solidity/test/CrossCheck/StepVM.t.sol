@@ -609,6 +609,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 vm.parseJsonBytes(raw, string.concat(base, ".targetBudgetPreHex")),
                 uint64(vm.parseJsonUint(raw, string.concat(base, ".signer"))),
                 uint64(vm.parseJsonUint(raw, string.concat(base, ".target"))),
+                vm.parseJsonBool(raw, string.concat(base, ".grants")),
                 uint64(vm.parseJsonUint(raw, string.concat(base, ".grantRecipient"))),
                 vm.parseJsonUint(raw, string.concat(base, ".grantAmount")),
                 vm.parseJsonUint(raw, string.concat(base, ".refundExtra"))

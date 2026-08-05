@@ -1487,17 +1487,25 @@ two.  Emitting it makes the disagreement visible in the corpus instead
 of in a game.
 -/
 
-/-- The `(recipient, amount)` an action grants, and the extra units a
-    refund claim consumes.  Mirrors `budgetGrant`'s per-variant arms
-    and `refundConsumeExtra`. -/
-private def grantTripleOf (action : Action) (signer : ActorId) :
-    ActorId × Nat × Nat :=
+/-- Whether an action grants at all, the `(recipient, amount)` it
+    grants, and the extra units a refund claim consumes.  Mirrors
+    `budgetGrant`'s per-variant arms and `refundConsumeExtra`.
+
+    The leading `Bool` is not redundant with `amount ≠ 0`.
+    `ActorBudget.topUp` NORMALISES before it adds, so a grant of zero
+    still refreshes a stale cell to the free tier — a granting variant
+    whose amount happens to be zero is not the same as a variant that
+    grants nothing.  The L1 mirror inferred one from the other and so
+    skipped the normalisation, forking the root; `StepPlan.planGrant`
+    now carries the flag and this emits it. -/
+private def grantPlanOf (action : Action) (signer : ActorId) :
+    Bool × ActorId × Nat × Nat :=
   match action with
-  | .depositWithFee _ recipient _ _ _ g _ => (recipient, g, 0)
-  | .topUpActionBudget _ _ inc _          => (signer, inc, 0)
-  | .topUpActionBudgetFor recipient _ _ inc _ => (recipient, inc, 0)
-  | .claimBudgetRefund _ budgetUnits _ _  => (signer, 0, budgetUnits)
-  | _                                     => (signer, 0, 0)
+  | .depositWithFee _ recipient _ _ _ g _ => (true, recipient, g, 0)
+  | .topUpActionBudget _ _ inc _          => (true, signer, inc, 0)
+  | .topUpActionBudgetFor recipient _ _ inc _ => (true, recipient, inc, 0)
+  | .claimBudgetRefund _ budgetUnits _ _  => (false, signer, 0, budgetUnits)
+  | _                                     => (false, signer, 0, 0)
 
 /-- Per-entry goldens for the nonce and epoch-budget derivations, over
     the fixture base state — the pre-values, the grant triple, and the
@@ -1514,11 +1522,20 @@ def uniformWriteGoldens : List Test.Bridge.CrossCheck.Json :=
     , ("depositWithFee",      .depositWithFee 1 8 9 5 1 3 3)
     , ("topUpActionBudget",   .topUpActionBudget 1 5 2 9)
     , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 5 2 9)
-    , ("claimBudgetRefund",   .claimBudgetRefund 1 2 3 9) ]
+    , ("claimBudgetRefund",   .claimBudgetRefund 1 2 3 9)
+      -- A GRANTING variant whose grant is ZERO.  `fixtureBase`'s policy
+      -- is `.bounded 100 1 1` and actor 8 holds no budget cell, so
+      -- `lastSeenEpoch 0 < 1` and `topUp … 0` is `normalise`: the cell
+      -- moves to `{1, 100}` and becomes PRESENT in the tree.  A verifier
+      -- that reads "amount is zero" as "no grant" leaves it canonically
+      -- absent and folds to a different root.  Reachable in production
+      -- whenever a deposit's `poolAmount / weiPerBudgetUnit` floors to
+      -- zero.
+    , ("depositWithFeeZeroGrant", .depositWithFee 1 8 9 5 1 0 4) ]
   probes.flatMap (fun (name, action) =>
     let st : SignedAction :=
       { action, signer, nonce := 0, sig := ByteArray.empty }
-    let (grantRecipient, grantAmount, refundExtra) := grantTripleOf action signer
+    let (grants, grantRecipient, grantAmount, refundExtra) := grantPlanOf action signer
     -- The signer's own cell and, where they differ, the grant
     -- recipient's: the branch that credits a recipient on a step the
     -- signer could afford is only exercised when the two are distinct.
@@ -1528,6 +1545,7 @@ def uniformWriteGoldens : List Test.Bridge.CrossCheck.Json :=
       .obj [ ("variant",        .str name)
            , ("signer",         .str (h256 signer.toNat))
            , ("target",         .str (h256 target.toNat))
+           , ("grants",         .bool grants)
            , ("grantRecipient", .str (h256 grantRecipient.toNat))
            , ("grantAmount",    .str (h256 grantAmount))
            , ("refundExtra",    .str (h256 refundExtra))

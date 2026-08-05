@@ -287,19 +287,37 @@ library StepWrites {
     ///         recipient — which is why this cannot collapse into "top
     ///         up the signer".
     ///
+    ///         **A zero grant is not "no grant".**  `_topUp`
+    ///         normalises before it adds, so on a stale cell
+    ///         `topUp(.., 0)` still refreshes the balance to the free
+    ///         tier and moves `lastSeenEpoch`.  Lean's authority
+    ///         (`VerifierWrites.applyGrantAt`) has no zero-amount case
+    ///         and neither does the sequencer
+    ///         (`ProductionApply.budgetGrant`), so a verifier that
+    ///         short-circuits on `grantAmount == 0` computes a
+    ///         different post-root than the one the honest sequencer
+    ///         published — reachable whenever a deposit's
+    ///         `poolAmount / weiPerBudgetUnit` floors to zero.  Which
+    ///         variants grant is therefore carried explicitly by
+    ///         `grants` rather than inferred from the amount, and that
+    ///         also retires the `grantRecipient == 0` sentinel, which
+    ///         collided with the real actor id `0`.
+    ///
+    /// @param  grants         whether this variant grants budget at all.
     /// @param  grantRecipient the actor the action grants to; ignored
-    ///         when `grantAmount` is zero.
-    /// @param  grantAmount    the granted units, or zero for the
-    ///         twenty-two variants that grant nothing.
+    ///         when `grants` is false.
+    /// @param  grantAmount    the granted units; may be zero on a
+    ///         granting variant.
     function applyGrantAt(
         uint64 target,
+        bool grants,
         uint64 grantRecipient,
         uint256 grantAmount,
         uint256 freeTier,
         uint256 currentEpoch,
         ActorBudget memory pre
     ) internal pure returns (ActorBudget memory) {
-        if (grantAmount == 0 || target != grantRecipient) return pre;
+        if (!grants || target != grantRecipient) return pre;
         return _topUp(pre, currentEpoch, freeTier, grantAmount);
     }
 
@@ -331,13 +349,14 @@ library StepWrites {
         ActorBudget memory targetPre,
         uint64 signer,
         uint64 target,
+        bool grants,
         uint64 grantRecipient,
         uint256 grantAmount,
         uint256 refundExtra
     ) internal pure returns (ActorBudget memory) {
         if (signer == BRIDGE_ACTOR) {
             return applyGrantAt(
-                target, grantRecipient, grantAmount,
+                target, grants, grantRecipient, grantAmount,
                 policy.freeTier, policy.currentEpoch, targetPre
             );
         }
@@ -348,7 +367,7 @@ library StepWrites {
         if (!ok) return targetPre;
         ActorBudget memory afterConsume = target == signer ? consumed : targetPre;
         return applyGrantAt(
-            target, grantRecipient, grantAmount,
+            target, grants, grantRecipient, grantAmount,
             policy.freeTier, policy.currentEpoch, afterConsume
         );
     }
@@ -1010,6 +1029,7 @@ library StepWrites {
         bytes memory targetValue,
         uint64 signer,
         uint64 target,
+        bool grants,
         uint64 grantRecipient,
         uint256 grantAmount,
         uint256 refundExtra
@@ -1018,7 +1038,7 @@ library StepWrites {
             decodeBudgetPolicy(policyValue),
             decodeActorBudget(signerValue),
             decodeActorBudget(targetValue),
-            signer, target, grantRecipient, grantAmount, refundExtra
+            signer, target, grants, grantRecipient, grantAmount, refundExtra
         );
         return CBEEncode.epochBudgetValue(out.lastSeenEpoch, out.budgetBalance);
     }

@@ -508,7 +508,7 @@ contract KnomosisStepVMRoot {
             : 0;
         (plan.newBal0, plan.newBal1) =
             StepPlan.planBalances(actionKind, actionFields, signer, pre0, pre1);
-        (plan.grantRecipient, plan.grantAmount, plan.refundExtra) =
+        (plan.grants, plan.grantRecipient, plan.grantAmount, plan.refundExtra) =
             StepPlan.planGrant(actionKind, actionFields, signer);
     }
 
@@ -557,7 +557,8 @@ contract KnomosisStepVMRoot {
                 _openedValue(opened, CELL_EPOCH_BUDGET, signer, 0),
                 opened[i].preValue,
                 signer, uint64(opened[i].keyA),
-                plan.grantRecipient, plan.grantAmount, plan.refundExtra
+                plan.grants, plan.grantRecipient, plan.grantAmount,
+                plan.refundExtra
             );
         }
         if (kind == CELL_REGISTRY) {

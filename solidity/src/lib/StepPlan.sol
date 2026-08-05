@@ -46,10 +46,22 @@ library StepPlan {
         uint256 newBal0;
         /// @dev ...and of cell 1.
         uint256 newBal1;
+        /// @dev Whether this variant grants budget AT ALL.
+        ///
+        ///      Carried separately from `grantAmount` because a zero
+        ///      amount is NOT the same condition.  `ActorBudget.topUp`
+        ///      normalises before it adds, so a grant of zero still
+        ///      refreshes a stale cell to the free tier — and
+        ///      `grantRecipient` is `0` for the twenty-two variants
+        ///      that grant nothing, which collides with the real actor
+        ///      id `0`.  Inferring "no grant" from `grantAmount == 0`
+        ///      conflated the two and skipped the normalisation Lean
+        ///      performs, forking the state root.
+        bool grants;
         /// @dev The actor an action grants budget to, if any.
         uint64 grantRecipient;
-        /// @dev The granted units; zero for the twenty-two variants
-        ///      that grant nothing.
+        /// @dev The granted units.  May legitimately be zero on a
+        ///      granting variant — see `grants`.
         uint256 grantAmount;
         /// @dev The extra budget consume a refund claim carries.
         uint256 refundExtra;
@@ -70,12 +82,18 @@ library StepPlan {
     function planGrant(uint8 actionKind, bytes calldata fields, uint64 signer)
         internal
         pure
-        returns (uint64 grantRecipient, uint256 grantAmount, uint256 refundExtra)
+        returns (
+            bool grants,
+            uint64 grantRecipient,
+            uint256 grantAmount,
+            uint256 refundExtra
+        )
     {
         if (actionKind == 19) {
             // depositWithFee: recipient @8, budgetGrant @88 — it
             // follows BOTH 32-byte amounts.
             return (
+                true,
                 uint64(StepWrites.readFieldUint(fields, 8, 8)),
                 StepWrites.readFieldUint(fields, 88, 8),
                 0
@@ -84,12 +102,13 @@ library StepPlan {
         if (actionKind == 20) {
             // topUpActionBudget: the SIGNER, budgetIncrement @40 —
             // it follows the 32-byte gasAmount at 8.
-            return (signer, StepWrites.readFieldUint(fields, 40, 8), 0);
+            return (true, signer, StepWrites.readFieldUint(fields, 40, 8), 0);
         }
         if (actionKind == 21) {
             // topUpActionBudgetFor: recipient @0, budgetIncrement @48
             // — it follows the 32-byte gasAmount at 16.
             return (
+                true,
                 uint64(StepWrites.readFieldUint(fields, 0, 8)),
                 StepWrites.readFieldUint(fields, 48, 8),
                 0
@@ -100,10 +119,10 @@ library StepPlan {
             // of the action cost — which is what stops a refund from
             // being a free round trip.  budgetUnits @8 — UNCHANGED by
             // the amount widening: it PRECEDES `weiPerBudgetUnit`,
-            // which is the field that widened.
-            return (0, 0, StepWrites.readFieldUint(fields, 8, 8));
+            // which is the field that widened.  It grants nothing.
+            return (false, 0, 0, StepWrites.readFieldUint(fields, 8, 8));
         }
-        return (0, 0, 0);
+        return (false, 0, 0, 0);
     }
 
     /// @notice The post-values of a step's balance cells.
