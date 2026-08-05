@@ -3,37 +3,8 @@ pragma solidity ^0.8.20;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
+import {SmtCellVerifierProxy} from "test/utils/SmtCellVerifierProxy.sol";
 
-/// @title SmtCellProofCrossCheckProxy
-/// @notice Thin external proxy exposing `SmtCellVerifier`'s internal
-///         library functions through a `calldata`-bearing surface
-///         so the cross-check tests can pass `bytes memory` data
-///         decoded from JSON.  Mirrors the proxy pattern used by
-///         `solidity/test/SmtCellVerifier.t.sol`; defined locally
-///         here under a distinct name to avoid ABI-name collisions
-///         when running the full forge-test suite.
-contract SmtCellProofCrossCheckProxy {
-    /// @notice External-pure proxy for `SmtCellVerifier.verifyCellProof`.
-    function verifyCellProof(
-        bytes32 root,
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bool) {
-        return SmtCellVerifier.verifyCellProof(root, smtKey, leafPreimage, proofData);
-    }
-
-    /// @notice External-pure proxy for `SmtCellVerifier.recomputeRoot`.
-    ///         Used by tests that want the raw walked root without
-    ///         the verifier's bool dispatch.
-    function recomputeRoot(
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bytes32) {
-        return SmtCellVerifier.recomputeRoot(smtKey, leafPreimage, proofData);
-    }
-}
 
 /// @title SmtCellProofCrossCheck
 /// @notice Workstream SC.3 — Solidity-side consumer of the
@@ -76,10 +47,10 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
 
     /// @notice Proxy contract instantiated per-test by the harness.
     ///         Stateless; deployed in `setUp`.
-    SmtCellProofCrossCheckProxy internal proxy;
+    SmtCellVerifierProxy internal proxy;
 
     function setUp() public {
-        proxy = new SmtCellProofCrossCheckProxy();
+        proxy = new SmtCellVerifierProxy();
     }
 
     /// @notice Helper that calls the proxy.  Wraps the external

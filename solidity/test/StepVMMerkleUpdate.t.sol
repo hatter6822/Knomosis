@@ -7,11 +7,17 @@ pragma solidity 0.8.20;
 import {Test} from "forge-std/Test.sol";
 
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
+import {SmtCellVerifierProxy} from "test/utils/SmtCellVerifierProxy.sol";
 import {StepVMMerkle} from "src/lib/StepVMMerkle.sol";
 
 /// @title StepVMMerkleUpdateProxy
 /// @notice External wrapper for the calldata-typed library functions.
 contract StepVMMerkleUpdateProxy {
+    // `SmtCellVerifier`'s entry points are NOT mirrored here — they live
+    // in the shared `SmtCellVerifierProxy`, which this suite deploys
+    // alongside.  A proxy fronts ONE library; fronting a second is what
+    // let three files each grow their own `recomputeRoot`.
+
     function updateCellRoot(bytes32 smtKey, bytes32 newLeaf, bytes calldata proofData)
         external
         pure
@@ -26,26 +32,6 @@ contract StepVMMerkleUpdateProxy {
         returns (bytes32)
     {
         return StepVMMerkle.cellLeafHash(isAbsent, leafPreimage);
-    }
-
-    function recomputeRoot(
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bytes32) {
-        return SmtCellVerifier.recomputeRoot(smtKey, leafPreimage, proofData);
-    }
-
-    function recomputeRootFromLeaf(bytes calldata smtKey, bytes32 leaf, bytes calldata proofData)
-        external
-        pure
-        returns (bytes32)
-    {
-        return SmtCellVerifier.recomputeRootFromLeaf(smtKey, leaf, proofData);
-    }
-
-    function emptyLeafHash() external pure returns (bytes32) {
-        return SmtCellVerifier.emptyLeafHash();
     }
 
     function verifyCellSmtProof(
@@ -73,6 +59,8 @@ contract StepVMMerkleUpdateProxy {
 ///         state does not hold.
 contract StepVMMerkleUpdateTest is Test {
     StepVMMerkleUpdateProxy internal p;
+    /// @dev The `SmtCellVerifier` boundary, shared with the other suites.
+    SmtCellVerifierProxy internal smt;
 
     /// A 32-byte key with a mixed bit pattern, so the walk exercises
     /// both the left- and right-child branches rather than one side.
@@ -95,6 +83,7 @@ contract StepVMMerkleUpdateTest is Test {
 
     function setUp() public {
         p = new StepVMMerkleUpdateProxy();
+        smt = new SmtCellVerifierProxy();
     }
 
     /// @notice The preimage path is unchanged: it now routes through
@@ -103,8 +92,8 @@ contract StepVMMerkleUpdateTest is Test {
     function test_recomputeRoot_is_the_leaf_path_with_a_hashed_preimage() public view {
         bytes memory preimage = hex"deadbeefcafe";
         assertEq(
-            p.recomputeRoot(KEY, preimage, EMPTY_PROOF),
-            p.recomputeRootFromLeaf(KEY, keccak256(preimage), EMPTY_PROOF),
+            smt.recomputeRoot(KEY, preimage, EMPTY_PROOF),
+            smt.recomputeRootFromLeaf(KEY, keccak256(preimage), EMPTY_PROOF),
             "the preimage wrapper must equal the leaf entry point"
         );
     }
@@ -116,7 +105,7 @@ contract StepVMMerkleUpdateTest is Test {
         bytes memory preimage = hex"0011223344556677";
         assertEq(
             p.cellLeafHash(true, preimage),
-            p.emptyLeafHash(),
+            smt.emptyLeafHash(),
             "an absent cell walks from the canonical empty leaf"
         );
         assertEq(
@@ -146,7 +135,7 @@ contract StepVMMerkleUpdateTest is Test {
         bytes32 oldLeaf = keccak256(hex"01");
         bytes32 newLeaf = keccak256(hex"02");
 
-        bytes32 oldRoot = p.recomputeRootFromLeaf(KEY, oldLeaf, EMPTY_PROOF);
+        bytes32 oldRoot = smt.recomputeRootFromLeaf(KEY, oldLeaf, EMPTY_PROOF);
         bytes32 newRoot = p.updateCellRoot(KEY32, newLeaf, EMPTY_PROOF);
 
         assertTrue(oldRoot != newRoot, "a different leaf must produce a different root");
@@ -179,7 +168,7 @@ contract StepVMMerkleUpdateTest is Test {
     ///         at the new one.
     function test_the_verifying_opening_produces_the_post_root() public view {
         bytes memory preimage = hex"c0ffee";
-        bytes32 preRoot = p.recomputeRoot(KEY, preimage, EMPTY_PROOF);
+        bytes32 preRoot = smt.recomputeRoot(KEY, preimage, EMPTY_PROOF);
 
         assertTrue(
             p.verifyCellSmtProof(preRoot, KEY, preimage, EMPTY_PROOF),

@@ -7,51 +7,8 @@ pragma solidity 0.8.20;
 import {Test} from "forge-std/Test.sol";
 
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
+import {SmtCellVerifierProxy} from "test/utils/SmtCellVerifierProxy.sol";
 
-/// @title SmtCellVerifierProxy
-/// @notice External wrapper exposing `SmtCellVerifier`'s internal
-///         library functions for tests.  All calldata-typed parameters
-///         need an `external` boundary so Foundry can supply
-///         `bytes memory` fixtures (which get re-wrapped as
-///         `bytes calldata` at the proxy boundary).
-contract SmtCellVerifierProxy {
-    function emptySubtreeHash(uint256 d) external pure returns (bytes32) {
-        return SmtCellVerifier.emptySubtreeHash(d);
-    }
-
-    function precomputeEmptySubtreeHashes() external pure returns (bytes32[256] memory) {
-        return SmtCellVerifier.precomputeEmptySubtreeHashes();
-    }
-
-    function readKeyBitMSBFirst(bytes calldata smtKey, uint256 d) external pure returns (uint256) {
-        return SmtCellVerifier.readKeyBitMSBFirst(smtKey, d);
-    }
-
-    function readBitmaskBit(bytes calldata bitmask, uint256 d) external pure returns (uint256) {
-        return SmtCellVerifier.readBitmaskBit(bitmask, d);
-    }
-
-    function bitmaskWord(bytes calldata bitmask) external pure returns (uint256) {
-        return SmtCellVerifier.bitmaskWord(bitmask);
-    }
-
-    function recomputeRoot(
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bytes32) {
-        return SmtCellVerifier.recomputeRoot(smtKey, leafPreimage, proofData);
-    }
-
-    function verifyCellProof(
-        bytes32 root,
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bool) {
-        return SmtCellVerifier.verifyCellProof(root, smtKey, leafPreimage, proofData);
-    }
-}
 
 /// @title SmtCellVerifierTest
 /// @notice Workstream SC.2.e — Forge test suite for the
