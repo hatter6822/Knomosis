@@ -162,18 +162,27 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
             checkLt(rate, 1 << 64, "rate out of uint64 range");
             checkLt(fixBudget, 1 << 64, "budgetGrant out of uint64 range");
 
-            (uint256 u, uint256 p, uint64 g) = FeeSplitMath.split(msgValue, feeBps, rate);
-            (uint256 ammSeed, uint256 freePool) = FeeSplitMath.ammSeedSplit(p, seedRatio);
+            try this.splitAllExternal(msgValue, feeBps, rate, seedRatio) returns (
+                uint256 u, uint256 p, uint64 g, uint256 ammSeed, uint256 freePool
+            ) {
+                checkEq(u, fixUser, "userAmount mismatch");
+                checkEq(p, fixPool, "poolAmount mismatch");
+                checkEq(ammSeed, fixSeed, "ammSeedAmount mismatch (GP.11.2)");
+                checkEq(uint256(g), fixBudget, "budgetGrant mismatch");
 
-            checkEq(u, fixUser, "userAmount mismatch");
-            checkEq(p, fixPool, "poolAmount mismatch");
-            checkEq(ammSeed, fixSeed, "ammSeedAmount mismatch (GP.11.2)");
-            checkEq(uint256(g), fixBudget, "budgetGrant mismatch");
-
-            checkEq(u + p, msgValue, "conservation: userAmount + poolAmount == msgValue");
-            checkEq(ammSeed + freePool, p, "conservation: ammSeed + freePool == poolAmount");
-            checkLe(ammSeed, p, "ammSeed never exceeds the pool fee");
-            checkLe(uint256(g), uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT), "budget within cap");
+                checkEq(
+                    u + p, msgValue, "conservation: userAmount + poolAmount == msgValue");
+                checkEq(
+                    ammSeed + freePool, p,
+                    "conservation: ammSeed + freePool == poolAmount");
+                checkLe(ammSeed, p, "ammSeed never exceeds the pool fee");
+                checkLe(
+                    uint256(g), uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT),
+                    "budget within cap");
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("FeeSplitMath reverted ", describeRevert(err)));
+            }
         }
     }
 
@@ -317,7 +326,20 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
             vm.recordLogs();
             vm.prank(depositor);
             // forge-lint: disable-next-line(unsafe-typecast)
-            bridge.depositBoldWithFee(msgValue, uint16(feeBps));
+            // A bridge refusal is reported as raw returndata rather
+            // than a name.  `KnomosisBridge` declares ~70 errors, and a
+            // hand-listed table of that size — which the completeness
+            // test would then require to stay current — costs more than
+            // the four greppable bytes it would save.  The libraries
+            // this walk exercises directly are named; the bridge's own
+            // refusals are not, deliberately.
+            try bridge.depositBoldWithFee(msgValue, uint16(feeBps)) {
+                // fall through to the log decode below
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("depositBoldWithFee reverted ", describeRevert(err)));
+                continue;
+            }
 
             (uint256 u, uint256 p, uint256 ammSeed, uint64 g, uint64 nonce, bytes32 rh) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
@@ -452,4 +474,33 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
         }
         revert("DepositWithFeeInitiated not found");
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Revert tolerance                                                   */
+    /* ------------------------------------------------------------------ */
+
+    /// @dev Both `FeeSplitMath` steps behind ONE external boundary, so
+    ///      a reverting entry is named and the walk continues.  One
+    ///      boundary rather than two because the second step consumes
+    ///      the first's output: splitting them would leave the caller
+    ///      holding a half-computed result with nothing useful to say
+    ///      about it.
+    ///
+    ///      `FeeSplitMath` declares no errors of its own, so what
+    ///      reaches the catch is a Solidity panic — overflow or
+    ///      division by zero — which the base `describeRevert` names.
+    function splitAllExternal(
+        uint256 value,
+        uint256 feeBps,
+        uint256 rate,
+        uint256 seedRatio
+    )
+        external
+        pure
+        returns (uint256 u, uint256 p, uint64 g, uint256 ammSeed, uint256 freePool)
+    {
+        (u, p, g) = FeeSplitMath.split(value, feeBps, rate);
+        (ammSeed, freePool) = FeeSplitMath.ammSeedSplit(p, seedRatio);
+    }
+
 }

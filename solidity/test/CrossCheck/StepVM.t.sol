@@ -41,7 +41,119 @@ import {StepWrites} from "src/lib/StepWrites.sol";
 ///             is `"null"` (i.e., the fixture writer correctly
 ///             flags the failure case).
 ///           * Step-VM commit field is present + well-formed.
+/// @title StepVMCrossCheckProxy
+/// @notice **An external boundary for the libraries this corpus walks.**
+///
+/// @dev    Library calls are internal, so a revert inside one ends the
+///         walk that made it — which on a 278-entry corpus means one bad
+///         entry hides the rest.  Reaching them through a contract makes
+///         the revert catchable, and gives the `vm.expectRevert` controls
+///         the call boundary they need.
+///
+///         A contract rather than a wrapper per function on the test
+///         itself: nine near-identical `*External` methods buried the
+///         tests they sat among, and the repo already spells this
+///         pattern as a proxy (`MultiProofCrossCheckProxy`).  One
+///         collaborator whose whole reason for existing is legible from
+///         its name beats nine methods that each have to explain
+///         themselves.
+contract StepVMCrossCheckProxy {
+    /// @dev `expectRevert` needs an external call boundary.
+    function encodeUint(uint256 n) external pure returns (bytes memory) {
+        return CBEEncode.uintValue(n);
+    }
+
+    /// @dev ...and likewise for the amount head.
+    function encodeAmount(uint256 n) external pure returns (bytes memory) {
+        return CBEEncode.amountValue(n);
+    }
+
+    /// @dev The byte-string encoder, completing the pair the
+    ///      `expectRevert` controls already needed.
+    function encodeBytes(bytes calldata payload)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return CBEEncode.bytesValue(payload);
+    }
+
+    /// @dev `expectRevert` needs an external call boundary.
+    function deriveNonce(bytes memory pre)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return StepWrites.deriveNonce(pre);
+    }
+
+    /// @dev Calldata boundaries for the two field-passthrough
+    ///      derivations.
+    function deriveRegistryFromFields(bytes calldata fields)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return StepWrites.deriveRegistryFromFields(fields);
+    }
+
+    /// @dev ...and the policy one, which is the fields verbatim.
+    function deriveDeclaredPolicy(bytes calldata fields)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return StepWrites.deriveDeclaredPolicyCellValue(fields);
+    }
+
+    /// @dev Calldata boundary for the dispatch.
+    function deriveWriteSet(
+        uint8 actionKind,
+        bytes calldata fields,
+        uint64 signer,
+        uint256 nextWdIdPre
+    ) external pure returns (StepWrites.Cell[] memory) {
+        return StepWrites.deriveWriteSet(actionKind, fields, signer, nextWdIdPre);
+    }
+
+    /// @dev The boundary `_tryActionCommit` calls through.
+    function actionCommit(uint8 kind, uint64 signer, bytes calldata fields)
+        external
+        pure
+        returns (bytes32)
+    {
+        return LogChain.actionCommit(kind, signer, fields);
+    }
+
+    /// @dev Both round trips behind ONE boundary: they are asserted
+    ///      together and a half-completed pair says nothing useful.
+    function roundTrip(uint64 n)
+        external
+        pure
+        returns (uint256 asUint, uint256 asAmount)
+    {
+        asUint = StepWrites.decodeNonce(CBEEncode.uintValue(n));
+        asAmount = StepWrites.decodeAmount(CBEEncode.amountValue(n));
+    }
+
+    /// @dev The absence marker and its own classification, behind one
+    ///      boundary — `isCanonicallyAbsent` reads the value
+    ///      `canonicalAbsentValue` produced, so they cannot be
+    ///      meaningfully separated.
+    function canonicalAbsence(uint8 cellKind)
+        external
+        pure
+        returns (bytes memory value, bool classified)
+    {
+        value = StepWrites.canonicalAbsentValue(cellKind);
+        classified = StepWrites.isCanonicallyAbsent(cellKind, value);
+    }
+
+}
 contract StepVMCrossCheck is CrossCheckFramework {
+    /// @dev The external boundary for the libraries this corpus walks.
+    StepVMCrossCheckProxy internal proxy = new StepVMCrossCheckProxy();
+
     string internal constant FIXTURE_NAME = "step_vm.json";
 
     /// @notice Verify the fixture file exists and has the expected
@@ -307,8 +419,15 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat")));
             bytes memory fields =
                 vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
+            (bool okC, bytes32 gotC, bytes memory errC) =
+                _tryActionCommit(kind, signer, fields);
+            if (!okC) {
+                recordFailure(
+                    string.concat("actionCommit reverted ", describeRevert(errC)));
+                continue;
+            }
             checkEq(
-                LogChain.actionCommitMemory(kind, signer, fields),
+                gotC,
                 expected,
                 string.concat("actionCommit mismatch at ", base)
             );
@@ -353,17 +472,32 @@ contract StepVMCrossCheck is CrossCheckFramework {
             bytes32 kindHash = keccak256(bytes(kind));
             if (kindHash == keccak256("uint")) {
                 uint256 v = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
-                checkEq(CBEEncode.uintValue(v), expected,
-                    string.concat("uint encoder mismatch at ", base));
+                try proxy.encodeUint(v) returns (bytes memory got) {
+                    checkEq(got, expected,
+                        string.concat("uint encoder mismatch at ", base));
+                } catch (bytes memory err) {
+                    recordFailure(
+                        string.concat("uintValue reverted ", describeRevert(err)));
+                }
             } else if (kindHash == keccak256("amount")) {
                 uint256 v = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
-                checkEq(CBEEncode.amountValue(v), expected,
-                    string.concat("amount encoder mismatch at ", base));
+                try proxy.encodeAmount(v) returns (bytes memory got) {
+                    checkEq(got, expected,
+                        string.concat("amount encoder mismatch at ", base));
+                } catch (bytes memory err) {
+                    recordFailure(
+                        string.concat("amountValue reverted ", describeRevert(err)));
+                }
             } else if (kindHash == keccak256("bytes")) {
                 bytes memory payload =
                     vm.parseJsonBytes(raw, string.concat(base, ".payloadHex"));
-                checkEq(CBEEncode.bytesValue(payload), expected,
-                    string.concat("bytes encoder mismatch at ", base));
+                try proxy.encodeBytes(payload) returns (bytes memory got) {
+                    checkEq(got, expected,
+                        string.concat("bytes encoder mismatch at ", base));
+                } catch (bytes memory err) {
+                    recordFailure(
+                        string.concat("bytesValue reverted ", describeRevert(err)));
+                }
             } else {
                 revert(string.concat("unknown golden kind at ", base));
             }
@@ -386,7 +520,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         // and hash to the leaf for a DIFFERENT balance.
         vm.expectRevert(
             abi.encodeWithSelector(CBEEncode.CBEValueTooWide.selector, 1 << 64, 8));
-        this.encodeUintExternal(1 << 64);
+        proxy.encodeUint(1 << 64);
         // The amount head has NO such rejection, and that is the point
         // rather than an omission: its width is the EVM word, so every
         // `uint256` fits and there is nothing to reject.  Closing C-3
@@ -409,21 +543,15 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint64[4] memory probes = [uint64(0), 1, 0xFF, type(uint64).max];
         for (uint256 i = 0; i < probes.length; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
-            checkEq(StepWrites.decodeNonce(CBEEncode.uintValue(probes[i])),
-                uint256(probes[i]), "uint round-trip");
-            checkEq(StepWrites.decodeAmount(CBEEncode.amountValue(probes[i])),
-                uint256(probes[i]), "amount round-trip");
+            try proxy.roundTrip(probes[i]) returns (uint256 asUint, uint256 asAmount) {
+                checkEq(asUint, uint256(probes[i]), "uint round-trip");
+                checkEq(asAmount, uint256(probes[i]), "amount round-trip");
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("encode/decode round trip reverted ",
+                        describeRevert(err)));
+            }
         }
-    }
-
-    /// @dev `expectRevert` needs an external call boundary.
-    function encodeUintExternal(uint256 n) external pure returns (bytes memory) {
-        return CBEEncode.uintValue(n);
-    }
-
-    /// @dev ...and likewise for the amount head.
-    function encodeAmountExternal(uint256 n) external pure returns (bytes memory) {
-        return CBEEncode.amountValue(n);
     }
 
     /// @notice **The two cells every action writes are derived
@@ -500,27 +628,18 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         derive the same write.
     function test_uniformWrites_are_fail_closed() public {
         vm.expectRevert(StepWrites.MalformedCellValue.selector);
-        this.deriveNonceExternal(hex"");
+        proxy.deriveNonce(hex"");
         vm.expectRevert(StepWrites.MalformedCellValue.selector);
-        this.deriveNonceExternal(hex"FF0000000000000000");   // wrong tag
+        proxy.deriveNonce(hex"FF0000000000000000");   // wrong tag
         vm.expectRevert(StepWrites.MalformedCellValue.selector);
-        this.deriveNonceExternal(hex"000000000000000000" hex"00"); // trailing byte
+        proxy.deriveNonce(hex"000000000000000000" hex"00"); // trailing byte
         // ...and the well-formed value still derives, so the checks
         // above are rejecting what they name rather than everything.
         assertEq(
-            this.deriveNonceExternal(CBEEncode.uintValue(41)),
+            proxy.deriveNonce(CBEEncode.uintValue(41)),
             CBEEncode.uintValue(42),
             "a well-formed nonce cell must still derive"
         );
-    }
-
-    /// @dev `expectRevert` needs an external call boundary.
-    function deriveNonceExternal(bytes memory pre)
-        external
-        pure
-        returns (bytes memory)
-    {
-        return StepWrites.deriveNonce(pre);
     }
 
     /// @notice **The per-variant balance derivations agree.**
@@ -650,9 +769,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
             // `payload` is the ACTION FIELDS here; the slice is the
             // library's, so a layout change fails rather than looking
             // silently correct.
-            got = this.deriveRegistryFromFieldsExternal(payload);
+            got = proxy.deriveRegistryFromFields(payload);
         } else if (k == keccak256("declaredPolicy")) {
-            got = this.deriveDeclaredPolicyExternal(payload);
+            got = proxy.deriveDeclaredPolicy(payload);
         } else if (k == keccak256("consumed")) {
             got = StepWrites.deriveConsumedCellValue(a, b, c, d);
         } else if (k == keccak256("pending")) {
@@ -661,25 +780,6 @@ contract StepVMCrossCheck is CrossCheckFramework {
             revert(string.concat("unknown record golden kind at ", base));
         }
         assertEq(got, expected, string.concat("record mismatch at ", base));
-    }
-
-    /// @dev Calldata boundaries for the two field-passthrough
-    ///      derivations.
-    function deriveRegistryFromFieldsExternal(bytes calldata fields)
-        external
-        pure
-        returns (bytes memory)
-    {
-        return StepWrites.deriveRegistryFromFields(fields);
-    }
-
-    /// @dev ...and the policy one, which is the fields verbatim.
-    function deriveDeclaredPolicyExternal(bytes calldata fields)
-        external
-        pure
-        returns (bytes memory)
-    {
-        return StepWrites.deriveDeclaredPolicyCellValue(fields);
     }
 
     /// @notice The withdrawal counter advances by one, like the nonce.
@@ -729,12 +829,18 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 uint8(vm.parseJsonUint(raw, string.concat(base, ".cellKind")));
             bytes memory expected =
                 vm.parseJsonBytes(raw, string.concat(base, ".absentValueHex"));
-            bytes memory got = StepWrites.canonicalAbsentValue(cellKind);
-            checkEq(got, expected, string.concat("absence mismatch at ", base));
-            checkTrue(
-                StepWrites.isCanonicallyAbsent(cellKind, got),
-                string.concat("the marker must classify as absent at ", base)
-            );
+            try proxy.canonicalAbsence(cellKind) returns (
+                bytes memory got, bool classified
+            ) {
+                checkEq(got, expected, string.concat("absence mismatch at ", base));
+                checkTrue(
+                    classified,
+                    string.concat("the marker must classify as absent at ", base)
+                );
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("canonicalAbsentValue reverted ", describeRevert(err)));
+            }
         }
         assertEq(n, 15, "every cell kind must be covered");
     }
@@ -905,7 +1011,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
             );
             return;
         }
-        StepWrites.Cell[] memory got = this.deriveWriteSetExternal(
+        StepWrites.Cell[] memory got = proxy.deriveWriteSet(
             kind,
             vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
             uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
@@ -926,16 +1032,6 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @dev Calldata boundary for the dispatch.
-    function deriveWriteSetExternal(
-        uint8 actionKind,
-        bytes calldata fields,
-        uint64 signer,
-        uint256 nextWdIdPre
-    ) external pure returns (StepWrites.Cell[] memory) {
-        return StepWrites.deriveWriteSet(actionKind, fields, signer, nextWdIdPre);
-    }
-
     /// @notice The bulk pair is refused, and only the bulk pair.
     /// @dev    The deployment decision made executable.  A gate never
     ///         observed to fire is indistinguishable from an absent
@@ -947,21 +1043,21 @@ contract StepVMCrossCheck is CrossCheckFramework {
         bytes memory fields = new bytes(104);
         vm.expectRevert(
             abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(6)));
-        this.deriveWriteSetExternal(6, fields, 7, 0);
+        proxy.deriveWriteSet(6, fields, 7, 0);
         vm.expectRevert(
             abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(7)));
-        this.deriveWriteSetExternal(7, fields, 7, 0);
+        proxy.deriveWriteSet(7, fields, 7, 0);
         // An unknown kind is refused too — a new `Action` constructor
         // must be considered rather than defaulting into the
         // kernel-identity family.
         vm.expectRevert(
             abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(25)));
-        this.deriveWriteSetExternal(25, fields, 7, 0);
+        proxy.deriveWriteSet(25, fields, 7, 0);
         // ...and every adjudicable kind still derives.
         for (uint8 k = 0; k <= 24; k++) {
             beginEntry(string.concat("#", vm.toString(k)));
             if (k == 6 || k == 7) continue;
-            checkGe(this.deriveWriteSetExternal(k, fields, 7, 0).length, 2,
+            checkGe(proxy.deriveWriteSet(k, fields, 7, 0).length, 2,
                 "every adjudicable kind writes at least the uniform pair");
         }
     }
@@ -1138,6 +1234,50 @@ contract StepVMCrossCheck is CrossCheckFramework {
             leanTail,
             "variant-21 tail layout: abi.encodePacked != Lean uint64BE/uint256BE"
         );
+    }
+
+
+    /* ---------------------------------------------------------- */
+    /* Revert tolerance                                           */
+    /* ---------------------------------------------------------- */
+
+    /// @dev `LogChain.actionCommitMemory`, revert-tolerant.  A library
+    ///      call is internal, so without a boundary one reverting entry
+    ///      ends the walk over a 278-entry corpus.
+    function _tryActionCommit(uint8 kind, uint64 signer, bytes memory fields)
+        private
+        view
+        returns (bool ok, bytes32 v, bytes memory err)
+    {
+        try proxy.actionCommit(kind, signer, fields) returns (bytes32 x) {
+            return (true, x, "");
+        } catch (bytes memory e) {
+            return (false, bytes32(0), e);
+        }
+    }
+
+    /// @notice Name the errors this corpus's libraries declare.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        override
+        returns (string memory)
+    {
+        bytes4 s = revertSelector(err);
+        if (s == StepWrites.ActionNotAdjudicable.selector) return "ActionNotAdjudicable";
+        if (s == StepWrites.ActionFieldsTooShort.selector) return "ActionFieldsTooShort";
+        if (s == StepWrites.MalformedCellValue.selector) return "MalformedCellValue";
+        if (s == CBEEncode.CBEValueTooWide.selector) return "CBEValueTooWide";
+        return super.describeRevert(err);
+    }
+
+    /// @notice **Every error these libraries declare has a name above.**
+    function test_every_declared_error_is_described() public {
+        string[] memory artifacts = new string[](3);
+        artifacts[0] = "out/StepWrites.sol/StepWrites.json";
+        artifacts[1] = "out/CBEEncode.sol/CBEEncode.json";
+        artifacts[2] = "out/LogChain.sol/LogChain.json";
+        assertEveryDeclaredErrorIsDescribed(artifacts);
     }
 
 }

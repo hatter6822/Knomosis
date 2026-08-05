@@ -160,9 +160,17 @@ contract MultiProofCrossCheck is CrossCheckFramework {
             bytes32[] memory ks = _keys(raw, i);
             string memory name = vm.parseJsonString(raw, string.concat(_probe(i), ".name"));
             for (uint256 c = 0; c + 1 < ks.length; ++c) {
+                (bool okA, uint256 a, bytes memory eA) = _tryPathIndex(ks[c]);
+                (bool okB, uint256 b, bytes memory eB) = _tryPathIndex(ks[c + 1]);
+                if (!okA || !okB) {
+                    recordFailure(
+                        string.concat(
+                            "probe ", name, ": pathIndexOf reverted ",
+                            describeRevert(okA ? eB : eA)));
+                    continue;
+                }
                 checkLt(
-                    proxy.pathIndexOf(ks[c]),
-                    proxy.pathIndexOf(ks[c + 1]),
+                    a, b,
                     string.concat("probe ", name, ": cells not in ascending path order")
                 );
             }
@@ -187,11 +195,14 @@ contract MultiProofCrossCheck is CrossCheckFramework {
             string memory p = _probe(i);
             string memory name = vm.parseJsonString(raw, string.concat(p, ".name"));
             uint256 want = vm.parseJsonUint(raw, string.concat(p, ".gapCount"));
-            checkEq(
-                proxy.gapCountOf(_keys(raw, i)),
-                want,
-                string.concat("probe ", name, ": derived gap count")
-            );
+            (bool ok, uint256 got, bytes memory err) = _tryGapCount(_keys(raw, i));
+            if (!ok) {
+                recordFailure(
+                    string.concat(
+                        "probe ", name, ": gapCountOf reverted ", describeRevert(err)));
+                continue;
+            }
+            checkEq(got, want, string.concat("probe ", name, ": derived gap count"));
         }
     }
 
@@ -207,7 +218,13 @@ contract MultiProofCrossCheck is CrossCheckFramework {
             beginEntry(string.concat("#", vm.toString(i)));
             string memory p = _probe(i);
             string memory name = vm.parseJsonString(raw, string.concat(p, ".name"));
-            uint256 g = proxy.gapCountOf(_keys(raw, i));
+            (bool okG, uint256 g, bytes memory errG) = _tryGapCount(_keys(raw, i));
+            if (!okG) {
+                recordFailure(
+                    string.concat(
+                        "probe ", name, ": gapCountOf reverted ", describeRevert(errG)));
+                continue;
+            }
             bytes memory mask = vm.parseJsonBytes(raw, string.concat(p, ".gapMaskHex"));
             bytes memory sibs = vm.parseJsonBytes(raw, string.concat(p, ".siblingsHex"));
             checkEq(mask.length, (g + 7) / 8, string.concat("probe ", name, ": mask length"));
@@ -272,16 +289,34 @@ contract MultiProofCrossCheck is CrossCheckFramework {
             bytes memory mask = vm.parseJsonBytes(raw, string.concat(p, ".gapMaskHex"));
             bytes memory sibs = vm.parseJsonBytes(raw, string.concat(p, ".siblingsHex"));
 
-            checkEq(
-                proxy.foldFromKeys(ks, _leaves(raw, i, false), mask, sibs),
-                vm.parseJsonBytes32(raw, string.concat(p, ".preStateRootHex")),
-                string.concat("probe ", name, ": pre-state root")
-            );
-            checkEq(
-                proxy.foldFromKeys(ks, _leaves(raw, i, true), mask, sibs),
-                vm.parseJsonBytes32(raw, string.concat(p, ".postStateRootHex")),
-                string.concat("probe ", name, ": post-state root")
-            );
+            (bool okPre, bytes32 preRoot, bytes memory errPre) =
+                _tryFold(ks, _leaves(raw, i, false), mask, sibs);
+            if (okPre) {
+                checkEq(
+                    preRoot,
+                    vm.parseJsonBytes32(raw, string.concat(p, ".preStateRootHex")),
+                    string.concat("probe ", name, ": pre-state root")
+                );
+            } else {
+                recordFailure(
+                    string.concat(
+                        "probe ", name, ": pre-side fold reverted ",
+                        describeRevert(errPre)));
+            }
+            (bool okPost, bytes32 postRoot, bytes memory errPost) =
+                _tryFold(ks, _leaves(raw, i, true), mask, sibs);
+            if (okPost) {
+                checkEq(
+                    postRoot,
+                    vm.parseJsonBytes32(raw, string.concat(p, ".postStateRootHex")),
+                    string.concat("probe ", name, ": post-state root")
+                );
+            } else {
+                recordFailure(
+                    string.concat(
+                        "probe ", name, ": post-side fold reverted ",
+                        describeRevert(errPost)));
+            }
         }
     }
 
@@ -331,13 +366,27 @@ contract MultiProofCrossCheck is CrossCheckFramework {
             bytes32[] memory ks = _keys(raw, i);
             bytes32[] memory ls = _leaves(raw, i, false);
             ls[0] = bytes32(uint256(ls[0]) ^ 1);
+            // A revert here is a PASS in substance — the tampered leaf
+            // did not reach the root — but it is recorded rather than
+            // silently accepted, because a fold that reverted on every
+            // input would satisfy this test while proving nothing.
+            (bool ok, bytes32 root, bytes memory err) = _tryFold(
+                ks,
+                ls,
+                vm.parseJsonBytes(raw, string.concat(p, ".gapMaskHex")),
+                vm.parseJsonBytes(raw, string.concat(p, ".siblingsHex"))
+            );
+            if (!ok) {
+                recordFailure(
+                    string.concat(
+                        "probe ",
+                        vm.parseJsonString(raw, string.concat(p, ".name")),
+                        ": tampered fold reverted rather than reaching a wrong root: ",
+                        describeRevert(err)));
+                continue;
+            }
             checkTrue(
-                proxy.foldFromKeys(
-                    ks,
-                    ls,
-                    vm.parseJsonBytes(raw, string.concat(p, ".gapMaskHex")),
-                    vm.parseJsonBytes(raw, string.concat(p, ".siblingsHex"))
-                ) != vm.parseJsonBytes32(raw, string.concat(p, ".preStateRootHex")),
+                root != vm.parseJsonBytes32(raw, string.concat(p, ".preStateRootHex")),
                 string.concat(
                     "probe ",
                     vm.parseJsonString(raw, string.concat(p, ".name")),
@@ -457,4 +506,85 @@ contract MultiProofCrossCheck is CrossCheckFramework {
             vm.parseJsonBytes(raw, string.concat(p, ".siblingsHex"))
         );
     }
+
+    /* ---------------------------------------------------------- */
+    /* Revert tolerance                                           */
+    /* ---------------------------------------------------------- */
+
+    /// @dev The proxy's three entry points, returning their failure
+    ///      instead of raising it.  `proxy` is already external, so
+    ///      `try` reaches it directly and no extra wrapper contract is
+    ///      needed — what these add is the failure DATA, so a reverting
+    ///      probe is named with its error rather than ending the walk.
+    function _tryPathIndex(bytes32 k)
+        private
+        view
+        returns (bool ok, uint256 v, bytes memory err)
+    {
+        try proxy.pathIndexOf(k) returns (uint256 x) {
+            return (true, x, "");
+        } catch (bytes memory e) {
+            return (false, 0, e);
+        }
+    }
+
+    /// @dev `gapCountOf`, revert-tolerant.
+    function _tryGapCount(bytes32[] memory ks)
+        private
+        view
+        returns (bool ok, uint256 v, bytes memory err)
+    {
+        try proxy.gapCountOf(ks) returns (uint256 x) {
+            return (true, x, "");
+        } catch (bytes memory e) {
+            return (false, 0, e);
+        }
+    }
+
+    /// @dev `foldFromKeys`, revert-tolerant.
+    function _tryFold(
+        bytes32[] memory ks,
+        bytes32[] memory ls,
+        bytes memory mask,
+        bytes memory sibs
+    ) private view returns (bool ok, bytes32 root, bytes memory err) {
+        try proxy.foldFromKeys(ks, ls, mask, sibs) returns (bytes32 r) {
+            return (true, r, "");
+        } catch (bytes memory e) {
+            return (false, bytes32(0), e);
+        }
+    }
+
+    /// @notice Name the verifier libraries' errors; defer the rest.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        override
+        returns (string memory)
+    {
+        bytes4 s = revertSelector(err);
+        if (s == SmtMultiVerifier.MultiProofTooManyCells.selector) {
+            return "MultiProofTooManyCells";
+        }
+        if (s == SmtMultiVerifier.MultiProofEmpty.selector) return "MultiProofEmpty";
+        if (s == SmtMultiVerifier.MultiProofNotStrictlySorted.selector) {
+            return "MultiProofNotStrictlySorted";
+        }
+        if (s == SmtMultiVerifier.MultiProofMaskLength.selector) {
+            return "MultiProofMaskLength";
+        }
+        if (s == SmtMultiVerifier.MultiProofPadding.selector) return "MultiProofPadding";
+        if (s == SmtMultiVerifier.MultiProofSiblingCount.selector) {
+            return "MultiProofSiblingCount";
+        }
+        return super.describeRevert(err);
+    }
+
+    /// @notice **Every error `SmtMultiVerifier` declares has a name above.**
+    function test_every_declared_error_is_described() public {
+        string[] memory artifacts = new string[](1);
+        artifacts[0] = "out/SmtMultiVerifier.sol/SmtMultiVerifier.json";
+        assertEveryDeclaredErrorIsDescribed(artifacts);
+    }
+
 }

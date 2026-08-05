@@ -266,8 +266,18 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
             bytes memory proofData = vm.parseJsonBytes(raw, string.concat(base, ".proofDataHex"));
             string memory category = vm.parseJsonString(raw, string.concat(base, ".category"));
 
-            bytes32 reconstructed = proxy.recomputeRoot(smtKey, leafPreimage, proofData);
-            checkEq(reconstructed, root, string.concat("recomputeRoot mismatch for ", category));
+            try proxy.recomputeRoot(smtKey, leafPreimage, proofData) returns (
+                bytes32 reconstructed
+            ) {
+                checkEq(
+                    reconstructed, root,
+                    string.concat("recomputeRoot mismatch for ", category));
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat(
+                        "recomputeRoot reverted for ", category, ": ",
+                        describeRevert(err)));
+            }
         }
     }
 
@@ -398,4 +408,42 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
         }
         return false;
     }
+
+    /* ---------------------------------------------------------- */
+    /* Revert tolerance                                           */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Name `SmtCellVerifier`'s errors; defer the rest to the
+    ///         base.
+    ///
+    /// @dev    These are the shape refusals a malformed `proofData`
+    ///         reaches, and this corpus deliberately carries malformed
+    ///         entries — so a walk that ended on the first one would
+    ///         stop exactly where the adversarial half begins.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        override
+        returns (string memory)
+    {
+        bytes4 s = revertSelector(err);
+        if (s == SmtCellVerifier.SmtCellProofTooShort.selector) {
+            return "SmtCellProofTooShort";
+        }
+        if (s == SmtCellVerifier.SmtCellSiblingsMisaligned.selector) {
+            return "SmtCellSiblingsMisaligned";
+        }
+        if (s == SmtCellVerifier.SmtCellDepthOutOfRange.selector) {
+            return "SmtCellDepthOutOfRange";
+        }
+        return super.describeRevert(err);
+    }
+
+    /// @notice **Every error `SmtCellVerifier` declares has a name above.**
+    function test_every_declared_error_is_described() public {
+        string[] memory artifacts = new string[](1);
+        artifacts[0] = "out/SmtCellVerifier.sol/SmtCellVerifier.json";
+        assertEveryDeclaredErrorIsDescribed(artifacts);
+    }
+
 }

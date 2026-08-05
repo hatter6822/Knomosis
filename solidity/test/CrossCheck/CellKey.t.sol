@@ -101,12 +101,16 @@ contract CellKeyCrossCheck is CrossCheckFramework {
             string memory expected =
                 vm.parseJsonString(json, string.concat(base, ".keyHex"));
 
-            bytes32 derived = StepVMMerkle.deriveCellSmtKey(kind, keyA, keyB);
-            checkEq(
-                vm.toString(abi.encodePacked(derived)),
-                expected,
-                string.concat("key mismatch at entry ", vm.toString(i))
-            );
+            try this.deriveCellSmtKeyExternal(kind, keyA, keyB) returns (bytes32 derived) {
+                checkEq(
+                    vm.toString(abi.encodePacked(derived)),
+                    expected,
+                    "derived cell key diverges from Lean"
+                );
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("deriveCellSmtKey reverted ", describeRevert(err)));
+            }
         }
     }
 
@@ -147,4 +151,18 @@ contract CellKeyCrossCheck is CrossCheckFramework {
     {
         return vm.parseUint(vm.parseJsonString(json, path));
     }
+
+    /// @dev `StepVMMerkle.deriveCellSmtKey` behind an external boundary
+    ///      so a reverting entry is reported rather than ending the
+    ///      walk.  `StepVMMerkle` declares no errors of its own, so the
+    ///      base `describeRevert` — which names the Solidity panics —
+    ///      covers everything reachable here.
+    function deriveCellSmtKeyExternal(uint8 kind, uint256 keyA, uint256 keyB)
+        external
+        pure
+        returns (bytes32)
+    {
+        return StepVMMerkle.deriveCellSmtKey(kind, keyA, keyB);
+    }
+
 }

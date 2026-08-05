@@ -150,8 +150,14 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             if (e.reserveIn == 0 || e.reserveOut == 0 || e.amountIn == 0 || e.feeBps >= 10000) {
                 continue;
             }
-            uint256 got = AmmMath.getAmountOut(e.amountIn, e.reserveIn, e.reserveOut, e.feeBps);
-            checkEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
+            try this.getAmountOutExternal(
+                e.amountIn, e.reserveIn, e.reserveOut, e.feeBps
+            ) returns (uint256 got) {
+                checkEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("getAmountOut reverted ", describeRevert(err)));
+            }
         }
     }
 
@@ -419,4 +425,48 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         );
         assertEq(actualEthOut, expectedEthOut, "live BOLD->ETH == AmmMath.getAmountOut");
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Revert tolerance                                                   */
+    /* ------------------------------------------------------------------ */
+
+    /// @dev `AmmMath.getAmountOut` behind an external boundary, so a
+    ///      corpus walk can catch a revert and name the entry that
+    ///      caused it.  A library call is internal, so without this a
+    ///      single reverting entry ends the walk and the rest of the
+    ///      corpus goes unexamined.
+    function getAmountOutExternal(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut,
+        uint256 feeBps
+    ) external pure returns (uint256) {
+        return AmmMath.getAmountOut(amountIn, reserveIn, reserveOut, feeBps);
+    }
+
+    /// @notice Name `AmmMath`'s own errors; defer the rest to the base.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        override
+        returns (string memory)
+    {
+        bytes4 s = revertSelector(err);
+        if (s == AmmMath.AmmMathInsufficientInput.selector) {
+            return "AmmMathInsufficientInput()";
+        }
+        if (s == AmmMath.AmmMathInsufficientLiquidity.selector) {
+            return "AmmMathInsufficientLiquidity()";
+        }
+        if (s == AmmMath.AmmMathFeeTooHigh.selector) return "AmmMathFeeTooHigh()";
+        return super.describeRevert(err);
+    }
+
+    /// @notice **Every error `AmmMath` declares has a name above.**
+    function test_every_declared_error_is_described() public {
+        string[] memory artifacts = new string[](1);
+        artifacts[0] = "out/AmmMath.sol/AmmMath.json";
+        assertEveryDeclaredErrorIsDescribed(artifacts);
+    }
+
 }

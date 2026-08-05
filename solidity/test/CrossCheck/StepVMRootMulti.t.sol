@@ -492,99 +492,19 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
             : string.concat(name, "(", vm.toString(args), ")");
     }
 
-    /// @notice **Every error these contracts declare has a name here.**
+    /// @notice **Every error the verifier path declares has a name in
+    ///         `describeRevert`.**
     ///
-    /// @dev    The completeness half of `describeRevert`.  The compiler
-    ///         catches a renamed or deleted error; nothing catches one
-    ///         that is ADDED and never described, which would surface a
-    ///         real failure as four anonymous bytes.  So the ABI is read
-    ///         back from the compiled artifact and every declared error
-    ///         is required to render as something other than its own hex.
-    ///
-    ///         Reading `out/` is why `foundry.toml` grants it read
-    ///         access.  The walk probes indices until the parse fails
-    ///         because forge exposes no array-length path — and it
-    ///         passes the artifact PATH rather than its contents, so the
-    ///         megabyte of JSON lives in the callee's fresh memory and
-    ///         is discarded per call instead of accumulating.
+    /// @dev    Found `CBEValueTooWide` on its first run — an error that
+    ///         reaches this ABI through `StepWrites`' encoder and that
+    ///         hand-listing the three obvious sources missed.  That is
+    ///         the case it exists for.
     function test_every_declared_error_is_described() public {
-        string[3] memory artifacts = [
-            "out/KnomosisStepVMRoot.sol/KnomosisStepVMRoot.json",
-            "out/SmtMultiVerifier.sol/SmtMultiVerifier.json",
-            "out/StepWrites.sol/StepWrites.json"
-        ];
-        uint256 seen = 0;
-        for (uint256 a = 0; a < artifacts.length; a++) {
-            for (uint256 i = 0; ; i++) {
-                string memory kind;
-                try this.abiEntryType(artifacts[a], i) returns (string memory k) {
-                    kind = k;
-                } catch {
-                    break;
-                }
-                if (keccak256(bytes(kind)) != keccak256("error")) continue;
-                string memory sig = this.abiErrorSignature(artifacts[a], i);
-                beginEntry(string.concat(artifacts[a], " ", sig));
-                seen++;
-                // A well-formed instance of the error: its selector plus
-                // one zero word, which covers every argument list these
-                // errors have.
-                bytes memory sample =
-                    abi.encodePacked(bytes4(keccak256(bytes(sig))), new bytes(64));
-                checkFalse(
-                    keccak256(bytes(describeRevert(sample)))
-                        == keccak256(bytes(vm.toString(sample))),
-                    "declared error renders as raw hex: add it to describeRevert"
-                );
-            }
-        }
-        beginEntry("");
-        assertGt(seen, 0, "no errors found: artifact path or ABI shape changed");
-    }
-
-    /// @dev The `type` of ABI entry `i`.  Reverts past the end, which
-    ///      is how the walk above finds the end.
-    function abiEntryType(string calldata artifact, uint256 i)
-        external
-        view
-        returns (string memory)
-    {
-        return vm.parseJsonString(
-            vm.readFile(artifact), string.concat(".abi[", vm.toString(i), "].type"));
-    }
-
-    /// @dev The canonical signature of the error at ABI entry `i`.
-    function abiErrorSignature(string calldata artifact, uint256 i)
-        external
-        view
-        returns (string memory sig)
-    {
-        string memory e = string.concat(".abi[", vm.toString(i), "]");
-        sig = string.concat(
-            vm.parseJsonString(vm.readFile(artifact), string.concat(e, ".name")), "(");
-        for (uint256 k = 0; ; k++) {
-            string memory t;
-            try this.abiInputType(artifact, i, k) returns (string memory s) {
-                t = s;
-            } catch {
-                break;
-            }
-            sig = string.concat(sig, k > 0 ? "," : "", t);
-        }
-        sig = string.concat(sig, ")");
-    }
-
-    /// @dev The `type` of input `k` of ABI entry `i`.  Reverts past the
-    ///      end of the input list.
-    function abiInputType(string calldata artifact, uint256 i, uint256 k)
-        external
-        view
-        returns (string memory)
-    {
-        return vm.parseJsonString(
-            vm.readFile(artifact),
-            string.concat(".abi[", vm.toString(i), "].inputs[", vm.toString(k), "].type")
-        );
+        string[] memory artifacts = new string[](3);
+        artifacts[0] = "out/KnomosisStepVMRoot.sol/KnomosisStepVMRoot.json";
+        artifacts[1] = "out/SmtMultiVerifier.sol/SmtMultiVerifier.json";
+        artifacts[2] = "out/StepWrites.sol/StepWrites.json";
+        assertEveryDeclaredErrorIsDescribed(artifacts);
     }
 
     /* ---------------------------------------------------------- */

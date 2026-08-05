@@ -155,17 +155,22 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            (uint256 u, uint256 p, uint64 b) =
-                FeeSplitMath.split(e.amount, e.chosenFeeBps, e.weiPerBudgetUnit);
-            checkEq(u, e.userAmount, "userAmount mismatch");
-            checkEq(p, e.poolAmount, "poolAmount mismatch");
-            checkEq(uint256(b), uint256(e.budgetGrant), "budgetGrant mismatch");
-            checkEq(u + p, e.amount, "conservation user+pool==amount");
-            checkLe(
-                uint256(b),
-                uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT),
-                "budget within cap"
-            );
+            try this.splitExternal(e.amount, e.chosenFeeBps, e.weiPerBudgetUnit) returns (
+                uint256 u, uint256 p, uint64 b
+            ) {
+                checkEq(u, e.userAmount, "userAmount mismatch");
+                checkEq(p, e.poolAmount, "poolAmount mismatch");
+                checkEq(uint256(b), uint256(e.budgetGrant), "budgetGrant mismatch");
+                checkEq(u + p, e.amount, "conservation user+pool==amount");
+                checkLe(
+                    uint256(b),
+                    uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT),
+                    "budget within cap"
+                );
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("FeeSplitMath.split reverted ", describeRevert(err)));
+            }
         }
     }
 
@@ -337,7 +342,20 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             MockBold(BOLD).approve(address(bridge), e.amount);
             vm.recordLogs();
             vm.prank(depositor);
-            bridge.depositBoldWithFee(e.amount, e.chosenFeeBps);
+            // A bridge refusal is reported as raw returndata rather
+            // than a name.  `KnomosisBridge` declares ~70 errors, and a
+            // hand-listed table of that size — which the completeness
+            // test would then require to stay current — costs more than
+            // the four greppable bytes it would save.  The libraries
+            // this walk exercises directly are named; the bridge's own
+            // refusals are not, deliberately.
+            try bridge.depositBoldWithFee(e.amount, e.chosenFeeBps) {
+                // fall through to the log decode below
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("depositBoldWithFee reverted ", describeRevert(err)));
+                continue;
+            }
             (uint256 u, uint256 p, uint64 b) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
             checkEq(u, e.userAmount, "live bold userAmount != fixture");
@@ -367,7 +385,13 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             vm.deal(depositor, e.amount);
             vm.recordLogs();
             vm.prank(depositor);
-            bridge.depositETHWithFee{value: e.amount}(e.chosenFeeBps);
+            try bridge.depositETHWithFee{value: e.amount}(e.chosenFeeBps) {
+                // fall through to the log decode below
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("depositETHWithFee reverted ", describeRevert(err)));
+                continue;
+            }
             (uint256 u, uint256 p, uint64 b) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
             checkEq(u, e.userAmount, "live eth userAmount != fixture");
@@ -542,4 +566,22 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         }
         revert("DepositWithFeeInitiated not found");
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Revert tolerance                                                   */
+    /* ------------------------------------------------------------------ */
+
+    /// @dev `FeeSplitMath.split` behind an external boundary, so a
+    ///      reverting entry is named rather than ending the walk.
+    ///      `FeeSplitMath` declares no errors of its own, so what
+    ///      reaches the catch is a Solidity panic, which the base
+    ///      `describeRevert` names.
+    function splitExternal(uint256 value, uint256 feeBps, uint256 rate)
+        external
+        pure
+        returns (uint256 u, uint256 p, uint64 g)
+    {
+        return FeeSplitMath.split(value, feeBps, rate);
+    }
+
 }

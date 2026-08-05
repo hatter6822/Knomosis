@@ -100,6 +100,14 @@ contract EcdsaVerifyCrossCheck is CrossCheckFramework {
             }
 
             // Verifies + wrongSigner share the same recovery code path.
+            //
+            // No external boundary here, unlike the other corpus walks:
+            // `tryRecover` returns a `RecoverError` instead of
+            // reverting — that is the whole difference between it and
+            // `recover` — so there is no revert for a boundary to
+            // catch.  Stated rather than left implicit, so a reader
+            // comparing this walk with its neighbours does not read the
+            // absence as an oversight.
             (address recovered, , ) = digest.tryRecover(sig);
             if (outcomeHash == keccak256(abi.encodePacked("verifies"))) {
                 checkEq(recovered, expectedSigner, "verifies: recovered should match");
