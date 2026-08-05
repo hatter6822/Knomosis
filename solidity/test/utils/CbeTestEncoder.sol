@@ -6,6 +6,8 @@
 // under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 pragma solidity ^0.8.36;
 
+import {CBEDecode} from "src/lib/CBEDecode.sol";
+
 /// @title  CbeTestEncoder
 /// @notice Test-side CBE byte builders, mirroring Lean's canonical
 ///         encoding.  Shared by every suite that hand-builds a blob the
@@ -23,6 +25,13 @@ pragma solidity ^0.8.36;
 ///         wrong one shifts every following field, and the production
 ///         decoder rejects the tag rather than silently truncating.
 abstract contract CbeTestEncoder {
+    // Tags come from `CBEDecode`, not from hex literals.  Two dispute
+    // suites had grown their own `_cbor*` encoder that did exactly this
+    // — a fifth spelling of the CBE writer — and it was RIGHT about the
+    // tags where this file was merely correct: a literal cannot follow
+    // the decoder it has to agree with.  Consolidating took the better
+    // half of each.
+
     // ------------------------------------------------------------------
     // CBE primitives (mirror Lean's canonical byte encoding)
     // ------------------------------------------------------------------
@@ -49,7 +58,7 @@ abstract contract CbeTestEncoder {
 
     /// @notice CBE uint: tag 0x00 + 8 LE value bytes.
     function _cbeUint(uint64 v) internal pure returns (bytes memory) {
-        return bytes.concat(hex"00", _leBytes8(v));
+        return bytes.concat(bytes1(CBEDecode.TAG_UINT), _leBytes8(v));
     }
 
     /// @notice CBE amount: tag 0x06 + 32 LE value bytes.  Value-carrying
@@ -57,19 +66,26 @@ abstract contract CbeTestEncoder {
     ///         test can construct is one the head cannot carry — which
     ///         is the property finding C-3 turned on.
     function _cbeAmount(uint256 v) internal pure returns (bytes memory) {
-        return bytes.concat(hex"06", _leBytes32(v));
+        return bytes.concat(bytes1(CBEDecode.TAG_AMOUNT), _leBytes32(v));
     }
 
     /// @notice CBE byte string: tag 0x02 + 8 LE length + payload.
     function _cbeBytes(bytes memory payload) internal pure returns (bytes memory) {
         // Payloads here are tiny (<= 64 bytes); the uint64 cast cannot lose.
         // forge-lint: disable-next-line(unsafe-typecast)
-        return bytes.concat(hex"02", _leBytes8(uint64(payload.length)), payload);
+        return bytes.concat(
+            bytes1(CBEDecode.TAG_BYTES), _leBytes8(uint64(payload.length)), payload);
+    }
+
+    /// @notice CBE byte string wrapping a `bytes32` — the prevHash /
+    ///         actionHash slot shape.
+    function _cbeBytes32(bytes32 b) internal pure returns (bytes memory) {
+        return _cbeBytes(abi.encodePacked(b));
     }
 
     /// @notice CBE array head: tag 0x04 + 8 LE count.
     function _cbeArrayHead(uint64 count) internal pure returns (bytes memory) {
-        return bytes.concat(hex"04", _leBytes8(count));
+        return bytes.concat(bytes1(CBEDecode.TAG_ARRAY), _leBytes8(count));
     }
 
     // ------------------------------------------------------------------

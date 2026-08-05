@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.36;
 
+import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
@@ -38,7 +39,11 @@ import {
 ///         deployed (the constructor's `symbol()` cross-check reads it).
 ///         `vm.etch` copies runtime code and resets storage, hence the
 ///         `pure` `symbol()` in `MockBold` and the post-etch `mint`.
-contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport, DepositEventDecoder {
+contract BridgeFeeSplitBoldTest is
+    Test,
+    WithdrawalFlowHarness,
+    BoldTestSupport,
+    DepositEventDecoder {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
 
@@ -1136,27 +1141,6 @@ contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport, Deposi
         assertLe(
             bridge.ammReserveBold(), bridge.boldTotalLockedValue(), "reserve <= bold TVL (post)"
         );
-    }
-
-    /// @notice EIP-712 digest for a state-root attestation (mirrors
-    ///         `KnomosisBridge.submitStateRoot`).
-    function _stateRootDigest(KnomosisBridge bridge, bytes32 root, uint64 idx)
-        internal
-        view
-        returns (bytes32)
-    {
-        bytes32 ds = KnomosisEip712.domainSeparator(
-            "KnomosisBridge", "1", block.chainid, uint256(0), address(bridge)
-        );
-        bytes32 sh = keccak256(
-            abi.encode(
-                keccak256("StateRoot(bytes32 root,uint64 logIndexHigh,bytes32 deploymentId)"),
-                root,
-                uint256(idx),
-                bridge.deploymentId()
-            )
-        );
-        return KnomosisEip712.digest(ds, sh);
     }
 
     /// @notice Sign a state-root attestation with the attestor key.

@@ -57,10 +57,6 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
     // Fixture decoding
     // ------------------------------------------------------------------
 
-    function _count(string memory raw) internal pure returns (uint256) {
-        return vm.parseJsonUint(raw, ".header.count");
-    }
-
     function _gridCount(string memory raw) internal pure returns (uint256) {
         return vm.parseJsonUint(raw, ".header.gridCount");
     }
@@ -100,10 +96,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
         }
         string memory raw = readFixture(FIXTURE_NAME);
 
-        assertGt(_count(raw), 0, "corpus is non-empty");
+        assertGt(headerCount(raw), 0, "corpus is non-empty");
         assertEq(
             _gridCount(raw) + _cornerCount(raw),
-            _count(raw),
+            headerCount(raw),
             "grid + corner == total"
         );
         assertEq(
@@ -143,7 +139,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -172,7 +168,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -194,7 +190,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -213,7 +209,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -247,7 +243,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
@@ -273,7 +269,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -294,7 +290,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -317,7 +313,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");

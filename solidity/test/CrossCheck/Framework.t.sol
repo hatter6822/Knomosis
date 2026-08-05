@@ -450,6 +450,15 @@ abstract contract CrossCheckFramework is Test {
         );
     }
 
+    /// @notice A corpus's entry count, from the nested `.header.count`.
+    ///
+    /// @dev    Three suites had written this line each.  Trivial in
+    ///         isolation, and the reason it belongs here anyway: the
+    ///         PATH is a schema fact, so three copies is three places to
+    ///         edit when the header moves.
+    function headerCount(string memory raw) internal pure returns (uint256) {
+        return vm.parseJsonUint(raw, ".header.count");
+    }
 }
 
 /// @title FrameworkSmokeTest

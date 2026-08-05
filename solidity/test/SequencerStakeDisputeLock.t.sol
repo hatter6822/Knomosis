@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.36;
 
+import {CbeTestEncoder} from "test/utils/CbeTestEncoder.sol";
 import {Test} from "forge-std/Test.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisDisputeVerifier} from "src/contracts/KnomosisDisputeVerifier.sol";
 import {KnomosisSequencerStake} from "src/contracts/KnomosisSequencerStake.sol";
 
-import {CBEDecode} from "src/lib/CBEDecode.sol";
 import {Deployer} from "test/utils/Deployer.sol";
 
 /// @notice A challenger that refuses every incoming ETH transfer.
@@ -55,7 +55,7 @@ contract RejectingChallenger {
 /// thing that can block the withdrawal is the new
 /// `openDisputeCount` check.  Reverting that check makes these tests
 /// fail rather than pass for the wrong reason.
-contract SequencerStakeDisputeLockTest is Test {
+contract SequencerStakeDisputeLockTest is Test, CbeTestEncoder {
     KnomosisBridge private bridge;
     KnomosisDisputeVerifier private verifier;
     KnomosisSequencerStake private stake;
@@ -399,11 +399,11 @@ contract SequencerStakeDisputeLockTest is Test {
 
     function _entry(uint64 signer, uint64 nonce) internal pure returns (bytes memory) {
         return bytes.concat(
-            _cborBytes32(bytes32(0)),
-            _cborBytes32(keccak256(abi.encode(signer, nonce))),
-            _cborUint(signer),
-            _cborUint(nonce),
-            _cborBytesEncoding(hex"01")
+            _cbeBytes32(bytes32(0)),
+            _cbeBytes32(keccak256(abi.encode(signer, nonce))),
+            _cbeUint(signer),
+            _cbeUint(nonce),
+            _cbeBytes(hex"01")
         );
     }
 
@@ -415,31 +415,11 @@ contract SequencerStakeDisputeLockTest is Test {
         returns (bytes memory)
     {
         return bytes.concat(
-            _cborUint(secondaryIdx),
-            _cborHead(CBEDecode.TAG_ARRAY, uint64(2)),
-            _cborBytesEncoding(a),
-            _cborBytesEncoding(b)
+            _cbeUint(secondaryIdx),
+            _cbeArrayHead(uint64(2)),
+            _cbeBytes(a),
+            _cbeBytes(b)
         );
     }
 
-    function _cborHead(uint8 tag, uint64 n) internal pure returns (bytes memory) {
-        bytes memory head = new bytes(9);
-        head[0] = bytes1(tag);
-        for (uint64 i = 0; i < 8; ++i) {
-            head[1 + uint256(i)] = bytes1(uint8((n >> (8 * i)) & 0xFF));
-        }
-        return head;
-    }
-
-    function _cborUint(uint64 n) internal pure returns (bytes memory) {
-        return _cborHead(CBEDecode.TAG_UINT, n);
-    }
-
-    function _cborBytesEncoding(bytes memory payload) internal pure returns (bytes memory) {
-        return bytes.concat(_cborHead(CBEDecode.TAG_BYTES, uint64(payload.length)), payload);
-    }
-
-    function _cborBytes32(bytes32 b) internal pure returns (bytes memory) {
-        return _cborBytesEncoding(abi.encodePacked(b));
-    }
 }

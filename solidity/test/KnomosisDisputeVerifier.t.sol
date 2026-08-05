@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.36;
 
+import {CbeTestEncoder} from "test/utils/CbeTestEncoder.sol";
 import {Test} from "forge-std/Test.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisDisputeVerifier} from "src/contracts/KnomosisDisputeVerifier.sol";
 import {KnomosisSequencerStake} from "src/contracts/KnomosisSequencerStake.sol";
 import {KnomosisIdentityRegistry} from "src/contracts/KnomosisIdentityRegistry.sol";
 
-import {CBEDecode} from "src/lib/CBEDecode.sol";
 import {KnomosisChainId} from "src/lib/KnomosisChainId.sol";
 import {Deployer} from "test/utils/Deployer.sol";
 
@@ -15,7 +15,7 @@ import {Deployer} from "test/utils/Deployer.sol";
 /// @notice Tests for the dispute verifier contract.  Each test
 ///         exercises one functional area of E.2 (filing,
 ///         per-claim verifiers, finalisation).
-contract KnomosisDisputeVerifierTest is Test {
+contract KnomosisDisputeVerifierTest is Test, CbeTestEncoder {
     KnomosisBridge private bridge;
     KnomosisDisputeVerifier private verifier;
     KnomosisSequencerStake private stake;
@@ -228,7 +228,7 @@ contract KnomosisDisputeVerifierTest is Test {
         // expected nonce is 0 (no prior entries for signer 1).  The
         // recorded nonce is 99 → mismatch → upheld.
         bytes memory entry = _logEntryBlob(1, 99, hex"ff");
-        bytes memory prefix = _arrayHead(1);
+        bytes memory prefix = _cbeArrayHead(1);
         bytes memory full = bytes.concat(prefix, entry);
         uint8 v = verifier.checkNonceMismatch(uint64(0), full);
         assertEq(v, verifier.VERDICT_UPHELD());
@@ -237,7 +237,7 @@ contract KnomosisDisputeVerifierTest is Test {
     function test_checkNonceMismatch_rejected_when_nonce_matches_expected() public view {
         // Build a 1-entry prefix with signer=1, nonce=0.  Expected = 0.
         bytes memory entry = _logEntryBlob(1, 0, hex"ff");
-        bytes memory prefix = _arrayHead(1);
+        bytes memory prefix = _cbeArrayHead(1);
         bytes memory full = bytes.concat(prefix, entry);
         uint8 v = verifier.checkNonceMismatch(uint64(0), full);
         assertEq(v, verifier.VERDICT_REJECTED());
@@ -247,7 +247,7 @@ contract KnomosisDisputeVerifierTest is Test {
         // signer=1 nonce=0 at idx 0; then signer=1 nonce=1 at idx 1.
         bytes memory e1 = _logEntryBlob(1, 0, hex"01");
         bytes memory e2 = _logEntryBlob(1, 1, hex"02");
-        bytes memory prefix = _arrayHead(2);
+        bytes memory prefix = _cbeArrayHead(2);
         bytes memory full = bytes.concat(prefix, e1, e2);
         uint8 v = verifier.checkNonceMismatch(uint64(1), full);
         assertEq(v, verifier.VERDICT_REJECTED());
@@ -257,14 +257,14 @@ contract KnomosisDisputeVerifierTest is Test {
         // signer=1 nonce=0 at idx 0; then signer=1 nonce=0 at idx 1 — replay.
         bytes memory e1 = _logEntryBlob(1, 0, hex"01");
         bytes memory e2 = _logEntryBlob(1, 0, hex"02");
-        bytes memory prefix = _arrayHead(2);
+        bytes memory prefix = _cbeArrayHead(2);
         bytes memory full = bytes.concat(prefix, e1, e2);
         uint8 v = verifier.checkNonceMismatch(uint64(1), full);
         assertEq(v, verifier.VERDICT_UPHELD());
     }
 
     function test_checkNonceMismatch_revert_on_oversized_prefix() public {
-        bytes memory prefix = _arrayHead(uint64(257)); // > MAX_PREFIX_LEN
+        bytes memory prefix = _cbeArrayHead(uint64(257)); // > MAX_PREFIX_LEN
         bytes memory full = bytes.concat(prefix, hex"00");
         vm.expectRevert(KnomosisDisputeVerifier.MaxPrefixLenExceeded.selector);
         verifier.checkNonceMismatch(uint64(0), full);
@@ -272,7 +272,7 @@ contract KnomosisDisputeVerifierTest is Test {
 
     function test_checkNonceMismatch_inconclusive_when_index_past_prefix() public view {
         bytes memory e1 = _logEntryBlob(1, 0, hex"01");
-        bytes memory prefix = _arrayHead(1);
+        bytes memory prefix = _cbeArrayHead(1);
         bytes memory full = bytes.concat(prefix, e1);
         uint8 v = verifier.checkNonceMismatch(uint64(99), full);
         assertEq(v, verifier.VERDICT_INCONCLUSIVE());
@@ -283,7 +283,7 @@ contract KnomosisDisputeVerifierTest is Test {
         // At idx 1, signer 2's expected nonce is 0.  Recorded = 99 → upheld.
         bytes memory e1 = _logEntryBlob(1, 0, hex"01");
         bytes memory e2 = _logEntryBlob(2, 99, hex"02");
-        bytes memory prefix = _arrayHead(2);
+        bytes memory prefix = _cbeArrayHead(2);
         bytes memory full = bytes.concat(prefix, e1, e2);
         uint8 v = verifier.checkNonceMismatch(uint64(1), full);
         assertEq(v, verifier.VERDICT_UPHELD());
@@ -293,40 +293,6 @@ contract KnomosisDisputeVerifierTest is Test {
     // CBE encoding helpers (mirror Lean's encoding shape)
     // ------------------------------------------------------------------
 
-    /// @notice Build a CBE byte string: tag + 8 LE length + payload.
-    function _cborBytesEncoding(bytes memory payload)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        bytes memory head = _cborHead(CBEDecode.TAG_BYTES, uint64(payload.length));
-        return bytes.concat(head, payload);
-    }
-
-    /// @notice Build a CBE uint head: tag + 8 LE bytes.
-    function _cborHead(uint8 tag, uint64 n) internal pure returns (bytes memory) {
-        bytes memory head = new bytes(9);
-        head[0] = bytes1(tag);
-        for (uint64 i = 0; i < 8; ++i) {
-            head[1 + uint256(i)] = bytes1(uint8((n >> (8 * i)) & 0xFF));
-        }
-        return head;
-    }
-
-    function _cborUint(uint64 n) internal pure returns (bytes memory) {
-        return _cborHead(CBEDecode.TAG_UINT, n);
-    }
-
-    function _arrayHead(uint64 count) internal pure returns (bytes memory) {
-        return _cborHead(CBEDecode.TAG_ARRAY, count);
-    }
-
-    /// @notice Build a 32-byte CBE byte string (used for prevHash /
-    ///         actionHash slots).
-    function _cborBytes32(bytes32 b) internal pure returns (bytes memory) {
-        return _cborBytesEncoding(abi.encodePacked(b));
-    }
-
     /// @notice Build a CBE-encoded LogEntry (prevHash, actionHash,
     ///         signer, nonce, sig).  Mirrors the Lean encoding.
     function _logEntryBlob(uint64 signer, uint64 nonce, bytes memory sig)
@@ -335,11 +301,11 @@ contract KnomosisDisputeVerifierTest is Test {
         returns (bytes memory)
     {
         return bytes.concat(
-            _cborBytes32(bytes32(0)), // prevHash placeholder
-            _cborBytes32(keccak256(abi.encode(signer, nonce))), // actionHash
-            _cborUint(signer),
-            _cborUint(nonce),
-            _cborBytesEncoding(sig)
+            _cbeBytes32(bytes32(0)), // prevHash placeholder
+            _cbeBytes32(keccak256(abi.encode(signer, nonce))), // actionHash
+            _cbeUint(signer),
+            _cbeUint(nonce),
+            _cbeBytes(sig)
         );
     }
 
@@ -354,11 +320,11 @@ contract KnomosisDisputeVerifierTest is Test {
         bytes memory sig
     ) internal pure returns (bytes memory) {
         return bytes.concat(
-            _cborBytes32(bytes32(0)),
-            _cborBytes32(actionHash),
-            _cborUint(signer),
-            _cborUint(nonce),
-            _cborBytesEncoding(sig)
+            _cbeBytes32(bytes32(0)),
+            _cbeBytes32(actionHash),
+            _cbeUint(signer),
+            _cbeUint(nonce),
+            _cbeBytes(sig)
         );
     }
 

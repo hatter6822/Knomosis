@@ -83,11 +83,6 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     // Fixture decoding
     // ------------------------------------------------------------------
 
-    /// @dev The corpus entry count, read from the nested `.header.count`.
-    function _count(string memory raw) internal pure returns (uint256) {
-        return vm.parseJsonUint(raw, ".header.count");
-    }
-
     /// @dev Load entry `i` from the raw JSON.  `amount` / `userAmount` /
     ///      `poolAmount` are hex `bytes32` (parsed as `uint256`); the
     ///      remaining fields are JSON numbers.
@@ -124,7 +119,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
         // other assertion below would still pass against a superseded
         // corpus, since a stale fixture parses fine.
         _requireIdentifier(raw, ".header.identifier", "knomosis/bold-deposit-crossstack/v2");
-        assertGt(_count(raw), 0, "count > 0");
+        assertGt(headerCount(raw), 0, "count > 0");
         assertEq(
             vm.parseJsonUint(raw, ".header.maxBudgetPerDeposit"),
             uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT),
@@ -151,7 +146,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     function test_perEntry_split_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
@@ -183,7 +178,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
@@ -206,7 +201,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     function test_clamp_corners() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         uint256 clamped = 0;
         for (uint256 i = 0; i < n; i++) {
             Entry memory e = _loadEntry(raw, i);
@@ -232,7 +227,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     function test_grid_resource_agnosticism() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         Entry[] memory entries = new Entry[](n);
         for (uint256 i = 0; i < n; i++) {
             entries[i] = _loadEntry(raw, i);
@@ -278,7 +273,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     function test_usd_calibration_parity() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         Entry[] memory entries = new Entry[](n);
         for (uint256 i = 0; i < n; i++) {
             entries[i] = _loadEntry(raw, i);
@@ -330,7 +325,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     function test_perEntry_liveContract_bold_split_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         address depositor = address(0xA11CE);
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -378,7 +373,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     function test_perEntry_liveContract_eth_split_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         address depositor = address(0xA11CE);
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -422,7 +417,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     function test_actionCbe_wellformed() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
             beginEntry(base);
@@ -463,7 +458,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     function test_recipientBudgetCbe_decodes_to_budgetGrant() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
         for (uint256 i = 0; i < n; i++) {
             Entry memory e = _loadEntry(raw, i);
             string memory base = string.concat(".entries[", vm.toString(i), "]");

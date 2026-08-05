@@ -53,11 +53,6 @@ contract AmmMathCrossCheck is CrossCheckFramework {
     // Fixture decoding
     // ------------------------------------------------------------------
 
-    /// @dev The corpus entry count, read from the nested `.header.count`.
-    function _count(string memory raw) internal pure returns (uint256) {
-        return vm.parseJsonUint(raw, ".header.count");
-    }
-
     /// @dev Load entry `i` from the raw JSON.
     function _loadEntry(string memory raw, uint256 i) internal pure returns (Entry memory e) {
         string memory base = string.concat(".entries[", vm.toString(i), "]");
@@ -82,7 +77,7 @@ contract AmmMathCrossCheck is CrossCheckFramework {
         }
         string memory raw = readFixture(FIXTURE_NAME);
 
-        assertGt(_count(raw), 0, "corpus is non-empty");
+        assertGt(headerCount(raw), 0, "corpus is non-empty");
         assertEq(
             vm.parseJsonUint(raw, ".header.bpsDenominator"),
             AmmMath.BPS_DENOMINATOR,
@@ -107,7 +102,7 @@ contract AmmMathCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -136,7 +131,7 @@ contract AmmMathCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -156,7 +151,7 @@ contract AmmMathCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
