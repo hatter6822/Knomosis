@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "e28706d228a86762bfcb5e3bdbc8c7c8e1974de7947a61a81c8b8d7693cbe3e2"
+    "source_digest": "08183af70299c164e2d3aec418ebb8317997292492532db2d6bc5f39f4cff633"
   },
   "summary": {
-    "module_count": 102,
-    "declaration_count": 2089
+    "module_count": 103,
+    "declaration_count": 2128
   },
   "modules": [
     {
@@ -8843,7 +8843,9 @@
           "kind": "contract",
           "name": "BridgeFeeSplitTest",
           "line": 25,
-          "called": []
+          "called": [
+            "FeeSplitBehaviour"
+          ]
         },
         {
           "kind": "function",
@@ -8916,6 +8918,7 @@
             "DepositReceipt",
             "KnomosisBridge",
             "_deployLeg",
+            "_depositAndCheck",
             "bridge"
           ]
         },
@@ -8938,6 +8941,7 @@
             "DepositReceipt",
             "KnomosisBridge",
             "_deployLeg",
+            "_depositAndCheck",
             "bridge"
           ]
         },
@@ -8963,6 +8967,7 @@
           "line": 221,
           "called": [
             "KnomosisBridge",
+            "_defaultLeg",
             "bridge"
           ]
         },
@@ -9043,6 +9048,7 @@
           "called": [
             "KnomosisBridge",
             "_deployLeg",
+            "_depositAndCheck",
             "bridge"
           ]
         },
@@ -9080,6 +9086,7 @@
           "called": [
             "DepositReceipt",
             "KnomosisBridge",
+            "_assertReceiptEq",
             "_deployLeg",
             "_findDepositReceipt",
             "_receiptHashOf",
@@ -9121,6 +9128,7 @@
           "line": 42,
           "called": [
             "BoldTestSupport",
+            "FeeSplitBehaviour",
             "WithdrawalFlowHarness"
           ]
         },
@@ -9230,6 +9238,7 @@
           "line": 236,
           "called": [
             "KnomosisBridge",
+            "_defaultLeg",
             "bridge"
           ]
         },
@@ -9251,6 +9260,7 @@
             "DepositReceipt",
             "KnomosisBridge",
             "_deployLeg",
+            "_depositAndCheck",
             "bridge"
           ]
         },
@@ -9274,6 +9284,7 @@
             "DepositReceipt",
             "KnomosisBridge",
             "_deployLeg",
+            "_depositAndCheck",
             "bridge"
           ]
         },
@@ -9308,6 +9319,7 @@
           "called": [
             "KnomosisBridge",
             "_deployLeg",
+            "_depositAndCheck",
             "bridge"
           ]
         },
@@ -9434,6 +9446,7 @@
           "line": 555,
           "called": [
             "KnomosisBridge",
+            "_defaultLeg",
             "bridge"
           ]
         },
@@ -9498,6 +9511,7 @@
           "called": [
             "KnomosisBridge",
             "MockBold",
+            "_defaultLeg",
             "_mintApprove",
             "bridge"
           ]
@@ -9544,6 +9558,7 @@
           "called": [
             "KnomosisBridge",
             "MockBold",
+            "_defaultLeg",
             "bridge",
             "mint"
           ]
@@ -9555,6 +9570,7 @@
           "called": [
             "KnomosisBridge",
             "MockBold",
+            "_defaultLeg",
             "approve",
             "bridge"
           ]
@@ -17711,6 +17727,443 @@
             "_deployBoldEnabled",
             "_etchBold",
             "_signerSet",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "FeeSplitBehaviour",
+      "path": "solidity/test/utils/FeeSplitBehaviour.sol",
+      "declaration_count": 39,
+      "declarations": [
+        {
+          "kind": "abstract_contract",
+          "name": "FeeSplitBehaviour",
+          "line": 45,
+          "called": [
+            "DepositEventDecoder"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "LegSnapshot",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_deployLeg",
+          "line": 71,
+          "called": [
+            "KnomosisBridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_fundFor",
+          "line": 80,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deposit",
+          "line": 84,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_legRate",
+          "line": 90,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_legResourceId",
+          "line": 93,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_legToken",
+          "line": 96,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_legBalanceOf",
+          "line": 100,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_defaultLeg",
+          "line": 109,
+          "called": [
+            "KnomosisBridge",
+            "_deployLeg"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_depositAndCheck",
+          "line": 126,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "LegSnapshot",
+            "_assertAccounting",
+            "_assertReceiptEq",
+            "_deposit",
+            "_expectedReceipt",
+            "_findDepositReceipt",
+            "_fundFor",
+            "_legBalanceOf",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_expectedReceipt",
+          "line": 155,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_legRate",
+            "_legResourceId",
+            "_legToken",
+            "_receiptHashOf",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_assertAccounting",
+          "line": 175,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "LegSnapshot",
+            "_legBalanceOf",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_assertReceiptEq",
+          "line": 201,
+          "called": [
+            "DepositReceipt"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_zeroFee_pureDeposit",
+          "line": 216,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_defaultLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_minFee_smallestPool",
+          "line": 224,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_maxFee_largestPool",
+          "line": 233,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_tinyAmount_roundsToUser",
+          "line": 240,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_defaultLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rateOne_budgetEqualsPool",
+          "line": 249,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rateTrillion_budgetDivides",
+          "line": 256,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_budgetClamp_exactBoundary_notClamped",
+          "line": 264,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_budgetClamp_oneAboveBoundary_clamped",
+          "line": 274,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_residue_favoursUser",
+          "line": 282,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_feeJustBelowMax",
+          "line": 291,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_singleAllowedFee_minEqualsMax",
+          "line": 297,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rate_nearUint64Max",
+          "line": 304,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_nonce_incrementsAcrossDeposits",
+          "line": 324,
+          "called": [
+            "KnomosisBridge",
+            "_defaultLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_independentNonces_perDepositor",
+          "line": 333,
+          "called": [
+            "KnomosisBridge",
+            "_defaultLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_tvl_accumulatesAcrossDeposits",
+          "line": 344,
+          "called": [
+            "KnomosisBridge",
+            "_defaultLeg",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_differentFee_distinctReceiptHash",
+          "line": 355,
+          "called": [
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "_findDepositReceipt",
+            "_fundFor",
+            "bridge",
+            "receiptHash"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_replayResistance_nonceBinding",
+          "line": 375,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "_findDepositReceipt",
+            "_fundFor",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_minEqualsMax_zero_forcesZeroFee",
+          "line": 405,
+          "called": [
+            "DepositReceipt",
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "_depositAndCheck",
+            "_fundFor",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_zeroDeposit",
+          "line": 420,
+          "called": [
+            "KnomosisBridge",
+            "_defaultLeg",
+            "_deposit",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_zeroDeposit_takesPrecedenceOverFeeCheck",
+          "line": 426,
+          "called": [
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_feeBelowMin",
+          "line": 434,
+          "called": [
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "_fundFor",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_feeAboveMax",
+          "line": 441,
+          "called": [
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "_fundFor",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_feeAboveMax_outOfBpsRange",
+          "line": 450,
+          "called": [
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "_fundFor",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_tvlCapReached",
+          "line": 462,
+          "called": [
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "_fundFor",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_tvlCap_firesOnFullValue_notUserAmount",
+          "line": 470,
+          "called": [
+            "KnomosisBridge",
+            "_deployLeg",
+            "_deposit",
+            "_depositAndCheck",
+            "_fundFor",
             "bridge"
           ]
         }
