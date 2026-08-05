@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -15,9 +16,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         from the raw formula, NOT via the contract's `AmmMath`, so the
 ///         behavioural suites check `contract == independent formula` while
 ///         `AmmMath.t.sol` separately pins `AmmMath == hand-computed truth`.
-abstract contract AmmTestBase is Test {
-    /// @dev Mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.
-    address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+abstract contract AmmTestBase is Test, BoldTestSupport {
     address internal constant BOLD_BREAKER = address(0xB12E6B6E);
     address internal constant BOLD_ADMIN = address(0xAD814);
     /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.  Wired into
@@ -57,11 +56,6 @@ abstract contract AmmTestBase is Test {
     /// @notice Place a fresh conformant `MockBold`'s runtime code at the
     ///         pinned BOLD address.  MUST run BEFORE deploying a BOLD-enabled
     ///         bridge (the constructor cross-checks `BOLD_TOKEN.symbol()`).
-    function _etchBold() internal {
-        MockBold impl = new MockBold();
-        vm.etch(BOLD, address(impl).code);
-    }
-
     /// @notice The canonical BOLD-enabled + AMM-enabled (80% seed) +
     ///         kill-switch-enabled (`AMM_DR`) `ConstructorArgs`.  Exposed so
     ///         the constructor-guard test can override a single field.
@@ -141,12 +135,6 @@ abstract contract AmmTestBase is Test {
     }
 
     /// @notice Mint `amount` BOLD to `user` and approve `bridge`.
-    function _mintApprove(KnomosisBridge bridge, address user, uint256 amount) internal {
-        MockBold(BOLD).mint(user, amount);
-        vm.prank(user);
-        MockBold(BOLD).approve(address(bridge), amount);
-    }
-
     /// @notice Seed both AMM reserves to a realistic ~1 ETH : 3000 BOLD ratio.
     ///         100 ETH at 50% fee -> pool 50 -> 80% seed = 40 ETH;
     ///         300000 BOLD at 50% fee -> pool 150000 -> 80% seed = 120000 BOLD.

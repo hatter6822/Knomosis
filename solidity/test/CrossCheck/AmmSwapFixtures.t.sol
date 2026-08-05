@@ -5,6 +5,7 @@
 //
 pragma solidity ^0.8.20;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {AmmMath} from "src/lib/AmmMath.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -25,7 +26,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///
 ///         The swap-math corpus runs UNCONDITIONALLY in every hash-binding
 ///         mode since it involves no hashing.
-contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
+contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
     /// @dev Fixture file name under `test/CrossCheck/fixtures/`.
     string internal constant FIXTURE_NAME = "amm_swap.json";
 
@@ -337,7 +338,6 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
     ///         verifying that the live contract's output matches
     ///         `AmmMath.getAmountOut`.
     function test_liveContract_ammSwapMatchesFormula() public {
-        address constant_BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
         address BOLD_BREAKER = address(0xB12E6B6E);
         address BOLD_ADMIN = address(0xAD814);
         address AMM_DR = address(0xA33D6);
@@ -348,7 +348,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
 
         // Etch MockBold at the pinned address
         MockBold impl = new MockBold();
-        vm.etch(constant_BOLD, address(impl).code);
+        vm.etch(BOLD, address(impl).code);
 
         // Deploy BOLD-enabled, AMM-enabled bridge (80% seed ratio)
         uint64[] memory rids = new uint64[](0);
@@ -369,7 +369,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
                 maxFeeBps: 5000,
                 weiPerBudgetUnitEth: 1_000_000_000,
                 weiPerBudgetUnitBold: 1_000_000_000,
-                boldTokenAddress: constant_BOLD,
+                boldTokenAddress: BOLD,
                 boldTvlCap: type(uint256).max,
                 boldCircuitBreaker: BOLD_BREAKER,
                 boldAdmin: BOLD_ADMIN,
@@ -387,9 +387,9 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
 
         // Seed BOLD reserve via depositBoldWithFee
         uint256 boldDeposit = 300_000 ether;
-        MockBold(constant_BOLD).mint(lp, boldDeposit);
+        MockBold(BOLD).mint(lp, boldDeposit);
         vm.prank(lp);
-        MockBold(constant_BOLD).approve(address(bridge), boldDeposit);
+        MockBold(BOLD).approve(address(bridge), boldDeposit);
         vm.prank(lp);
         bridge.depositBoldWithFee(boldDeposit, 5000);
 
@@ -416,9 +416,9 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         uint256 boldIn = 3000 ether;
         uint256 expectedEthOut = AmmMath.getAmountOut(boldIn, rBold, rEth, AMM_SWAP_FEE_BPS);
         assertGt(expectedEthOut, 0, "non-trivial BOLD->ETH output");
-        MockBold(constant_BOLD).mint(swp, boldIn);
+        MockBold(BOLD).mint(swp, boldIn);
         vm.prank(swp);
-        MockBold(constant_BOLD).approve(address(bridge), boldIn);
+        MockBold(BOLD).approve(address(bridge), boldIn);
         vm.prank(swp);
         uint256 actualEthOut = bridge.ammSwap(
             1, boldIn, 0, block.timestamp + 1 hours

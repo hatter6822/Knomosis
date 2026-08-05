@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 import {CbeTestEncoder} from "./utils/CbeTestEncoder.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -36,16 +37,10 @@ import {
 ///         deployed (the constructor's `symbol()` cross-check reads it).
 ///         `vm.etch` copies runtime code and resets storage, hence the
 ///         `pure` `symbol()` in `MockBold` and the post-etch `mint`.
-contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder {
+contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
 
-    /// @dev Local mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS` (a
-    ///      contract constant is not reachable via the type name from
-    ///      another contract, and the mock must be etched here BEFORE the
-    ///      bridge is deployed).  `test_boldConstants_pinned` asserts this
-    ///      mirror equals the deployed contract's getter, so drift fails.
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
 
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_BOLD`.
     uint64 private constant RESOURCE_BOLD = 1;
@@ -91,11 +86,6 @@ contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder {
 
     /// @notice Place a fresh conformant `MockBold`'s runtime code at the
     ///         pinned BOLD address (resets its storage).
-    function _etchBold() internal {
-        MockBold impl = new MockBold();
-        vm.etch(BOLD, address(impl).code);
-    }
-
     /// @notice Master deploy helper: standalone bridge with the given fee
     ///         range, ETH + BOLD exchange rates, BOLD token address, and
     ///         TVL ceiling.  `migration == address(0)` keeps `circuitOpen`
@@ -194,12 +184,6 @@ contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder {
     }
 
     /// @notice Mint `amount` BOLD to `user` and approve `bridge` for it.
-    function _mintApprove(KnomosisBridge bridge, address user, uint256 amount) internal {
-        MockBold(BOLD).mint(user, amount);
-        vm.prank(user);
-        MockBold(BOLD).approve(address(bridge), amount);
-    }
-
     // ------------------------------------------------------------------
     // Shared assertion helper
     // ------------------------------------------------------------------
@@ -272,8 +256,13 @@ contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder {
     ///         reflects the constructor's opt-in.
     function test_boldConstants_pinned() public {
         KnomosisBridge bridge = _defaultBold();
+        // THE pin.  `BOLD` is `BoldTestSupport`'s literal — the test
+        // tree's only copy — and this is the one assertion standing
+        // between it and the deployed constant.  Two independently
+        // written values with one comparison between them; the raw
+        // literal that used to sit here as a second assertion was the
+        // same value a third time, so it could only ever have agreed.
         assertEq(bridge.BOLD_TOKEN_ADDRESS(), BOLD, "BOLD_TOKEN_ADDRESS pin");
-        assertEq(bridge.BOLD_TOKEN_ADDRESS(), 0x6440f144b7e50D6a8439336510312d2F54beB01D, "BOLD address literal");
         assertEq(bridge.RESOURCE_ID_BOLD(), RESOURCE_BOLD, "RESOURCE_ID_BOLD");
         assertEq(bridge.RESOURCE_ID_BOLD(), 1, "RESOURCE_ID_BOLD == 1");
         assertEq(

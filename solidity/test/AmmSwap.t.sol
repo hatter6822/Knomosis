@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -462,8 +463,7 @@ contract AmmSwapTest is AmmTestBase {
 /// @notice A contract that performs a BOLD->ETH swap but CANNOT receive the
 ///         ETH output (no payable `receive`/`fallback`), forcing the bridge's
 ///         low-level ETH `call` to fail and revert `EthTransferFailed`.
-contract RejectsEth {
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+contract RejectsEth is BoldTestSupport {
     uint64 private constant BOLD_RID = 1;
 
     function doBoldToEthSwap(KnomosisBridge bridge, uint256 amountIn, uint256 deadline)

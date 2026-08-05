@@ -5,6 +5,7 @@
 //
 pragma solidity ^0.8.20;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {CrossCheckFramework} from "./Framework.t.sol";
@@ -39,12 +40,10 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         `lake test`.  The Lean generator wraps the corpus metadata
 ///         under a top-level `header` object, so all metadata reads use
 ///         `.header.<field>`.
-contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
+contract BoldDepositFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
     /// @dev Fixture file name under `test/CrossCheck/fixtures/`.
     string internal constant FIXTURE_NAME = "bold_deposit.json";
 
-    /// @dev Local mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.
-    address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
 
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_BOLD`.
     uint64 internal constant RESOURCE_BOLD = 1;

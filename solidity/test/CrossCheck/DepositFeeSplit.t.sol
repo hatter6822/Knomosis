@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {CrossCheckFramework} from "./Framework.t.sol";
@@ -40,15 +41,9 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         contract-vs-Lean equivalence with no `FeeSplitMath`
 ///         intermediary, plus an on-chain real-keccak256 check of the
 ///         receiptHash recipe.
-contract DepositFeeSplitCrossCheck is CrossCheckFramework {
+contract DepositFeeSplitCrossCheck is CrossCheckFramework, BoldTestSupport {
     string internal constant FIXTURE_NAME = "deposit_fee_split.json";
 
-    /// @dev BOLD scaffolding for the live-contract check.  AMM seeding only
-    ///      accrues on a FUNCTIONAL (BOLD-enabled) AMM; the corpus models the
-    ///      seed ARITHMETIC, so the per-entry live deploy must be BOLD-enabled
-    ///      for its emitted `ammSeedAmount` to match the Lean fixture.  (The
-    ///      hash-independent recompute / layout checks need none of this.)
-    address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     address internal constant BOLD_BREAKER = address(0xB12E6B6E);
     address internal constant BOLD_ADMIN = address(0xAD814);
     address internal constant AMM_DR = address(0xA33D6);

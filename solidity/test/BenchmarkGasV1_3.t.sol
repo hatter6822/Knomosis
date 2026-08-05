@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -100,14 +101,12 @@ contract InactiveMigration {
 ///         production BOLD / TroveManager bytecode may differ marginally
 ///         from the mocks (larger dispatch tables, recipient checks) —
 ///         a few hundred gas, not thousands.
-abstract contract BenchmarkGasV1_3Base is Test {
+abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
     /// @dev The snapshot group: all benchmarks across all scenario
     ///      contracts aggregate into `snapshots/BenchmarkGasV1_3.json`
     ///      (forge scratch output; the committed copy is the baseline).
     string internal constant SNAP_GROUP = "BenchmarkGasV1_3";
 
-    /// @dev Mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.
-    address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     /// @dev Mirrors of the three constitutional Liquity V2 TroveManager pins.
     address internal constant LIQUITY_TM_ETH = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
     address internal constant LIQUITY_TM_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
@@ -270,7 +269,10 @@ abstract contract BenchmarkGasV1_3Base is Test {
 
     /// @notice Mint `amount` BOLD to `user` and approve `b` for exactly
     ///         that amount.
-    function _mintApprove(KnomosisBridge b, address user, uint256 amount) internal {
+    function _mintApprove(KnomosisBridge b, address user, uint256 amount)
+        internal
+        override
+    {
         MockBoldOz(BOLD).mint(user, amount);
         vm.prank(user);
         MockBoldOz(BOLD).approve(address(b), amount);
