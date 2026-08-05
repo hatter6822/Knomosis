@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.36;
 
-import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
-import {Test} from "forge-std/Test.sol";
+import {FeeSplitBehaviour} from "test/utils/FeeSplitBehaviour.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
@@ -14,34 +13,21 @@ import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
 /// @dev    Covers GP.5.1.f (happy path), GP.5.1.g (revert cases), and
 ///         GP.5.1.h (fuzz: `userAmount + poolAmount == msg.value`).
 ///         Each happy-path scenario pins the live contract against the
-///         `FeeSplitMath` reference via `vm.expectEmit`; the reference
-///         is independently anchored to hand-computed values
+///         `FeeSplitMath` reference by decoding the emitted receipt; the
+///         reference is independently anchored to hand-computed values
 ///         (`test_reference_anchor_*`) and to the Lean spec
 ///         (`test/CrossCheck/DepositFeeSplit.t.sol`).  No file checks
 ///         the formula against itself.
-contract BridgeFeeSplitTest is Test, DepositEventDecoder {
-    address private alice = address(0xA1);
-    address private bob = address(0xB0B);
-
+///
+///         The twenty-five cases this leg shares with the BOLD leg live
+///         in `FeeSplitBehaviour`; what remains here is ETH-specific --
+///         the constructor guards, the `msg.value` fuzz, the gas smoke
+///         test, and the mixed-currency nonce case.
+contract BridgeFeeSplitTest is FeeSplitBehaviour {
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_NATIVE_ETH` (a
     ///      contract constant is not reachable via the type name from
     ///      another contract).
     uint64 private constant NATIVE_ETH = 0;
-
-    /// @dev Local copy of the contract event for `vm.expectEmit`.  The
-    ///      GP.11.2 `ammSeedAmount` field is 0 throughout this suite (every
-    ///      bridge here is AMM-disabled, `ammSeedRatioBps = 0`).
-    event DepositWithFeeInitiated(
-        address indexed sender,
-        uint64 indexed resourceId,
-        address indexed token,
-        uint256 userAmount,
-        uint256 poolAmount,
-        uint256 ammSeedAmount,
-        uint64 budgetGrant,
-        uint64 depositorNonce,
-        bytes32 receiptHash
-    );
 
     function setUp() public {
         vm.deal(alice, type(uint128).max);
@@ -49,14 +35,16 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
     }
 
     // ------------------------------------------------------------------
-    // Deployment helper
+    // `FeeSplitBehaviour` hooks -- the ETH leg
     // ------------------------------------------------------------------
 
-    /// @notice Deploy a standalone bridge with chosen fee-split
-    ///         parameters.  `migration == address(0)` keeps the
-    ///         `circuitOpen` breaker open for a fresh deployment.
-    function _deploy(uint16 minFeeBps, uint16 maxFeeBps, uint64 rate, uint256 tvlCap)
+    /// @inheritdoc FeeSplitBehaviour
+    /// @dev A standalone bridge, BOLD disabled.  `migration ==
+    ///      address(0)` keeps the `circuitOpen` breaker open for a
+    ///      fresh deployment.
+    function _deployLeg(uint16 minFeeBps, uint16 maxFeeBps, uint64 rate, uint256 tvlCap)
         internal
+        override
         returns (KnomosisBridge)
     {
         uint64[] memory rids = new uint64[](0);
@@ -90,246 +78,53 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         );
     }
 
-    /// @notice Default test bridge: full `[0, 5000]` fee range, a
-    ///         realistic exchange rate of 1 budget unit per 10^9 wei,
-    ///         no TVL ceiling.
-    function _defaultBridge() internal returns (KnomosisBridge) {
-        return _deploy(0, 5000, 1_000_000_000, type(uint256).max);
-    }
+    /// @inheritdoc FeeSplitBehaviour
+    /// @dev No approval to grant: `msg.value` needs only a balance, and
+    ///      `setUp` already funds both depositors well past any case here.
+    function _fundFor(KnomosisBridge, address, uint256) internal pure override {}
 
-    // ------------------------------------------------------------------
-    // Shared assertion helper
-    // ------------------------------------------------------------------
-
-    /// @notice Deposit `v` wei at `feeBps` as `user`, asserting the
-    ///         emitted `DepositWithFeeInitiated` matches the
-    ///         `FeeSplitMath` reference exactly, that TVL grows by the
-    ///         full deposit, and that the per-depositor nonce
-    ///         increments.  Returns the reference split for the caller
-    ///         to cross-check against hand-computed values.
-    function _depositAndCheck(KnomosisBridge bridge, address user, uint256 v, uint16 feeBps)
+    /// @inheritdoc FeeSplitBehaviour
+    function _deposit(KnomosisBridge bridge, address user, uint256 amount, uint16 feeBps)
         internal
-        returns (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant)
+        override
     {
-        // The whole expected receipt as ONE value.  Previously its nine
-        // fields were nine live locals here, and the nine-argument
-        // `receiptHash` and `emit` held them all across two calls.
-        // AMM-disabled suite, so `ammSeedAmount` stays 0
-        // (`freePoolAmount == poolAmount`).
-        DepositReceipt memory want;
-        want.sender = user;
-        want.resourceId = NATIVE_ETH;
-        want.token = address(0);
-        (want.userAmount, want.poolAmount, want.budgetGrant) =
-            FeeSplitMath.split(v, feeBps, bridge.weiPerBudgetUnitEth());
-        want.nonce = bridge.depositNonce(user);
-        want.receiptHash = _receiptHashOf(bridge.deploymentId(), want);
-
-        uint256 tvlBefore = bridge.totalLockedValue();
-        _expectDeposit(bridge, want);
-
         vm.prank(user);
-        bridge.depositETHWithFee{value: v}(feeBps);
-
-        // Conservation + accounting invariants on the live contract.
-        assertEq(want.userAmount + want.poolAmount, v, "split must conserve msg.value");
-        assertEq(bridge.totalLockedValue(), tvlBefore + v, "TVL grows by full deposit");
-        assertEq(bridge.depositNonce(user), want.nonce + 1, "nonce increments");
-        return (want.userAmount, want.poolAmount, want.budgetGrant);
+        bridge.depositETHWithFee{value: amount}(feeBps);
     }
 
-    /// @dev Arm `expectEmit` for a receipt.  The nine positional
-    ///      arguments `emit` requires are confined to this one frame —
-    ///      Solidity has no struct splat, so the field list has to be
-    ///      written once somewhere; once is the point.
-    function _expectDeposit(KnomosisBridge bridge, DepositReceipt memory r) private {
-        vm.expectEmit(true, true, true, true, address(bridge));
-        emit DepositWithFeeInitiated(
-            r.sender,
-            r.resourceId,
-            r.token,
-            r.userAmount,
-            r.poolAmount,
-            r.ammSeedAmount,
-            r.budgetGrant,
-            r.nonce,
-            r.receiptHash
-        );
+    /// @inheritdoc FeeSplitBehaviour
+    function _legRate(KnomosisBridge bridge) internal view override returns (uint64) {
+        return bridge.weiPerBudgetUnitEth();
+    }
+
+    /// @inheritdoc FeeSplitBehaviour
+    function _legResourceId() internal pure override returns (uint64) {
+        return NATIVE_ETH;
+    }
+
+    /// @inheritdoc FeeSplitBehaviour
+    /// @dev Native ETH carries no token address.
+    function _legToken() internal pure override returns (address) {
+        return address(0);
+    }
+
+    /// @inheritdoc FeeSplitBehaviour
+    function _legBalanceOf(address who) internal view override returns (uint256) {
+        return who.balance;
     }
 
     // ------------------------------------------------------------------
     // GP.5.1.f — happy-path cases
     // ------------------------------------------------------------------
 
-    function test_zeroFee_pureDeposit() public {
-        KnomosisBridge bridge = _defaultBridge();
-        (uint256 u, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 1 ether, 0);
-        assertEq(p, 0, "no pool credit at zero fee");
-        assertEq(u, 1 ether, "full amount to user");
-        assertEq(g, 0, "no budget grant at zero fee");
-    }
-
-    function test_minFee_smallestPool() public {
-        // minFeeBps = 50 (0.5%); the smallest admissible pool credit.
-        KnomosisBridge bridge = _deploy(50, 5000, 1, type(uint256).max);
-        (uint256 u, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 1_000_000, 50);
-        assertEq(p, 5000, "0.5% of 1e6");
-        assertEq(u, 995_000, "remainder to user");
-        assertEq(g, 5000, "budget == poolAmount at rate 1");
-    }
-
-    function test_maxFee_largestPool() public {
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-        (uint256 u, uint256 p,) = _depositAndCheck(bridge, alice, 100, 5000);
-        assertEq(p, 50, "50% of 100");
-        assertEq(u, 50, "exact half to user");
-    }
-
-    function test_tinyAmount_roundsToUser() public {
-        // 1 wei at 1% → poolAmount floors to 0, all 1 wei to user.
-        KnomosisBridge bridge = _defaultBridge();
-        (uint256 u, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 1, 100);
-        assertEq(p, 0, "pool rounds to zero");
-        assertEq(u, 1, "1 wei to user");
-        assertEq(g, 0, "budget rounds to zero");
-    }
-
-    function test_rateOne_budgetEqualsPool() public {
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-        (, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 10_000, 100);
-        assertEq(p, 100, "1% of 1e4");
-        assertEq(g, 100, "budget == poolAmount at rate 1");
-    }
-
-    function test_rateTrillion_budgetDivides() public {
-        KnomosisBridge bridge = _deploy(0, 5000, 1_000_000_000_000, type(uint256).max);
-        // poolAmount = 50% of 6e12 = 3e12; budget = 3e12 / 1e12 = 3.
-        (, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 6_000_000_000_000, 5000);
-        assertEq(p, 3_000_000_000_000, "half of 6e12");
-        assertEq(g, 3, "3e12 / 1e12");
-    }
-
     function test_budgetClamp_doesNotRevert() public {
-        // Huge pool at rate 1 → rawBudget far exceeds the 10^12 cap;
+        // Huge pool at rate 1 -> rawBudget far exceeds the 10^12 cap;
         // the budget is clamped (NOT a revert) and the deposit lands.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-        (uint256 u, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 10 ether, 5000);
-        assertEq(p, 5 ether, "half of 10 ETH");
-        assertEq(u, 5 ether, "half to user");
-        assertEq(g, FeeSplitMath.MAX_BUDGET_PER_DEPOSIT, "budget clamped at cap");
-    }
-
-    function test_budgetClamp_exactBoundary_notClamped() public {
-        // rawBudget == MAX_BUDGET_PER_DEPOSIT exactly: the clamp uses a
-        // strict `>` so the boundary value passes through unclamped.
-        // poolAmount = 50% of 2e12 = 1e12; rate 1 → rawBudget = 1e12.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-        (, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 2_000_000_000_000, 5000);
-        assertEq(p, 1_000_000_000_000, "half of 2e12");
-        assertEq(g, FeeSplitMath.MAX_BUDGET_PER_DEPOSIT, "exact boundary, not clamped");
-    }
-
-    function test_budgetClamp_oneAboveBoundary_clamped() public {
-        // poolAmount = 1e12 + 10000 > 1e12 → clamped to the cap.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-        (, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 2_000_000_020_000, 5000);
-        assertEq(p, 1_000_000_010_000, "half of 2e12 + 20000");
-        assertEq(g, FeeSplitMath.MAX_BUDGET_PER_DEPOSIT, "one above boundary, clamped");
-    }
-
-    function test_residue_favoursUser() public {
-        // v = 12345, feeBps = 333 → poolAmount = floor(12345*333/10000)
-        // = floor(411.0885) = 411; the residue accrues to the user.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-        (uint256 u, uint256 p,) = _depositAndCheck(bridge, alice, 12_345, 333);
-        assertEq(p, 411, "floor(12345 * 333 / 10000)");
-        assertEq(u, 11_934, "residue to user");
-    }
-
-    function test_feeJustBelowMax() public {
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-        (, uint256 p,) = _depositAndCheck(bridge, alice, 1_000_000, 4999);
-        assertEq(p, 499_900, "floor(1e6 * 4999 / 10000)");
-    }
-
-    function test_singleAllowedFee_minEqualsMax() public {
-        // minFeeBps == maxFeeBps: exactly one admissible fee value.
-        KnomosisBridge bridge = _deploy(250, 250, 1, type(uint256).max);
-        (, uint256 p,) = _depositAndCheck(bridge, alice, 1_000_000, 250);
-        assertEq(p, 25_000, "2.5% of 1e6");
-    }
-
-    function test_nonce_incrementsAcrossDeposits() public {
-        KnomosisBridge bridge = _defaultBridge();
-        assertEq(bridge.depositNonce(alice), 0);
-        _depositAndCheck(bridge, alice, 1 ether, 100);
-        assertEq(bridge.depositNonce(alice), 1);
-        _depositAndCheck(bridge, alice, 2 ether, 200);
-        assertEq(bridge.depositNonce(alice), 2);
-    }
-
-    function test_independentNonces_perDepositor() public {
-        KnomosisBridge bridge = _defaultBridge();
-        _depositAndCheck(bridge, alice, 1 ether, 100);
-        _depositAndCheck(bridge, alice, 1 ether, 100);
-        // Bob's first deposit uses nonce 0 even though Alice is at 2.
-        assertEq(bridge.depositNonce(bob), 0);
-        _depositAndCheck(bridge, bob, 1 ether, 100);
-        assertEq(bridge.depositNonce(bob), 1);
-        assertEq(bridge.depositNonce(alice), 2);
-    }
-
-    function test_tvl_accumulatesAcrossDeposits() public {
-        KnomosisBridge bridge = _defaultBridge();
-        _depositAndCheck(bridge, alice, 3 ether, 100);
-        _depositAndCheck(bridge, bob, 5 ether, 4000);
-        assertEq(bridge.totalLockedValue(), 8 ether, "TVL = sum of full deposits");
-    }
-
-    function test_differentFee_distinctReceiptHash() public {
-        // Two deposits with identical other fields but different
-        // chosenFeeBps must produce different receiptHashes, because
-        // the split fields (userAmount / poolAmount / budgetGrant) feed
-        // the hash.  We capture both via recorded logs.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-
-        vm.recordLogs();
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1_000_000}(100);
-        bytes32 hash1 = _findDepositReceipt(vm.getRecordedLogs()).receiptHash;
-
-        vm.recordLogs();
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1_000_000}(200);
-        bytes32 hash2 = _findDepositReceipt(vm.getRecordedLogs()).receiptHash;
-
-        assertTrue(hash1 != hash2, "different fee -> different receiptHash");
-    }
-
-    function test_replayResistance_nonceBinding() public {
-        // Two deposits with IDENTICAL (value, fee) by the same depositor
-        // on the same bridge produce different receiptHashes, because the
-        // per-depositor nonce is bound into the hash.  Isolates
-        // nonce-replay resistance WITHIN a deployment (the prior test
-        // conflated fee + nonce changes).
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-
-        vm.recordLogs();
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1 ether}(100);
-        DepositReceipt memory r1 = _findDepositReceipt(vm.getRecordedLogs());
-
-        vm.recordLogs();
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1 ether}(100);
-        DepositReceipt memory r2 = _findDepositReceipt(vm.getRecordedLogs());
-
-        assertEq(r1.nonce, 0, "first deposit uses nonce 0");
-        assertEq(r2.nonce, 1, "second deposit uses nonce 1");
-        assertTrue(
-            r1.receiptHash != r2.receiptHash,
-            "identical deposits at different nonces must hash differently"
-        );
+        KnomosisBridge bridge = _deployLeg(0, 5000, 1, type(uint256).max);
+        DepositReceipt memory rcpt = _depositAndCheck(bridge, alice, 10 ether, 5000);
+        assertEq(rcpt.poolAmount, 5 ether, "half of 10 ETH");
+        assertEq(rcpt.userAmount, 5 ether, "half to user");
+        assertEq(rcpt.budgetGrant, FeeSplitMath.MAX_BUDGET_PER_DEPOSIT, "budget clamped at cap");
     }
 
     function test_replayResistance_deploymentBinding() public {
@@ -340,8 +135,8 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         // bound into the hash.  Isolates cross-deployment replay
         // resistance -- the security rationale for binding deploymentId
         // (which the unified-gas-pool plan's bare recipe omitted).
-        KnomosisBridge bridgeA = _deploy(0, 5000, 1, type(uint256).max);
-        KnomosisBridge bridgeB = _deploy(0, 5000, 1, type(uint256).max);
+        KnomosisBridge bridgeA = _deployLeg(0, 5000, 1, type(uint256).max);
+        KnomosisBridge bridgeB = _deployLeg(0, 5000, 1, type(uint256).max);
         assertTrue(
             bridgeA.deploymentId() != bridgeB.deploymentId(),
             "two deployments have distinct deploymentIds"
@@ -368,28 +163,12 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
 
     function test_realisticRate_tenPercentMaxFee() public {
         // A realistic deployment: max fee 10%, rate 10^9.
-        KnomosisBridge bridge = _deploy(0, 1000, 1_000_000_000, type(uint256).max);
-        (uint256 u, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 5 ether, 1000);
-        assertEq(p, 0.5 ether, "10% of 5 ETH");
-        assertEq(u, 4.5 ether, "90% to user");
+        KnomosisBridge bridge = _deployLeg(0, 1000, 1_000_000_000, type(uint256).max);
+        DepositReceipt memory rcpt = _depositAndCheck(bridge, alice, 5 ether, 1000);
+        assertEq(rcpt.poolAmount, 0.5 ether, "10% of 5 ETH");
+        assertEq(rcpt.userAmount, 4.5 ether, "90% to user");
         // 0.5 ETH / 1e9 = 5e26 / 1e9 = 5e17; fits uint64? 5e17 < 1.8e19 yes.
-        assertEq(g, 500_000_000, "pool / 1e9");
-    }
-
-    function test_rate_nearUint64Max() public {
-        // Exercises the upper edge of the exchange-rate domain
-        // (constructor accepts up to type(uint64).max).
-        uint64 hugeRate = type(uint64).max; // ~1.8447e19
-        KnomosisBridge bridge = _deploy(0, 5000, hugeRate, type(uint256).max);
-        // Small deposit: pool credit (0.5 ETH = 5e17) < rate -> budget 0.
-        (, uint256 p1, uint64 g1) = _depositAndCheck(bridge, alice, 1 ether, 5000);
-        assertEq(p1, 0.5 ether, "half to pool");
-        assertEq(g1, 0, "budget rounds to zero when pool < rate");
-        // Large deposit: pool credit (20 ETH = 2e19) >= rate -> budget 1
-        // (floor(2e19 / 1.8447e19) = 1).
-        (, uint256 p2, uint64 g2) = _depositAndCheck(bridge, bob, 40 ether, 5000);
-        assertEq(p2, 20 ether, "half to pool");
-        assertEq(g2, 1, "budget = floor(2e19 / uint64max) = 1");
+        assertEq(rcpt.budgetGrant, 500_000_000, "pool / 1e9");
     }
 
     function test_gas_depositETHWithFee() public {
@@ -398,7 +177,7 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         // loop, an SSTORE storm) without being brittle to optimizer /
         // compiler drift; the dedicated 5%-tolerance gas baseline is
         // GP.11.9's deliverable.
-        KnomosisBridge bridge = _deploy(0, 5000, 1_000_000_000, type(uint256).max);
+        KnomosisBridge bridge = _deployLeg(0, 5000, 1_000_000_000, type(uint256).max);
         vm.prank(alice);
         uint256 gasBefore = gasleft();
         bridge.depositETHWithFee{value: 1 ether}(100);
@@ -441,7 +220,7 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
     ///         pins are mirrored by
     ///         `BoldCircuitBreaker.t.sol::test_troveManagerConstants_pinned`.
     function test_compileTimeCaps_pinned() public {
-        KnomosisBridge bridge = _defaultBridge();
+        KnomosisBridge bridge = _defaultLeg();
         assertEq(bridge.MAX_FEE_BPS_CAP(), 5000, "MAX_FEE_BPS_CAP");
         assertEq(bridge.MIN_WEI_PER_BUDGET_UNIT(), 1, "MIN_WEI_PER_BUDGET_UNIT");
         assertEq(
@@ -456,74 +235,13 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
     // GP.5.1.g — revert / error cases
     // ------------------------------------------------------------------
 
-    function test_revert_zeroDeposit() public {
-        KnomosisBridge bridge = _defaultBridge();
-        vm.expectRevert(KnomosisBridge.ZeroDeposit.selector);
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 0}(0);
-    }
-
-    function test_revert_zeroDeposit_takesPrecedenceOverFeeCheck() public {
-        // minFeeBps = 100; a zero-value call still reverts ZeroDeposit
-        // (the value guard fires before the fee-range guards).
-        KnomosisBridge bridge = _deploy(100, 5000, 1, type(uint256).max);
-        vm.expectRevert(KnomosisBridge.ZeroDeposit.selector);
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 0}(200);
-    }
-
-    function test_revert_feeBelowMin() public {
-        KnomosisBridge bridge = _deploy(100, 5000, 1, type(uint256).max);
-        vm.expectRevert(abi.encodeWithSelector(KnomosisBridge.FeeBpsBelowMin.selector, uint16(99)));
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1 ether}(99);
-    }
-
-    function test_revert_feeAboveMax() public {
-        KnomosisBridge bridge = _deploy(0, 1000, 1, type(uint256).max);
-        vm.expectRevert(abi.encodeWithSelector(KnomosisBridge.FeeBpsAboveMax.selector, uint16(1001)));
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1 ether}(1001);
-    }
-
-    function test_revert_feeAboveMax_outOfBpsRange() public {
-        // chosenFeeBps = 10001 (> 100%): the range guard fires before
-        // any arithmetic, so it reverts FeeBpsAboveMax, not an
-        // arithmetic error.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
-        vm.expectRevert(abi.encodeWithSelector(KnomosisBridge.FeeBpsAboveMax.selector, uint16(10001)));
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1 ether}(10001);
-    }
-
     function test_revert_feeAboveMax_uint16Max() public {
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
+        KnomosisBridge bridge = _deployLeg(0, 5000, 1, type(uint256).max);
         vm.expectRevert(
             abi.encodeWithSelector(KnomosisBridge.FeeBpsAboveMax.selector, type(uint16).max)
         );
         vm.prank(alice);
         bridge.depositETHWithFee{value: 1 ether}(type(uint16).max);
-    }
-
-    function test_revert_tvlCapReached() public {
-        // Cap at 1 ETH; a 2-ETH deposit exceeds it.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, 1 ether);
-        vm.expectRevert(KnomosisBridge.TvlCapReached.selector);
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 2 ether}(100);
-    }
-
-    function test_revert_tvlCap_firesOnFullValue_notUserAmount() public {
-        // Cap at 1 ETH.  A deposit of exactly 1 ETH at 50% fee has
-        // userAmount = 0.5 ETH but the cap must fire on the FULL 1 ETH
-        // + 1 wei, proving fee manipulation cannot bypass the cap.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, 1 ether);
-        // 1 ETH deposit lands (TVL == cap).
-        _depositAndCheck(bridge, alice, 1 ether, 5000);
-        // A further 1-wei deposit pushes TVL over the cap.
-        vm.expectRevert(KnomosisBridge.TvlCapReached.selector);
-        vm.prank(bob);
-        bridge.depositETHWithFee{value: 1}(0);
     }
 
     // ---- Constructor guards ----
@@ -534,7 +252,7 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
                 KnomosisBridge.MinFeeBpsExceedsMax.selector, uint16(2000), uint16(1000)
             )
         );
-        _deploy(2000, 1000, 1, type(uint256).max);
+        _deployLeg(2000, 1000, 1, type(uint256).max);
     }
 
     function test_revert_constructor_minExceedsMax_takesPrecedence() public {
@@ -546,14 +264,14 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
                 KnomosisBridge.MinFeeBpsExceedsMax.selector, uint16(5001), uint16(5000)
             )
         );
-        _deploy(5001, 5000, 1, type(uint256).max);
+        _deployLeg(5001, 5000, 1, type(uint256).max);
     }
 
     function test_revert_constructor_maxExceedsCap() public {
         vm.expectRevert(
             abi.encodeWithSelector(KnomosisBridge.MaxFeeBpsExceedsCap.selector, uint16(5001))
         );
-        _deploy(0, 5001, 1, type(uint256).max);
+        _deployLeg(0, 5001, 1, type(uint256).max);
     }
 
     function test_revert_constructor_maxExceedsCap_minEqualsMax() public {
@@ -561,18 +279,18 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         vm.expectRevert(
             abi.encodeWithSelector(KnomosisBridge.MaxFeeBpsExceedsCap.selector, uint16(6000))
         );
-        _deploy(6000, 6000, 1, type(uint256).max);
+        _deployLeg(6000, 6000, 1, type(uint256).max);
     }
 
     function test_revert_constructor_weiPerBudgetUnitZero() public {
         vm.expectRevert(
             abi.encodeWithSelector(KnomosisBridge.WeiPerBudgetUnitTooSmall.selector, uint64(0))
         );
-        _deploy(0, 5000, 0, type(uint256).max);
+        _deployLeg(0, 5000, 0, type(uint256).max);
     }
 
     function test_constructor_pins_feeSplitImmutables() public {
-        KnomosisBridge bridge = _deploy(25, 1234, 777, type(uint256).max);
+        KnomosisBridge bridge = _deployLeg(25, 1234, 777, type(uint256).max);
         assertEq(bridge.minFeeBps(), 25);
         assertEq(bridge.maxFeeBps(), 1234);
         assertEq(bridge.weiPerBudgetUnitEth(), 777);
@@ -580,22 +298,8 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
 
     function test_constructor_allowsMaxFeeAtCap() public {
         // maxFeeBps exactly at the cap is allowed.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
+        KnomosisBridge bridge = _deployLeg(0, 5000, 1, type(uint256).max);
         assertEq(bridge.maxFeeBps(), 5000);
-    }
-
-    function test_minEqualsMax_zero_forcesZeroFee() public {
-        // A deployment that forbids any fee: min == max == 0.  Only
-        // chosenFeeBps == 0 is admissible (a pure balance deposit); any
-        // positive fee reverts FeeBpsAboveMax.
-        KnomosisBridge bridge = _deploy(0, 0, 1, type(uint256).max);
-        (uint256 u, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 1 ether, 0);
-        assertEq(p, 0, "forced zero pool");
-        assertEq(u, 1 ether, "full amount to user");
-        assertEq(g, 0, "no budget");
-        vm.expectRevert(abi.encodeWithSelector(KnomosisBridge.FeeBpsAboveMax.selector, uint16(1)));
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1 ether}(1);
     }
 
     // ------------------------------------------------------------------
@@ -607,7 +311,7 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         // `depositNonce` counter, so no two deposits by the same
         // depositor (of any kind) ever reuse a nonce — guaranteeing
         // receiptHash uniqueness across deposit kinds.
-        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
+        KnomosisBridge bridge = _deployLeg(0, 5000, 1, type(uint256).max);
         assertEq(bridge.depositNonce(alice), 0);
         vm.prank(alice);
         bridge.depositETH{value: 1 ether}();
@@ -671,7 +375,7 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         // [0, 5000] is the admissible range for this bridge.
         v = (v % 1e30) + 1;
         feeBps = uint16(uint256(feeBps) % 5001);
-        KnomosisBridge bridge = _deploy(0, 5000, 1_000_000_000, type(uint256).max);
+        KnomosisBridge bridge = _deployLeg(0, 5000, 1_000_000_000, type(uint256).max);
         vm.deal(alice, v);
 
         (uint256 refUser, uint256 refPool, uint64 refBudget) =
@@ -696,32 +400,29 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         v = (v % 1e30) + 1;
         feeBps = uint16(uint256(feeBps) % 5001);
         rate = uint64(uint256(rate) % 1e15) + 1;
-        KnomosisBridge bridge = _deploy(0, 5000, rate, type(uint256).max);
+        KnomosisBridge bridge = _deployLeg(0, 5000, rate, type(uint256).max);
         vm.deal(alice, v);
 
-        (uint256 refUser, uint256 refPool, uint64 refBudget) = FeeSplitMath.split(v, feeBps, rate);
+        // The reference receipt, built from the FUZZED `rate` rather
+        // than read back off the bridge -- that independence is the
+        // point of a differential.  As a struct because the nine-argument
+        // `FeeSplitMath.receiptHash` held nine live locals here, which is
+        // one slot more than the ETH leg's frame has to spare.
+        DepositReceipt memory want;
+        want.sender = alice;
+        want.resourceId = NATIVE_ETH;
+        want.token = address(0);
+        (want.userAmount, want.poolAmount, want.budgetGrant) =
+            FeeSplitMath.split(v, feeBps, rate);
+        // Fresh bridge, alice's first deposit.  `ammSeedAmount` stays 0.
+        want.nonce = 0;
+        want.receiptHash = _receiptHashOf(bridge.deploymentId(), want);
 
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: v}(feeBps);
-        DepositReceipt memory r = _findDepositReceipt(vm.getRecordedLogs());
 
-        assertEq(r.userAmount, refUser, "userAmount matches reference");
-        assertEq(r.poolAmount, refPool, "poolAmount matches reference");
-        assertEq(r.budgetGrant, refBudget, "budgetGrant matches reference");
-
-        bytes32 refHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(),
-            alice,
-            NATIVE_ETH,
-            address(0),
-            refUser,
-            refPool,
-            0, // ammSeedAmount (AMM-disabled suite)
-            refBudget,
-            0
-        );
-        assertEq(r.receiptHash, refHash, "receiptHash matches reference");
+        _assertReceiptEq(_findDepositReceipt(vm.getRecordedLogs()), want);
     }
 
     /// @notice A fuzzed out-of-range fee always reverts (never silently
@@ -731,7 +432,7 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         uint16 maxF = 1000;
         // Map into [maxF + 1, type(uint16).max] = [1001, 65535].
         feeBps = uint16(uint256(maxF) + 1 + (uint256(feeBps) % (uint256(type(uint16).max) - maxF)));
-        KnomosisBridge bridge = _deploy(0, maxF, 1, type(uint256).max);
+        KnomosisBridge bridge = _deployLeg(0, maxF, 1, type(uint256).max);
         vm.deal(alice, v);
         vm.expectRevert(abi.encodeWithSelector(KnomosisBridge.FeeBpsAboveMax.selector, feeBps));
         vm.prank(alice);
