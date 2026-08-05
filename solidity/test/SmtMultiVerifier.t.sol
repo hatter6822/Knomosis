@@ -129,7 +129,7 @@ contract SmtMultiVerifierTest is Test {
         for (uint256 d = 1; d < 250; d += 37) {
             uint256[] memory two = new uint256[](2);
             two[0] = 0;
-            two[1] = 1 << d;
+            two[1] = uint256(1) << d;
             assertEq(p.gapCount(two), 255 + d, string.concat("divergence ", vm.toString(d)));
         }
     }
@@ -150,7 +150,7 @@ contract SmtMultiVerifierTest is Test {
         mask = new bytes(32);
         uint256 n = 0;
         for (uint256 d = 0; d < 256; d += stride) {
-            mask[d >> 3] = bytes1(uint8(mask[d >> 3]) | uint8(1 << (d & 7)));
+            mask[d >> 3] = bytes1(uint8(mask[d >> 3]) | (uint8(1) << (d & 7)));
             n++;
         }
         sibs = new bytes(0);
@@ -224,7 +224,7 @@ contract SmtMultiVerifierTest is Test {
         assertEq(g, 258, "the probe's gap count");
         bytes memory mask = new bytes((g + 7) / 8); // 33 bytes, 6 spare bits
         // Set a bit past the last gap.
-        mask[g >> 3] = bytes1(uint8(1 << (g & 7)));
+        mask[g >> 3] = bytes1(uint8(1) << (g & 7));
 
         vm.expectRevert(
             abi.encodeWithSelector(SmtMultiVerifier.MultiProofPadding.selector, g)
@@ -307,7 +307,7 @@ contract SmtMultiVerifierTest is Test {
         uint256 dLevel = 5;
         uint256[] memory sorted = new uint256[](2);
         sorted[0] = 0;
-        sorted[1] = 1 << dLevel;
+        sorted[1] = uint256(1) << dLevel;
         bytes32[] memory leaves = new bytes32[](2);
         leaves[0] = keccak256("a");
         leaves[1] = keccak256("b");

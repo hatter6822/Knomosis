@@ -325,11 +325,11 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     ///         scheme, so it outlives the entry point that first
     ///         asserted it.
     function test_isAdjudicable_excludes_exactly_the_bulk_pair() public {
-        for (uint256 k = 0; k <= 30; k++) {
+        for (uint8 k = 0; k <= 30; k++) {
             beginEntry(string.concat("#", vm.toString(k)));
             bool expected = k <= 24 && k != 6 && k != 7;
             checkEq(
-                StepWrites.isAdjudicable(uint8(k)), expected,
+                StepWrites.isAdjudicable(k), expected,
                 string.concat("adjudicability at kind ", vm.toString(k))
             );
         }
@@ -568,6 +568,11 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         out[0] = 0x06;
         uint256 v = n;
         for (uint256 i = 0; i < 32; i++) {
+            // casting to 'uint8' is safe because `& 0xFF` has already
+            // reduced the operand to its low byte, so the cast is the
+            // identity rather than a truncation.  Mirrors
+            // `CBEEncode._leBytes`, which this helper reproduces.
+            // forge-lint: disable-next-line(unsafe-typecast)
             out[1 + i] = bytes1(uint8(v & 0xFF));
             v >>= 8;
         }

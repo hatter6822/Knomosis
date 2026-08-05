@@ -82,6 +82,8 @@ import LegalKernel.Test.Encoding.State
 import LegalKernel.Test.Encoding.SignInput
 import LegalKernel.Test.Encoding.Disputes
 import LegalKernel.Test.Encoding.LocalPolicy
+import LegalKernel.Test.Encoding.KernelStep
+import LegalKernel.Test.AxiomFootprint
 import LegalKernel.Test.Encoding.Injectivity
 import LegalKernel.Test.LocalPolicy.LawClassification
 import LegalKernel.Test.DSL.Law
@@ -265,6 +267,10 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "encoding-signinput" Encoding.SignInputTests.tests)
   failed := failed + (← runAll "encoding-localpolicy"
                                     Encoding.LocalPolicyTests.tests)
+  failed := failed + (← runAll "axiom-footprint"
+                                    AxiomFootprint.tests)
+  failed := failed + (← runAll "encoding-kernelstep"
+                                    Encoding.KernelStepTests.tests)
   failed := failed + (← runAll "encoding-injectivity"
                                     Encoding.InjectivityTests.tests)
   failed := failed + (← runAll "localpolicy-lawclass"

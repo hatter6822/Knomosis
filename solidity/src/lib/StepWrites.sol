@@ -780,12 +780,17 @@ library StepWrites {
     /// @dev The nonce + epoch-budget pair every action writes, appended
     ///      after the variant's own cells.  `CellKind.Nonce = 1`,
     ///      `CellKind.EpochBudget = 13`.
-    function _appendUniform(Cell[] memory out, uint256 at, uint64 signer)
+    ///
+    ///      `slot` is the index of the FIRST of the two; the pair
+    ///      occupies `slot` and `slot + 1`.  Named `slot` rather than
+    ///      `at` because solc reserves `at` as a future keyword and
+    ///      warns on it as an identifier.
+    function _appendUniform(Cell[] memory out, uint256 slot, uint64 signer)
         private
         pure
     {
-        out[at] = Cell({kind: 1, keyA: signer, keyB: 0});
-        out[at + 1] = Cell({kind: 13, keyA: signer, keyB: 0});
+        out[slot] = Cell({kind: 1, keyA: signer, keyB: 0});
+        out[slot + 1] = Cell({kind: 13, keyA: signer, keyB: 0});
     }
 
     /// @notice **The cells an action writes**, mirroring

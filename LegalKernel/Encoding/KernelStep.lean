@@ -158,12 +158,210 @@ def CellTag.decode (s : Stream) :
     | .error e => .error e
   | .ok (6, s₁) =>
     .ok (.bridgeNextWdId, s₁)
+  -- Tags 7..14: the AMM mirror, the BOLD circuit-breaker trio, the
+  -- kill switch, the per-actor epoch budget and the budget policy.
+  -- All but `epochBudget` are singleton cells, so the tag alone is
+  -- the whole encoding and the residual stream passes through.
+  | .ok (7, s₁)  => .ok (.bridgeAmmReserveEth, s₁)
+  | .ok (8, s₁)  => .ok (.bridgeAmmReserveBold, s₁)
+  | .ok (9, s₁)  => .ok (.bridgeBoldCircuitClosed, s₁)
+  | .ok (10, s₁) => .ok (.bridgeBoldTvlCap, s₁)
+  | .ok (11, s₁) => .ok (.bridgeBoldTotalLockedValue, s₁)
+  | .ok (12, s₁) => .ok (.bridgeAmmDisabled, s₁)
+  | .ok (13, s₁) =>
+    match Encodable.decode (T := Nat) s₁ with
+    | .ok (a, s₂) =>
+      if ha : a < 18446744073709551616 then
+        let _ := ha
+        .ok (.epochBudget a.toUInt64, s₂)
+      else
+        let _ := ha
+        .error (.invalidLength s!"CellTag.epochBudget actor {a} exceeds 2^64")
+    | .error e => .error e
+  | .ok (14, s₁) => .ok (.budgetPolicy, s₁)
   | .ok (other, _) => .error (.invalidConstructorIndex other)
   | .error e => .error e
 
 instance : Encodable FaultProof.CellTag where
   encode := CellTag.encode
   decode := CellTag.decode
+
+/-- The field bounds `CellTag`'s round-trip needs.
+
+    `ActorId` and `ResourceId` are `UInt64` (`Kernel.lean`), so their
+    `toNat` sits below the 8-byte head's modulus by construction and
+    costs no conjunct.  `DepositId` and `WithdrawalId` are bare `Nat`
+    (`Bridge/State.lean`), so the two bridge-set cells carry the only
+    real obligation — the same shape as
+    `LocalPolicyClause.fieldsBounded`. -/
+def CellTag.fieldsBounded : FaultProof.CellTag → Prop
+  | .bridgeConsumed d  => d < 256 ^ 8
+  | .bridgePending wd  => wd < 256 ^ 8
+  | _                  => True
+
+/-- Decidability of `CellTag.fieldsBounded`: every branch is either
+    `True` or a single `Nat` comparison. -/
+instance (t : FaultProof.CellTag) : Decidable (CellTag.fieldsBounded t) := by
+  cases t <;> (unfold CellTag.fieldsBounded; infer_instance)
+
+/-- A `UInt64`-typed key always fits the 8-byte CBE uint head. -/
+private theorem uint64_key_lt_head (a : UInt64) : a.toNat < 256 ^ 8 := by
+  have h64 : (256 : Nat) ^ 8 = 2 ^ 64 := by decide
+  have : a.toNat < 2 ^ 64 := UInt64.toNat_lt a
+  omega
+
+/-- **`CellTag` round-trips.**  Decoding an encoded tag returns that
+    tag and leaves the residual stream untouched.
+
+    This is what `cellTag_encode_deterministic` is not: determinism is
+    `t₁ = t₂ → encode t₁ = encode t₂`, which holds of every function
+    and so establishes nothing about the codec.  The round-trip is the
+    statement the decoder can fail — and did, for the eight tags
+    (7..14) whose arms were missing while `encode` emitted them.  Since
+    every action writes an `.epochBudget` cell (tag 13) and every
+    frontier leads with `.budgetPolicy` (tag 14), the gap covered the
+    majority of real bundles. -/
+theorem cellTag_roundtrip (t : FaultProof.CellTag) (rest : Stream)
+    (h : CellTag.fieldsBounded t) :
+    CellTag.decode (CellTag.encode t ++ rest) = .ok (t, rest) := by
+  cases t with
+  | balance r a =>
+    show CellTag.decode
+      (Encodable.encode (T := Nat) 0 ++ Encodable.encode (T := Nat) r.toNat ++
+        Encodable.encode (T := Nat) a.toNat ++ rest) = _
+    unfold CellTag.decode
+    rw [show
+      Encodable.encode (T := Nat) 0 ++ Encodable.encode (T := Nat) r.toNat ++
+          Encodable.encode (T := Nat) a.toNat ++ rest =
+        Encodable.encode (T := Nat) 0 ++
+          (Encodable.encode (T := Nat) r.toNat ++
+            (Encodable.encode (T := Nat) a.toNat ++ rest))
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 0 _ (by decide)]
+    dsimp only
+    rw [nat_roundtrip r.toNat _ (uint64_key_lt_head r)]
+    dsimp only
+    rw [nat_roundtrip a.toNat _ (uint64_key_lt_head a)]
+    dsimp only
+    rw [dif_pos (by have := uint64_key_lt_head r; omega),
+        dif_pos (by have := uint64_key_lt_head a; omega)]
+    simp [UInt64.ofNat_toNat]
+  | nonce a =>
+    show CellTag.decode
+      (Encodable.encode (T := Nat) 1 ++ Encodable.encode (T := Nat) a.toNat ++ rest) = _
+    unfold CellTag.decode
+    rw [show
+      Encodable.encode (T := Nat) 1 ++ Encodable.encode (T := Nat) a.toNat ++ rest =
+        Encodable.encode (T := Nat) 1 ++
+          (Encodable.encode (T := Nat) a.toNat ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 1 _ (by decide)]
+    dsimp only
+    rw [nat_roundtrip a.toNat _ (uint64_key_lt_head a)]
+    dsimp only
+    rw [dif_pos (by have := uint64_key_lt_head a; omega)]
+    simp [UInt64.ofNat_toNat]
+  | registry a =>
+    show CellTag.decode
+      (Encodable.encode (T := Nat) 2 ++ Encodable.encode (T := Nat) a.toNat ++ rest) = _
+    unfold CellTag.decode
+    rw [show
+      Encodable.encode (T := Nat) 2 ++ Encodable.encode (T := Nat) a.toNat ++ rest =
+        Encodable.encode (T := Nat) 2 ++
+          (Encodable.encode (T := Nat) a.toNat ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 2 _ (by decide)]
+    dsimp only
+    rw [nat_roundtrip a.toNat _ (uint64_key_lt_head a)]
+    dsimp only
+    rw [dif_pos (by have := uint64_key_lt_head a; omega)]
+    simp [UInt64.ofNat_toNat]
+  | localPolicy a =>
+    show CellTag.decode
+      (Encodable.encode (T := Nat) 3 ++ Encodable.encode (T := Nat) a.toNat ++ rest) = _
+    unfold CellTag.decode
+    rw [show
+      Encodable.encode (T := Nat) 3 ++ Encodable.encode (T := Nat) a.toNat ++ rest =
+        Encodable.encode (T := Nat) 3 ++
+          (Encodable.encode (T := Nat) a.toNat ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 3 _ (by decide)]
+    dsimp only
+    rw [nat_roundtrip a.toNat _ (uint64_key_lt_head a)]
+    dsimp only
+    rw [dif_pos (by have := uint64_key_lt_head a; omega)]
+    simp [UInt64.ofNat_toNat]
+  | bridgeConsumed d =>
+    have hd : d < 256 ^ 8 := h
+    show CellTag.decode
+      (Encodable.encode (T := Nat) 4 ++ Encodable.encode (T := Nat) d ++ rest) = _
+    unfold CellTag.decode
+    rw [show
+      Encodable.encode (T := Nat) 4 ++ Encodable.encode (T := Nat) d ++ rest =
+        Encodable.encode (T := Nat) 4 ++ (Encodable.encode (T := Nat) d ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 4 _ (by decide)]
+    dsimp only
+    rw [nat_roundtrip d rest hd]
+  | bridgePending wd =>
+    have hw : wd < 256 ^ 8 := h
+    show CellTag.decode
+      (Encodable.encode (T := Nat) 5 ++ Encodable.encode (T := Nat) wd ++ rest) = _
+    unfold CellTag.decode
+    rw [show
+      Encodable.encode (T := Nat) 5 ++ Encodable.encode (T := Nat) wd ++ rest =
+        Encodable.encode (T := Nat) 5 ++ (Encodable.encode (T := Nat) wd ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 5 _ (by decide)]
+    dsimp only
+    rw [nat_roundtrip wd rest hw]
+  | bridgeNextWdId =>
+    show CellTag.decode (Encodable.encode (T := Nat) 6 ++ rest) = _
+    unfold CellTag.decode
+    rw [nat_roundtrip 6 rest (by decide)]
+  | bridgeAmmReserveEth =>
+    show CellTag.decode (Encodable.encode (T := Nat) 7 ++ rest) = _
+    unfold CellTag.decode
+    rw [nat_roundtrip 7 rest (by decide)]
+  | bridgeAmmReserveBold =>
+    show CellTag.decode (Encodable.encode (T := Nat) 8 ++ rest) = _
+    unfold CellTag.decode
+    rw [nat_roundtrip 8 rest (by decide)]
+  | bridgeBoldCircuitClosed =>
+    show CellTag.decode (Encodable.encode (T := Nat) 9 ++ rest) = _
+    unfold CellTag.decode
+    rw [nat_roundtrip 9 rest (by decide)]
+  | bridgeBoldTvlCap =>
+    show CellTag.decode (Encodable.encode (T := Nat) 10 ++ rest) = _
+    unfold CellTag.decode
+    rw [nat_roundtrip 10 rest (by decide)]
+  | bridgeBoldTotalLockedValue =>
+    show CellTag.decode (Encodable.encode (T := Nat) 11 ++ rest) = _
+    unfold CellTag.decode
+    rw [nat_roundtrip 11 rest (by decide)]
+  | bridgeAmmDisabled =>
+    show CellTag.decode (Encodable.encode (T := Nat) 12 ++ rest) = _
+    unfold CellTag.decode
+    rw [nat_roundtrip 12 rest (by decide)]
+  | epochBudget a =>
+    show CellTag.decode
+      (Encodable.encode (T := Nat) 13 ++ Encodable.encode (T := Nat) a.toNat ++ rest) = _
+    unfold CellTag.decode
+    rw [show
+      Encodable.encode (T := Nat) 13 ++ Encodable.encode (T := Nat) a.toNat ++ rest =
+        Encodable.encode (T := Nat) 13 ++
+          (Encodable.encode (T := Nat) a.toNat ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 13 _ (by decide)]
+    dsimp only
+    rw [nat_roundtrip a.toNat _ (uint64_key_lt_head a)]
+    dsimp only
+    rw [dif_pos (by have := uint64_key_lt_head a; omega)]
+    simp [UInt64.ofNat_toNat]
+  | budgetPolicy =>
+    show CellTag.decode (Encodable.encode (T := Nat) 14 ++ rest) = _
+    unfold CellTag.decode
+    rw [nat_roundtrip 14 rest (by decide)]
 
 /-! ## `CellProof` codec -/
 

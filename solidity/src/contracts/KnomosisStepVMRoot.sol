@@ -119,7 +119,15 @@ contract KnomosisStepVMRoot {
     uint256 public constant MAX_CELL_OPENINGS = 32;
 
     /// @notice The highest frozen `Action` dispatcher index.
-    uint256 internal constant MAX_ACTION_KIND = 24;
+    ///
+    /// @dev    Typed `uint8` because that is the width the action kind
+    ///         has on the wire (`actionKindByte`) and the width both
+    ///         consumers — `StepWrites.isAdjudicable` and
+    ///         `StepWrites.deriveWriteSet` — accept.  Declaring it
+    ///         `uint256` forced a truncating `uint8(k)` cast at every
+    ///         call site; typing it here removes the cast rather than
+    ///         annotating it as safe.
+    uint8 internal constant MAX_ACTION_KIND = 24;
 
     /// @notice Field-buffer length `widestFrontier` probes with —
     ///         comfortably past the longest layout `actionFieldsForL1`
@@ -197,10 +205,10 @@ contract KnomosisStepVMRoot {
         returns (uint256 widest)
     {
         require(probeFields.length >= PROBE_FIELD_BYTES, "ProbeFieldsTooShort");
-        for (uint256 k = 0; k <= MAX_ACTION_KIND; k++) {
-            if (!StepWrites.isAdjudicable(uint8(k))) continue;
+        for (uint8 k = 0; k <= MAX_ACTION_KIND; k++) {
+            if (!StepWrites.isAdjudicable(k)) continue;
             uint256 n =
-                StepWrites.deriveWriteSet(uint8(k), probeFields, 0, 0).length + 1;
+                StepWrites.deriveWriteSet(k, probeFields, 0, 0).length + 1;
             if (n > widest) widest = n;
         }
     }

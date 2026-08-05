@@ -768,8 +768,8 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         bytes32[5] memory commits;
         commits[0] = LOW_ROOT;
         commits[1] = probePostRoot;
-        for (uint256 i = 2; i < 5; i++) {
-            commits[i] = keccak256(abi.encodePacked(commits[i - 1], uint8(i)));
+        for (uint8 i = 2; i < 5; i++) {
+            commits[i] = keccak256(abi.encodePacked(commits[i - 1], i));
         }
 
         // The sequencer honestly published each commit at its log index,

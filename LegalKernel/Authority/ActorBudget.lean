@@ -165,6 +165,53 @@ theorem topUp_normalised (b : ActorBudget) (now ft amount : Nat) :
     (b.topUp now ft amount).normalise now ft = b.topUp now ft amount :=
   normalise_noop_if_current _ _ _ (topUp_lastSeenEpoch_ge b now ft amount)
 
+/-! ## Per-step growth of the stored balance
+
+These bound the value the *cell* carries — `budgetBalance` as
+`FaultProof.budgetCellValue` encodes it — rather than the normalised
+`currentBudget` the admission gate meters against.  The distinction is
+the whole point: `currentBudget` folds the free-tier floor in, so
+growth measured against it is exactly the grant, whereas the STORED
+number is what the 8-byte CBE head has to hold.
+
+`FaultProof/BoundsReachable.lean` carries the argument these serve:
+that `2^64` is out of reach for the epoch-budget cell.  That argument
+was stated there as settled and is not — see the section docstring,
+which these lemmas let it state truthfully. -/
+
+/-- Normalising raises the stored balance to at most the free tier.
+
+    The inequality is tight in both directions: on a stale cell the
+    balance becomes `max b.budgetBalance ft` exactly, and on a current
+    one it does not move at all. -/
+theorem normalise_budgetBalance_le_max (b : ActorBudget) (now ft : Nat) :
+    (b.normalise now ft).budgetBalance ≤ max b.budgetBalance ft := by
+  unfold normalise
+  by_cases h : b.lastSeenEpoch < now
+  · simp [h]
+  · simp [h, Nat.le_max_left]
+
+/-- **A top-up raises the stored balance by at most the free tier plus
+    the granted amount.**
+
+    Note the `max … ft` term.  A bound of the form `b.budgetBalance +
+    amount` — "a budget advances by at most the grant" — is FALSE: a
+    cell that has gone stale is floored at `ft` by `normalise` before
+    the credit lands, so a single step can lift a balance of `0` to
+    `ft + amount` however small `amount` is. -/
+theorem topUp_budgetBalance_le (b : ActorBudget) (now ft amount : Nat) :
+    (b.topUp now ft amount).budgetBalance ≤ max b.budgetBalance ft + amount := by
+  rw [topUp_budgetBalance]
+  exact Nat.add_le_add_right (normalise_budgetBalance_le_max b now ft) amount
+
+/-- A successful consume never raises the stored balance above the
+    free-tier floor: it normalises, then subtracts. -/
+theorem consume_some_budgetBalance_le (b : ActorBudget) (now ft cost : Nat)
+    (b' : ActorBudget) (h : b.consume now ft cost = some b') :
+    b'.budgetBalance ≤ max b.budgetBalance ft := by
+  rw [consume_some_budgetBalance b now ft cost b' h]
+  exact Nat.le_trans (Nat.sub_le _ _) (normalise_budgetBalance_le_max b now ft)
+
 end ActorBudget
 
 /-- Per-actor map of budget cells. -/
@@ -340,6 +387,70 @@ theorem currentBudget_floored_at_freeTier
     ebs.currentBudget a now ft ≥ ft := by
   unfold currentBudget
   exact ActorBudget.normalise_floors_at_freeTier _ now ft h
+
+/-! ## Stored balance and its per-step growth
+
+`currentBudget` normalises before reading, which is right for the
+admission gate but wrong for the commitment: the fault-proof cell
+carries the RAW `budgetBalance` (`FaultProof.budgetCellValue`), and it
+is that number the 8-byte CBE head has to hold.  The two differ by
+exactly the free-tier floor, which is why a growth bound stated over
+`currentBudget` cannot be transported to the cell. -/
+
+/-- The stored balance of an actor's budget cell — the number
+    `FaultProof.budgetCellValue` encodes, before any normalisation. -/
+def storedBalance (ebs : EpochBudgetState) (a : ActorId) : Nat :=
+  (ebs[a]?.getD ActorBudget.empty).budgetBalance
+
+/-- **A top-up raises no actor's stored balance by more than the free
+    tier plus the granted amount** — the targeted actor included.
+
+    Uniform in `a`: the targeted cell grows by at most
+    `max stored ft + amount` and every other cell does not move. -/
+theorem storedBalance_topUp_le
+    (ebs : EpochBudgetState) (target a : ActorId) (now ft amount : Nat) :
+    (ebs.topUp target now ft amount).storedBalance a
+      ≤ max (ebs.storedBalance a) ft + amount := by
+  by_cases h : target = a
+  · subst h
+    show (((ebs.insert target
+              ((ebs[target]?.getD ActorBudget.empty).topUp now ft amount))[target]?).getD
+            ActorBudget.empty).budgetBalance
+        ≤ max (ebs[target]?.getD ActorBudget.empty).budgetBalance ft + amount
+    rw [RBMap.find?_insert_self]
+    exact ActorBudget.topUp_budgetBalance_le _ now ft amount
+  · show (((ebs.insert target
+              ((ebs[target]?.getD ActorBudget.empty).topUp now ft amount))[a]?).getD
+            ActorBudget.empty).budgetBalance
+        ≤ max (ebs[a]?.getD ActorBudget.empty).budgetBalance ft + amount
+    rw [RBMap.find?_insert_other _ target a _ h]
+    exact Nat.le_trans (Nat.le_max_left _ _) (Nat.le_add_right _ _)
+
+/-- **A consume raises no actor's stored balance above the free-tier
+    floor.**  Spending cannot be a growth path; only the normalisation
+    that precedes it can move a stale cell up, and only to `ft`. -/
+theorem storedBalance_consume_le
+    (ebs ebs' : EpochBudgetState) (target a : ActorId) (now ft cost : Nat)
+    (h : ebs.consume target now ft cost = some ebs') :
+    ebs'.storedBalance a ≤ max (ebs.storedBalance a) ft := by
+  unfold consume at h
+  cases hc : (ebs[target]?.getD ActorBudget.empty).consume now ft cost with
+  | none => rw [hc] at h; exact absurd h (by simp)
+  | some b' =>
+    rw [hc] at h
+    have hins : ebs' = ebs.insert target b' := by
+      have := h; simp only [Option.some.injEq] at this; exact this.symm
+    subst hins
+    by_cases hEq : target = a
+    · subst hEq
+      show (((ebs.insert target b')[target]?).getD ActorBudget.empty).budgetBalance
+          ≤ max (ebs[target]?.getD ActorBudget.empty).budgetBalance ft
+      rw [RBMap.find?_insert_self]
+      exact ActorBudget.consume_some_budgetBalance_le _ now ft cost b' hc
+    · show (((ebs.insert target b')[a]?).getD ActorBudget.empty).budgetBalance
+          ≤ max (ebs[a]?.getD ActorBudget.empty).budgetBalance ft
+      rw [RBMap.find?_insert_other _ target a _ hEq]
+      exact Nat.le_max_left _ _
 
 /-- The genesis `EpochBudgetState.empty` returns `currentBudget = 0`
     when `now = 0` (the cell's `lastSeenEpoch` defaults to 0, so

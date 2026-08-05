@@ -333,6 +333,11 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework, DepositEventDecod
             // the four greppable bytes it would save.  The libraries
             // this walk exercises directly are named; the bridge's own
             // refusals are not, deliberately.
+            // casting to 'uint16' is safe because the `checkLe(feeBps,
+            // 5000, …)` above bounds the fixture's value well inside
+            // `uint16`, so a corpus entry that could truncate here is
+            // already a recorded failure rather than a silent one.
+            // forge-lint: disable-next-line(unsafe-typecast)
             try bridge.depositBoldWithFee(msgValue, uint16(feeBps)) {
                 // fall through to the log decode below
             } catch (bytes memory err) {
