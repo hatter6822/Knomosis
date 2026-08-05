@@ -1,240 +1,87 @@
 # Audit — full-codebase sweep (Lean / Rust / Solidity)
 
-This register records a full-codebase audit pass run across the three
-stacks.  It is a **finding register, not a completion record**: most
-entries below are open, and each states where it was found and what
-would close it.
+A full-codebase audit pass across the three stacks.  This is a
+**finding register, not a completion record**: every entry below is
+open unless it says otherwise, and each states where it was found and
+what would close it.
 
-## How to read the verification status
+## Method, and what the numbers mean
 
-The pass ran in two stages.  Independent auditors read one area each
-and reported defects; a second, adversarial stage re-read the source
-for the highest-severity findings and tried to REFUTE them.  Only the
-subset that reached the second stage carries an independent judgment —
-the stage was capped per area, so an entry's absence from the verified
-list means "not re-checked", **not** "refuted".
+Independent auditors read one area each and reported defects against
+source rather than against documentation.  A second, adversarial stage
+re-read the source for the highest-severity findings and tried to
+REFUTE them, with instructions to judge on the merits rather than
+default either way.
 
-  * **65 raw findings** across the two sweeps (28 Lean, 37 Rust /
-    Solidity), of which 39 are critical or major and appear below.
-  * **17 were adversarially re-verified and upheld.**  Two of those
-    verifications built a temporary executable reproduction.
-  * **0 were refuted at the verification stage.**  That is a fact
-    about which findings were selected for re-checking, not a claim
-    that every unverified entry is real.
+  * **65 raw findings** (28 Lean, 37 Rust / Solidity).
+  * **39 went through adversarial verification**;
+    **37 were upheld** and
+    **2 refuted**.
+  * The verification stage was **capped per area**, so a finding's
+    absence from the list below means "not re-checked", **not**
+    "refuted".  Raw findings that never reached verification are not
+    reproduced here; they are recoverable from the run journals.
 
-Entries not re-checked should be treated as **plausible and
-unconfirmed**.  Confirm before acting.
+Severities below are the VERIFIER's corrected severity, which in two
+cases is lower than the reporting auditor's.  Post-verification split:
+25 major, 7 critical, 5 minor.
+
+Two verifications built a temporary executable reproduction rather
+than arguing from source alone.
 
 ## Closed by the pass that produced this register
 
-Five findings were fixed in the same pass rather than filed:
+Five defects were fixed in the same pass rather than filed:
 
-  * `CellTag.decode` covered 7 of 15 constructors while `encode`
-    emitted all 15 — every honest bundle carries an `.epochBudget`
-    (13) and a `.budgetPolicy` (14) cell.  Decoder completed,
-    `cellTag_roundtrip` proved, `encoding-kernelstep` suite added.
-  * "No custom axioms (ABSOLUTE)" had no mechanical gate.
-    `Test/AxiomFootprint.lean` adds a build-time one.
-  * The epoch-budget growth bound was asserted, unproved, and false as
-    stated.  `storedBalance_topUp_le` / `_consume_le` now carry it.
-  * Solidity project-source warnings (one solc, eleven forge-lint) —
-    cleared, and `ci-solidity.yml` gained the strict-warnings gate the
-    Lean side already had.
-  * Seven docstrings still describing the retired `2^128` amount head.
+  * **`CellTag.decode` covered 7 of 15 constructors** while `encode`
+    emitted all 15.  Every honest bundle carries an `.epochBudget`
+    (tag 13) and a `.budgetPolicy` (14) cell, so the gap covered the
+    majority of real bundles.  Nothing caught it because the module's
+    only theorems were `*_encode_deterministic`
+    (`t₁ = t₂ → encode t₁ = encode t₂`, true of every function) and no
+    test called the decoder.  Decoder completed, `cellTag_roundtrip`
+    proved, `encoding-kernelstep` suite added.
 
-Two register entries below therefore overlap work already done:
-`CellTag.decode` (closed) and the `eb_val` bound (the growth lemmas
-landed; the cross-stack truncate-vs-revert asymmetry is still open).
+    *Read the verification result for this one carefully.*  It appears
+    in the journals as REFUTED, and that verdict is an artefact of
+    timing, not a judgment: the fix landed while the pass was still
+    running, so the verifier read the already-corrected file and
+    correctly reported that the arms are present.  The finding was
+    real when reported.
 
-## Standing caveat on the two amount-head findings
+  * **"No custom axioms (ABSOLUTE)" had no mechanical gate.**  Six
+    audit binaries ship beside that claim and none checked it;
+    `count_sorries` says so itself.  `Test/AxiomFootprint.lean` adds a
+    build-time one.
+  * **The epoch-budget growth bound was asserted, unproved, and false
+    as stated.**  `storedBalance_topUp_le` / `_consume_le` now carry
+    it.
+  * **Solidity project-source warnings** (one solc, eleven
+    forge-lint) — cleared, and `ci-solidity.yml` gained the
+    strict-warnings gate the Lean side already had.
+  * **Seven docstrings** still describing the retired `2^128` amount
+    head.
+
+## Standing note on the two amount-head findings
 
 `LocalPolicyClause.capAmount` and the epoch-budget cell are both
-reported as C-3 recurrences.  Note for whoever triages them that
+reported as C-3 recurrences.  For whoever triages them:
 `capAmount`'s bound IS enforced at the decode boundary
-(`LocalPolicyClause.fieldsBounded` requires `max < 2^64`, and the CBE
+(`LocalPolicyClause.fieldsBounded` requires `max < 2^64` and the CBE
 decoder rejects violations), so a wire-originated policy cannot carry
-an over-bound cap.  The reachability question is whether any
-non-decoder path constructs one.  The epoch-budget cell has no such
-decode gate on the value, and there the stacks genuinely disagree at
-the ceiling: Lean truncates, Solidity reverts (`CBEValueTooWide`).
+an over-bound cap — the open question is whether any non-decoder path
+constructs one.  The epoch-budget cell has no such gate on its value,
+and there the stacks genuinely disagree at the ceiling: Lean
+truncates, Solidity reverts (`CBEValueTooWide`).
 
 ---
 
-## Findings (critical first)
-
-
-### CRITICAL — Cross-resource budget arbitrage: budget is minted at the buy leg's refund rate and redeemed at the sell leg's rate, draining the gas pool
-
-*Where:* `LegalKernel/Authority/SignedAction.lean:966` — Lean sweep
-
-`topUpRoundTripCheck` (SignedAction.lean:966-972) prices a budget mint
-against `refundRate gasResource` where `gasResource` is the *top-up's*
-resource, while `claimBudgetRefund_gate` (SignedAction.lean:1090-1106)
-pays out at `refundRate gasResource` of the *refund's* resource. The
-action budget itself is a single per-actor scalar (`EpochBudgetState
-:= TreeMap ActorId ActorBudget`, ActorBudget.lean:171 — no resource
-dimension), so units bought on one blessed leg are redeemable on the
-other. Both gates bless exactly `gasResource = 0 ∨ gasResource = 1`
-(SignedAction.lean:754 and :1099), and nothing anywhere requires
-`refundRate 0 = refundRate 1`. The asymmetric configuration is not
-exotic: `RefundRateConfig` (Runtime/RefundRateSidecar.lean:76-92) and
-the CLI (`--wei-per-budget-unit-eth` / `--wei-per-budget-unit-bold`,
-Main.lean:816-832) explicitly support enabling one leg and leaving the
-other at 0, and at rate 0 the round-trip seal is *provably* vacuous
-(`topUpRoundTripCheck_true_of_zero_rate`, SignedAction.lean:998-1001).
-The docstring of `topUpActionBudget_roundtrip_not_profitable`
-(SignedAction.lean:1975-1996) claims 'The top-up -> refund round-trip
-is therefore non-profitable for EVERY caller', but the theorem it
-decorates only concludes `budgetIncrement * refundRate gasResource <=
-gasAmount` for the buy leg, which does not imply the claim once the
-sell leg's rate differs.
-
-**Failure scenario.**
-
-Deployment runs `knomosis ... --wei-per-budget-unit-bold 3000` and
-omits `--wei-per-budget-unit-eth` (documented as 'refunds disabled at
-ETH'). So refundRate 0 = 0, refundRate 1 = 3000. Attacker A
-(registered, non-bridge, non-pool) holds 1 wei of resource 0. 1. A
-signs `topUpActionBudget gasResource=0 gasAmount=1
-budgetIncrement=1000000 poolActor=gasPoolActor`. -
-`topUpActionBudget_gasCheck`: signer != bridgeActor OK, signer !=
-poolActor OK, poolActor = gasPoolActor OK, gasResource in {0,1} OK,
-1000000 <= MAX_TOPUP_BUDGET_PER_ACTION (=1000000) OK, gasAmount=1 > 0
-OK, balance 1 >= 1 OK. - `topUpRoundTripCheck`: 1000000 * refundRate 0
-= 1000000 * 0 = 0 <= 1. Passes. - Admitted; A's epoch budget is
-credited +1000000 (applyGrant, SignedAction.lean:1199-1200) at a cost
-of 1 wei ETH and 1 budget unit. 2. A signs `claimBudgetRefund
-gasResource=1 budgetUnits=999899 weiPerBudgetUnit=3000 …
-
-**Suggested remediation.**
-
-Make the price link resource-invariant rather than per-leg. Either (a)
-add a conjunct to both
-`topUpActionBudget_gasCheck`/`topUpActionBudgetFor_gate` and
-`claimBudgetRefund_gate` requiring the mint to be priced at the
-MAXIMUM blessed rate — i.e. replace `refundRate gasResource` in
-`topUpRoundTripCheck` with `max (refundRate 0) (refundRate 1)` — so
-budget bought on the cheap leg still costs at least what the rich leg
-will pay; or (b) partition the budget ledger per resource
-(`EpochBudgetState : TreeMap (ActorId x ResourceId) ActorBudget`) so a
-unit is only redeemable on the leg it was bought on. Option (a) is the
-minimal change and preserves every existing GP.3.2/GP.3.4 theorem; …
-
-
-### CRITICAL — No gas-price floor on budget minting: with refunds disabled (the default) 1 wei mints 10^6 budget units, defeating the per-actor admission gate
-
-*Where:* `LegalKernel/Authority/SignedAction.lean:747` — Lean sweep
-
-`topUpActionBudget_gasCheck` (SignedAction.lean:747-758) requires only
-`gasAmount > 0` and `getBalance >= gasAmount`; it imposes no relation
-between `gasAmount` (gas actually paid) and `budgetIncrement` (budget
-minted), bounding the latter only by the per-action ceiling
-`MAX_TOPUP_BUDGET_PER_ACTION = 1000000` (SignedAction.lean:682). The
-only conjunct that ties the two is `topUpRoundTripCheck`, which
-`topUpRoundTripCheck_true_of_zero_rate` (SignedAction.lean:998) proves
-is unconditionally `true` at the default `refundRate = fun _ => 0` —
-the default on every production entry point
-(`apply_admissible_with_budget`'s default argument,
-SignedAction.lean:1166; `apply_bridge_admissible_with_budget`,
-Bridge/Admissible.lean:483; and `RefundRateConfig.disabled` as the CLI
-default, Runtime/RefundRateSidecar.lean:101). The gate's own docstring
-(SignedAction.lean:676-681) recognises the hole and asserts 'each
-repetition permanently moves gasAmount > 0 out of the signer's balance
-into the real pool, and costs a budget unit to admit. The mint is
-therefore paid for' — but `gasAmount > 0` is satisfied by 1 wei while
-the mint is 10^6 units, so each repetition nets +999,999 budget for 1
-wei. The per-actor budget gate is described in the same file as the
-L2's only spam/DoS admission control.
-
-**Failure scenario.**
-
-Default deployment (no `--wei-per-budget-unit-*` flags, so refundRate
-= fun _ => 0), `BudgetPolicy.bounded freeTier actionCost currentEpoch`
-with actionCost = 1. Attacker A is a registered actor holding 1000 wei
-of resource 0 (1e-15 ETH). A repeatedly signs `topUpActionBudget
-gasResource=0 gasAmount=1 budgetIncrement=1000000
-poolActor=gasPoolActor`. Each submission: - passes
-`topUpActionBudget_gasCheck` (gasAmount = 1 > 0, balance >= 1,
-budgetIncrement = 1000000 <= MAX_TOPUP_BUDGET_PER_ACTION), - passes
-`topUpRoundTripCheck` vacuously (1000000 * 0 = 0 <= 1), - consumes 1
-budget unit and grants 1000000 (SignedAction.lean:1223-1228), - debits
-exactly 1 wei from A. After 1000 such actions A holds ~10^9 action-
-budget units and has spent 1000 wei. A can then submit ~10^9 arbitrary
-admitted actions (transfers, policy churn, withdrawals) before the
-budget gate refuses anything, i.e. the …
-
-**Suggested remediation.**
-
-Add a deployment-configured minimum price per budget unit to
-`topUpActionBudget_gasCheck` and `topUpActionBudgetFor_gate`,
-independent of `refundRate`: a conjunct `budgetIncrement *
-minWeiPerBudgetUnit gasResource <= gasAmount` with
-`minWeiPerBudgetUnit` threaded from the runtime alongside `refundRate`
-(and required to be >= 1 on every blessed leg). That makes the mint
-proportional to gas paid under every configuration, including the
-refunds-disabled default, and makes `MAX_TOPUP_BUDGET_PER_ACTION` a
-secondary bound rather than the only one. The existing GP.3.2 theorems
-are unaffected because the new conjunct is another `decide` in the
-same `Bool` gate.
-
-
-### CRITICAL — Bridge-signed `ammSwap` is actor-parametric with no admission conjunct pinning the reserve actor — it can debit an arbitrary actor's balance
-
-*Where:* `LegalKernel/Bridge/Admissible.lean:271` — Lean sweep
-
-`BridgeAdmissibleWith` (Admissible.lean:271-311) adds conjunct 9
-pinning `.reclaimAmmReserves`'s actor fields to the canonical reserved
-slots, with the explicit rationale "the kernel law is actor-
-parametric, so without this pin a bridge-signed action could sweep an
-ARBITRARY actor's balance into an arbitrary recipient"
-(Admissible.lean:296-301). The sibling action `.ammSwap` is equally
-actor-parametric — `Action.compile` maps `.ammSwap fr tr ai ao ra`
-straight to `Laws.ammSwap fr tr ai ao ra` (Authority/Action.lean:623)
-and `Laws.ammSwap` debits the *supplied* `ammReserveActor` at
-`toResource` (Laws/AmmSwap.lean:83-87) — but NO conjunct pins that
-field. `bridgeAuthorizedAction` wildcards every field (`| .ammSwap _ _
-_ _ _ => true`, BridgeActor.lean:480), `Action.isBridgeOnly` likewise
-(Admissible.lean:113), and the `ammReservePolicy` LocalPolicy is keyed
-on `st.signer` (Authority/SignedAction.lean:264-267), so it is never
-consulted for a bridgeActor-signed swap. The docstrings assert the
-opposite: BridgeActor.lean:206-209 claims the reserve actor's balances
-are "mutated only by bridge-attested `ammSwap` actions ... no other
-action targets this actor", and BridgeActor.lean:248-251 offers
-`ammReserveActor_ne_gasPoolActor` as "Guarantees an `ammSwap` mutates
-a ledger domain disjoint from the gas pool" — a theorem about two
-constants that says nothing about the action's field. …
-
-**Failure scenario.**
-
-With the bridge key (or a buggy/compromised L1 event watcher), submit
-`SignedAction { signer := bridgeActor, action := .ammSwap 7 0 1 V
-victim }` where `V = getBalance s 0 victim`. Every `Laws.ammSwap`
-precondition holds: `getBalance s 0 victim ≥ V` ✓, `7 ≠ 0` ✓,
-`amountIn = 1 > 0` ✓, `AmountBounded s 7 victim 1` ✓. `bridgePolicy`
-authorises it (wildcarded), conjunct 8 is satisfied (signer =
-bridgeActor), and no conjunct 9 analogue exists. The step credits
-`victim` 1 unit of the junk resource 7 and debits `victim`'s entire
-resource-0 balance, which is credited to nobody — the funds are
-destroyed. Substituting `gasPoolActor` for `victim` drains the gas
-pool at leg 0 while `pool_drain_bounded_by_action_count` remains
-silent, because that theorem's `hext` hypothesis is exactly what this
-action falsifies.
-
-**Suggested remediation.**
-
-Add a `BridgeAdmissibleWith` conjunct mirroring conjunct 9: `(∀ fr tr
-ai ao ra, st.action = .ammSwap fr tr ai ao ra → ra = ammReserveActor ∧
-(fr = 0 ∨ fr = 1) ∧ (tr = 0 ∨ tr = 1) ∧ es.bridge.ammDisabled =
-false)`, with a projection theorem and a negative test that a non-
-canonical `ra` is inadmissible. Restate
-`ammReserveActor_ne_gasPoolActor`'s docstring claim as a real theorem
-over admitted steps (e.g.
-`ammSwap_admissible_does_not_touch_gasPool`).
+## Verified findings (verifier severity, critical first)
 
 
 ### CRITICAL — Withdrawal SMT is keyed by `nextWdId` but L1 redemption requires the proof index to equal the leaf's `l2LogIndex` — no production withdrawal can be redeemed
 
-*Where:* `LegalKernel/Bridge/Admissible.lean:178` — Lean sweep
+*Where:* `LegalKernel/Bridge/Admissible.lean:178` — Lean sweep, verifier confidence high
 
 `applyActionToBridgeState` records the withdrawal with `l2LogIndex :=
 l2LogIndex` (Admissible.lean:178-182), where that argument is the
@@ -272,6 +119,26 @@ rejected by line 2021. `withdrawWithProof` reverts `InvalidProof` for
 every real withdrawal, so escrowed ETH/BOLD is permanently
 unredeemable.
 
+**Verifier's finding.**
+
+Verified end-to-end in source. (1)
+LegalKernel/Bridge/State.lean:391-395 `appendWithdrawal` is the ONLY
+production insertion into `pending`, keying at `bs.nextWdId` (a per-
+withdrawal counter); grep for `pending.insert` outside tests confirms
+no other writer. (2) LegalKernel/Bridge/Admissible.lean:177-182 stores
+`l2LogIndex` into the leaf, and the sole production caller passes
+`rs.logIndex` (Runtime/Loop.lean:220), which is incremented on EVERY
+admitted action (Loop.lean:235) — a different counter. (3) The only
+production proof builder is `extractProof snap idx`
+(Bridge/WithdrawalProof.lean:94-101) → `constructProof` sets `index :=
+idx` = the withdrawal id (WithdrawalRoot.lean:468-479); the CLI
+(Main.lean:1266/735) takes the withdrawal id. `PendingWithdrawal`
+(State.lean:270-282) has no withdrawal-id field, so L1 cannot recover
+the SMT key from the leaf. (4) KnomosisBridge.sol:2021 requires
+`proofIndex == wd.l2LogIndex` before SmtVerifier.verifyProof at 2022,
+and `withdrawWithProof` is the contract's only exit function.
+Refutation attempts all failed. No code path constrains …
+
 **Suggested remediation.**
 
 Pick one key and make it authoritative on both stacks. Either (a) add
@@ -285,184 +152,9 @@ least one fixture, so the two counters are no longer pinned equal by
 the fixture builder.
 
 
-### CRITICAL — `LocalPolicyClause.capAmount`'s `max : Amount` is encoded on the 8-byte uint head, silently truncating wei-denominated caps mod 2^64
-
-*Where:* `LegalKernel/Encoding/LocalPolicy.lean:111` — Lean sweep
-
-`capAmount` is declared with an `Amount`-typed field
-(`LegalKernel/Authority/LocalPolicy.lean:174`: `| capAmount (resource
-: ResourceId) (max : Amount)`) and its semantics compares against a
-full unbounded `Nat`
-(`LegalKernel/Authority/LocalPolicySemantics.lean:128-137`: `|
-.transfer r' _ _ amt => r' ≠ r ∨ amt ≤ max`). But the encoder writes
-it with `Encodable.encode (T := Nat) max` — the 9-byte `cbeTagUint`
-head whose body is `natToBytesLE n 8` (`Encoding/CBOR.lean:283`),
-which truncates mod 2^64. This is the one Amount-typed field in the
-whole tree left on the narrow head; every other value-carrying field
-(`transfer`/`mint`/`burn` amounts, `userAmount`/`poolAmount`,
-`ammReserveEth`, `boldTvlCap`, balances via `AmountValue`) was
-migrated to `encodeAmount`'s 33-byte `cbeTagAmount` head.
-`LocalPolicyClause.fieldsBounded` (line 64-65) codifies the narrow
-bound `max < 256 ^ 8` rather than the `256 ^ 32` every other amount
-site carries, so the round-trip/injectivity ladder
-(`localPolicyClause_roundtrip`, `LocalPolicy.encodeAsBytes_injective`,
-`LocalPolicies.encodeMap_injective`) is only stated below 2^64 —
-exactly the range `Encoding/CBOR.lean`'s own `cbeTagAmount` docstring
-says wei amounts leave at ~18.45 ETH. Nothing on the production path
-enforces the bound: `Laws/LocalPolicy.lean:60` has `lex_pre := fun _
-=> True` and `Authority/SignedAction.lean:554` stores the action's …
-
-**Failure scenario.**
-
-A deployment declares the canonical gas-pool policy with a per-action
-drain cap above 2^64 wei — e.g. `gasPoolPolicy (20 * 10^18) …`, i.e.
-20 ETH, which `Bridge/GasPoolPolicy.lean:732`'s
-`gasPoolPolicy_fieldsBounded` explicitly cannot discharge (`hEth :
-maxDrainPerActionEth < 256 ^ 8`). (1) The live node enforces `amt ≤
-20000000000000000000`. (2) `getCellValue es (.localPolicy
-gasPoolActor)` (`FaultProof/CellValue.lean:120-129`) encodes `20e18
-mod 2^64 = 1553255926290448384` (~1.553 ETH), so the published
-`commitExtendedState` root is byte-identical to that of a state
-holding a 1.553-ETH cap — two states with different admission
-behaviour commit to the same root, the same class-C-3 defect
-`Laws/AmountBound.lean` was written to close for balances. (3)
-`Runtime/Snapshot.lean:140` writes `Encodable.encodeBytes (T :=
-ExtendedState)`; `restoreSnapshot` (`Snapshot.lean:169`) decodes it
-back …
-
-**Suggested remediation.**
-
-Route the field through the amount head: `LocalPolicyClause.encode`'s
-`capAmount` arm becomes `... ++ encodeAmount max`,
-`LocalPolicyClause.decode`'s tag-2 arm reads it with `decodeAmount`,
-and `LocalPolicyClause.fieldsBounded` becomes `max < 256 ^ 32`. Update
-`localPolicyClause_roundtrip`'s `capAmount` case to use
-`amount_roundtrip`, and re-derive `gasPoolPolicy_fieldsBounded` /
-`ammReservePolicy_fieldsBounded` under the widened bound. Mirror the
-change in the Solidity `CBEEncode`/`CBEDecode` policy path and the
-Rust decoders, and add a `capAmount` case to the cross-stack corpus
-with a value above 2^64. Separately, make `Laws.declareLocalPolicy`
-carry a decidable …
-
-
-### CRITICAL — Lean game model's terminal step adjudicates an unauthenticated, caller-supplied action — the L1 log-chain binding has no Lean counterpart
-
-*Where:* `LegalKernel/FaultProof/Game.lean:336` — Lean sweep
-
-`applyTransition gs (.terminateOnSingleStep step)` calls
-`kernelStepApply step` and compares the result against
-`gs.range.high.commit`, but nothing anywhere in the Lean model
-constrains `step.signedAction` to be the action the L2 actually
-executed at that log index. The Solidity contract does exactly this
-check (`KnomosisFaultProofGame.sol:498`
-`_requireActionInLogChain(g.high.idx, actionKind, actionFields,
-signer)`, whose own error docstring at :207-215 says that without it
-"a party about to lose could search for a different action whose step
-reproduces the disputed root and settle in its favour on a step that
-never happened"). The Lean `GameState` (Game.lean:108-138) carries no
-`prevLogEntryHash`/`expectedNextHash` field, and the two primitives
-that would implement the check — `StepVMCoherence.l1ActionCommit`
-(StepVMCoherence.lean:513) and `StepVMCoherence.l1NextEntryHash`
-(:524) — exist in Lean and have no caller in the game. The
-`GameTransition` docstring at Game.lean:145-170 nevertheless claims
-"Both non-trivial transitions take strictly less from the caller than
-the state machine needs and derive the rest from `gs`" and that the
-transition "mirrors the 5-argument
-`KnomosisFaultProofGame.terminateOnSingleStep`" — the shipped contract
-function takes 8 arguments and performs the binding.
-
-**Failure scenario.**
-
-A dishonest sequencer publishes a fabricated root R at log index i.
-The challenger bisects honestly; `Honesty.disagreement_persists_on_*`
-keeps `low.commit = truth low.idx` and `high.commit = R ≠ truth
-high.idx`, and the range narrows to `[i-1, i]` with `gs.turn =
-.sequencer`. The sequencer chose R in the first place, so it can pick
-R to be `commitExtendedState (productionApplyBudget es st' i)` for
-some *other* action `st'` (e.g. a transfer crediting itself) that it
-can actually build an honest bundle for from the real pre-state. It
-then submits `KernelStep { preStateCommit := gs.range.low.commit,
-signedAction := st', l2LogIndex := i, bundle := stepMultiBundle es st'
-}`. `verifierPostRootMulti` accepts (the bundle is honest for `st'`),
-returns R, the guard at Game.lean:345 succeeds, and `applyTransition`
-settles `.sequencerWon` — the sequencer defends a fabricated root with
-an action …
-
-**Suggested remediation.**
-
-Add the log-entry-chain anchor to `GameState` (e.g.
-`highPrevLogEntryHash`, `highStateCommit`, `highExpectedNextHash`,
-populated at `initiateChallenge` time as the contract does), and gate
-the `.terminateOnSingleStep` arm on `l1NextEntryHash
-highPrevLogEntryHash highStateCommit (l1ActionCommit
-step.signedAction.action step.signedAction.signer) =
-highExpectedNextHash`, awarding the loss to the responder when it
-fails — mirroring `ActionNotInLogChain`. Then restate
-`honest_challenger_wins_against_invalid_state_root` so
-`h_kernel_truthful` is *derived* from the anchor plus
-`stepMultiFold_eq_commit_post`, rather than assumed.
-
-
-### CRITICAL — Lean game model's terminal step never binds the executed action to the disputed log entry (Solidity does); the headline settlement theorems are proved over this weaker model
-
-*Where:* `LegalKernel/FaultProof/Game.lean:314` — Lean sweep
-
-`applyTransition`'s `.terminateOnSingleStep` branch
-(Game.lean:314-341) validates exactly three things: game status,
-single-step range, no pending midpoint, and `step.preStateCommit =
-gs.range.low.commit`. It then calls `kernelStepApply step`, which
-executes `step.signedAction.action` / `step.signedAction.signer` —
-both caller-supplied fields of the responder's `KernelStep`
-(Step.lean:53-75) — and compares the result against
-`gs.range.high.commit`. Nothing anywhere in `GameState`
-(Game.lean:101-137) carries a log-entry-chain commitment, and nothing
-checks that `step.signedAction` is the action the sequencer actually
-committed to at index `gs.range.high.idx`. The production contract
-does perform this check:
-`KnomosisFaultProofGame.terminateOnSingleStep` calls
-`_requireActionInLogChain(g.high.idx, actionKind, actionFields,
-signer)` (solidity/src/contracts/KnomosisFaultProofGame.sol:498,
-551-574) and reverts with `ActionNotInLogChain` on mismatch. So the
-Lean model — the object every `Settlement.lean` theorem, including
-`honest_challenger_wins_against_invalid_state_root`
-(Settlement.lean:213) and
-`terminate_responder_loses_when_step_differs` (Settlement.lean:99), is
-stated about — is strictly weaker than the deployed game, and the
-inline comment at Game.lean:310-313 ("Neither side of that comparison
-comes from the caller") is false of the action itself.
-
-**Failure scenario.**
-
-A dishonest sequencer publishes root R_{i+1} that is NOT the result of
-applying the real log entry i, but is the result of applying some
-substituted action a' (transaction censorship/substitution). A
-challenger disputes and bisects to the single step [low=(i,R_i),
-high=(i+1,R_{i+1})]. The sequencer is the responder and calls
-`terminateOnSingleStep` with a `KernelStep` whose `preStateCommit =
-R_i` (passes the only binding check) and whose `signedAction` is a',
-with the honest multiproof for a' against R_i. `kernelStepApply step`
-returns `some R_{i+1}`, the equality at Game.lean:343 holds, and
-Game.lean:344-350 awards `sequencerWon`. The fabricated root is upheld
-and the challenger's bond is slashed. In Lean this is fully reachable;
-the only thing preventing it in production is a check that exists
-solely in Solidity and is therefore unmodelled and unproved.
-
-**Suggested remediation.**
-
-Give `GameState`/`DisputedRange.Claim` the log-entry-chain fields the
-contract reads (`prevLogEntryHash`, `stateCommit`, `expectedNextHash`
-at `high.idx`) and add a guard in `applyTransition
-.terminateOnSingleStep` mirroring `_requireActionInLogChain`:
-recompute `StepVMCoherence.l1NextEntryHash prevLogEntryHash
-stateCommit (StepVMCoherence.l1ActionCommit step.signedAction.action
-step.signedAction.signer)` and treat a mismatch exactly as the
-contract does (responder loses / refusal). Then restate the Settlement
-theorems over the guarded transition.
-
-
 ### CRITICAL — An honest responder loses the game outright on any step over `distributeOthers` / `proportionalDilute`, and nothing enforces the deployment-level exclusion the design relies on
 
-*Where:* `LegalKernel/FaultProof/VerifierWrites.lean:1733` — Lean sweep
+*Where:* `LegalKernel/FaultProof/VerifierWrites.lean:1733` — Lean sweep, verifier confidence high
 
 `FaultProofAdjudicable` is `false` on exactly the two bulk variants
 (VerifierWrites.lean:1733-1736, pinned by
@@ -500,6 +192,26 @@ i+1]. The sequencer, as responder, calls `terminateOnSingleStep`;
 attack is profitable, repeatable, and requires no dishonesty by the
 sequencer whatsoever.
 
+**Verifier's finding.**
+
+Traced end to end in source. (1) VerifierWrites.lean:1733-1736 makes
+FaultProofAdjudicable false on exactly
+.distributeOthers/.proportionalDilute (iff-pinned at :1771). (2)
+Terminate.lean:428 has verifierPostRootMulti return none for them
+before inspecting anything. (3) Game.lean:336-341 maps kernelStepApply
+= none to "turn-holder loses". (4) The two honesty theorems that could
+rescue this (Step.lean:148, Terminate.lean:1161) both take h_adj :
+FaultProofAdjudicable = true as a hypothesis, so no theorem covers the
+bulk case. The claimed mitigation is enforced nowhere:
+FaultProofAdjudicable occurs in no non-test Lean file outside
+FaultProof/{Terminate,Step,VerifierWrites}; AuthorityPolicy
+(Authority/Identity.lean:157-165) is an unconstrained ActorId ->
+Action -> Prop with no adjudicability conjunct; no genesis-
+ratification or admission gate references it; no Rust guard (grep
+'adjudicab' over runtime/ yields three comments in the observer only);
+no actionKind filter in KnomosisStateRootSubmission.sol. The project's
+own worked deployment authorises the bulk pair — …
+
 **Suggested remediation.**
 
 Make the exclusion structural rather than a runbook sentence: add a
@@ -515,7 +227,7 @@ recipient list into the action's fields).
 
 ### CRITICAL — Pivot de-duplication cache blocks the honest sequencer's terminateOnSingleStep, forcing a bond loss in the normal adversarial trace
 
-*Where:* `runtime/knomosis-faultproof-observer/src/observer.rs:1420` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-faultproof-observer/src/observer.rs:1420` — Rust / Solidity sweep, verifier confidence high
 
 `maybe_play_move` de-duplicates moves on the key `(game_id,
 pivot_idx)` where `pivot_for_move` (observer.rs:1672-1682) returns
@@ -546,6 +258,26 @@ turn Sequencer. (5) `handle_response_submitted` -> `maybe_play_move`
 silently skipped (`debug!` only). No further event ever arrives for
 this game, so the observer never …
 
+**Verifier's finding.**
+
+CONFIRMED by source trace plus a temporary executable reproduction
+(since reverted). Mechanism, verified line by line: - observer.rs:156
+declares the dedup cache as HashSet<(u128, Option<u64>)> — game_id +
+bare pivot index, no move-kind or depth discriminator. -
+observer.rs:1413-1427: build_calldata_for_move runs FIRST (terminate
+calldata is built successfully), then pivot_for_move +
+has_submitted_for_pivot skip the move with only a debug! log,
+returning Ok(Some(false)) before any ResponseRecord is persisted. -
+observer.rs:1672-1681: Submit(c) => Some(c.idx) but
+TerminateOnSingleStep => Some(state.range.high.idx) — two different
+index spaces sharing one key. - KnomosisFaultProofGame.sol:445-448
+`else { g.high = g.pendingMidpoint; }` (Rust mirror game.rs:428-432
+apply_respond disagree branch) makes post-disagree range.high.idx
+EXACTLY the midpoint index previously submitted. - Turn parity forces
+the collision onto one party: initiateChallenge sets g.turn =
+Sequencer (:364); submitMidpoint (:413) and respondToMidpoint (:453)
+both flip. So the sequencer always sees pending_midpoint == …
+
 **Suggested remediation.**
 
 Make the dedup key discriminate the move kind, e.g. key on `(game_id,
@@ -558,107 +290,9 @@ opponent disagrees, terminate at high == N) and asserting a terminate
 calldata is broadcast.
 
 
-### CRITICAL — Observer only ever moves in reaction to an opponent event, so the honest sequencer never submits its first midpoint and any deferred move is never retried
-
-*Where:* `runtime/knomosis-faultproof-observer/src/observer.rs:693` — Rust / Solidity sweep
-
-`maybe_play_move` is invoked from exactly two call sites --
-`handle_midpoint_submitted` (observer.rs:1187) and
-`handle_response_submitted` (observer.rs:1291). Nothing else drives
-it: `handle_game_opened` deliberately does not (it records
-`state_known=false`), and `hydrate_cold_start_games` (observer.rs:565,
-called at observer.rs:693) flips `state_known` to true via
-`mark_state_known` but never asks whether a move is now owed. There is
-no per-iteration sweep over `self.games` for `status == InProgress &&
-turn == me`. Consequently the observer can only act when the opposing
-party has just acted.
-
-**Failure scenario.**
-
-The L1 contract sets `g.turn = TurnSide.Sequencer` at
-`initiateChallenge` (KnomosisFaultProofGame.sol:361), so after a game
-opens the SEQUENCER owes the first midpoint and the challenger
-correctly does nothing. An observer with `play_as = Sequencer` adopts
-the game from `FaultProofGameOpened` with `state_known=false` (no
-move), hydrates it on the next iteration (state_known=true,
-turn=Sequencer, pending_midpoint=None) -- and then waits for an event
-that can never arrive, because the challenger has no legal move while
-it is the sequencer's turn. `turnDeadline` expires and the challenger
-calls `claimTimeout`, slashing an honest sequencer that never got to
-defend. The same dead-end applies to every deferred move: a
-`TruthOracleMissed` (observer.rs:1400), a `build_calldata_for_move`
-failure (observer.rs:1413), or a `build_and_sign` failure
-(observer.rs:1434) all return `Ok(Some(false))` and …
-
-**Suggested remediation.**
-
-Add a per-iteration sweep after hydration and after event dispatch:
-for every `GameRecord` with `state.status.is_in_progress() &&
-state_known && state.turn == me`, call `maybe_play_move`. That single
-loop covers the sequencer's opening move, post-hydration catch-up, and
-retry of every deferred move, and is naturally idempotent once the
-pivot key is fixed (see the terminate-dedup finding).
-
-
-### CRITICAL — Per-connection writer-thread spawn uses `.expect()`, so an OS thread refusal aborts the whole host process (release `panic = "abort"`)
-
-*Where:* `runtime/knomosis-host/src/listener.rs:594` — Rust / Solidity sweep
-
-`run_persistent` spawns the per-connection response-writer thread with
-`std::thread::Builder::new()...spawn(...).expect("spawn persistent
-writer thread")`. `Builder::spawn` returns `Err(io::Error)` — not a
-panic — precisely on `EAGAIN` (RLIMIT_NPROC, cgroup `pids.max`, or
-thread-stack VA exhaustion), which is the condition that arises under
-exactly the load an unauthenticated remote attacker controls: the
-number of simultaneously open connections. The workspace release
-profile sets `panic = "abort"` (`runtime/Cargo.toml`
-`[profile.release]`), so this panic terminates the entire `knomosis-
-host` process rather than just the connection thread. The identical
-hazard is explicitly recognised and correctly handled ~180 lines later
-in the TCP accept loop (`listener.rs:782-804`: "thread::spawn PANICS
-when the OS refuses a thread (EAGAIN under fd/thread pressure —
-exactly when a server is under load) ... Handle the error instead.")
-and in the Unix accept loop (`listener.rs:1336-1356`), so the
-hardening was applied to one of the two per-connection spawn sites and
-missed on the other. `run_persistent` is the site that *doubles*
-thread pressure: with `--persistent-connections`, every accepted
-connection costs two threads (handler + writer), so the default
-`max_concurrent_connections = 1024` means up to 2048 live threads.
-
-**Failure scenario.**
-
-Host started with `--persistent-connections` (TCP or Unix), defaults
-otherwise (`max_concurrent_connections = 1024`), running in a
-container with `pids.max = 1500` or under `RLIMIT_NPROC`. An attacker
-opens ~750 concurrent TCP connections. Each accepted connection
-acquires a `ConnectionSlot` (cap not yet reached), spawns its handler
-thread, and the handler immediately calls `run_persistent`, which
-tries to spawn a second (writer) thread. At ~750 connections the
-1500-pid budget is exhausted; `Builder::spawn` returns `Err(EAGAIN)`;
-`.expect` panics; `panic = "abort"` fires `abort()` and the whole
-sequencer host dies. No authentication, no valid `SignedAction`, and
-no valid CBE payload is required — the attacker only has to complete
-TCP handshakes. Restarting the process does not help: the attacker
-reconnects and kills it again.
-
-**Suggested remediation.**
-
-Replace the `.expect` with error handling that degrades instead of
-aborting. `run_persistent` already has a natural fallback — the one-
-shot handler — and both call sites (`handle_single_connection`,
-`handle_single_unix_connection`) already implement a
-`try_clone`-failure fallback to `handle_connection`. Change
-`run_persistent` to return a `Result`/sentinel on spawn failure, e.g.:
-```rust let writer = match std::thread::Builder::new()
-.name("knomosis-host-persist-writer".into()) .spawn(move || {
-persistent_writer_loop(write_half, resp_rx, kernel_reply_timeout,
-&writer_dead); }) { Ok(w) => w, Err(e) => { tracing::warn!(error = %e,
-"failed to spawn persistent writer; one-shot fallback"); …
-
-
 ### CRITICAL — AMM has no minimum-liquidity/reserve guard: a 1-wei BOLD seed lets an attacker drain ~half the ETH reserve per swap
 
-*Where:* `solidity/src/contracts/KnomosisBridge.sol:1811` — Rust / Solidity sweep
+*Where:* `solidity/src/contracts/KnomosisBridge.sol:1811` — Rust / Solidity sweep, verifier confidence high
 
 `ammSwap` only rejects a *zero* reserve (`if (reserveIn == 0 ||
 reserveOut == 0) revert AmmEmpty();`, line 1811). There is no minimum-
@@ -692,6 +326,26 @@ inputs extracts the remainder. Total loss: essentially the whole
 `ammReserveEth`, i.e. gas-pool funds, for a few wei of BOLD. The same
 attack works in the …
 
+**Verifier's finding.**
+
+CONFIRMED by direct source reading and an executed proof-of-concept.
+KnomosisBridge.sol:1811 (`if (reserveIn == 0 || reserveOut == 0)
+revert AmmEmpty();`) is the ONLY liquidity gate in `ammSwap` — there
+is no minimum-reserve floor, no initial-price anchor, no external
+price reference, and no cap on swap size relative to reserves. A grep
+over solidity/src confirms `ammReserveEth`/`ammReserveBold` are
+written only by `_seedAmmReserves` (1541-1579) and `ammSwap`
+(1845-1850): there is NO admin or genesis seeding function, so
+reserves start at zero and accrue from two independent, unbalanced
+deposit flows. At line 1563 `ammSeedAmount = (poolAmount * ratio) /
+10_000;` with only `if (ammSeedAmount == 0) return 0;` at 1565, so a
+seed of exactly 1 wei is admissible and fully attacker-choosable via
+the permissionless `depositBoldWithFee(amount, chosenFeeBps)` (both
+parameters caller-controlled; `amount == 0` is the only floor). I
+wrote and ran a Foundry PoC on the repo's own AmmTestBase deployment
+(ammSeedRatioBps=8000, maxFeeBps=5000), then deleted it. Results: ETH
+fee-split deposits gave …
+
 **Suggested remediation.**
 
 Enforce a per-leg minimum reserve before a swap is admissible (e.g.
@@ -706,7 +360,7 @@ exceed a value-comparable floor.
 
 ### CRITICAL — Withdrawal proof binds the SMT leaf position to `l2LogIndex`, but the Lean authority keys the withdrawal SMT by `WithdrawalId` — all withdrawals become unredeemable
 
-*Where:* `solidity/src/contracts/KnomosisBridge.sol:2021` — Rust / Solidity sweep
+*Where:* `solidity/src/contracts/KnomosisBridge.sol:2021` — Rust / Solidity sweep, verifier confidence high
 
 `withdrawWithProof` requires the proof's tree position to equal the
 leaf's `l2LogIndex` field (`if (proofIndex != wd.l2LogIndex) revert
@@ -740,6 +394,27 @@ is unredeemable by any input; every bridged position is permanently
 stranded once the two counters diverge, which is after the first non-
 withdraw L2 action.
 
+**Verifier's finding.**
+
+Traced end-to-end in source. Lean keys the withdrawal SMT by
+WithdrawalId: `appendWithdrawal` inserts at `bs.nextWdId`
+(LegalKernel/Bridge/State.lean:389-394), `rangeRoot` splits on the map
+key `p.1` (Bridge/WithdrawalRoot.lean:205-220), and the production
+emitter `extractProof` / `knomosis withdrawal-proof`
+(Bridge/WithdrawalProof.lean:97-99, Main.lean:723-742) sets
+`WithdrawalProof.index := idx`, that same key (constructProof,
+WithdrawalRoot.lean:469-477). `l2LogIndex` is a distinct counter: the
+`.withdraw` arm of `applyActionToBridgeState` stores the function's
+`l2LogIndex` parameter as a leaf FIELD while taking the key from
+`nextWdId` (Bridge/Admissible.lean:168-183), and that parameter is the
+runtime's global per-action log index
+(FaultProof/ProductionApply.lean:121-124). The repo's own test proves
+divergence: Test/Runtime/BridgeAdmission.lean:415-424 runs deposit,
+deposit, withdraw and asserts the pending entry sits at key 0 with
+`l2LogIndex = 2` and `nextWdId = 1`. L1 requires equality:
+KnomosisBridge.sol:2021 `if (proofIndex != wd.l2LogIndex) revert
+InvalidProof();` where …
+
 **Suggested remediation.**
 
 Add the withdrawal id to the redeemed leaf's on-wire identity and bind
@@ -752,9 +427,72 @@ adds no soundness and only breaks the honest path. Add a regression
 fixture where `withdrawalId != l2LogIndex` on both stacks.
 
 
+### CRITICAL (reported MAJOR) — The attestation-staleness circuit breaker gates `submitStateRoot` itself, so one missed window permanently bricks the bridge
+
+*Where:* `solidity/src/contracts/KnomosisBridge.sol:1880` — Rust / Solidity sweep, verifier confidence high
+
+`submitStateRoot` carries the `circuitOpen` modifier (line 1882),
+whose first arm reverts `AttestationStale` when `block.number >
+latestStateRootSubmittedAtBlock + maxAttestationStaleBlocks` (lines
+1044-1048). `latestStateRootSubmittedAtBlock` is written *only* inside
+`submitStateRoot` (line 1904), and `maxAttestationStaleBlocks` is
+`immutable` (line 271). The breaker is therefore self-sealing: the one
+action that could clear the staleness condition is the action the
+breaker blocks. There is no admin reset, no timeout, and no alternate
+write path.
+
+**Failure scenario.**
+
+A deployment sets `maxAttestationStaleBlocks = 200` (the value used
+throughout the test suite, ~40 minutes on mainnet). The
+sequencer/attestor suffers a 45-minute outage — a routine operational
+event. On recovery it calls `submitStateRoot(root, n+1, sig)`;
+`circuitOpen` evaluates `block.number >
+latestStateRootSubmittedAtBlock + 200`, which is now true and will
+remain true forever, so the call reverts `AttestationStale`. Every
+subsequent attempt reverts identically. `depositETH`, `depositERC20`,
+`depositETHWithFee` and `depositBoldWithFee` also revert (same
+modifier). No new L2 state root can ever be published, so every L2
+withdrawal not already covered by a submitted-and-finalised root is
+permanently unredeemable; recovery requires the full
+`KnomosisMigration` handoff to a freshly deployed bridge.
+
+**Verifier's finding.**
+
+Verified in source and reproduced with a forge test.
+KnomosisBridge.sol:1880-1882 applies `circuitOpen` to
+`submitStateRoot`; the modifier's first arm (1043-1048) reverts
+`AttestationStale` when `block.number >
+latestStateRootSubmittedAtBlock + maxAttestationStaleBlocks`.
+`latestStateRootSubmittedAtBlock` is written only at 1904 (inside the
+very function the breaker blocks — confirmed by grep over the whole
+contract; `revertToPriorRoot` at 2124 does not touch it), and
+`maxAttestationStaleBlocks` is `immutable` (271/942) with no setter
+and no admin reset in the contract's function list. A temporary test
+(submit at block 1 with window 200, roll to 202) reverted
+`AttestationStale`, and still reverted after a further 1,000,000
+blocks; a control at exactly latest+200 succeeded, isolating the
+overshoot. Two facts make it worse than reported. (1) The claimed
+`KnomosisMigration` recovery does not exist in the shipped
+configuration: `migration` is immutable (267/939),
+`script/DeploySepolia.s.sol` hard-codes `migration: address(0)`
+(665/694) and asserts it at 726, and `circuitOpen`'s …
+
+**Suggested remediation.**
+
+Exempt `submitStateRoot` from the `AttestationStale` arm (it is the
+recovery action, not a value-moving one) — e.g. split `circuitOpen`
+into `depositOpen` (all four arms) and `submissionOpen` (dispute-
+cooldown, TVL and migration arms only). Keeping deposits halted while
+a fresh root is accepted preserves the intended "deposits halted,
+exits continue" posture without making the halt terminal. Add a
+regression test that rolls past `maxAttestationStaleBlocks` and
+asserts a subsequent `submitStateRoot` succeeds.
+
+
 ### CRITICAL — StepWrites.applyGrantAt skips the epoch normalisation Lean performs on a ZERO grant, forking the state root
 
-*Where:* `solidity/src/lib/StepWrites.sol:302` — Rust / Solidity sweep
+*Where:* `solidity/src/lib/StepWrites.sol:302` — Rust / Solidity sweep, verifier confidence high
 
 `StepWrites.applyGrantAt` short-circuits with `if (grantAmount == 0 ||
 target != grantRecipient) return pre;`. The Lean authority
@@ -792,6 +530,26 @@ must produce its post-value. * Lean / the honest sequencer:
 `normalise` = `{lastSeenEpoch:1, budgetBalance:100}` → cell bytes
 `0x00 0100000000000000 00 6400000000000000`, a PRESENT leaf …
 
+**Verifier's finding.**
+
+Confirmed by reading both stacks and by executing the Solidity path.
+solidity/src/lib/StepWrites.sol:302 `applyGrantAt` returns `pre`
+unchanged when `grantAmount == 0`; the Lean authority
+(LegalKernel/FaultProof/VerifierWrites.lean:290-300) has no zero-
+amount case and calls `pre.topUp currentEpoch freeTier g`, which is
+`normalise` then add (LegalKernel/Authority/ActorBudget.lean:36-53).
+On a stale cell (`lastSeenEpoch < currentEpoch`) `normalise` returns
+`{currentEpoch, max(bal, freeTier)}`, so `topUp(…, 0)` is NOT the
+identity. The sequencer side agrees with Lean's verifier:
+ProductionApply.lean:161-170 `budgetGrant` is unconditional and
+`EpochBudgetState.topUp` (ActorBudget.lean:239-242) inserts the
+result. I ran the Solidity function under forge with the corpus's own
+policy cell (freeTier=100, actionCost=1, currentEpoch=1), signer=7,
+target=grantRecipient=8, absent target cell, grantAmount=0: it
+returned 0x000000000000000000000000000000000000 (the canonical-absent
+value) where Lean produces 0x000100000000000000006400000000000000. The
+Lean value is forced by the corpus's own …
+
 **Suggested remediation.**
 
 Stop overloading `grantAmount == 0` as the "this variant grants
@@ -807,7 +565,7 @@ policy.currentEpoch` so the corpus pins the case.
 
 ### MAJOR — MAX_TOPUP_BUDGET_PER_ACTION lets 1 wei buy 1,000,000 budget units, defeating the L2's only spam-admission control
 
-*Where:* `LegalKernel/Authority/SignedAction.lean:682` — Lean sweep
+*Where:* `LegalKernel/Authority/SignedAction.lean:682` — Lean sweep, verifier confidence high
 
 `Laws.topUpActionBudget`'s kernel leg requires only `getBalance s
 gasResource a ≥ gasAmount`
@@ -850,6 +608,26 @@ with ~10^9 accumulated budget units — enough to flood the sequencer
 indefinitely. The per-actor epoch-budget gate, described at
 SignedAction.lean:667-668 as "the L2's only spam/DoS admission …
 
+**Verifier's finding.**
+
+CONFIRMED by independent trace of every conjunct on the production
+path. (1) Kernel leg: Laws/TopUpActionBudget.lean:16-21 has pre :=
+getBalance s gasResource a >= gasAmount AND AmountBounded ...;
+budgetIncrement is bound as `_budgetIncrement` (literally unused). No
+binding between mint size and gas paid. (2) Gate leg:
+topUpActionBudget_gasCheck (SignedAction.lean:747-758) has only two
+quantitative conjuncts -- budgetIncrement <=
+MAX_TOPUP_BUDGET_PER_ACTION (line 755; def = 1000000 at line 682) and
+gasAmount > 0 (satisfied by 1). The SAME gate is used on the
+production bridge path (Bridge/Admissible.lean:496), so this is not a
+kernel-only artifact. (3) The only conjunct that relates the two is
+topUpRoundTripCheck (SignedAction.lean:966-971), and
+topUpRoundTripCheck_true_of_zero_rate (998-1000) proves it
+unconditionally true at refundRate = fun _ => 0 -- the default on
+every entry point (Runtime/Loop.lean:126,338,382,417,487;
+Main.lean:1050-1053 refundRateEth/Bold : Option Nat := none, .getD 0).
+(4) Grant/consume asymmetry: SignedAction.lean:1199-1200 and …
+
 **Suggested remediation.**
 
 Add a rate-independent price conjunct to `topUpActionBudget_gasCheck`
@@ -865,9 +643,241 @@ is never vacuous. `MAX_TOPUP_BUDGET_PER_ACTION` should remain as a
 second-order cap, not as the only bound.
 
 
+### MAJOR (reported CRITICAL) — Cross-resource budget arbitrage: budget is minted at the buy leg's refund rate and redeemed at the sell leg's rate, draining the gas pool
+
+*Where:* `LegalKernel/Authority/SignedAction.lean:966` — Lean sweep, verifier confidence high
+
+`topUpRoundTripCheck` (SignedAction.lean:966-972) prices a budget mint
+against `refundRate gasResource` where `gasResource` is the *top-up's*
+resource, while `claimBudgetRefund_gate` (SignedAction.lean:1090-1106)
+pays out at `refundRate gasResource` of the *refund's* resource. The
+action budget itself is a single per-actor scalar (`EpochBudgetState
+:= TreeMap ActorId ActorBudget`, ActorBudget.lean:171 — no resource
+dimension), so units bought on one blessed leg are redeemable on the
+other. Both gates bless exactly `gasResource = 0 ∨ gasResource = 1`
+(SignedAction.lean:754 and :1099), and nothing anywhere requires
+`refundRate 0 = refundRate 1`. The asymmetric configuration is not
+exotic: `RefundRateConfig` (Runtime/RefundRateSidecar.lean:76-92) and
+the CLI (`--wei-per-budget-unit-eth` / `--wei-per-budget-unit-bold`,
+Main.lean:816-832) explicitly support enabling one leg and leaving the
+other at 0, and at rate 0 the round-trip seal is *provably* vacuous
+(`topUpRoundTripCheck_true_of_zero_rate`, SignedAction.lean:998-1001).
+The docstring of `topUpActionBudget_roundtrip_not_profitable`
+(SignedAction.lean:1975-1996) claims 'The top-up -> refund round-trip
+is therefore non-profitable for EVERY caller', but the theorem it
+decorates only concludes `budgetIncrement * refundRate gasResource <=
+gasAmount` for the buy leg, which does not imply the claim once the
+sell leg's rate differs.
+
+**Failure scenario.**
+
+Deployment runs `knomosis ... --wei-per-budget-unit-bold 3000` and
+omits `--wei-per-budget-unit-eth` (documented as 'refunds disabled at
+ETH'). So refundRate 0 = 0, refundRate 1 = 3000. Attacker A
+(registered, non-bridge, non-pool) holds 1 wei of resource 0. 1. A
+signs `topUpActionBudget gasResource=0 gasAmount=1
+budgetIncrement=1000000 poolActor=gasPoolActor`. -
+`topUpActionBudget_gasCheck`: signer != bridgeActor OK, signer !=
+poolActor OK, poolActor = gasPoolActor OK, gasResource in {0,1} OK,
+1000000 <= MAX_TOPUP_BUDGET_PER_ACTION (=1000000) OK, gasAmount=1 > 0
+OK, balance 1 >= 1 OK. - `topUpRoundTripCheck`: 1000000 * refundRate 0
+= 1000000 * 0 = 0 <= 1. Passes. - Admitted; A's epoch budget is
+credited +1000000 (applyGrant, SignedAction.lean:1199-1200) at a cost
+of 1 wei ETH and 1 budget unit. 2. A signs `claimBudgetRefund
+gasResource=1 budgetUnits=999899 weiPerBudgetUnit=3000 …
+
+**Verifier's finding.**
+
+Mechanism verified end-to-end in source. (1) Budget is a single per-
+actor scalar with no resource dimension: ActorBudget.lean:19-25
+(fields lastSeenEpoch/budgetBalance only) and EpochBudgetState :=
+TreeMap ActorId ActorBudget; applyGrant (SignedAction.lean:1195-1211)
+credits the signer irrespective of gasResource, and refundConsumeExtra
+debits that same scalar. (2) The buy leg is priced at refundRate of
+the top-up's resource (topUpRoundTripCheck, SignedAction.lean:966-972)
+while the sell leg pays at refundRate of the refund's resource
+(claimBudgetRefund_gate, :1090-1106); both bless {0,1} (:754, :1099).
+(3) topUpActionBudget_gasCheck (:753-760) adds no price link — only
+budgetIncrement <= MAX_TOPUP_BUDGET_PER_ACTION (=1_000_000, :682),
+gasAmount > 0, balance >= gasAmount — and Laws.topUpActionBudget
+(Laws/TopUpActionBudget.lean:15-24) charges only gasAmount. So at
+refundRate 0 the seal is provably vacuous
+(topUpRoundTripCheck_true_of_zero_rate, :998-1001) and 1 wei mints 1e6
+units, redeemable at the other blessed leg subject only to
+refundableBudget …
+
+**Suggested remediation.**
+
+Make the price link resource-invariant rather than per-leg. Either (a)
+add a conjunct to both
+`topUpActionBudget_gasCheck`/`topUpActionBudgetFor_gate` and
+`claimBudgetRefund_gate` requiring the mint to be priced at the
+MAXIMUM blessed rate — i.e. replace `refundRate gasResource` in
+`topUpRoundTripCheck` with `max (refundRate 0) (refundRate 1)` — so
+budget bought on the cheap leg still costs at least what the rich leg
+will pay; or (b) partition the budget ledger per resource
+(`EpochBudgetState : TreeMap (ActorId x ResourceId) ActorBudget`) so a
+unit is only redeemable on the leg it was bought on. Option (a) is the
+minimal change and preserves every existing GP.3.2/GP.3.4 theorem; …
+
+
+### MAJOR (reported CRITICAL) — No gas-price floor on budget minting: with refunds disabled (the default) 1 wei mints 10^6 budget units, defeating the per-actor admission gate
+
+*Where:* `LegalKernel/Authority/SignedAction.lean:747` — Lean sweep, verifier confidence high
+
+`topUpActionBudget_gasCheck` (SignedAction.lean:747-758) requires only
+`gasAmount > 0` and `getBalance >= gasAmount`; it imposes no relation
+between `gasAmount` (gas actually paid) and `budgetIncrement` (budget
+minted), bounding the latter only by the per-action ceiling
+`MAX_TOPUP_BUDGET_PER_ACTION = 1000000` (SignedAction.lean:682). The
+only conjunct that ties the two is `topUpRoundTripCheck`, which
+`topUpRoundTripCheck_true_of_zero_rate` (SignedAction.lean:998) proves
+is unconditionally `true` at the default `refundRate = fun _ => 0` —
+the default on every production entry point
+(`apply_admissible_with_budget`'s default argument,
+SignedAction.lean:1166; `apply_bridge_admissible_with_budget`,
+Bridge/Admissible.lean:483; and `RefundRateConfig.disabled` as the CLI
+default, Runtime/RefundRateSidecar.lean:101). The gate's own docstring
+(SignedAction.lean:676-681) recognises the hole and asserts 'each
+repetition permanently moves gasAmount > 0 out of the signer's balance
+into the real pool, and costs a budget unit to admit. The mint is
+therefore paid for' — but `gasAmount > 0` is satisfied by 1 wei while
+the mint is 10^6 units, so each repetition nets +999,999 budget for 1
+wei. The per-actor budget gate is described in the same file as the
+L2's only spam/DoS admission control.
+
+**Failure scenario.**
+
+Default deployment (no `--wei-per-budget-unit-*` flags, so refundRate
+= fun _ => 0), `BudgetPolicy.bounded freeTier actionCost currentEpoch`
+with actionCost = 1. Attacker A is a registered actor holding 1000 wei
+of resource 0 (1e-15 ETH). A repeatedly signs `topUpActionBudget
+gasResource=0 gasAmount=1 budgetIncrement=1000000
+poolActor=gasPoolActor`. Each submission: - passes
+`topUpActionBudget_gasCheck` (gasAmount = 1 > 0, balance >= 1,
+budgetIncrement = 1000000 <= MAX_TOPUP_BUDGET_PER_ACTION), - passes
+`topUpRoundTripCheck` vacuously (1000000 * 0 = 0 <= 1), - consumes 1
+budget unit and grants 1000000 (SignedAction.lean:1223-1228), - debits
+exactly 1 wei from A. After 1000 such actions A holds ~10^9 action-
+budget units and has spent 1000 wei. A can then submit ~10^9 arbitrary
+admitted actions (transfers, policy churn, withdrawals) before the
+budget gate refuses anything, i.e. the …
+
+**Verifier's finding.**
+
+VERIFIED REAL. Traced end-to-end in source. 1.
+topUpActionBudget_gasCheck
+(LegalKernel/Authority/SignedAction.lean:747-758) imposes NO relation
+between gasAmount and budgetIncrement: only `gasAmount > 0`,
+`getBalance >= gasAmount`, and `budgetIncrement <=
+MAX_TOPUP_BUDGET_PER_ACTION = 1000000` (line 682). 2. The kernel law
+cannot compensate: Laws/TopUpActionBudget.lean:15-24 takes the
+parameter as `_budgetIncrement` and never uses it; `pre` is only
+`getBalance >= gasAmount /\ AmountBounded ...`. 3. The only conjunct
+tying the two, topUpRoundTripCheck (SignedAction.lean:966-971), is
+`budgetIncrement * refundRate gasResource <= gasAmount`, which
+topUpRoundTripCheck_true_of_zero_rate (line 998) proves
+unconditionally true at rate 0. Rate 0 is the default at every level I
+checked: apply_admissible_with_budget:1166,
+Bridge/Admissible.lean:483, Runtime/Loop.lean:126, and
+Main.lean:1133-1141 (`ofFlags (refundRateEth.getD 0)
+(refundRateBold.getD 0)`), i.e. zero unless --wei-per-budget-unit-eth
+is passed. REFUTATION ATTEMPTS, ALL FAILED: - bridgeAuthorizedAction
+returns false for …
+
+**Suggested remediation.**
+
+Add a deployment-configured minimum price per budget unit to
+`topUpActionBudget_gasCheck` and `topUpActionBudgetFor_gate`,
+independent of `refundRate`: a conjunct `budgetIncrement *
+minWeiPerBudgetUnit gasResource <= gasAmount` with
+`minWeiPerBudgetUnit` threaded from the runtime alongside `refundRate`
+(and required to be >= 1 on every blessed leg). That makes the mint
+proportional to gas paid under every configuration, including the
+refunds-disabled default, and makes `MAX_TOPUP_BUDGET_PER_ACTION` a
+secondary bound rather than the only one. The existing GP.3.2 theorems
+are unaffected because the new conjunct is another `decide` in the
+same `Bool` gate.
+
+
+### MAJOR (reported CRITICAL) — Bridge-signed `ammSwap` is actor-parametric with no admission conjunct pinning the reserve actor — it can debit an arbitrary actor's balance
+
+*Where:* `LegalKernel/Bridge/Admissible.lean:271` — Lean sweep, verifier confidence high
+
+`BridgeAdmissibleWith` (Admissible.lean:271-311) adds conjunct 9
+pinning `.reclaimAmmReserves`'s actor fields to the canonical reserved
+slots, with the explicit rationale "the kernel law is actor-
+parametric, so without this pin a bridge-signed action could sweep an
+ARBITRARY actor's balance into an arbitrary recipient"
+(Admissible.lean:296-301). The sibling action `.ammSwap` is equally
+actor-parametric — `Action.compile` maps `.ammSwap fr tr ai ao ra`
+straight to `Laws.ammSwap fr tr ai ao ra` (Authority/Action.lean:623)
+and `Laws.ammSwap` debits the *supplied* `ammReserveActor` at
+`toResource` (Laws/AmmSwap.lean:83-87) — but NO conjunct pins that
+field. `bridgeAuthorizedAction` wildcards every field (`| .ammSwap _ _
+_ _ _ => true`, BridgeActor.lean:480), `Action.isBridgeOnly` likewise
+(Admissible.lean:113), and the `ammReservePolicy` LocalPolicy is keyed
+on `st.signer` (Authority/SignedAction.lean:264-267), so it is never
+consulted for a bridgeActor-signed swap. The docstrings assert the
+opposite: BridgeActor.lean:206-209 claims the reserve actor's balances
+are "mutated only by bridge-attested `ammSwap` actions ... no other
+action targets this actor", and BridgeActor.lean:248-251 offers
+`ammReserveActor_ne_gasPoolActor` as "Guarantees an `ammSwap` mutates
+a ledger domain disjoint from the gas pool" — a theorem about two
+constants that says nothing about the action's field. …
+
+**Failure scenario.**
+
+With the bridge key (or a buggy/compromised L1 event watcher), submit
+`SignedAction { signer := bridgeActor, action := .ammSwap 7 0 1 V
+victim }` where `V = getBalance s 0 victim`. Every `Laws.ammSwap`
+precondition holds: `getBalance s 0 victim ≥ V` ✓, `7 ≠ 0` ✓,
+`amountIn = 1 > 0` ✓, `AmountBounded s 7 victim 1` ✓. `bridgePolicy`
+authorises it (wildcarded), conjunct 8 is satisfied (signer =
+bridgeActor), and no conjunct 9 analogue exists. The step credits
+`victim` 1 unit of the junk resource 7 and debits `victim`'s entire
+resource-0 balance, which is credited to nobody — the funds are
+destroyed. Substituting `gasPoolActor` for `victim` drains the gas
+pool at leg 0 while `pool_drain_bounded_by_action_count` remains
+silent, because that theorem's `hext` hypothesis is exactly what this
+action falsifies.
+
+**Verifier's finding.**
+
+Verified end-to-end in source. BridgeAdmissibleWith
+(LegalKernel/Bridge/Admissible.lean:270-310) has nine conjuncts;
+conjunct 9 pins .reclaimAmmReserves's actor fields to
+ammReserveActor/gasPoolActor with an explicit rationale about actor-
+parametric kernel laws, and there is no analogous conjunct for the
+equally actor-parametric .ammSwap. Trace: (a) Action.compile maps
+.ammSwap fr tr ai ao ra straight to Laws.ammSwap fr tr ai ao ra
+(Authority/Action.lean:623); (b) Laws.ammSwap credits the SUPPLIED
+actor at fromResource and debits it at toResource
+(Laws/AmmSwap.lean:74-87), with preconditions bal(to,ra) >= amountOut,
+from != to, amountIn > 0, AmountBounded — all satisfiable with
+.ammSwap 7 0 1 V victim where V = getBalance s 0 victim; (c)
+Action.isBridgeOnly .ammSwap = true (Admissible.lean:113) so conjunct
+8 only forces signer = bridgeActor, which the attacker holds; (d)
+bridgeAuthorizedAction wildcards all five fields
+(BridgeActor.lean:480) and bridgePolicy is just signer = bridgeActor
+AND bridgeAuthorizedAction (BridgeActor.lean:498-500); (e) the two
+reserved-actor …
+
+**Suggested remediation.**
+
+Add a `BridgeAdmissibleWith` conjunct mirroring conjunct 9: `(∀ fr tr
+ai ao ra, st.action = .ammSwap fr tr ai ao ra → ra = ammReserveActor ∧
+(fr = 0 ∨ fr = 1) ∧ (tr = 0 ∨ tr = 1) ∧ es.bridge.ammDisabled =
+false)`, with a projection theorem and a negative test that a non-
+canonical `ra` is inadmissible. Restate
+`ammReserveActor_ne_gasPoolActor`'s docstring claim as a real theorem
+over admitted steps (e.g.
+`ammSwap_admissible_does_not_touch_gasPool`).
+
+
 ### MAJOR — GP.7.3 pool-drain bound excludes the refund outflow by hypothesis, so the 'per-resource pool drain bound' does not bound total pool outflow
 
-*Where:* `LegalKernel/Bridge/PoolDrainBound.lean:723` — Lean sweep
+*Where:* `LegalKernel/Bridge/PoolDrainBound.lean:723` — Lean sweep, verifier confidence high
 
 The headline `pool_drain_bounded_by_action_count_per_resource`
 (PoolDrainBound.lean:762-771) is stated over `PoolBoundedTrace`, whose
@@ -906,6 +916,27 @@ refundRate 0`, violating `hext` — the trace is simply outside
 drained to zero in a single such action if B * rate equals the pool
 balance, regardless of `maxDrainPerActionEth`.
 
+**Verifier's finding.**
+
+Verified line by line. PoolBoundedTrace.step
+(PoolDrainBound.lean:718-727) carries hext, which for non-pool signers
+IS the per-step conclusion (pool_step_drain_le:634 discharges that
+branch by `Nat.le_trans (hext hs) …`). The only discharge mechanism is
+Action.doesNotDebitPoolAt:388, whose claimBudgetRefund arm (:406) is
+`gr != rLeg \/ pa != gasPoolActor`. That excluded case is not
+hypothetical: claimBudgetRefund_gate
+(Authority/SignedAction.lean:1090-1105) PINS `poolActor =
+gasPoolActor` and `gasResource in {0,1}` and requires `1 <=
+weiPerBudgetUnit` and `1 <= budgetUnits`, so every admitted refund
+debits gasPoolActor at a gas leg by >= 1; Laws.claimBudgetRefund
+(Laws/ClaimBudgetRefund.lean:95-108) is a genuine debit-then-credit
+and AdmissibleWith implies the precondition holds (used as h.2.2.2.1
+at PoolDrainBound.lean:257), so the step really lowers the balance and
+hext is false. The trace is unconstructible and the headline theorem
+covers no trace containing a refund. Refutations attempted and failed:
+gasPoolAuthorityPolicy (GasPoolPolicy.lean:848-856) is `else True` for
+non-pool …
+
 **Suggested remediation.**
 
 Either extend `PoolBoundedTrace` with a refund arm that carries the
@@ -919,113 +950,89 @@ CLAUDE.md headline row and the PoolDrainBound module docstring should
 not be read as bounding total pool outflow.
 
 
-### MAJOR — `bridge_chain_accounting_equation` is proved over a trace relation that excludes the supply-moving actions a production deployment must admit, so the "unconditional" escrow identity does not hold on any real chain
+### MAJOR (reported CRITICAL) — `LocalPolicyClause.capAmount`'s `max : Amount` is encoded on the 8-byte uint head, silently truncating wei-denominated caps mod 2^64
 
-*Where:* `LegalKernel/Bridge/Reachable.lean:57` — Lean sweep
+*Where:* `LegalKernel/Encoding/LocalPolicy.lean:111` — Lean sweep, verifier confidence high
 
-`BridgeReachable` closes only over `BridgeAction`, which enumerates
-exactly `deposit`, `depositWithFee`, `withdraw`
-(Reachable.lean:57-71). `bridge_chain_conserves` /
-`bridgeReachable_solvent` / `bridge_chain_accounting_equation`
-(ChainAccounting.lean:570-599) are stated only over that relation. The
-module's justification — "Every other action either leaves the bridge
-ledger untouched or is supply-non-conservative (mint / burn / reward)"
-(Reachable.lean:30-32) — is false for two production, bridge-only,
-non-user-optional actions. `.ammSwap` (frozen index 23) changes
-`TotalSupply` at both legs (`Laws.ammSwap` credits `+amountIn` at
-`fromResource` and debits `−amountOut` at `toResource`,
-AmmSwap.lean:83-87) while `applyActionToBridgeState` leaves the bridge
-ledger identity (Admissible.lean:183); `.reclaimAmmReserves` (index
-24) likewise. Both are `Action.isBridgeOnly = true`
-(Admissible.lean:113-114) and `bridgeAuthorizedAction = true`
-(BridgeActor.lean:480, 488), i.e. a deployment that runs the AMM
-cannot exclude them. `BridgeConserves es := ∀ r, totalWithdrawn es r +
-TotalSupply es.base r = totalDeposited es r`
-(ChainAccounting.lean:447) is therefore violated by the first swap.
-CLAUDE.md advertises this as "§7.6.4 escrow identity (unconditional)"
-and as closing audit finding m-16.
-
-**Failure scenario.**
-
-A chain that admits `deposit(resource 0, 100)` then one bridge-
-attested `.ammSwap 0 1 amountIn=10 amountOut=9 ammReserveActor` has
-`totalDeposited(0) = 100`, `totalWithdrawn(0) = 0`, but
-`TotalSupply(0) = 110`. `BridgeConserves` fails at r=0 (`0 + 110 ≠
-100`), and at r=1 the supply drops by 9 with no matching
-`totalWithdrawn` entry, so `bridgeEscrowBalance` (= `totalDeposited −
-totalWithdrawn`, Accounting.lean:556) over-states resource-1 backing
-by 9 while under-stating resource-0 backing by 10. Neither
-`bridgeReachable_solvent` nor `bridge_chain_accounting_equation`
-applies to this state, because no `BridgeReachable` derivation exists
-for a trace containing an `ammSwap` — the guarantee is silently
-vacuous on the deployed action set rather than false.
-
-**Suggested remediation.**
-
-Extend `BridgeAction` to cover `.ammSwap` and `.reclaimAmmReserves`
-and either (a) strengthen `BridgeConserves` to a per-resource
-invariant that nets the AMM legs (e.g. `totalWithdrawn r + TotalSupply
-r = totalDeposited r + ammNetIn r − ammNetOut r`, with `ammNetIn/Out`
-tracked in `BridgeState` — which also fixes finding #3's missing
-reserve mirror), or (b) prove the deltas and carry a separate AMM
-accounting term. Failing that, restate the CLAUDE.md / docstring claim
-to say the identity holds only over deposit/withdraw-only traces, and
-record the AMM legs as an open obligation.
-
-
-### MAJOR — `CellTag.decode` handles only tags 0..6, so every honest fault-proof `MultiBundle`/`KernelStep` fails to decode
-
-*Where:* `LegalKernel/Encoding/KernelStep.lean:161` — Lean sweep
-
-`CellTag.encode` emits fifteen tags (0..14), including the six
-GP.11.8/GP.11.10 bridge scalars (7..12), `epochBudget` (13) and
-`budgetPolicy` (14). `CellTag.decode` implements arms for 0..6 only
-and routes everything else to `.error (.invalidConstructorIndex
-other)`. The `Encodable FaultProof.CellTag` instance (line 164-166)
-therefore does not round-trip on 8 of its 15 constructors, and every
-composite codec built on it — `CellProof.decode` (line 180),
-`CellOpening.decode` (line 254), `OpenedCell.decode` (line 307),
-`MultiBundle.decode` (line 324), `KernelStep.decode` (line 350) —
-inherits the failure. The module ships no round-trip or injectivity
-theorem for any of these; the only theorems are
-`cellTag_encode_deterministic` / `kernelStep_encode_deterministic`
-(lines 386-397), which are `by rw [h]` and prove nothing about the
-decoder. So no build-time check catches the gap, and the module header
-still describes the tag space as "the frozen tag (0..16)".
+`capAmount` is declared with an `Amount`-typed field
+(`LegalKernel/Authority/LocalPolicy.lean:174`: `| capAmount (resource
+: ResourceId) (max : Amount)`) and its semantics compares against a
+full unbounded `Nat`
+(`LegalKernel/Authority/LocalPolicySemantics.lean:128-137`: `|
+.transfer r' _ _ amt => r' ≠ r ∨ amt ≤ max`). But the encoder writes
+it with `Encodable.encode (T := Nat) max` — the 9-byte `cbeTagUint`
+head whose body is `natToBytesLE n 8` (`Encoding/CBOR.lean:283`),
+which truncates mod 2^64. This is the one Amount-typed field in the
+whole tree left on the narrow head; every other value-carrying field
+(`transfer`/`mint`/`burn` amounts, `userAmount`/`poolAmount`,
+`ammReserveEth`, `boldTvlCap`, balances via `AmountValue`) was
+migrated to `encodeAmount`'s 33-byte `cbeTagAmount` head.
+`LocalPolicyClause.fieldsBounded` (line 64-65) codifies the narrow
+bound `max < 256 ^ 8` rather than the `256 ^ 32` every other amount
+site carries, so the round-trip/injectivity ladder
+(`localPolicyClause_roundtrip`, `LocalPolicy.encodeAsBytes_injective`,
+`LocalPolicies.encodeMap_injective`) is only stated below 2^64 —
+exactly the range `Encoding/CBOR.lean`'s own `cbeTagAmount` docstring
+says wei amounts leave at ~18.45 ETH. Nothing on the production path
+enforces the bound: `Laws/LocalPolicy.lean:60` has `lex_pre := fun _
+=> True` and `Authority/SignedAction.lean:554` stores the action's …
 
 **Failure scenario.**
 
-`multiFrontierOf` is `frontierOf (.budgetPolicy :: verifierWriteCells
-a signer nextWdIdPre)` (`LegalKernel/FaultProof/Terminate.lean:402`),
-so `CellTag.budgetPolicy` (index 14) is present in EVERY honest
-sequencer bundle, and `.epochBudget` (index 13) is written by every
-one of the twenty-five action variants. Take any real `KernelStep`
-produced by `stepMultiBundle`, encode it with `Encodable.encode (T :=
-FaultProof.KernelStep)`, and hand the bytes to `Encodable.decode (T :=
-FaultProof.KernelStep)`: `MultiBundle.decode` → `OpenedCell.decode` →
-`CellTag.decode` reaches `| .ok (other, _) => .error
-(.invalidConstructorIndex other)` with `other = 14` (or 13) and the
-whole step is rejected. The CBE representation of a terminal step is
-thus unusable for any Lean-side consumer — observer persistence, audit
-replay, or a snapshot of an in-flight game — and a future consumer
-wired to it would …
+A deployment declares the canonical gas-pool policy with a per-action
+drain cap above 2^64 wei — e.g. `gasPoolPolicy (20 * 10^18) …`, i.e.
+20 ETH, which `Bridge/GasPoolPolicy.lean:732`'s
+`gasPoolPolicy_fieldsBounded` explicitly cannot discharge (`hEth :
+maxDrainPerActionEth < 256 ^ 8`). (1) The live node enforces `amt ≤
+20000000000000000000`. (2) `getCellValue es (.localPolicy
+gasPoolActor)` (`FaultProof/CellValue.lean:120-129`) encodes `20e18
+mod 2^64 = 1553255926290448384` (~1.553 ETH), so the published
+`commitExtendedState` root is byte-identical to that of a state
+holding a 1.553-ETH cap — two states with different admission
+behaviour commit to the same root, the same class-C-3 defect
+`Laws/AmountBound.lean` was written to close for balances. (3)
+`Runtime/Snapshot.lean:140` writes `Encodable.encodeBytes (T :=
+ExtendedState)`; `restoreSnapshot` (`Snapshot.lean:169`) decodes it
+back …
+
+**Verifier's finding.**
+
+REAL, but the claimed attack surface is narrower than stated; severity
+major, not critical. Verified in source: -
+Encoding/LocalPolicy.lean:108-111 encodes capAmount's `max` with
+`Encodable.encode (T := Nat)` = `cborHeadEncode` (CBOR.lean:213),
+whose body is `natToBytesLE n 8`; its own docstring says values >=
+2^64 are silently truncated. - The field is `Amount`
+(Authority/LocalPolicy.lean:174) and its semantics compares against an
+unbounded Nat (LocalPolicySemantics.lean:128-137, `amt <= max`). - The
+asymmetry is exactly as claimed: Action.fieldsBounded gives every
+amount `< 256^32` (Encoding/Action.lean:99-127, all via
+`encodeAmount`'s 33-byte head), while LocalPolicyClause.fieldsBounded
+gives `max < 256^8` (Encoding/LocalPolicy.lean:64-65). Laws.maxAmount
+= 256^32 (Laws/AmountBound.lean:77), so admissible amounts far exceed
+the cap's representable range. capAmount is the one Amount-typed field
+left on the narrow head. - FaultProof/CellValue.lean:119-129 encodes
+the localPolicy cell with that truncating encoder, while the sibling
+.balance arm (100-104) explicitly uses encodeAmount …
 
 **Suggested remediation.**
 
-Add decode arms 7..14 mirroring the encoder (tags 7-12 and 14 are
-field-free; tag 13 reads one `Nat` actor id with the same `< 2^64`
-guard the other actor-keyed arms use). Then ship a real
-`cellTag_roundtrip : ∀ t rest, Encodable.decode (T := CellTag)
-(Encodable.encode t ++ rest) = .ok (t, rest)` proved by `cases t` — an
-exhaustive case split makes any future `CellTag` constructor addition
-a build failure, which the current determinism-only theorems cannot
-do. Correct the module header's "frozen tag (0..16)" to the actual
-0..14.
+Route the field through the amount head: `LocalPolicyClause.encode`'s
+`capAmount` arm becomes `... ++ encodeAmount max`,
+`LocalPolicyClause.decode`'s tag-2 arm reads it with `decodeAmount`,
+and `LocalPolicyClause.fieldsBounded` becomes `max < 256 ^ 32`. Update
+`localPolicyClause_roundtrip`'s `capAmount` case to use
+`amount_roundtrip`, and re-derive `gasPoolPolicy_fieldsBounded` /
+`ammReservePolicy_fieldsBounded` under the widened bound. Mirror the
+change in the Solidity `CBEEncode`/`CBEDecode` policy path and the
+Rust decoders, and add a `capAmount` case to the cross-stack corpus
+with a value above 2^64. Separately, make `Laws.declareLocalPolicy`
+carry a decidable …
 
 
 ### MAJOR — Epoch-budget cell truncates mod 2^64 into the canonical-absent value; the `eb_val` bound is neither enforced nor correctly justified (C-3 reproduced on the budget cell)
 
-*Where:* `LegalKernel/FaultProof/BoundsReachable.lean:315` — Lean sweep
+*Where:* `LegalKernel/FaultProof/BoundsReachable.lean:315` — Lean sweep, verifier confidence high
 
 `ExtendedState.CanonicalBounds.eb_val`
 (LegalKernel/FaultProof/Commit.lean:777-778) requires
@@ -1068,6 +1075,27 @@ takes the `else` branch and evaluates `EpochBudgetState.consume
 es.epochBudgets A 0 0 1`. In `esA` the consume succeeds (`1 ≤ 2^64`)
 and yields `budgetBalance = 2^64 - 1`, which is …
 
+**Verifier's finding.**
+
+The underlying defect is REAL and I traced every mechanical step, but
+the finding's supporting narrative is substantially stale and two of
+its three specific accusations are refuted by the current source. WHAT
+I CONFIRMED (all verified against source, not docs): 1. `eb_val` is an
+undischarged standing assumption.
+`ExtendedState.CanonicalBounds.eb_val`
+(LegalKernel/FaultProof/Commit.lean:777-778) requires
+`p.2.budgetBalance < 256^8`. A grep for `CanonicalBounds` across all
+`.lean` files shows exactly one discharge theorem —
+`canonicalBounds_base_amt_of_reachable` (BoundsReachable.lean:512) —
+and no `..._eb_val_of_reachable` or `..._nonces_val_of_reachable`
+anywhere. So unlike `base_amt`, `eb_val` is assumed, not proved. 2.
+The truncation collision is real by construction. `instEncodableNat`
+(Encoding/Encodable.lean:196-197) = `cborHeadEncode cbeTagUint n` =
+`major :: natToBytesLE n 8` (CBOR.lean:315-316), and `natToBytesLE`
+(CBOR.lean:214-216) is `(n % 256) :: natToBytesLE (n/256) k` — a pure
+mod-2^64 truncation with no range check. `budgetCellValue`
+(CellStore.lean:109-112) is …
+
 **Suggested remediation.**
 
 Close it the same way `base_amt` was closed, rather than by trace-
@@ -1085,7 +1113,7 @@ verified surface instead …
 
 ### MAJOR — The epoch-budget cell rides the truncating 8-byte CBE head, so `commitExtendedState` is not injective in `budgetBalance` — and at `budgetBalance ≡ 0 (mod 2^64)` the cell disappears from the root entirely (C-3, unclosed for budgets)
 
-*Where:* `LegalKernel/FaultProof/CellValue.lean:170` — Lean sweep
+*Where:* `LegalKernel/FaultProof/CellValue.lean:170` — Lean sweep, verifier confidence high
 
 `getCellValue es (.epochBudget a)` encodes both components through
 `Encodable.encode (T := Nat)`, i.e. `cborHeadEncode`, whose body is
@@ -1127,6 +1155,26 @@ equals the root of the same state with A holding no budget. A can now
 pay for 2^64 admitted actions that the published state root — and
 therefore every fault-proof opening …
 
+**Verifier's finding.**
+
+Verified end-to-end in source. (1) `Encodable Nat` is `cborHeadEncode
+cbeTagUint n = tag :: natToBytesLE n 8` (Encodable.lean:196,
+CBOR.lean:214-216/315-316) — a fixed 8-byte LE body that truncates mod
+2^64; its round-trip and injectivity theorems are explicitly gated on
+`n < 256^8`. (2) `getCellValue es (.epochBudget a)`
+(CellValue.lean:170-174) puts BOTH `lastSeenEpoch` and the
+accumulating `budgetBalance` on that head, and `canonicalAbsentValue
+(.epochBudget _)` is `encode 0 ++ encode 0` (CellValue.lean:79-81), so
+`{0, 2^64}` is byte-identical to absent; `stateCellEntries`' filter
+(StateCells.lean:113-116) then drops it from `commitExtendedState`
+(StateCells.lean:158). With the default `epochLength = 0`,
+`advanceEpoch` is the identity (Nonce.lean:100-112) so `lastSeenEpoch`
+stays 0 and the vanish case — not merely the alias case — is the live
+one. (3) `budgetBalance` accumulates with no ceiling anywhere:
+`ActorBudget.topUp` (ActorBudget.lean:51-53), `EpochBudgetState.topUp`
+(:239-242), `ProductionApply.budgetGrant` (:162-170) — no clamp, no
+min. (4) No `AmountBounded` analogue …
+
 **Suggested remediation.**
 
 Apply the C-3 remedy to the budget cell rather than to balances alone.
@@ -1145,7 +1193,7 @@ no-op exactly as an over-ceiling credit is, and cap `depositWithFee`'s
 
 ### MAJOR — `CellWriteReady.keysInjective` is self-contradictory for any cell the state actually holds, so `verifyStateCellProof_buildStateCellProof` is vacuous exactly on present cells
 
-*Where:* `LegalKernel/FaultProof/CellWrites.lean:155` — Lean sweep
+*Where:* `LegalKernel/FaultProof/CellWrites.lean:155` — Lean sweep, verifier confidence high
 
 `CellWriteReady es t` requires `keysInjective : ∀ t' ∈ stateCellTags
 es, getCellValue es t' ≠ canonicalAbsentValue t' → smtCellKey t' ≠
@@ -1187,6 +1235,27 @@ off-by-one in `setBitmaskBit`, a dropped non-empty sibling — would
 leave this theorem still provable, so the proof layer would not flag
 it; only the fixture test would.
 
+**Verifier's finding.**
+
+Confirmed by compiling against the project's own build artifacts.
+`CellWriteReady.keysInjective`
+(LegalKernel/FaultProof/CellWrites.lean:155-156) quantifies over every
+`t' ∈ stateCellTags es` with no `t' ≠ t` guard. Since
+`getCellValue_of_not_mem` (StateCellsInjective.lean:303) is total over
+all fifteen CellTag constructors, `getCellValue es t ≠
+canonicalAbsentValue t` gives `t ∈ stateCellTags es` by
+contraposition, and instantiating the field at `t' := t` yields
+`smtCellKey t ≠ smtCellKey t`, hence False. I compiled `theorem
+cellWriteReady_forces_absent ... := Classical.byContradiction fun h_ne
+=> h.keysInjective t (Classical.byContradiction fun hc => h_ne
+(getCellValue_of_not_mem es t hc)) h_ne rfl` against
+LEAN_PATH=.lake/build/lib/lean and it succeeded, so `CellWriteReady es
+t` is uninhabited for every present cell and
+`verifyStateCellProof_buildStateCellProof` (CellWrites.lean:173)
+proves nothing about opening a live cell. Refutation attempts all
+failed: no guard anywhere in the structure; no caller constrains the
+input (grep finds ZERO non-test consumers — the sole reference …
+
 **Suggested remediation.**
 
 Add the missing side condition: `keysInjective : ∀ t' ∈ stateCellTags
@@ -1201,99 +1270,165 @@ assumed, matching the `collisionFreeOn_id` satisfiability discipline
 used for `CollisionFreeOn`.
 
 
-### MAJOR — Terminal step takes `l2LogIndex` from the caller instead of from the game range, contradicting its own docstring and the contract
+### MAJOR (reported CRITICAL) — Lean game model's terminal step adjudicates an unauthenticated, caller-supplied action — the L1 log-chain binding has no Lean counterpart
 
-*Where:* `LegalKernel/FaultProof/Step.lean:120` — Lean sweep
+*Where:* `LegalKernel/FaultProof/Game.lean:336` — Lean sweep, verifier confidence high
 
-`kernelStepApply` forwards `step.l2LogIndex` — a field of the caller-
-supplied `KernelStep` — into `verifierPostRootMulti`, and
-`applyTransition`'s `.terminateOnSingleStep` arm (Game.lean:314-359)
-never checks it against `gs.range.high.idx` (or `gs.range.low.idx +
-1`). The contract does derive it: `KnomosisFaultProofGame.sol:526-528`
-passes `g.high.idx` to `executeStepToRootMulti`, with the comment "the
-game supplies the index it is adjudicating rather than the step VM
-guessing one". The `KernelStep.l2LogIndex` docstring (Step.lean:60-63)
-asserts the L1 behaviour — "On L1 the game supplies `g.high.idx`
-rather than reading it from the caller" — while the Lean model it
-documents does read it from the caller. The index is not inert:
-`derivedCellValue` for `.bridgePending` embeds it verbatim
-(`Terminate.lean:244-250`, `derivePendingCellValue { ..., l2LogIndex
-:= l2LogIndex }`), so it is a free parameter in the post-root the
-verifier computes.
-
-**Failure scenario.**
-
-A sequencer publishes, at log index i, a state root whose pending-
-withdrawal record carries `l2LogIndex := j` for some j ≠ i (an off-by-
-one or a deliberately mislabelled withdrawal, which downstream L1
-withdrawal-proof consumers key on). A challenger disputes index i and
-bisects to the single step `[i-1, i]`. The sequencer terminates with
-`step.l2LogIndex := j`; `derivePendingCellValue` then reproduces
-exactly the record in the published root, `verifierPostRootMulti`
-returns `gs.range.high.commit`, and Game.lean:345 settles
-`.sequencerWon` — the model upholds a root that the contract (which
-would have passed `g.high.idx = i`) would have rejected. The Lean game
-therefore admits a class of invalid roots the L1 refuses, so the model
-is not a sound over-approximation of the contract it is stated to
-specify.
-
-**Suggested remediation.**
-
-In `applyTransition`'s `.terminateOnSingleStep` arm, call
-`verifierPostRootMulti step.preStateCommit step.signedAction.action
-step.signedAction.signer gs.range.high.idx step.bundle` directly (or
-reject `step.l2LogIndex ≠ gs.range.high.idx` the way
-`step.preStateCommit ≠ gs.range.low.commit` is already rejected at
-Game.lean:323). Prefer the former: dropping the field from
-`KernelStep` makes the index underivable from the caller by
-construction, exactly as removing `claimedPostCommit` did.
-
-
-### MAJOR — `step.l2LogIndex` is caller-supplied and unconstrained in the Lean terminal step, though its own docstring says the game must supply it
-
-*Where:* `LegalKernel/FaultProof/Step.lean:64` — Lean sweep
-
-`KernelStep.l2LogIndex` (Step.lean:60-64) is documented as "the log
-index this step produces ... On L1 the game supplies `g.high.idx`
-rather than reading it from the caller", but `applyTransition
-.terminateOnSingleStep` (Game.lean:314-341) never compares
-`step.l2LogIndex` to `gs.range.high.idx` (or `low.idx`), and
-`kernelStepApply` (Step.lean:118-120) passes it straight into
-`verifierPostRootMulti`. That index is not inert: `derivedCellValue`'s
-`.bridgePending` arm (Terminate.lean:244-250) builds `{ resource,
-recipient, amount, l2LogIndex := l2LogIndex }` and
-`derivePendingCellValue` (VerifierWrites.lean:1550) encodes it into
-the cell value, so the derived post-root is a function of it. The
-contract passes `g.high.idx`
-(solidity/src/contracts/KnomosisFaultProofGame.sol:526-528), so again
-the Lean model is weaker than production and the property is
-unmodelled.
+`applyTransition gs (.terminateOnSingleStep step)` calls
+`kernelStepApply step` and compares the result against
+`gs.range.high.commit`, but nothing anywhere in the Lean model
+constrains `step.signedAction` to be the action the L2 actually
+executed at that log index. The Solidity contract does exactly this
+check (`KnomosisFaultProofGame.sol:498`
+`_requireActionInLogChain(g.high.idx, actionKind, actionFields,
+signer)`, whose own error docstring at :207-215 says that without it
+"a party about to lose could search for a different action whose step
+reproduces the disputed root and settle in its favour on a step that
+never happened"). The Lean `GameState` (Game.lean:108-138) carries no
+`prevLogEntryHash`/`expectedNextHash` field, and the two primitives
+that would implement the check — `StepVMCoherence.l1ActionCommit`
+(StepVMCoherence.lean:513) and `StepVMCoherence.l1NextEntryHash`
+(:524) — exist in Lean and have no caller in the game. The
+`GameTransition` docstring at Game.lean:145-170 nevertheless claims
+"Both non-trivial transitions take strictly less from the caller than
+the state machine needs and derive the rest from `gs`" and that the
+transition "mirrors the 5-argument
+`KnomosisFaultProofGame.terminateOnSingleStep`" — the shipped contract
+function takes 8 arguments and performs the binding.
 
 **Failure scenario.**
 
-Log entry i is `withdraw r sender amount rcp`. The honest post-state's
-pending-withdrawal record at `nextWdId` carries `l2LogIndex = i`. A
-dishonest sequencer instead publishes R_{i+1} computed with
-`l2LogIndex = j ≠ i` (a wrong index in the pending record, which the
-L1 withdrawal-proof path reads). Challenged and bisected to that step,
-the sequencer submits a `KernelStep` with `preStateCommit = R_i`, the
-true action, the honest bundle, and `l2LogIndex := j`.
-`verifierPostRootMulti` derives the pending cell with `l2LogIndex :=
-j`, the fold lands exactly on the sequencer's fabricated R_{i+1}, and
-Game.lean:343-350 declares `sequencerWon`.
+A dishonest sequencer publishes a fabricated root R at log index i.
+The challenger bisects honestly; `Honesty.disagreement_persists_on_*`
+keeps `low.commit = truth low.idx` and `high.commit = R ≠ truth
+high.idx`, and the range narrows to `[i-1, i]` with `gs.turn =
+.sequencer`. The sequencer chose R in the first place, so it can pick
+R to be `commitExtendedState (productionApplyBudget es st' i)` for
+some *other* action `st'` (e.g. a transfer crediting itself) that it
+can actually build an honest bundle for from the real pre-state. It
+then submits `KernelStep { preStateCommit := gs.range.low.commit,
+signedAction := st', l2LogIndex := i, bundle := stepMultiBundle es st'
+}`. `verifierPostRootMulti` accepts (the bundle is honest for `st'`),
+returns R, the guard at Game.lean:345 succeeds, and `applyTransition`
+settles `.sequencerWon` — the sequencer defends a fabricated root with
+an action …
+
+**Verifier's finding.**
+
+Verified against source, not docs. Game.lean:314-359's
+terminateOnSingleStep branch guards only status/isSingleStep/no-
+pending-midpoint/preStateCommit; it then calls kernelStepApply
+(Step.lean:118-120), which feeds step.signedAction.action,
+step.signedAction.signer and step.l2LogIndex straight from the caller-
+supplied KernelStep into verifierPostRootMulti. GameState
+(Game.lean:108-138) carries no prevLogEntryHash/expectedNextHash, and
+a repo-wide grep shows l1ActionCommit (StepVMCoherence.lean:513) and
+l1NextEntryHash (:523) have no caller outside tests — so the L1
+binding truly has no Lean counterpart. The Solidity mirror does bind:
+KnomosisFaultProofGame.sol:498 calls _requireActionInLogChain,
+implemented at :551-574 by re-deriving
+LogChain.nextEntryHash(prevLogEntryHash, stateCommit,
+LogChain.actionCommit(kind, signer, fields)) and reverting on
+mismatch; its error docstring at :206-216 describes exactly the attack
+the Lean model allows. The attack is constructible and does not even
+need a search: the sequencer holds the real pre-state es with
+commitExtendedState es = low.commit …
 
 **Suggested remediation.**
 
-In `applyTransition .terminateOnSingleStep`, either drop `l2LogIndex`
-from `KernelStep` and pass `gs.range.high.idx` to `kernelStepApply`
-directly (matching the contract), or add an explicit `step.l2LogIndex
-≠ gs.range.high.idx → responder loses` guard alongside the existing
-`preStateCommit` guard.
+Add the log-entry-chain anchor to `GameState` (e.g.
+`highPrevLogEntryHash`, `highStateCommit`, `highExpectedNextHash`,
+populated at `initiateChallenge` time as the contract does), and gate
+the `.terminateOnSingleStep` arm on `l1NextEntryHash
+highPrevLogEntryHash highStateCommit (l1ActionCommit
+step.signedAction.action step.signedAction.signer) =
+highExpectedNextHash`, awarding the loss to the responder when it
+fails — mirroring `ActionNotInLogChain`. Then restate
+`honest_challenger_wins_against_invalid_state_root` so
+`h_kernel_truthful` is *derived* from the anchor plus
+`stepMultiFold_eq_commit_post`, rather than assumed.
+
+
+### MAJOR (reported CRITICAL) — Lean game model's terminal step never binds the executed action to the disputed log entry (Solidity does); the headline settlement theorems are proved over this weaker model
+
+*Where:* `LegalKernel/FaultProof/Game.lean:314` — Lean sweep, verifier confidence high
+
+`applyTransition`'s `.terminateOnSingleStep` branch
+(Game.lean:314-341) validates exactly three things: game status,
+single-step range, no pending midpoint, and `step.preStateCommit =
+gs.range.low.commit`. It then calls `kernelStepApply step`, which
+executes `step.signedAction.action` / `step.signedAction.signer` —
+both caller-supplied fields of the responder's `KernelStep`
+(Step.lean:53-75) — and compares the result against
+`gs.range.high.commit`. Nothing anywhere in `GameState`
+(Game.lean:101-137) carries a log-entry-chain commitment, and nothing
+checks that `step.signedAction` is the action the sequencer actually
+committed to at index `gs.range.high.idx`. The production contract
+does perform this check:
+`KnomosisFaultProofGame.terminateOnSingleStep` calls
+`_requireActionInLogChain(g.high.idx, actionKind, actionFields,
+signer)` (solidity/src/contracts/KnomosisFaultProofGame.sol:498,
+551-574) and reverts with `ActionNotInLogChain` on mismatch. So the
+Lean model — the object every `Settlement.lean` theorem, including
+`honest_challenger_wins_against_invalid_state_root`
+(Settlement.lean:213) and
+`terminate_responder_loses_when_step_differs` (Settlement.lean:99), is
+stated about — is strictly weaker than the deployed game, and the
+inline comment at Game.lean:310-313 ("Neither side of that comparison
+comes from the caller") is false of the action itself.
+
+**Failure scenario.**
+
+A dishonest sequencer publishes root R_{i+1} that is NOT the result of
+applying the real log entry i, but is the result of applying some
+substituted action a' (transaction censorship/substitution). A
+challenger disputes and bisects to the single step [low=(i,R_i),
+high=(i+1,R_{i+1})]. The sequencer is the responder and calls
+`terminateOnSingleStep` with a `KernelStep` whose `preStateCommit =
+R_i` (passes the only binding check) and whose `signedAction` is a',
+with the honest multiproof for a' against R_i. `kernelStepApply step`
+returns `some R_{i+1}`, the equality at Game.lean:343 holds, and
+Game.lean:344-350 awards `sequencerWon`. The fabricated root is upheld
+and the challenger's bond is slashed. In Lean this is fully reachable;
+the only thing preventing it in production is a check that exists
+solely in Solidity and is therefore unmodelled and unproved.
+
+**Verifier's finding.**
+
+Verified by reading source. Game.lean:314-359 gates
+.terminateOnSingleStep on only four conditions (status, isSingleStep,
+no pendingMidpoint, step.preStateCommit = gs.range.low.commit), then
+calls kernelStepApply and compares to gs.range.high.commit.
+kernelStepApply (Step.lean:118-121) forwards step.signedAction.action
+/ .signer / .l2LogIndex — all caller-supplied KernelStep fields
+(Step.lean:53-75) — into verifierPostRootMulti
+(Terminate.lean:426-474), which derives every post-cell value FROM the
+supplied action (derivedCellValue ... a signer l2LogIndex plan t) and
+only checks the pre-side walk against preRoot (line 469). GameState
+(Game.lean:108-138) carries no log-chain commitment. I grepped the
+entire Lean tree: l1ActionCommit / l1NextEntryHash exist only in
+StepVMCoherence.lean:507-536 and are consumed ONLY by
+LegalKernel/Test/Bridge/CrossCheck/StepVM.lean — no production Lean
+module (Game, Settlement, Honesty, Strategy, Transcript) references
+them. Transcript.chainKernelStepApplyFromLog builds steps from a log
+but is never wired to applyTransition/GameState. Solidity does …
+
+**Suggested remediation.**
+
+Give `GameState`/`DisputedRange.Claim` the log-entry-chain fields the
+contract reads (`prevLogEntryHash`, `stateCommit`, `expectedNextHash`
+at `high.idx`) and add a guard in `applyTransition
+.terminateOnSingleStep` mirroring `_requireActionInLogChain`:
+recompute `StepVMCoherence.l1NextEntryHash prevLogEntryHash
+stateCommit (StepVMCoherence.l1ActionCommit step.signedAction.action
+step.signedAction.signer)` and treat a mismatch exactly as the
+contract does (responder loses / refusal). Then restate the Settlement
+theorems over the guarded transition.
 
 
 ### MAJOR — No theorem connects `verifierPostRootMulti` to the true post-state root in either direction; the settlement theorems' load-bearing hypothesis is never discharged
 
-*Where:* `LegalKernel/FaultProof/Terminate.lean:426` — Lean sweep
+*Where:* `LegalKernel/FaultProof/Terminate.lean:426` — Lean sweep, verifier confidence high
 
 `stepMultiFold_eq_commit_post` (Terminate.lean:1160) proves only the
 inner `multiWalk` equality — that the merged walk of `openedOf
@@ -1335,6 +1470,26 @@ outcomes are checked only by nineteen/twenty value-level corpus probes
 in `faultproof-terminate`, which is a spot check over a finite fixture
 set, not a proof over the …
 
+**Verifier's finding.**
+
+Every factual claim in the finding checks out against the source. (1)
+`stepMultiFold_eq_commit_post` (Terminate.lean:1160-1177) concludes an
+equality about `multiWalk` on `openedOf`/`multiSiblings` only; it
+never mentions `verifierPostRootMulti`, so the adjudicability gate
+(:428), `frontierShapeOk` (:431), policy lookup (:434),
+`plannedBalances` (:437), the two length checks (:456-457),
+`isWellFormedFor` (:464), `expandMultiProof` (:466) and the pre-root
+comparison (:469) are all outside any proof. (2) Repo-wide,
+`verifierPostRootMulti`/`stepMultiPostRoot` occur in a theorem only
+via `rfl`/`Iff.rfl` projections (Step.lean:127-132, Step.lean:326-330,
+TerminateBundle.lean:240-243) — there is no `stepMultiPostRoot es st
+idx = some (commitExtendedState (productionApplyBudget es st idx))`
+anywhere. (3) The soundness direction is worse than "uncomposed": it
+has no ingredients at all. `CollisionFreeOn` appears nowhere in
+MultiProof.lean, Terminate.lean or Frontier.lean; every multiproof
+theorem is stated on the honest `openedOf`/`multiSiblings` pair, i.e.
+completeness. The retired …
+
 **Suggested remediation.**
 
 Prove the two wrapper-level theorems and thread them into Settlement:
@@ -1352,7 +1507,7 @@ over the step's own pre-images implies `c = …
 
 ### MAJOR — `Laws.ammSwap` places no relation between `amountOut` and the reserves, so a single admitted swap can zero the AMM reserve; the constant-product guarantee exists only in `AmmMath`, which nothing on the L2 path calls
 
-*Where:* `LegalKernel/Laws/AmmSwap.lean:77` — Lean sweep
+*Where:* `LegalKernel/Laws/AmmSwap.lean:77` — Lean sweep, verifier confidence high
 
 `AmmMath.getAmountOut` and its two soundness theorems
 (`getAmountOut_lt_reserveOut`, `k_nondecreasing`, AmmMath.lean:61-162)
@@ -1391,6 +1546,27 @@ proof's own reference semantics, so
 `honest_challenger_wins_against_invalid_state_root` offers no
 protection.
 
+**Verifier's finding.**
+
+Confirmed by direct source trace. (1) `getAmountOut` +
+`getAmountOut_lt_reserveOut` + `k_nondecreasing`
+(Bridge/AmmMath.lean:54-162) are imported by no production module —
+only LegalKernel/Test/Bridge/AmmMath.lean and
+Test/Bridge/CrossCheck/AmmMath.lean. (2) `Laws.ammSwap.pre`
+(Laws/AmmSwap.lean:77-81) bounds `amountOut` only by `getBalance s
+toResource ammReserveActor >= amountOut`, so `amountIn = 1, amountOut
+= entire balance` is admissible — a single swap zeroes the leg. (3)
+`BridgeAdmissibleWith` (Bridge/Admissible.lean:270-310) has conjuncts
+6, 6b, 7, 8, 9 and none of them mentions `.ammSwap`. (4)
+`bridgeAuthorizedAction` (BridgeActor.lean:480) returns `true` for
+`.ammSwap _ _ _ _ _` and `bridgePolicy` (498-502) is only `signer =
+bridgeActor and bridgeAuthorizedAction action`, constraining no field.
+(5) `Action.compileTransition` (Authority/Action.lean:623) passes all
+five fields through unmodified. (6) `applyActionToBridgeState` has `|
+_ => bs` for `.ammSwap` (Admissible.lean:183) and
+`ammReserveEth`/`ammReserveBold` are written nowhere in production
+Lean (only …
+
 **Suggested remediation.**
 
 Mirror the L1 reserves into `BridgeState` on `.ammSwap` (extend
@@ -1405,7 +1581,7 @@ the curve is unenforced on L2.
 
 ### MAJOR — BulkBounded caps live holders at 256, making both bulk laws unusable on any real deployment and permanently griefable by any unprivileged actor
 
-*Where:* `LegalKernel/Laws/BulkBound.lean:121` — Lean sweep
+*Where:* `LegalKernel/Laws/BulkBound.lean:121` — Lean sweep, verifier confidence high
 
 `BulkBounded s r excluded` requires `(bulkRecipients s r
 excluded).length ≤ 256`, and it is a conjunct of both bulk laws'
@@ -1448,6 +1624,27 @@ excluded totalReward` fails `AdmissibleWith` conjunct 5 and is
 rejected forever. The dust is unrecoverable: only a balance's holder
 can move it (`transfer`/`burn`/`withdraw` are all signed by the …
 
+**Verifier's finding.**
+
+VERIFIED. Every link in the chain checks out against source. 1. The
+cap is a real precondition conjunct, not a comment.
+`LegalKernel/Laws/BulkBound.lean:109-111` defines `bulkRecipients s r
+excluded = (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 !=
+excluded && kv.2 != 0)` — every live (nonzero) holder at `r` except
+one. `BulkBound.lean:120-122` makes `BulkBounded` `(...).length ≤ 256`
+(`maxRecipientsPerBulkAction`, line 52). `DistributeOthers.lean:74-76`
+and `ProportionalDilute.lean:76-79` both carry `BulkBounded s r
+excluded` in `Transition.pre` (and in their `lex_pre` mirrors,
+DistributeOthers.lean:94-98). 2. The precondition is reached at
+admission with the real law. `Action.compileTransition`
+(`Authority/Action.lean:546-547`) maps
+`.distributeOthers`/`.proportionalDilute` to
+`Laws.distributeOthers`/`Laws.proportionalDilute` (not the
+`Laws.freezeResource 0` no-op used for the signer-aware/advisory
+actions), and `AdmissibleWith` conjunct 5
+(`Authority/SignedAction.lean:309`) is `(Action.compile
+st.action).transition.pre es.base`. So above the cap the action is …
+
 **Suggested remediation.**
 
 Decouple the law's admissibility from a third-party-controlled
@@ -1463,62 +1660,72 @@ cannot move the resource out of the admissible region. In either case
 remove the dangling …
 
 
-### MAJOR — `declareLocalPolicy` accepts policies the CBE decoder rejects, so one user action permanently breaks snapshot restore
+### MAJOR (reported CRITICAL) — Observer only ever moves in reaction to an opponent event, so the honest sequencer never submits its first midpoint and any deferred move is never retried
 
-*Where:* `LegalKernel/Laws/LocalPolicy.lean:60` — Lean sweep
+*Where:* `runtime/knomosis-faultproof-observer/src/observer.rs:693` — Rust / Solidity sweep, verifier confidence high
 
-The §3.0 DoS caps (`MAX_CLAUSES_PER_POLICY = 64`, `MAX_TAGS_PER_DENY =
-64`, `MAX_RECIPIENTS_PER_REQUIRE = 64`, `MAX_DELEGATES_PER_ALLOW =
-64`, `Authority/LocalPolicy.lean:86-99`) are enforced only on the
-DECODE side (`Encoding/LocalPolicy.lean:402` for the clause count, and
-lines 131/155/180 for the per-list caps). Nothing on the write side
-enforces them: `legalkernel_declareLocalPolicy`'s precondition is `fun
-(_ : LegalKernel.State) => True` and `applyActionToLocalPolicies`
-(`Authority/SignedAction.lean:554`) stores `policy` verbatim via
-`lp.declare signer policy`. `ExtendedState.encode` is total, so an
-over-cap policy serialises fine — but `ExtendedState.decode` routes
-through `LocalPolicies.decodeMap`
-(`Encoding/LocalPolicy.lean:710-730`), which calls
-`LocalPolicy.decode` on each framed value and fails the whole map. The
-encoder and decoder therefore disagree about which states exist, and
-the asymmetry is one-directional: states are writable that are not
-readable.
+`maybe_play_move` is invoked from exactly two call sites --
+`handle_midpoint_submitted` (observer.rs:1187) and
+`handle_response_submitted` (observer.rs:1291). Nothing else drives
+it: `handle_game_opened` deliberately does not (it records
+`state_known=false`), and `hydrate_cold_start_games` (observer.rs:565,
+called at observer.rs:693) flips `state_known` to true via
+`mark_state_known` but never asks whether a move is now owed. There is
+no per-iteration sweep over `self.games` for `status == InProgress &&
+turn == me`. Consequently the observer can only act when the opposing
+party has just acted.
 
 **Failure scenario.**
 
-Any actor authorised to declare a local policy signs
-`declareLocalPolicy { clauses := <65 clauses> }` (or a single
-`denyTags` clause with 65 entries). Admission passes — the law's `pre`
-is `True`, `AmountBounded` does not apply, and the LP.7 meta-action
-exemption means no existing policy can block it. The clause list lands
-in `es.localPolicies`. The node then writes a snapshot:
-`Runtime/Snapshot.lean:140` calls `Encodable.encodeBytes (T :=
-ExtendedState) state`, which succeeds. Every replica that later calls
-`restoreSnapshot` (`Snapshot.lean:169`) gets `Encodable.decodeAllBytes
-(T := ExtendedState) → LocalPolicies.decodeMap → LocalPolicy.decode →
-.error (.invalidLength "LocalPolicy: 65 clauses exceeds
-MAX_CLAUSES_PER_POLICY=64")`, i.e. `SnapshotError.decode`, and cannot
-bootstrap. The poisoned entry is permanent — the offending actor need
-never sign again, and only that actor can revoke …
+The L1 contract sets `g.turn = TurnSide.Sequencer` at
+`initiateChallenge` (KnomosisFaultProofGame.sol:361), so after a game
+opens the SEQUENCER owes the first midpoint and the challenger
+correctly does nothing. An observer with `play_as = Sequencer` adopts
+the game from `FaultProofGameOpened` with `state_known=false` (no
+move), hydrates it on the next iteration (state_known=true,
+turn=Sequencer, pending_midpoint=None) -- and then waits for an event
+that can never arrive, because the challenger has no legal move while
+it is the sequencer's turn. `turnDeadline` expires and the challenger
+calls `claimTimeout`, slashing an honest sequencer that never got to
+defend. The same dead-end applies to every deferred move: a
+`TruthOracleMissed` (observer.rs:1400), a `build_calldata_for_move`
+failure (observer.rs:1413), or a `build_and_sign` failure
+(observer.rs:1434) all return `Ok(Some(false))` and …
+
+**Verifier's finding.**
+
+Verified end-to-end in source. (1) `self.maybe_play_move(` has exactly
+two call sites: observer.rs:1187 (handle_midpoint_submitted) and
+observer.rs:1291 (handle_response_submitted). (2)
+`run_iteration_inner` (observer.rs:663-780) contains no sweep over
+`self.games` — it is recover_intent_records ->
+hydrate_cold_start_games -> watcher.run_iteration -> per-event
+handle_event -> commit_batch -> drain pending_broadcasts;
+`Observer::run` (observer.rs:1601) merely loops that with a sleep. (3)
+`mark_state_known` (observer.rs:481-530), the only thing
+`hydrate_cold_start_games` (observer.rs:565) calls, flips
+`state_known=true`, commits, logs, and returns — it never asks whether
+a move is owed, contradicting its own docstring ("maybe_play_move will
+then start submitting moves"). (4) The opponent cannot supply the
+retrigger: KnomosisFaultProofGame.sol:364 sets `g.turn =
+TurnSide.Sequencer` at initiateChallenge, and both submitMidpoint
+(lines 403-405) and respondToMidpoint (lines 438-440) compute
+`responsible = g.turn == Sequencer ? g.sequencer : g.challenger` and
+revert NotResponsible for …
 
 **Suggested remediation.**
 
-Give `legalkernel_declareLocalPolicy` a real precondition: `lex_pre :=
-fun _ => Encoding.LocalPolicy.fieldsBounded policy` (the instance
-`LocalPolicy.decFieldsBounded` at `Encoding/LocalPolicy.lean:81`
-already makes `decPre := fun _ => inferInstance` work). Because
-`step_impl` is `if pre then apply_impl else id`, an over-cap
-declaration then becomes a no-op rather than a stored-but-unreadable
-state, which is the fail-closed direction and matches the
-`Laws/AmountBound.lean` precedent. This simultaneously discharges
-`ExtendedState.CanonicalBounds.lp_pol` (`FaultProof/Commit.lean:740`)
-inductively over reachable states instead of leaving it as a standing
-assumption, and it closes the same hole …
+Add a per-iteration sweep after hydration and after event dispatch:
+for every `GameRecord` with `state.status.is_in_progress() &&
+state_known && state.turn == me`, call `maybe_play_move`. That single
+loop covers the sequencer's opening move, post-hydration catch-up, and
+retry of every deferred move, and is naturally idempotent once the
+pivot key is fixed (see the terminate-dedup finding).
 
 
 ### MAJOR — A move whose L1 broadcast fails is marked Failed and its pivot stays consumed forever, so one transient RPC error permanently forfeits the move
 
-*Where:* `runtime/knomosis-faultproof-observer/src/observer.rs:883` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-faultproof-observer/src/observer.rs:883` — Rust / Solidity sweep, verifier confidence high
 
 `maybe_play_move` inserts the pivot into `submitted_pivots` and stages
 an `Intent` response record BEFORE the broadcast.
@@ -1547,6 +1754,26 @@ the move is never rebuilt or re-broadcast. The honest party silently
 stops defending and loses the game by `claimTimeout` after a single
 lost packet.
 
+**Verifier's finding.**
+
+Traced end-to-end in source. maybe_play_move (observer.rs:1450-1471)
+persists the Intent record and inserts (game_id, pivot_idx) into
+submitted_pivots before broadcast; run_iteration_inner clears
+iteration_pivot_inserts on commit success (observer.rs:742) BEFORE the
+broadcast phase (769-772), so the Err-path rollback at 649-656 is
+doubly unreachable — and broadcast_and_update_status returns Ok(())
+even on broadcast failure, so run_iteration never returns Err anyway.
+The Err arm sets ResponseStatus::Failed (observer.rs:906) and persists
+it. recover_intent_records skips anything not Intent
+(observer.rs:802), and Observer::new rebuilds submitted_pivots from
+list_responses() with no status filter (observer.rs:257-260), so the
+Failed record re-blocks the pivot across restarts.
+has_submitted_for_pivot then short-circuits the rebuild
+(observer.rs:1420-1427). Refutation attempts all failed: the observer
+never calls check_inclusion (defined at submitter.rs:999 /
+jsonrpc_submitter.rs:647 but zero call sites in observer.rs), so the
+Dropped->re-broadcast arrow in the persistence.rs:204 status …
+
 **Suggested remediation.**
 
 Either (a) leave the record in `Intent` on a broadcast failure (or add
@@ -1559,7 +1786,7 @@ a genuinely unbroadcastable tx eventually alerts instead of looping.
 
 ### MAJOR — Observer is deadline-blind: it never claims an opponent's timeout, never checks tx inclusion, and never escalates fees
 
-*Where:* `runtime/knomosis-faultproof-observer/src/state_reader.rs:490` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-faultproof-observer/src/state_reader.rs:490` — Rust / Solidity sweep, verifier confidence high
 
 The state reader decodes `turnDeadline` (slot 11) and `lastStepBlock`
 (slot 16) and immediately discards both (`let _turn_deadline = ...`,
@@ -1590,6 +1817,27 @@ spike; the tx never mines, nothing checks inclusion, no bump is
 issued, and the honest party loses on `turnDeadline` while believing
 it moved.
 
+**Verifier's finding.**
+
+Confirmed on every leg by reading source. (1) state_reader.rs:490
+discards turnDeadline (`let _turn_deadline =
+read_u64_from_slot(slot(11))`) and :507 discards lastStepBlock; slot
+11 is verified to be `turnDeadline` against the Solidity `struct Game`
+field order (KnomosisFaultProofGame.sol:103-121). game::GameState
+(game.rs:216-248) has no deadline field, so the value cannot reach any
+caller. (2) `claimTimeout` is permissionless on L1
+(KnomosisFaultProofGame.sol:580, external nonReentrant, no auth) but
+workspace-wide grep shows `encode_claim_timeout_calldata`
+(submitter.rs:904) and `GameTransition::TimeoutLoss` (game.rs:298) are
+referenced only from #[cfg(test)] modules and the two integration test
+files; observer.rs contains neither. (3) `run_iteration_inner`
+(observer.rs:663-786) is purely event-driven and never calls
+`check_inclusion`; `broadcast_and_update_status` sets
+ResponseStatus::Pending (observer.rs:885) and `recover_intent_records`
+skips anything not Intent (observer.rs:802), so a Pending record is
+never revisited. Decisive corroboration: `ResponseStatus::Confirmed`
+and …
+
 **Suggested remediation.**
 
 Carry `turn_deadline` and `last_step_block` on `GameState`, and add a
@@ -1603,58 +1851,9 @@ receipt `status` in `check_inclusion_inner` and report a reverted tx
 as not-included.
 
 
-### MAJOR — /readyz is exempt from both the auth gate and the rate limiter yet performs upstream I/O, giving anonymous callers a thread- and lock-exhaustion primitive
-
-*Where:* `runtime/knomosis-gateway/src/auth.rs:203` — Rust / Solidity sweep
-
-`is_exempt_path` (auth.rs:203) exempts `/healthz`, `/readyz` and
-`/rpc` from authentication, and `rate_limit_check` (auth.rs:245)
-returns `None` — i.e. "admit, do not throttle" — for the *same* exempt
-set before it ever consults the token bucket. `/readyz` is therefore
-reachable by any anonymous caller at unbounded rate, and it is not a
-static probe: `system::readyz` (system.rs:143-147) calls
-`probe_indexer` (a live `read_cursor` that takes `SqliteStorage`'s
-single `Mutex<Connection>` — knomosis-storage/src/sqlite.rs:304, the
-one lock every authenticated read endpoint also serialises on) and
-then two `probe_tcp` calls, each a `TcpStream::connect_timeout` with
-`READINESS_PROBE_TIMEOUT = 2s` (system.rs:41, 172-176). The work is
-synchronous on the connection thread, and the gateway is thread-per-
-connection bounded by `--max-connections` (default 1024,
-config.rs:45).
-
-**Failure scenario.**
-
-An attacker opens 1024 plaintext connections (the default `--max-
-connections`) and issues `GET /readyz` in a loop on each, with no
-credential. Two effects, both without any token: (1) every request
-acquires the process-wide SQLite connection mutex, so authenticated
-`GET /v1/actors/{id}/balances` / `/budget` / `/pools` requests queue
-behind anonymous traffic; (2) if either upstream address is behind a
-packet-dropping firewall or a saturated backlog — exactly the
-condition a readiness probe exists to detect — each request blocks its
-connection thread for up to 4 s in `connect_timeout`, so ~256
-anonymous requests/second occupy every connection slot and the gateway
-stops serving authenticated traffic entirely. Each request
-additionally opens two fresh TCP connections to the internal knomosis-
-host and event-subscribe daemons, churning their own bounded
-connection caps.
-
-**Suggested remediation.**
-
-Split the exempt set in two: exempt from *authentication* only, and
-still subject to a limiter. Give the unauthenticated surface a
-separate peer-keyed (or global) token bucket rather than the per-
-credential one, and make `/readyz` cheap: memoise the probe result for
-a short interval (e.g. 1 s) behind an `AtomicU64` timestamp so N
-concurrent anonymous requests collapse to one cursor read and one pair
-of connects, and shorten `READINESS_PROBE_TIMEOUT` or move the probing
-to a background thread that `/readyz` merely reads a cached verdict
-from.
-
-
 ### MAJOR — The mux swallows the upstream TRUNCATED gap, so the ring holds a hole that `position` classifies as InWindow
 
-*Where:* `runtime/knomosis-gateway/src/events/fanout/mux.rs:169` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-gateway/src/events/fanout/mux.rs:169` — Rust / Solidity sweep, verifier confidence high
 
 `Mux::run_epoch`'s `StreamItem::Gap` arm (lines 169-179) resubscribes
 from `oldest_available_seq` and returns nothing to the shared state.
@@ -1681,6 +1880,25 @@ evicted, receives no `behind`/`truncated`/`lag_exceeded` event, and is
 simply streamed (501,0) next — silently skipping 400 seqs of
 balance/nonce/deposit events it will never backfill.
 
+**Verifier's finding.**
+
+Traced end to end in source. mux.rs:169-179 handles StreamItem::Gap by
+resubscribing at oldest_available_seq and mutating nothing shared — no
+ring call, no FanoutState write. FanoutState (fanout/mod.rs:36-39)
+holds only `ring` and `fault`, so a discontinuity is structurally
+unrepresentable. EventRing::push (ring.rs:205-225) treats the post-gap
+record as an ordinary advance (inserts, sets watermark to the pre-gap
+seq, leaves last_evicted untouched since eviction is count-driven, not
+seq-driven). EventRing::position (ring.rs:254-295) decides contiguity
+only from retention history: `Some(ev) => cursor >= ev` / `None =>
+cursor >= oldest() || cursor.is_immediately_before(oldest())`. With
+the ring holding (90,0)..(100,0) then (501,0), a cursor at (100,0) is
+>= oldest() -> InWindow. Both consumers then take the wrong branch:
+dispatch.rs:155-167 sees behind=false and records.len()==1 (under
+max_client_lag), so the live client is written (501,0) with no error
+event; resume.rs:122-128 with stream.rs:110-114 passing
+upstream_oldest=None returns ResumeAction::Stream for a reconnect at …
+
 **Suggested remediation.**
 
 Give the ring an explicit discontinuity frontier: on a `Gap`, call
@@ -1695,7 +1913,7 @@ frontier (in addition to the eviction/floor tests). The
 
 ### MAJOR — Upstream cursor regresses to the live-tail sentinel on LagExceeded{0}/ServerShutdown{0}, turning a backfill page into a false "caught up" answer
 
-*Where:* `runtime/knomosis-gateway/src/events/subscribe.rs:224` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-gateway/src/events/subscribe.rs:224` — Rust / Solidity sweep, verifier confidence high
 
 `UpstreamSubscription::recv` assigns the server-supplied
 `last_delivered_seq` straight into `self.resume_from` for both
@@ -1731,6 +1949,26 @@ delivered. The client advances no cursor, sees no error, and never
 learns of the balance changes; a client steered here by the SSE
 `behind` signal loses exactly the range it was told to backfill.
 
+**Verifier's finding.**
+
+Confirmed by source trace and empirical reproduction.
+runtime/knomosis-gateway/src/events/subscribe.rs:224 and :231 assign
+the server-supplied last_delivered_seq into self.resume_from with no
+monotonicity guard or zero floor, while resume_from=0 is the reserved
+live-tail sentinel (subscribe.rs:30-31, honoured by
+event_cache.rs:341-344 returning RangeOutcome::AtLiveTail). The event-
+subscribe server emits LagExceeded{last_delivered_seq: 0} on two
+capacity paths that are not lag at all — server.rs:818-828 (subscriber
+registry at max_subscribers, default 256) and server.rs:726-738
+write_capacity_rejection (connection slot at capacity) — and
+ServerShutdown{sub.last_delivered_seq()} is 0 before the first
+record_delivered (subscription.rs:185 initialises the AtomicU64 to 0).
+backfill.rs:204-215 continues the drain after a non-StaleTimeout
+Reconnecting, so the next sub.recv() reconnects with the poisoned
+cursor; the ensuing silence trips the 500 ms BACKFILL_IDLE_TIMEOUT
+(dispatch.rs:35), and backfill.rs:205-208 classifies StaleTimeout as
+caught_up() rather than a failure, yielding …
+
 **Suggested remediation.**
 
 Never let a server-supplied seq move the cursor backwards, and never
@@ -1747,7 +1985,7 @@ caught-up page.
 
 ### MAJOR — POST /rpc is auth- and rate-limit-exempt and fully materialises a --max-frame-size JSON body before the MAX_BATCH cap is applied
 
-*Where:* `runtime/knomosis-gateway/src/rpc.rs:75` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-gateway/src/rpc.rs:75` — Rust / Solidity sweep, verifier confidence high
 
 `/rpc` is on the auth exemption list (auth.rs:203) and therefore also
 skips the rate limiter (auth.rs:245). `handler::handle` reads the
@@ -1776,6 +2014,26 @@ raised `--max-frame-size` (up to the 16 MiB ceiling) multiplies it by
 allocation failure terminates the process rather than failing the
 request.
 
+**Verifier's finding.**
+
+Verified end-to-end in source, not from docs. (1) auth.rs:203
+`is_exempt_path` matches "/healthz"|"/readyz"|"/rpc"; auth.rs:215
+`gate` and auth.rs:245 `rate_limit_check` both short-circuit on it, so
+/rpc is genuinely auth- AND rate-limit-exempt, with no enable flag
+(router.rs:274 maps it unconditionally). (2) The "gate-before-body"
+DoS boundary documented at conn.rs:419-431 / handler.rs:140-144
+protects every other body-consuming route; /rpc passes the gate
+trivially, so `read_body_fn` runs and conn.rs:1066 `read_body` buffers
+exactly `content_length`, bounded only by `max_frame_size`
+(conn.rs:836; default 1 MiB, ceiling 16 MiB, config.rs:132/137). (3)
+rpc.rs:75 `serde_json::from_slice` materialises an owned Value BEFORE
+the MAX_BATCH guard at rpc.rs:92, which tests `requests.len()` on an
+already-parsed Vec<Value>. The MAX_BATCH doc comment (rpc.rs:54-61)
+itself cites the exempt status as the reason a cap is needed and
+claims "--max-frame-size" bounds the rest — that bounds input bytes,
+not the parsed representation. I measured the amplification rather
+than asserting it: a scratch …
+
 **Suggested remediation.**
 
 Apply a dedicated, much smaller body cap on the exempt `/rpc` route (a
@@ -1791,7 +2049,7 @@ use a streaming/depth-and-length-limited deserializer instead of
 
 ### MAJOR — `CommandKernel` waits for the `knomosis` child to exit before draining its piped stderr — a pipe-capacity block stalls the entire single-threaded host for the full 60 s timeout
 
-*Where:* `runtime/knomosis-host/src/kernel.rs:1356` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-host/src/kernel.rs:1356` — Rust / Solidity sweep, verifier confidence high
 
 `CommandKernel::submit` configures `cmd.stderr(Stdio::piped())` and
 then calls `wait_with_timeout(&mut child, self.timeout)`, which polls
@@ -1827,6 +2085,26 @@ timeout"`. Every submitted action in that window is rejected even
 though the kernel would have admitted it. The condition repeats on
 every subsequent request, so the …
 
+**Verifier's finding.**
+
+CONFIRMED, and the finding understates reachability. MECHANISM (traced
++ empirically reproduced). runtime/knomosis-
+host/src/kernel.rs:1343-1345 sets `stderr(Stdio::piped())`; :1356
+calls `wait_with_timeout(&mut child, self.timeout)` BEFORE :1361 does
+`child.stderr.take()`. `wait_with_timeout` (:1450-1476) only polls
+`child.try_wait()` and `sleep(WAIT_POLL_INTERVAL)` — it never touches
+the pipe fd. The `MAX_SUBPROCESS_OUTPUT` (64 KiB, :856) bound the
+comment cites as the defence is applied strictly after the wait, so it
+cannot prevent the block. I compiled a standalone replica of the exact
+spawn/poll/drain sequence: 60 KiB of child stderr exits in 10 ms; 65
+KiB and 128 KiB both stall for the FULL timeout and get SIGKILLed. The
+boundary is exactly Linux's 65536-byte pipe capacity. BLAST RADIUS
+(confirmed). `spawn_lock` is held across the whole wait
+(kernel.rs:1210-1213). server.rs:197-218 spawns exactly ONE worker
+thread on both the `Fifo` and `Drr` arms. `DEFAULT_TIMEOUT =
+Duration::from_mins(1)` (kernel.rs:883). So the entire host is
+unavailable for 60 s per triggering request; …
+
 **Suggested remediation.**
 
 Drain stderr concurrently with the wait. Spawn a short-lived reader
@@ -1842,9 +2120,85 @@ let exit_status = wait_with_timeout(&mut child, self.timeout); let
 stderr_text = collector.ok() …
 
 
+### MAJOR (reported CRITICAL) — Per-connection writer-thread spawn uses `.expect()`, so an OS thread refusal aborts the whole host process (release `panic = "abort"`)
+
+*Where:* `runtime/knomosis-host/src/listener.rs:594` — Rust / Solidity sweep, verifier confidence high
+
+`run_persistent` spawns the per-connection response-writer thread with
+`std::thread::Builder::new()...spawn(...).expect("spawn persistent
+writer thread")`. `Builder::spawn` returns `Err(io::Error)` — not a
+panic — precisely on `EAGAIN` (RLIMIT_NPROC, cgroup `pids.max`, or
+thread-stack VA exhaustion), which is the condition that arises under
+exactly the load an unauthenticated remote attacker controls: the
+number of simultaneously open connections. The workspace release
+profile sets `panic = "abort"` (`runtime/Cargo.toml`
+`[profile.release]`), so this panic terminates the entire `knomosis-
+host` process rather than just the connection thread. The identical
+hazard is explicitly recognised and correctly handled ~180 lines later
+in the TCP accept loop (`listener.rs:782-804`: "thread::spawn PANICS
+when the OS refuses a thread (EAGAIN under fd/thread pressure —
+exactly when a server is under load) ... Handle the error instead.")
+and in the Unix accept loop (`listener.rs:1336-1356`), so the
+hardening was applied to one of the two per-connection spawn sites and
+missed on the other. `run_persistent` is the site that *doubles*
+thread pressure: with `--persistent-connections`, every accepted
+connection costs two threads (handler + writer), so the default
+`max_concurrent_connections = 1024` means up to 2048 live threads.
+
+**Failure scenario.**
+
+Host started with `--persistent-connections` (TCP or Unix), defaults
+otherwise (`max_concurrent_connections = 1024`), running in a
+container with `pids.max = 1500` or under `RLIMIT_NPROC`. An attacker
+opens ~750 concurrent TCP connections. Each accepted connection
+acquires a `ConnectionSlot` (cap not yet reached), spawns its handler
+thread, and the handler immediately calls `run_persistent`, which
+tries to spawn a second (writer) thread. At ~750 connections the
+1500-pid budget is exhausted; `Builder::spawn` returns `Err(EAGAIN)`;
+`.expect` panics; `panic = "abort"` fires `abort()` and the whole
+sequencer host dies. No authentication, no valid `SignedAction`, and
+no valid CBE payload is required — the attacker only has to complete
+TCP handshakes. Restarting the process does not help: the attacker
+reconnects and kills it again.
+
+**Verifier's finding.**
+
+Traced directly in source. runtime/knomosis-
+host/src/listener.rs:589-594 spawns the per-connection writer thread
+via `std::thread::Builder::new().name(...).spawn(...).expect("spawn
+persistent writer thread")`. `Builder::spawn` returns Err(io::Error)
+on EAGAIN (RLIMIT_NPROC / cgroup pids.max / stack VA exhaustion), so
+`.expect` panics. runtime/Cargo.toml:253 sets `panic = "abort"` in
+[profile.release], and the project itself confirms the consequence at
+server.rs:472 ("`catch_unwind` is a no-op (a panic aborts the process
+before ...)"). No catch_unwind wraps the connection thread; the only
+ones in the crate are in server.rs around kernel.submit. The asymmetry
+the reporter cites is real and complete: grep of `.spawn(` shows four
+per-connection/accept spawn sites in listener.rs. The three accept
+loops -- TCP 775-804, TLS 965, Unix 1338-1356 -- all match on the Err
+and respond Busy, each carrying an explicit comment that spawn fails
+"when the OS refuses a thread (EAGAIN under fd/thread pressure --
+exactly when a server is under load)". Site 591 is the only unhandled
+one, and it is …
+
+**Suggested remediation.**
+
+Replace the `.expect` with error handling that degrades instead of
+aborting. `run_persistent` already has a natural fallback — the one-
+shot handler — and both call sites (`handle_single_connection`,
+`handle_single_unix_connection`) already implement a
+`try_clone`-failure fallback to `handle_connection`. Change
+`run_persistent` to return a `Result`/sentinel on spawn failure, e.g.:
+```rust let writer = match std::thread::Builder::new()
+.name("knomosis-host-persist-writer".into()) .spawn(move || {
+persistent_writer_loop(write_half, resp_rx, kernel_reply_timeout,
+&writer_dead); }) { Ok(w) => w, Err(e) => { tracing::warn!(error = %e,
+"failed to spawn persistent writer; one-shot fallback"); …
+
+
 ### MAJOR — The gas-pool drain event (tag 18) is never emitted, so `pool_balances_*` are monotone-increasing gross inflows and the gateway serves them as `net: true`
 
-*Where:* `runtime/knomosis-indexer/src/budget_view.rs:286` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-indexer/src/budget_view.rs:286` — Rust / Solidity sweep, verifier confidence high
 
 `dispatch_event`'s `Event::GasPoolClaim` arm is the only code path
 that ever decrements `pool_balances_eth` / `pool_balances_bold`, and
@@ -1880,6 +2234,27 @@ while the pool is being emptied, and will not trigger a refill or a
 circuit-breaker until the pool is actually insolvent and user actions
 start failing.
 
+**Verifier's finding.**
+
+Verified independently against source. (1) Producer:
+LegalKernel/Events/Extract.lean's actionEvents + extractEvents
+construct no Event.gasPoolClaim arm; grep for gasPoolClaim across
+*.lean hits only Events/Types.lean (constructor + tag/actor/resource
+projections), Encoding/Event.lean (codec), and LegalKernel/Test/**
+fixtures. Tag 18 is declared but never constructed by the event
+authority. (2) Real outflow:
+runtime/knomosis-l1-ingest/src/sequencer_claim.rs:166 builds
+Action::Transfer{sender: GAS_POOL_ACTOR_ID, receiver:
+SEQUENCER_ACTOR_ID}, matching GasPoolPolicy.lean's
+gasPoolPolicy_permits_sequencer_transfer_{eth,bold}; its pool-side
+event is Event.balanceChanged (tag 0). Laws.claimBudgetRefund likewise
+debits the pool and surfaces only tag 0. (3) Consumer:
+budget_view.rs:286-311 is the ONLY drain_pool call site (grep-
+confirmed; the other references are the hand-constructed unit tests at
+822/845/868), and the catch-all `_ => {}` at budget_view.rs:317 drops
+tag 0 for the pool tables. So the drain half of the identity
+documented at budget_view.rs:24/59 and budget_storage.rs:53-54 is …
+
 **Suggested remediation.**
 
 Per the project's implement-the-improvement rule, make the description
@@ -1897,7 +2272,7 @@ gateway's `net` flag must stop …
 
 ### MAJOR — Indexer CBE decoder caps amounts at 2^128 while the Lean authority admits < 2^256 — a legally-admitted balance permanently wedges the indexer
 
-*Where:* `runtime/knomosis-indexer/src/decoder.rs:257` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-indexer/src/decoder.rs:257` — Rust / Solidity sweep, verifier confidence high
 
 `Cursor::read_amount` reads the 33-byte CBE amount head (tag 0x06 +
 32-byte LE body) but requires bytes 17..33 (the high 128 bits) to be
@@ -1932,6 +2307,26 @@ frame, and dies again. The indexer — and every gateway read view fed
 from its SQLite file (balances, budget, pools, `/v1/events` backfill)
 — is permanently frozen at that seq with no operator …
 
+**Verifier's finding.**
+
+Traced end-to-end in source. Lean authority admits balances in [0,
+2^256): Encoding/CBOR.lean:403 cborAmountHeadEncode writes
+natToBytesLE n 32; Encodable.lean:244 encodeAmount routes to it;
+Laws/AmountBound.lean:77,94-96 sets maxAmount = 256^32 and
+AmountBounded is the ONLY ceiling; Laws/Mint.lean:55 pre = amount > 0
+AND AmountBounded, with Authority/Action.lean:540 dispatching .mint to
+Laws.mint unchanged and Encoding/Action.lean:100 bounding the field at
+256^32. Encoding/Event.lean:80-85 encodes balanceChanged oldV/newV as
+absolute amounts via encodeAmount, and Main.lean:956 ->
+Runtime/EventStream.lean:138 confirms production `extract-events`
+emits Encodable.encode Event, i.e. the 33-byte head. The Rust mirror
+narrows: knomosis-indexer/src/decoder.rs:257 returns AmountTooWide if
+bytes 17..33 are non-zero, and balance.rs:72 BALANCE_VALUE_LEN = 16.
+Halt path confirmed: daemon.rs:240-250 and :264-272 map the decode
+error to IndexerError::Decode; main.rs:193-208 treats only
+CommitAmbiguous as recoverable and returns
+OperatorExitCode::OperatorAction otherwise; the batch commits only …
+
 **Suggested remediation.**
 
 Either (a) narrow the authority to match the mirrors — make
@@ -1949,7 +2344,7 @@ does not contain an amount …
 
 ### MAJOR — JSON-RPC log fetch verifies the returned blockHash but not the emitting contract address, and neither decoder checks it
 
-*Where:* `runtime/knomosis-l1-ingest/src/source.rs:834` — Rust / Solidity sweep
+*Where:* `runtime/knomosis-l1-ingest/src/source.rs:834` — Rust / Solidity sweep, verifier confidence high
 
 `JsonRpcL1Source::logs_in_block_by_hash` sends an `eth_getLogs` filter
 carrying both `blockHash` and `address`, and then re-verifies only the
@@ -1980,6 +2375,26 @@ game terminal, after which `maybe_play_move` returns early on
 `!rec.state.status.is_in_progress()` and the honest party stops
 defending a game it is winning.
 
+**Verifier's finding.**
+
+Verified by reading source.
+runtime/knomosis-l1-ingest/src/source.rs:757-760 sends an eth_getLogs
+filter with both blockHash and address; lines 771-778 parse the log's
+address into RawLog.address; lines 822-839 re-verify only blockHash
+("some providers have ignored the filter"). No equality check on
+address exists anywhere — grep for log.address / '.address ==' across
+l1-ingest source.rs, watcher.rs and the observer returns only the
+construction site at :776. The field is write-only. The trait contract
+at source.rs:82-85 explicitly promises "every log emitted by
+`contract`", so the impl violates its own documented contract on the
+half it did not check. Both decoders are address-blind: l1-ingest
+events.rs:665-670 and observer events.rs:332-345 dispatch solely on
+topics[0]; the observer's docstring at :322-324 even names "logs from
+other contracts captured by an over-broad RPC filter" as an expected
+input. Merge sites confirmed at l1-ingest/watcher.rs:443-459 and
+observer/watcher.rs:406-428. Impact traced further than the reporter
+did. A spoofed RegisteredECDSA log reaches …
+
 **Suggested remediation.**
 
 In `logs_in_block_by_hash`, reject any returned log whose `address !=
@@ -1992,51 +2407,283 @@ submission contract, and `RegisteredECDSA`/`Revoked` only from the
 identity registry.
 
 
-### MAJOR — The attestation-staleness circuit breaker gates `submitStateRoot` itself, so one missed window permanently bricks the bridge
+### MINOR (reported MAJOR) — `bridge_chain_accounting_equation` is proved over a trace relation that excludes the supply-moving actions a production deployment must admit, so the "unconditional" escrow identity does not hold on any real chain
 
-*Where:* `solidity/src/contracts/KnomosisBridge.sol:1880` — Rust / Solidity sweep
+*Where:* `LegalKernel/Bridge/Reachable.lean:57` — Lean sweep, verifier confidence high
 
-`submitStateRoot` carries the `circuitOpen` modifier (line 1882),
-whose first arm reverts `AttestationStale` when `block.number >
-latestStateRootSubmittedAtBlock + maxAttestationStaleBlocks` (lines
-1044-1048). `latestStateRootSubmittedAtBlock` is written *only* inside
-`submitStateRoot` (line 1904), and `maxAttestationStaleBlocks` is
-`immutable` (line 271). The breaker is therefore self-sealing: the one
-action that could clear the staleness condition is the action the
-breaker blocks. There is no admin reset, no timeout, and no alternate
-write path.
+`BridgeReachable` closes only over `BridgeAction`, which enumerates
+exactly `deposit`, `depositWithFee`, `withdraw`
+(Reachable.lean:57-71). `bridge_chain_conserves` /
+`bridgeReachable_solvent` / `bridge_chain_accounting_equation`
+(ChainAccounting.lean:570-599) are stated only over that relation. The
+module's justification — "Every other action either leaves the bridge
+ledger untouched or is supply-non-conservative (mint / burn / reward)"
+(Reachable.lean:30-32) — is false for two production, bridge-only,
+non-user-optional actions. `.ammSwap` (frozen index 23) changes
+`TotalSupply` at both legs (`Laws.ammSwap` credits `+amountIn` at
+`fromResource` and debits `−amountOut` at `toResource`,
+AmmSwap.lean:83-87) while `applyActionToBridgeState` leaves the bridge
+ledger identity (Admissible.lean:183); `.reclaimAmmReserves` (index
+24) likewise. Both are `Action.isBridgeOnly = true`
+(Admissible.lean:113-114) and `bridgeAuthorizedAction = true`
+(BridgeActor.lean:480, 488), i.e. a deployment that runs the AMM
+cannot exclude them. `BridgeConserves es := ∀ r, totalWithdrawn es r +
+TotalSupply es.base r = totalDeposited es r`
+(ChainAccounting.lean:447) is therefore violated by the first swap.
+CLAUDE.md advertises this as "§7.6.4 escrow identity (unconditional)"
+and as closing audit finding m-16.
 
 **Failure scenario.**
 
-A deployment sets `maxAttestationStaleBlocks = 200` (the value used
-throughout the test suite, ~40 minutes on mainnet). The
-sequencer/attestor suffers a 45-minute outage — a routine operational
-event. On recovery it calls `submitStateRoot(root, n+1, sig)`;
-`circuitOpen` evaluates `block.number >
-latestStateRootSubmittedAtBlock + 200`, which is now true and will
-remain true forever, so the call reverts `AttestationStale`. Every
-subsequent attempt reverts identically. `depositETH`, `depositERC20`,
-`depositETHWithFee` and `depositBoldWithFee` also revert (same
-modifier). No new L2 state root can ever be published, so every L2
-withdrawal not already covered by a submitted-and-finalised root is
-permanently unredeemable; recovery requires the full
-`KnomosisMigration` handoff to a freshly deployed bridge.
+A chain that admits `deposit(resource 0, 100)` then one bridge-
+attested `.ammSwap 0 1 amountIn=10 amountOut=9 ammReserveActor` has
+`totalDeposited(0) = 100`, `totalWithdrawn(0) = 0`, but
+`TotalSupply(0) = 110`. `BridgeConserves` fails at r=0 (`0 + 110 ≠
+100`), and at r=1 the supply drops by 9 with no matching
+`totalWithdrawn` entry, so `bridgeEscrowBalance` (= `totalDeposited −
+totalWithdrawn`, Accounting.lean:556) over-states resource-1 backing
+by 9 while under-stating resource-0 backing by 10. Neither
+`bridgeReachable_solvent` nor `bridge_chain_accounting_equation`
+applies to this state, because no `BridgeReachable` derivation exists
+for a trace containing an `ammSwap` — the guarantee is silently
+vacuous on the deployed action set rather than false.
+
+**Verifier's finding.**
+
+Core claim verified by reading source. `BridgeAction`
+(Reachable.lean:57-71) admits only deposit/depositWithFee/withdraw and
+`BridgeReachable.step` (:99-106) pins `st.action = ba.toAction`, so no
+trace containing any other action has a derivation. `BridgeConserves`
+(ChainAccounting.lean:447) contains a `TotalSupply` term, so it is
+broken by any supply-moving action even when the bridge ledger is
+untouched. `.ammSwap` is exactly that case: `applyActionToBridgeState`
+is identity on it (Admissible.lean:183, pinned at :221) while
+`ammSwap_fromResource_supply_increase` (AmmSwap.lean:240) and
+`ammSwap_toResource_supply_decrease` (:280) prove supply moves at both
+legs, and the law's own header says "NOT globally conserved" (:34-37).
+It is `isBridgeOnly` (Admissible.lean:113) and `bridgeAuthorizedAction
+= true` (BridgeActor.lean:~480) with no conjunct in
+`BridgeAdmissibleWith` (:270-310) blocking it, so an AMM deployment
+cannot stay inside the relation. The stated justification at
+Reachable.lean:27-30 — the three constructors are "exactly the
+constructors that move the per-resource L2 …
 
 **Suggested remediation.**
 
-Exempt `submitStateRoot` from the `AttestationStale` arm (it is the
-recovery action, not a value-moving one) — e.g. split `circuitOpen`
-into `depositOpen` (all four arms) and `submissionOpen` (dispute-
-cooldown, TVL and migration arms only). Keeping deposits halted while
-a fresh root is accepted preserves the intended "deposits halted,
-exits continue" posture without making the halt terminal. Add a
-regression test that rolls past `maxAttestationStaleBlocks` and
-asserts a subsequent `submitStateRoot` succeeds.
+Extend `BridgeAction` to cover `.ammSwap` and `.reclaimAmmReserves`
+and either (a) strengthen `BridgeConserves` to a per-resource
+invariant that nets the AMM legs (e.g. `totalWithdrawn r + TotalSupply
+r = totalDeposited r + ammNetIn r − ammNetOut r`, with `ammNetIn/Out`
+tracked in `BridgeState` — which also fixes finding #3's missing
+reserve mirror), or (b) prove the deltas and carry a separate AMM
+accounting term. Failing that, restate the CLAUDE.md / docstring claim
+to say the identity holds only over deposit/withdraw-only traces, and
+record the AMM legs as an open obligation.
 
 
-### MAJOR — V1 dispute verifier's quorum tally reverts on a malleable signature instead of skipping it, letting one adjudicator block finalisation
+### MINOR (reported MAJOR) — Terminal step takes `l2LogIndex` from the caller instead of from the game range, contradicting its own docstring and the contract
 
-*Where:* `solidity/src/contracts/KnomosisDisputeVerifier.sol:849` — Rust / Solidity sweep
+*Where:* `LegalKernel/FaultProof/Step.lean:120` — Lean sweep, verifier confidence high
+
+`kernelStepApply` forwards `step.l2LogIndex` — a field of the caller-
+supplied `KernelStep` — into `verifierPostRootMulti`, and
+`applyTransition`'s `.terminateOnSingleStep` arm (Game.lean:314-359)
+never checks it against `gs.range.high.idx` (or `gs.range.low.idx +
+1`). The contract does derive it: `KnomosisFaultProofGame.sol:526-528`
+passes `g.high.idx` to `executeStepToRootMulti`, with the comment "the
+game supplies the index it is adjudicating rather than the step VM
+guessing one". The `KernelStep.l2LogIndex` docstring (Step.lean:60-63)
+asserts the L1 behaviour — "On L1 the game supplies `g.high.idx`
+rather than reading it from the caller" — while the Lean model it
+documents does read it from the caller. The index is not inert:
+`derivedCellValue` for `.bridgePending` embeds it verbatim
+(`Terminate.lean:244-250`, `derivePendingCellValue { ..., l2LogIndex
+:= l2LogIndex }`), so it is a free parameter in the post-root the
+verifier computes.
+
+**Failure scenario.**
+
+A sequencer publishes, at log index i, a state root whose pending-
+withdrawal record carries `l2LogIndex := j` for some j ≠ i (an off-by-
+one or a deliberately mislabelled withdrawal, which downstream L1
+withdrawal-proof consumers key on). A challenger disputes index i and
+bisects to the single step `[i-1, i]`. The sequencer terminates with
+`step.l2LogIndex := j`; `derivePendingCellValue` then reproduces
+exactly the record in the published root, `verifierPostRootMulti`
+returns `gs.range.high.commit`, and Game.lean:345 settles
+`.sequencerWon` — the model upholds a root that the contract (which
+would have passed `g.high.idx = i`) would have rejected. The Lean game
+therefore admits a class of invalid roots the L1 refuses, so the model
+is not a sound over-approximation of the contract it is stated to
+specify.
+
+**Verifier's finding.**
+
+VERIFIED REAL by direct source tracing. (1)
+LegalKernel/FaultProof/Step.lean:118-120 — kernelStepApply forwards
+step.l2LogIndex, a plain caller-supplied field of KernelStep
+(Step.lean:64), into verifierPostRootMulti. (2)
+LegalKernel/FaultProof/Game.lean:314-359 — the .terminateOnSingleStep
+arm checks status, isSingleStep, pendingMidpoint, and explicitly
+rejects step.preStateCommit != gs.range.low.commit (line 323), then
+calls kernelStepApply and compares to gs.range.high.commit. It never
+compares step.l2LogIndex to gs.range.high.idx. Conclusive: grep of
+"l2LogIndex" across LegalKernel/ returns ZERO hits in Game.lean.
+Claim.idx is available in the game state (Game.lean:56-61), so the
+derivation is possible and simply omitted. (3) The index is not inert.
+Terminate.lean:426-427 threads it into derivedCellValue at 453-454,
+and Terminate.lean:244-250 embeds it verbatim in the .bridgePending
+branch for .withdraw. derivePendingCellValue
+(VerifierWrites.lean:1550) is the raw CBE encoding, and
+derivePendingCellValue_correct (VerifierWrites.lean:1636-1643) shows
+production puts the STEP's idx …
+
+**Suggested remediation.**
+
+In `applyTransition`'s `.terminateOnSingleStep` arm, call
+`verifierPostRootMulti step.preStateCommit step.signedAction.action
+step.signedAction.signer gs.range.high.idx step.bundle` directly (or
+reject `step.l2LogIndex ≠ gs.range.high.idx` the way
+`step.preStateCommit ≠ gs.range.low.commit` is already rejected at
+Game.lean:323). Prefer the former: dropping the field from
+`KernelStep` makes the index underivable from the caller by
+construction, exactly as removing `claimedPostCommit` did.
+
+
+### MINOR (reported MAJOR) — `step.l2LogIndex` is caller-supplied and unconstrained in the Lean terminal step, though its own docstring says the game must supply it
+
+*Where:* `LegalKernel/FaultProof/Step.lean:64` — Lean sweep, verifier confidence high
+
+`KernelStep.l2LogIndex` (Step.lean:60-64) is documented as "the log
+index this step produces ... On L1 the game supplies `g.high.idx`
+rather than reading it from the caller", but `applyTransition
+.terminateOnSingleStep` (Game.lean:314-341) never compares
+`step.l2LogIndex` to `gs.range.high.idx` (or `low.idx`), and
+`kernelStepApply` (Step.lean:118-120) passes it straight into
+`verifierPostRootMulti`. That index is not inert: `derivedCellValue`'s
+`.bridgePending` arm (Terminate.lean:244-250) builds `{ resource,
+recipient, amount, l2LogIndex := l2LogIndex }` and
+`derivePendingCellValue` (VerifierWrites.lean:1550) encodes it into
+the cell value, so the derived post-root is a function of it. The
+contract passes `g.high.idx`
+(solidity/src/contracts/KnomosisFaultProofGame.sol:526-528), so again
+the Lean model is weaker than production and the property is
+unmodelled.
+
+**Failure scenario.**
+
+Log entry i is `withdraw r sender amount rcp`. The honest post-state's
+pending-withdrawal record at `nextWdId` carries `l2LogIndex = i`. A
+dishonest sequencer instead publishes R_{i+1} computed with
+`l2LogIndex = j ≠ i` (a wrong index in the pending record, which the
+L1 withdrawal-proof path reads). Challenged and bisected to that step,
+the sequencer submits a `KernelStep` with `preStateCommit = R_i`, the
+true action, the honest bundle, and `l2LogIndex := j`.
+`verifierPostRootMulti` derives the pending cell with `l2LogIndex :=
+j`, the fold lands exactly on the sequencer's fabricated R_{i+1}, and
+Game.lean:343-350 declares `sequencerWon`.
+
+**Verifier's finding.**
+
+Traced and confirmed in source. (1) Game.lean:314-359 guards status,
+isSingleStep, pendingMidpoint and step.preStateCommit vs
+gs.range.low.commit (line 323) but never constrains step.l2LogIndex,
+even though gs.range.high.idx is available in GameState (Claim.idx,
+Game.lean:56-61). The sibling guard at 323 even carries a comment
+explaining why a caller-supplied value must be rejected explicitly in
+the Lean model; the same reasoning was not applied to the index. (2)
+Step.lean:118-120 passes it straight into verifierPostRootMulti. (3)
+Terminate.lean:426-474 threads it to derivedCellValue (453-454); the
+frontier is NOT a function of it, since verifierWriteCells
+(Terminate.lean:100-105) keys the pending cell as .bridgePending
+nextWdIdPre from the bundle's own .bridgeNextWdId opening, so the cell
+key set is identical and only the value moves. (4)
+Terminate.lean:244-250 -> VerifierWrites.lean:1550-1551
+derivePendingCellValue encodes the full PendingWithdrawal incl.
+l2LogIndex, so the derived post-root is a function of the caller-
+chosen index; derivePendingCellValue_correct (1636-1662) …
+
+**Suggested remediation.**
+
+In `applyTransition .terminateOnSingleStep`, either drop `l2LogIndex`
+from `KernelStep` and pass `gs.range.high.idx` to `kernelStepApply`
+directly (matching the contract), or add an explicit `step.l2LogIndex
+≠ gs.range.high.idx → responder loses` guard alongside the existing
+`preStateCommit` guard.
+
+
+### MINOR (reported MAJOR) — /readyz is exempt from both the auth gate and the rate limiter yet performs upstream I/O, giving anonymous callers a thread- and lock-exhaustion primitive
+
+*Where:* `runtime/knomosis-gateway/src/auth.rs:203` — Rust / Solidity sweep, verifier confidence high
+
+`is_exempt_path` (auth.rs:203) exempts `/healthz`, `/readyz` and
+`/rpc` from authentication, and `rate_limit_check` (auth.rs:245)
+returns `None` — i.e. "admit, do not throttle" — for the *same* exempt
+set before it ever consults the token bucket. `/readyz` is therefore
+reachable by any anonymous caller at unbounded rate, and it is not a
+static probe: `system::readyz` (system.rs:143-147) calls
+`probe_indexer` (a live `read_cursor` that takes `SqliteStorage`'s
+single `Mutex<Connection>` — knomosis-storage/src/sqlite.rs:304, the
+one lock every authenticated read endpoint also serialises on) and
+then two `probe_tcp` calls, each a `TcpStream::connect_timeout` with
+`READINESS_PROBE_TIMEOUT = 2s` (system.rs:41, 172-176). The work is
+synchronous on the connection thread, and the gateway is thread-per-
+connection bounded by `--max-connections` (default 1024,
+config.rs:45).
+
+**Failure scenario.**
+
+An attacker opens 1024 plaintext connections (the default `--max-
+connections`) and issues `GET /readyz` in a loop on each, with no
+credential. Two effects, both without any token: (1) every request
+acquires the process-wide SQLite connection mutex, so authenticated
+`GET /v1/actors/{id}/balances` / `/budget` / `/pools` requests queue
+behind anonymous traffic; (2) if either upstream address is behind a
+packet-dropping firewall or a saturated backlog — exactly the
+condition a readiness probe exists to detect — each request blocks its
+connection thread for up to 4 s in `connect_timeout`, so ~256
+anonymous requests/second occupy every connection slot and the gateway
+stops serving authenticated traffic entirely. Each request
+additionally opens two fresh TCP connections to the internal knomosis-
+host and event-subscribe daemons, churning their own bounded
+connection caps.
+
+**Verifier's finding.**
+
+Traced end to end in source. auth.rs:203 `is_exempt_path` covers
+`/healthz|/readyz|/rpc`; `gate` (auth.rs:214) short-circuits on it,
+and `rate_limit_check` (auth.rs:245) short-circuits on the same set
+before the token bucket. handler.rs:118 composes them with `.or_else`,
+so a `None` gate falls straight to `dispatch` → `system::readyz`.
+`readyz` (system.rs:143-147) is not static: `probe_indexer` does a
+live `read_cursor` that takes SqliteStorage's single `conn:
+Mutex<Connection>` (knomosis-storage/src/sqlite.rs:304 — the same lock
+every authenticated read serialises on), then two `probe_tcp` calls,
+each `TcpStream::connect_timeout(.., READINESS_PROBE_TIMEOUT = 2s)`
+(system.rs:172-176). No caching, coalescing, or per-probe concurrency
+bound anywhere; thread-per-connection bounded only by
+DEFAULT_MAX_CONNECTIONS = 1024 (config.rs:45), with keep-alive so one
+connection issues unbounded requests, and no per-IP limit.
+tests/integration.rs:707 and auth.rs:371 pin the exemption as
+intended, so nothing catches it. Strong corroboration the auditor
+missed: rpc.rs:100-106 fixes this exact class …
+
+**Suggested remediation.**
+
+Split the exempt set in two: exempt from *authentication* only, and
+still subject to a limiter. Give the unauthenticated surface a
+separate peer-keyed (or global) token bucket rather than the per-
+credential one, and make `/readyz` cheap: memoise the probe result for
+a short interval (e.g. 1 s) behind an `AtomicU64` timestamp so N
+concurrent anonymous requests collapse to one cursor read and one pair
+of connects, and shorten `READINESS_PROBE_TIMEOUT` or move the probing
+to a background thread that `/readyz` merely reads a cached verdict
+from.
+
+
+### MINOR (reported MAJOR) — V1 dispute verifier's quorum tally reverts on a malleable signature instead of skipping it, letting one adjudicator block finalisation
+
+*Where:* `solidity/src/contracts/KnomosisDisputeVerifier.sol:849` — Rust / Solidity sweep, verifier confidence high
 
 `_countVerifiedSignatures` filters on `sigs[i].length != 65` and then
 calls `ECDSA.recover(verdictHash, sigs[i])` directly. OpenZeppelin's
@@ -2071,6 +2718,27 @@ than `QuorumNotMet(2, 3)`, the finaliser has no on-chain signal
 identifying which signature to drop, and C can keep re-issuing
 malleable signatures each …
 
+**Verifier's finding.**
+
+Mechanics confirmed by reading source. KnomosisDisputeVerifier.sol:849
+calls ECDSA.recover directly inside the tally loop (822-855) where
+every other rejection reason uses `continue`. The vendored OZ v5 ECDSA
+(solidity/lib/openzeppelin-
+contracts/contracts/utils/cryptography/ECDSA.sol:89, 137-144, 163-171)
+reverts via _throwError with ECDSAInvalidSignatureS on high-s and
+ECDSAInvalidSignature on bad v — it does not return address(0). So a
+single 65-byte non-canonical signature aborts
+finalizeUpheld/finalizeRejected. The unused tryRecover wrapper is at
+line 574-580 with a docstring stating exactly this purpose, and the
+same file uses it correctly at 557-563 in checkSignatureInvalid;
+KnomosisDisputeVerifierV2.sol:343-350 is the correct pattern. Cross-
+stack divergence is genuine: the Lean authority
+LegalKernel/Disputes/Verdict.lean:171-173 states the mirrored
+countVerifiedSignatures is "total: missing signatures, unregistered
+signers, or mismatched signature lengths simply produce a count that
+does not clear the quorum threshold" — the V1 Solidity mirror is not
+total. No test covers …
+
 **Suggested remediation.**
 
 Replace line 849 with the V2 pattern: `try
@@ -2079,4 +2747,69 @@ this.tryRecover(verdictHash, sigs[i]) returns (address rec) { if (rec
 exists at line 574 and is `external pure`, so the self-call works
 unchanged.) Add a test that includes one high-s signature alongside a
 satisfied quorum and asserts finalisation still succeeds.
+
+
+---
+
+## Refuted
+
+
+Recorded so the reasoning is not lost and the same finding is not re-filed.
+
+
+### Refuted — Lean sweep (confidence high)
+
+Traced the scenario through the actual source and it fails at the
+first step. LegalKernel/Encoding/KernelStep.lean:165-181 implements
+decoder arms for every tag the encoder emits: 7-12 as singletons (tag
+alone, residual stream passed through, mirroring the encoder at lines
+87-92), 13 as epochBudget with the same <2^64 actor guard the other
+actor-keyed arms use, and 14 as budgetPolicy. Lines 161-164 — the
+location the finding cites as the error arm — are a comment
+introducing exactly those arms; the .error (.invalidConstructorIndex
+other) catch-all is at line 182 and is reachable only for tags >= 15,
+which the 15-constructor CellTag (FaultProof/Cell.lean:104-148) cannot
+produce. The claim that the module ships no round-trip theorem is also
+false: cellTag_roundtrip (lines 224-364) proves CellTag.decode
+(CellTag.encode t ++ rest) = .ok (t, rest) by explicit cases over all
+fifteen constructors, with arms for bridgeAmmReserveEth (322) through
+budgetPolicy (361). Its hypothesis CellTag.fieldsBounded (line 197) is
+not a smuggled escape: it is True on 13 constructors and a genuine <
+256^8 head-width bound only on the two bare-Nat bridge keys, with the
+UInt64-keyed arms discharged from uint64_key_lt_head (line 208).
+Test/Encoding/KernelStep.lean:110-115 asserts round-tripping of
+.epochBudget and .budgetPolicy by name, calling out that they are the
+two present in every real bundle, plus the 256^8-1 boundary cases at
+144-146. git log on the file shows commit ee72b6b "Close the CellTag
+codec gap, gate the axiom claim, and prove the budget bound" as the
+latest change with a clean …
+
+
+### Refuted — Lean sweep (confidence high)
+
+The finding's code citations are all accurate, but its failure
+scenario does not reach the state it claims, so it is not a real
+defect as reported. Accurate parts: `legalkernel_declareLocalPolicy`'s
+precondition really is `True` (LegalKernel/Laws/LocalPolicy.lean:60)
+with the policy parameter unused; `applyActionToLocalPolicies` really
+does store the policy verbatim (Authority/SignedAction.lean:552-556);
+`AdmissibleWith` (Authority/SignedAction.lean:295-316) really has no
+`fieldsBounded` conjunct; and the §3.0 caps really are enforced only
+on the decode side (Encoding/LocalPolicy.lean:402 for the clause
+count, :134 / :149 / :177 for the per-list caps), while
+`LocalPolicy.encode` (:388) is total. What refutes it: the auditor
+never traced how a `SignedAction` enters the runtime. Every production
+ingest path obtains actions by DECODING CBE bytes, and
+`Action.decode`'s tag-15 arm is literally `Encodable.decode (T :=
+LocalPolicy) s1` (Encoding/Action.lean:499-503), i.e. the capped
+`LocalPolicy.decode`. Concretely: Main.lean:101-121
+(`decodeSignedActionStream` / `readSignedActionsFromFile` ->
+`Encodable.decode (T := SignedAction)` -> `Action.decode`);
+Runtime/LogFile.lean:147-156 (`LogEntry.decode` -> `Encodable.decode
+(T := SignedAction)`); Main.lean:940 (the `extract-events` stdin frame
+loop decodes each `LogEntry` before replay). A 65-clause policy (or a
+65-element denyTags/requireRecipientIn/allowTopUpFrom list) therefore
+fails at frame decode with `DecodeError.invalidLength` and never
+reaches `AdmissibleWith`, never reaches `apply_admissible_with`, and
+never lands in …
 
