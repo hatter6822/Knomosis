@@ -92,20 +92,25 @@ def maxRecipientsPerBulkAction : Nat := 256
     laws must share one list rather than each spell their own.
 
     **Scope of the claim.**  `kv.2 ≠ 0` coincides with "the cell is
-    live" only while balances stay under the CBE amount head's `2^128`
-    range, because `encodeAmount` truncates modulo `2^128`: a balance
-    of a nonzero multiple of `2^128` encodes as `encodeAmount 0` and so
-    reads canonically absent while `kv.2 != 0` still says `true`.  That
-    is the standing `ExtendedState.CanonicalBounds.base_amt`
-    assumption, and it is deliberately NOT re-enforced here.  It is a
-    property of the commitment rather than of this list — a balance
-    that large makes the root blind to a cell for EVERY law, not just
-    these two (`transfer`'s precondition already reads `true` on one of
-    two root-identical states), so bounding it in one law's
-    precondition would treat a symptom.  Recorded as finding **C-3** in
-    `docs/audits/19-findings-and-followups.md`;
-    `FaultProof.balanceCell_absent_iff_balance_zero` carries the bound
-    as an explicit hypothesis rather than assuming it silently. -/
+    live" only while balances stay under the CBE amount head's `2^256`
+    range, because `encodeAmount` truncates modulo `2^256`: a balance
+    of a nonzero multiple of `2^256` would encode as `encodeAmount 0`
+    and so read canonically absent while `kv.2 != 0` still says `true`.
+    That is `ExtendedState.CanonicalBounds.base_amt`, and it is
+    deliberately NOT re-enforced here.  It is a property of the
+    commitment rather than of this list — a balance that large makes
+    the root blind to a cell for EVERY law, not just these two
+    (`transfer`'s precondition would already read `true` on one of two
+    root-identical states), so bounding it in one law's precondition
+    would treat a symptom.  Recorded as finding **C-3** in
+    `docs/audits/19-findings-and-followups.md` and since **closed**:
+    the ceiling is `Laws.maxAmount = 256 ^ 32`, enforced as a
+    precondition conjunct on every crediting law
+    (`Laws.AmountBounded`) and proved unreachable by
+    `FaultProof.canonicalBounds_base_amt_of_reachable` rather than
+    assumed.  `FaultProof.balanceCell_absent_iff_balance_zero` still
+    carries the bound as an explicit hypothesis rather than assuming it
+    silently. -/
 def bulkRecipients (s : State) (r : ResourceId) (excluded : ActorId) :
     List (ActorId × Amount) :=
   (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded && kv.2 != 0)

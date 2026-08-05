@@ -56,7 +56,7 @@ The constructor-tag map (frozen):
   | 24  | `reclaimAmmReserves` | `r`, `amount`, `reserveActor`, `poolActor`              |
 
 The `Action.fieldsBounded` predicate captures the canonical-encoding
-bound on every numeric field: `< 2^128` for the wei-denominated amount
+bound on every numeric field: `< 2^256` for the wei-denominated amount
 fields, which ride the 33-byte CBE amount head, and `< 2^64` for
 identifiers, unit counts, nonces, epochs and deposit ids, which ride
 the 9-byte uint head.  Round-trip and injectivity
@@ -90,7 +90,7 @@ for everything else.  Phase 5's runtime adaptor gates on this before
 serialising. -/
 
 /-- The canonical-encoding bound on every numeric field of `a`:
-    `< 2^128` for a wei-denominated amount, `< 2^64` for an
+    `< 2^256` for a wei-denominated amount, `< 2^64` for an
     identifier, unit count, nonce, epoch, index or deposit id.  For
     `replaceKey`, the public key's byte length is the relevant bound.
     For dispute / verdict actions, the bound is delegated to the inner

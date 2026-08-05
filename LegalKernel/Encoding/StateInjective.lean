@@ -53,7 +53,7 @@ the bound differs by slot.  List lengths, identifiers and payload
 sizes carry `< 2^64` — the CBE head's 8-byte LE length field forces
 that discipline, and `nat_encode_injective` /
 `byteArray_encode_injective` are conditional for the same reason.
-*Balances* carry `< 2^128`, because they ride the wider amount head
+*Balances* carry `< 2^256`, because they ride the wider amount head
 (`amountValue_encode_injective`).  The distinction is not cosmetic:
 at `< 2^64` the balance hypothesis was reachable on ordinary states
 — a wei-denominated balance crosses `2^64` at ~18.45 ETH and

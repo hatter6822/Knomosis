@@ -248,7 +248,7 @@ def encodeAmount (n : Nat) : Stream :=
 def decodeAmount (s : Stream) : Except DecodeError (Nat × Stream) :=
   cborAmountHeadDecode s
 
-/-- Amount round-trip (with suffix): for `n < 2^128`, decoding
+/-- Amount round-trip (with suffix): for `n < 2^256`, decoding
     `encodeAmount n ++ rest` returns `(n, rest)`. -/
 theorem amount_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 32) :
     decodeAmount (encodeAmount n ++ rest) = .ok (n, rest) :=
@@ -260,9 +260,13 @@ theorem amount_roundtrip_empty (n : Nat) (h : n < 256 ^ 32) :
   cborAmountHeadRoundtrip n h
 
 /-- Amount injectivity: in-range amounts with equal encodings are
-    equal.  The bound is `2^128` rather than the `2^64` the old `Nat`
-    path required, which is what moves it out of the reachable range —
-    the entire ETH supply is about `2^87` wei. -/
+    equal.  The bound is `2^256` — the width of an EVM word, and the
+    same ceiling `Laws.maxAmount` enforces as a precondition conjunct
+    on every crediting law.  It is not merely out of reach (the entire
+    ETH supply is about `2^87` wei) but proved unreachable, by
+    `FaultProof.canonicalBounds_base_amt_of_reachable`; the earlier
+    `2^64` and `2^128` heads were moved without ever establishing the
+    ceiling, which is how the same defect recurred one modulus up. -/
 theorem encodeAmount_injective (n₁ n₂ : Nat)
     (h₁ : n₁ < 256 ^ 32) (h₂ : n₂ < 256 ^ 32)
     (h : encodeAmount n₁ = encodeAmount n₂) : n₁ = n₂ :=
@@ -295,7 +299,7 @@ verbatim — no amount-specific duplicates of the pair machinery.
 Unlike `BoundedNat` the wrapper carries no proof field: balances are
 `Nat` and arrive from the kernel without a bound in hand, so the range
 obligation stays where the rest of the codec keeps it — a per-element
-hypothesis on the injectivity theorems (`< 2^128` here rather than the
+hypothesis on the injectivity theorems (`< 2^256` here rather than the
 `< 2^64` the narrow head demanded). -/
 
 /-- A value-carrying `Amount` in a slot whose codec is chosen by
@@ -321,8 +325,8 @@ theorem AmountValue.mk_injective {n₁ n₂ : Nat}
   congrArg AmountValue.val h
 
 /-- Bounded `AmountValue` round-trip (with suffix).  The bound is the
-    amount head's `< 2^128`, so it is not reachable by a wei-denominated
-    balance (the entire ETH supply is about `2^87` wei). -/
+    amount head's `< 2^256`, which `Laws.AmountBounded` enforces on
+    every crediting law rather than leaving to chance. -/
 theorem amountValue_roundtrip (a : AmountValue) (rest : Stream)
     (h : a.val < 256 ^ 32) :
     Encodable.decode (T := AmountValue) (Encodable.encode a ++ rest) = .ok (a, rest) := by

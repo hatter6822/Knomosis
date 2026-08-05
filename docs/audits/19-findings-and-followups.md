@@ -1439,9 +1439,18 @@ snapshot-bootstrap guarantees.
 states: balances ≥ 2^64 collide, so two distinct states share one
 L1 state root
 
-**Status:** OPEN.  Found by a later audit pass; not covered by the
-original review, whose closing note ("No critical findings") is
-superseded by this entry.
+**Status:** CLOSED — see the disposition table at the head of this
+document.  The entry below is the original write-up, preserved for the
+audit trail; its "Remaining: the migration itself" section describes
+work that has since landed.  The head is now `2^256`
+(`cbeTagAmount = 0x06`, a 32-byte body), the ceiling is enforced as a
+precondition conjunct on every crediting law (`Laws.AmountBounded`,
+`Laws.maxAmount = 256 ^ 32`), and it is proved unreachable rather than
+assumed (`FaultProof.canonicalBounds_base_amt_of_reachable`).  C-3
+below records why widening alone would have left the defect open.
+
+Found by a later audit pass; not covered by the original review, whose
+closing note ("No critical findings") is superseded by this entry.
 
 **Where.**  `LegalKernel/Encoding/Encodable.lean` (`instEncodableNat`
 → `cborHeadEncode`, a fixed 8-byte little-endian body) and
