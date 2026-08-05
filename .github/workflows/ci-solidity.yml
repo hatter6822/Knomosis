@@ -182,6 +182,36 @@ jobs:
       - name: forge build
         run: forge build
 
+      - name: Strict-warnings gate (Solidity)
+        # The Solidity peer of `ci.yml`'s Lean strict-warnings gate.
+        # Without it the two stacks were held to different standards:
+        # Lean failed the build on any `warning:` line while Solidity
+        # accumulated eleven forge-lint warnings and a solc
+        # future-keyword warning unnoticed, because nothing read the
+        # build log.
+        #
+        # Scoped to `src test script` deliberately.  `lib/` is vendored
+        # third-party (forge-std, OpenZeppelin) and carries warnings
+        # this project cannot fix; linting the whole tree would make
+        # the gate permanently red and therefore ignored.
+        #
+        # The grep is load-bearing: `forge lint` PRINTS its findings
+        # but exits 0, so a step that trusted the exit code would pass
+        # while reporting warnings.  Same reason `ci.yml` greps the
+        # Lean build log rather than trusting `lake build`'s status.
+        #
+        # A cast or shift that is genuinely safe carries a
+        # `// forge-lint: disable-next-line(<id>)` with the reason it
+        # is safe, so silencing one is a reviewable diff rather than a
+        # config-level opt-out.
+        run: |
+          forge lint src test script 2>&1 | tee /tmp/forge_lint.log
+          if grep -qE 'warning\[' /tmp/forge_lint.log; then
+            echo "::error::forge lint emitted warnings; failing strict gate."
+            exit 1
+          fi
+          echo "forge lint: no warnings in src/ test/ script/."
+
       - name: forge test
         run: forge test
 
