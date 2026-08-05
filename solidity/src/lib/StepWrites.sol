@@ -713,19 +713,33 @@ library StepWrites {
     /// @notice `withdraw`'s pending-withdrawal write.
     /// @dev    Mirrors `Encoding.Bridge.PendingWithdrawal.encode`:
     ///         `uint resource || bytes recipient || amount amount ||
-    ///         uint l2LogIndex`.  The recipient rides the byte-string
-    ///         encoder, not a raw 20-byte splat.
+    ///         uint l2LogIndex || uint wdId`.  The recipient rides the
+    ///         byte-string encoder, not a raw 20-byte splat.
+    ///
+    ///         `wdId` is the leaf's own claim about which key it
+    ///         occupies, and `KnomosisBridge.withdrawWithProof` binds a
+    ///         submitted proof's index to it.  It is APPENDED rather
+    ///         than prepended so every preceding field keeps its
+    ///         offset — the decoders read sequentially, so position
+    ///         costs nothing, and a layout change that moved existing
+    ///         fields would be a second consensus change riding along
+    ///         with this one.
+    ///
+    /// @param  wdId the withdrawal id, which is also the cell key the
+    ///         verifier derived this write for.
     function derivePendingCellValue(
         uint256 resource,
         bytes memory recipientL1,
         uint256 amount,
-        uint256 l2LogIndex
+        uint256 l2LogIndex,
+        uint256 wdId
     ) internal pure returns (bytes memory) {
         return bytes.concat(
             CBEEncode.uintValue(resource),
             CBEEncode.bytesValue(recipientL1),
             CBEEncode.amountValue(amount),
-            CBEEncode.uintValue(l2LogIndex)
+            CBEEncode.uintValue(l2LogIndex),
+            CBEEncode.uintValue(wdId)
         );
     }
 

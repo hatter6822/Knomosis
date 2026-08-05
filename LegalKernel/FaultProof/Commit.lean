@@ -764,7 +764,8 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   bs_pend_wd : ∀ p ∈ es.bridge.pending.toList,
                p.2.resource.toNat < 256 ^ 8 ∧
                p.2.amount < 256 ^ 32 ∧
-               p.2.l2LogIndex < 256 ^ 8
+               p.2.l2LogIndex < 256 ^ 8 ∧
+               p.2.wdId < 256 ^ 8
   /-- The bridge nextWdId fits. -/
   bs_nxt : es.bridge.nextWdId < 256 ^ 8
   /-- GP.11.8: AMM ETH reserve fits. -/
@@ -856,7 +857,8 @@ theorem pendingWithdrawal_bounded_of_canonicalBounds (es : ExtendedState)
     (w : Bridge.WithdrawalId) (pw : Bridge.PendingWithdrawal)
     (h_w : es.bridge.pending[w]? = some pw)
     (h : ExtendedState.CanonicalBounds es) :
-    pw.resource.toNat < 256 ^ 8 ∧ pw.amount < 256 ^ 32 ∧ pw.l2LogIndex < 256 ^ 8 :=
+    pw.resource.toNat < 256 ^ 8 ∧ pw.amount < 256 ^ 32 ∧
+      pw.l2LogIndex < 256 ^ 8 ∧ pw.wdId < 256 ^ 8 :=
   h.bs_pend_wd (w, pw) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_w)
 
 /-- An actor's epoch budget is bounded, absent entries included: the

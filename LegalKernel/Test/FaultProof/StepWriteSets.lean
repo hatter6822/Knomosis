@@ -550,7 +550,14 @@ def tests : List TestCase :=
           (CellTag.bridgePending base.bridge.nextWdId)
           (derivePendingCellValue
             { resource := 1, recipient := LegalKernel.Bridge.EthAddress.zero
-            , amount := 5, l2LogIndex := 0 })
+            , amount := 5, l2LogIndex := 0
+              -- The leaf's own claim about the key it occupies, which
+              -- IS the cell key above.  Not defaultable here: `wdId`
+              -- defaults to 0 because the allocator owns it at an
+              -- `appendWithdrawal`, but a VERIFIER-side derivation has
+              -- to state it, and the advance's value is the pre-state
+              -- counter.
+            , wdId := base.bridge.nextWdId })
         match deriveNextWdIdCellValue (getCellValue base CellTag.bridgeNextWdId) with
         | some derived =>
           check (.withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero)

@@ -924,7 +924,8 @@ theorem applyActionToBridgeState_withdraw
       { resource    := r
         recipient   := rcp
         amount      := amount
-        l2LogIndex  := idx } := by
+        l2LogIndex  := idx
+        wdId        := bs.nextWdId } := by
   unfold applyActionToBridgeState
   rfl
 

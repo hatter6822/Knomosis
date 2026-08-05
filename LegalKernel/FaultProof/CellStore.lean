@@ -402,7 +402,7 @@ theorem getCellValue_setCell_bridgeConsumed (es : ExtendedState) (d : DepositId)
 theorem getCellValue_setCell_bridgePending (es : ExtendedState) (w : WithdrawalId)
     (pw : Bridge.PendingWithdrawal)
     (h_res : pw.resource.toNat < 256 ^ 8) (h_amt : pw.amount < 256 ^ 32)
-    (h_idx : pw.l2LogIndex < 256 ^ 8) :
+    (h_idx : pw.l2LogIndex < 256 ^ 8) (h_wid : pw.wdId < 256 ^ 8) :
     getCellValue (setCell es (.bridgePending w) (withdrawalCellValue pw)) (.bridgePending w)
       = withdrawalCellValue pw := by
   have hne : ¬ (withdrawalCellValue pw).size = 0 := by
@@ -412,7 +412,7 @@ theorem getCellValue_setCell_bridgePending (es : ExtendedState) (w : WithdrawalI
   have hd : Bridge.PendingWithdrawal.decode (withdrawalCellValue pw).data.toList
       = .ok (pw, []) := by
     simpa [withdrawalCellValue] using
-      Encoding.pendingWithdrawal_roundtrip pw [] h_res h_amt h_idx
+      Encoding.pendingWithdrawal_roundtrip pw [] h_res h_amt h_idx h_wid
   simp only [setCell, hne, if_false, hd, getCellValue_bridgePending,
     LegalKernel.RBMap.find?_insert_self]
 

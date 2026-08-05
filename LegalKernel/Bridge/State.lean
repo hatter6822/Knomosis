@@ -275,10 +275,36 @@ structure PendingWithdrawal where
   recipient   : EthAddress
   /-- The withdrawn amount. -/
   amount      : Amount
-  /-- The L2 log index at which the withdrawal was applied.  Used by
-      the L1-side proof verifier to locate the withdrawal in the
-      finalised log slice. -/
+  /-- The L2 log index at which the withdrawal was applied.
+
+      Informational: it records WHEN the withdrawal happened.  It is
+      NOT the withdrawal's position in the pending SMT — an earlier
+      docstring said the L1 proof verifier uses it to locate the
+      withdrawal, and the L1 duly bound its proof index to it, but the
+      tree is keyed by `wdId`.  The two counters diverge permanently
+      after the first non-`withdraw` action (`l2LogIndex` advances on
+      every action, `nextWdId` only on withdrawals), so every honest
+      proof was rejected.  See `wdId`. -/
   l2LogIndex  : Nat
+  /-- The withdrawal's own id — the key it occupies in
+      `BridgeState.pending`, and therefore its position in the
+      withdrawal SMT that `WithdrawalRoot.rangeRoot` builds.
+
+      Carried IN the leaf so the L1 can bind a submitted proof's index
+      to the leaf's own claim about where it sits.  Without it the
+      verifier had nothing in the leaf to check the index against and
+      bound it to `l2LogIndex` instead, which is a different counter;
+      dropping the check altogether was not an option either, since it
+      is what stops a prover choosing the tree position.
+
+      `BridgeState.appendWithdrawal` OVERWRITES this with the key it
+      inserts at, so the field cannot disagree with the key at the only
+      production insertion point.  It defaults to `0` for exactly that
+      reason: the id is ALLOCATED, not supplied, so a construction site
+      that had to name one would be stating a value the allocator
+      discards — and a discarded value that looks meaningful is worse
+      than an obvious placeholder. -/
+  wdId        : WithdrawalId := 0
   deriving Repr, DecidableEq
 
 /-! ## BridgeState -/
@@ -387,12 +413,28 @@ theorem empty_ammDisabled_false :
   { bs with consumed := bs.consumed.insert depositId rec }
 
 /-- Insert a pending withdrawal at `bs.nextWdId` and bump the
-    counter.  Leaves `consumed` and AMM state unchanged. -/
+    counter.  Leaves `consumed` and AMM state unchanged.
+
+    The inserted record's `wdId` is OVERWRITTEN with the key rather
+    than taken from the caller.  That is what makes "the leaf's claimed
+    id is the key it sits at" unrepresentable-to-violate here, instead
+    of an invariant maintained by convention at each call site — and
+    the L1 binds a submitted proof's index to that field, so a
+    disagreement would be a redemption failure rather than a caught
+    error. -/
 @[inline] def appendWithdrawal (bs : BridgeState) (wd : PendingWithdrawal) :
     BridgeState :=
   { bs with
-    pending  := bs.pending.insert bs.nextWdId wd
+    pending  := bs.pending.insert bs.nextWdId { wd with wdId := bs.nextWdId }
     nextWdId := bs.nextWdId + 1 }
+
+/-- `appendWithdrawal` inserts a record whose `wdId` IS the key it
+    occupies.  The structural invariant, stated so consumers can use
+    it rather than re-deriving it. -/
+theorem appendWithdrawal_wdId_eq_key (bs : BridgeState) (wd : PendingWithdrawal) :
+    ((bs.appendWithdrawal wd).pending[bs.nextWdId]?).map (·.wdId)
+      = some bs.nextWdId := by
+  simp [appendWithdrawal]
 
 /-- Look up whether a deposit-id has been consumed. -/
 @[inline] def isConsumed (bs : BridgeState) (depositId : DepositId) : Bool :=

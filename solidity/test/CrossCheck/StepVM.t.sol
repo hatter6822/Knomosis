@@ -776,7 +776,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         } else if (k == keccak256("consumed")) {
             got = StepWrites.deriveConsumedCellValue(a, b, c, d);
         } else if (k == keccak256("pending")) {
-            got = StepWrites.derivePendingCellValue(a, payload, b, c);
+            got = StepWrites.derivePendingCellValue(a, payload, b, c, d);
         } else {
             revert(string.concat("unknown record golden kind at ", base));
         }

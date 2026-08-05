@@ -1717,10 +1717,15 @@ def recordWriteGoldens : List Test.Bridge.CrossCheck.Json :=
   , .obj [ ("kind", .str "pending")
          , ("payloadHex", .str (hx (LegalKernel.Bridge.EthAddress.toBytes rcp)))
          , ("a", .str (h256 1)), ("b", .str (h256 5))
-         , ("c", .str (h256 7)), ("d", .str (h256 0))
+         -- `c` is the l2LogIndex, `d` the withdrawal id.  They are
+         -- DELIBERATELY different numbers: the two counters diverge in
+         -- production after the first non-withdraw action, and the L1
+         -- used to bind the proof index to the wrong one.  A golden
+         -- that made them equal would pass either way.
+         , ("c", .str (h256 7)), ("d", .str (h256 3))
          , ("encodedHex", .str (hx (derivePendingCellValue
              { resource := 1, recipient := rcp
-             , amount := 5, l2LogIndex := 7 }))) ] ]
+             , amount := 5, l2LogIndex := 7, wdId := 3 }))) ] ]
 
 /-! ### The multiproof wire, per probe
 

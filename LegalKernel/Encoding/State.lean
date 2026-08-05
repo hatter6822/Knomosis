@@ -784,7 +784,8 @@ def Bridge.PendingWithdrawal.encode (wd : Bridge.PendingWithdrawal) : Stream :=
   Encodable.encode (T := Nat) wd.resource.toNat ++
   Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
   encodeAmount wd.amount ++
-  Encodable.encode (T := Nat) wd.l2LogIndex
+  Encodable.encode (T := Nat) wd.l2LogIndex ++
+  Encodable.encode (T := Nat) wd.wdId
 
 /-- Wrap a `PendingWithdrawal` as a length-prefixed CBE byte string
     for placement in the outer `pending` map's value slot.
@@ -812,10 +813,14 @@ def Bridge.PendingWithdrawal.decode (s : Stream) :
           | .ok (amount, s₃) =>
             match Encodable.decode (T := Nat) s₃ with
             | .ok (idx, s₄) =>
-              .ok ({ resource    := resN.toUInt64
-                     recipient   := rcp
-                     amount      := amount
-                     l2LogIndex  := idx }, s₄)
+              match Encodable.decode (T := Nat) s₄ with
+              | .ok (wid, s₅) =>
+                .ok ({ resource    := resN.toUInt64
+                       recipient   := rcp
+                       amount      := amount
+                       l2LogIndex  := idx
+                       wdId        := wid }, s₅)
+              | .error e => .error e
             | .error e => .error e
           | .error e => .error e
         | none =>
@@ -1359,21 +1364,24 @@ theorem pendingWithdrawal_roundtrip
     (wd : Bridge.PendingWithdrawal) (rest : Stream)
     (h_res : wd.resource.toNat < 256 ^ 8)
     (h_amt : wd.amount < 256 ^ 32)
-    (h_idx : wd.l2LogIndex < 256 ^ 8) :
+    (h_idx : wd.l2LogIndex < 256 ^ 8)
+    (h_wid : wd.wdId < 256 ^ 8) :
     Bridge.PendingWithdrawal.decode (Bridge.PendingWithdrawal.encode wd ++ rest) =
     .ok (wd, rest) := by
   unfold Bridge.PendingWithdrawal.encode Bridge.PendingWithdrawal.decode
-  -- Re-associate the four-segment concatenation so each segment is
+  -- Re-associate the five-segment concatenation so each segment is
   -- consumed left-to-right by its own decoder.
   rw [show
     Encodable.encode (T := Nat) wd.resource.toNat ++
       Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
       encodeAmount wd.amount ++
-      Encodable.encode (T := Nat) wd.l2LogIndex ++ rest =
+      Encodable.encode (T := Nat) wd.l2LogIndex ++
+      Encodable.encode (T := Nat) wd.wdId ++ rest =
     Encodable.encode (T := Nat) wd.resource.toNat ++
       (Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
         (encodeAmount wd.amount ++
-          (Encodable.encode (T := Nat) wd.l2LogIndex ++ rest)))
+          (Encodable.encode (T := Nat) wd.l2LogIndex ++
+            (Encodable.encode (T := Nat) wd.wdId ++ rest))))
     from by simp [List.append_assoc]]
   -- Segment 1: resource (Nat).
   rw [nat_roundtrip wd.resource.toNat _ h_res]
@@ -1396,19 +1404,25 @@ theorem pendingWithdrawal_roundtrip
   rw [amount_roundtrip wd.amount _ h_amt]
   dsimp only
   -- Segment 4: l2LogIndex (Nat).
-  rw [nat_roundtrip wd.l2LogIndex rest h_idx]
+  rw [nat_roundtrip wd.l2LogIndex _ h_idx]
+  dsimp only
+  -- Segment 5: wdId (Nat) — the leaf's own claim about the key it
+  -- occupies, which the L1 binds a submitted proof's index to.
+  rw [nat_roundtrip wd.wdId rest h_wid]
   -- Reduce the constructed record back to `wd`.
   show Except.ok ({ resource := wd.resource.toNat.toUInt64,
                     recipient := wd.recipient,
                     amount := wd.amount,
-                    l2LogIndex := wd.l2LogIndex }, rest)
+                    l2LogIndex := wd.l2LogIndex,
+                    wdId := wd.wdId }, rest)
      = .ok (wd, rest)
   congr 1
   congr 1
   cases wd with
-  | mk resource recipient amount l2LogIndex =>
-    show Bridge.PendingWithdrawal.mk resource.toNat.toUInt64 recipient amount l2LogIndex
-       = ⟨resource, recipient, amount, l2LogIndex⟩
+  | mk resource recipient amount l2LogIndex wdId =>
+    show Bridge.PendingWithdrawal.mk resource.toNat.toUInt64 recipient amount
+           l2LogIndex wdId
+       = ⟨resource, recipient, amount, l2LogIndex, wdId⟩
     have : resource.toNat.toUInt64 = resource := UInt64.ofNat_toNat
     rw [this]
 

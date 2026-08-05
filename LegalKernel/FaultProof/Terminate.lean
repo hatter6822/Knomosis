@@ -241,12 +241,17 @@ def derivedCellValue (read : CellValueReader) (policyValue : ByteArray)
         { resource := r, userAmount := userAmount
         , poolAmount := poolAmount, budgetGrant := bg })
     | _ => none
-  | .bridgePending _ =>
+  | .bridgePending wid =>
     match a with
     | .withdraw r _ amount rcp =>
+      -- `wid` is the verifier's OWN cell key, re-derived from the
+      -- proven `.bridgeNextWdId` cell by `Action.writeCellsAt` — not
+      -- something the responder supplies — so taking the leaf's
+      -- claimed id from it makes "the leaf sits where it says it
+      -- does" true by construction on this side too.
       some (derivePendingCellValue
         { resource := r, recipient := rcp, amount := amount
-        , l2LogIndex := l2LogIndex })
+        , l2LogIndex := l2LogIndex, wdId := wid })
     | _ => none
   | .bridgeNextWdId =>
     match read t with
@@ -1027,7 +1032,7 @@ theorem derivedCellValue_correct (es : ExtendedState) (st : SignedAction) (idx :
               | .withdraw r' _ amount rcp' =>
                 some (derivePendingCellValue
                   { resource := r', recipient := rcp', amount := amount
-                  , l2LogIndex := idx })
+                  , l2LogIndex := idx, wdId := es.bridge.nextWdId })
               | _ => none) = _
         rw [h_act]
         exact congrArg some (derivePendingCellValue_correct es st idx r s amt rcp h_act)

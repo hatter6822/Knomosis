@@ -346,7 +346,8 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         uint64 logIdx
     ) internal {
         uint64 leafIdx = 0;
-        bytes memory leaf = _encodeWithdrawalLeaf(resourceId, recipient, wAmount, leafIdx);
+        bytes memory leaf = _encodeWithdrawalLeaf(
+            resourceId, recipient, wAmount, leafIdx + 7, leafIdx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
         bridge.submitStateRoot(root, logIdx, _signStateRootAs(ATTESTOR_PK, bridge, root, logIdx));

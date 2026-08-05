@@ -774,7 +774,11 @@ contract BridgeFeeSplitBoldTest is
         address recipient = address(0xBEEFCAFE);
         uint64 wAmount = 400_000;
         uint64 idx = 0;
-        bytes memory leaf = _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, idx);
+        bytes memory leaf = _encodeWithdrawalLeaf(
+            // l2LogIndex DELIBERATELY differs from the tree position: the
+            // two counters diverge in production, and the L1 used to
+            // bind the proof index to this one.
+            RESOURCE_BOLD, recipient, wAmount, idx + 7, idx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(idx), leaf, siblings);
 
@@ -876,7 +880,11 @@ contract BridgeFeeSplitBoldTest is
         // forge-lint: disable-next-line(unsafe-typecast)
         uint64 wAmount = uint64(amount - seed);
         uint64 idx = 0;
-        bytes memory leaf = _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, idx);
+        bytes memory leaf = _encodeWithdrawalLeaf(
+            // l2LogIndex DELIBERATELY differs from the tree position: the
+            // two counters diverge in production, and the L1 used to
+            // bind the proof index to this one.
+            RESOURCE_BOLD, recipient, wAmount, idx + 7, idx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(idx), leaf, siblings);
 

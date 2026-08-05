@@ -1041,7 +1041,7 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
 
         // forge-lint: disable-next-line(unsafe-typecast)
-        ethLeaf = _encodeWithdrawalLeaf(NATIVE_ETH, alice, uint64(ETH_WITHDRAW_AMOUNT), 0);
+        ethLeaf = _encodeWithdrawalLeaf(NATIVE_ETH, alice, uint64(ETH_WITHDRAW_AMOUNT), 7, 0);
         bytes32 ethRoot = SmtVerifier.recomputeRoot(0, ethLeaf, siblings);
         bridge.submitStateRoot(
             ethRoot, ETH_ROOT_LOG_INDEX, _signStateRoot(ethRoot, ETH_ROOT_LOG_INDEX)
@@ -1049,7 +1049,7 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         ethProof = _encodeWithdrawalProof(ethLeaf, 0, siblings);
 
         // forge-lint: disable-next-line(unsafe-typecast)
-        boldLeaf = _encodeWithdrawalLeaf(BOLD_RID, alice, uint64(BOLD_WITHDRAW_AMOUNT), 0);
+        boldLeaf = _encodeWithdrawalLeaf(BOLD_RID, alice, uint64(BOLD_WITHDRAW_AMOUNT), 7, 0);
         bytes32 boldRoot = SmtVerifier.recomputeRoot(0, boldLeaf, siblings);
         bridge.submitStateRoot(
             boldRoot, BOLD_ROOT_LOG_INDEX, _signStateRoot(boldRoot, BOLD_ROOT_LOG_INDEX)

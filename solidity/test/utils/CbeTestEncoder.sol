@@ -92,21 +92,31 @@ abstract contract CbeTestEncoder {
     // Withdrawal leaf + proof blobs
     // ------------------------------------------------------------------
 
-    /// @notice The canonical 80-byte `PendingWithdrawal` leaf blob,
+    /// @notice The canonical 89-byte `PendingWithdrawal` leaf blob,
     ///         matching `KnomosisBridge._decodePendingWithdrawal`:
     ///         9 (resourceId) + 29 (recipient) + 33 (amount) + 9
-    ///         (l2LogIndex) = 80 bytes.
+    ///         (l2LogIndex) + 9 (wdId) = 89 bytes.
+    ///
+    /// @dev    `wdId` and `l2LogIndex` are SEPARATE parameters, and
+    ///         callers should generally pass different values: the two
+    ///         counters diverge in production after the first
+    ///         non-withdraw action, and the L1 used to bind the proof
+    ///         index to `l2LogIndex` when the tree is keyed by `wdId`.
+    ///         A helper that derived one from the other would make that
+    ///         class of defect untestable.
     function _encodeWithdrawalLeaf(
         uint64 resourceId,
         address recipient,
         uint128 amount,
-        uint64 l2LogIndex
+        uint64 l2LogIndex,
+        uint64 wdId
     ) internal pure returns (bytes memory) {
         return bytes.concat(
             _cbeUint(resourceId),
             _cbeBytes(abi.encodePacked(recipient)),
             _cbeAmount(amount),
-            _cbeUint(l2LogIndex)
+            _cbeUint(l2LogIndex),
+            _cbeUint(wdId)
         );
     }
 

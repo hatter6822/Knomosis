@@ -580,11 +580,17 @@ contract KnomosisStepVMRoot {
                 revert StepWrites.ActionFieldsTooShort(
                     actionKind, actionFields.length);
             }
+            // The withdrawal id is the CELL KEY.  It is the
+            // verifier's own — `deriveWriteSet` builds this cell from
+            // the proven `.bridgeNextWdId` value, and the frontier is
+            // checked against that write set — so binding the leaf's
+            // claimed id to it cannot be steered by the responder.
             return StepWrites.derivePendingCellValue(
                 StepWrites.readFieldUint(actionFields, 0, 8),
                 actionFields[48:68],
                 StepWrites.readFieldUint(actionFields, 16, 32),
-                l2LogIndex
+                l2LogIndex,
+                opened[i].keyA
             );
         }
         return StepWrites.deriveNextWdIdCellValue(opened[i].preValue);

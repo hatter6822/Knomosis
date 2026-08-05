@@ -297,7 +297,8 @@ theorem withdraw_step_withdrawn
       = totalWithdrawn es r + (if r₀ = r then amt else 0) := by
   have hbridge : (apply_bridge_admissible_with verify P dep es st idx h).bridge
       = es.bridge.appendWithdrawal
-          { resource := r₀, recipient := rcp, amount := amt, l2LogIndex := idx } := by
+          { resource := r₀, recipient := rcp, amount := amt, l2LogIndex := idx,
+            wdId := es.bridge.nextWdId } := by
     show applyActionToBridgeState es.bridge st.action idx = _
     rw [haction]
     rfl
@@ -305,7 +306,8 @@ theorem withdraw_step_withdrawn
   rw [hbridge]
   exact pendingFold_insert_absent (fun wd => PendingWithdrawal.amountAt wd r)
     es.bridge.pending es.bridge.nextWdId
-    { resource := r₀, recipient := rcp, amount := amt, l2LogIndex := idx }
+    { resource := r₀, recipient := rcp, amount := amt, l2LogIndex := idx,
+            wdId := es.bridge.nextWdId }
     (nextWdId_not_mem_of_monotonic hmono)
 
 /-- Withdrawal-ledger delta of a `deposit` bridge step: `totalWithdrawn`
@@ -502,7 +504,8 @@ theorem withdrawalsMonotonic_step
       intro k hmem
       have hb : (apply_bridge_admissible_with verify P dep es st idx h).bridge
           = es.bridge.appendWithdrawal
-              { resource := r₀, recipient := rcp, amount := amt, l2LogIndex := idx } := by
+              { resource := r₀, recipient := rcp, amount := amt,
+                l2LogIndex := idx, wdId := es.bridge.nextWdId } := by
         show applyActionToBridgeState es.bridge st.action idx = _
         rw [haction]; rfl
       rw [hb] at hmem ⊢

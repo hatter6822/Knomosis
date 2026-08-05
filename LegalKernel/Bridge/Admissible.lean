@@ -179,7 +179,11 @@ def applyActionToBridgeState (bs : BridgeState) (action : Action)
       { resource    := r
         recipient   := rcp
         amount      := amount
-        l2LogIndex  := l2LogIndex }
+        l2LogIndex  := l2LogIndex
+        -- `appendWithdrawal` overwrites this with the key it inserts
+        -- at; naming the same value here keeps the record readable at
+        -- the construction site rather than leaving a placeholder.
+        wdId        := bs.nextWdId }
   | _ => bs
 
 /-- Smoke check: non-bridge actions leave `BridgeState` unchanged.

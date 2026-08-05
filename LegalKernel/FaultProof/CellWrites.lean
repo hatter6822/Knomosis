@@ -322,9 +322,9 @@ theorem getCellValue_setCell_getCellValue
       have h_v : getCellValue source (.bridgePending w) = withdrawalCellValue pw := by
         rw [getCellValue_bridgePending, h_w]
       rw [h_v]
-      obtain ⟨h_res, h_amt, h_idx⟩ :=
+      obtain ⟨h_res, h_amt, h_idx, h_wid⟩ :=
         pendingWithdrawal_bounded_of_canonicalBounds source w pw h_w h_bounds
-      exact getCellValue_setCell_bridgePending target w pw h_res h_amt h_idx
+      exact getCellValue_setCell_bridgePending target w pw h_res h_amt h_idx h_wid
   | bridgeNextWdId =>
     rw [getCellValue_bridgeNextWdId]
     exact getCellValue_setCell_bridgeNextWdId target _ h_bounds.bs_nxt

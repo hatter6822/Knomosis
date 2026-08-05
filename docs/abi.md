@@ -2581,8 +2581,17 @@ bytes proofBlob, bytes leafBlob)` function expects:
       bytes  recipientL1  (CBE: 1 tag + 8 length + 20 payload = 29 bytes)
       amount amount       (CBE: 1 tag + 32 LE = 33 bytes)
       uint   l2LogIndex   (9 bytes)
-      → total: 80 bytes (the audit-2 lossless 20-byte address
-        encoding, plus the amount on the 33-byte head).
+      uint   wdId         (9 bytes)
+      → total: 89 bytes (the audit-2 lossless 20-byte address
+        encoding, the amount on the 33-byte head, and the
+        withdrawal id).
+    `wdId` is the leaf's key in `BridgeState.pending`, hence its
+    POSITION in the withdrawal SMT, and the field `proofBlob`'s
+    `index` is checked against.  The check previously bound the
+    index to `l2LogIndex`, which is a different counter — it
+    advances on every action, `wdId` only on withdrawals — so the
+    two diverge after the first non-withdraw action and every
+    honest proof was rejected.
   * `proofBlob` — CBE encoding of the `WithdrawalProof`
     (post-audit-2; mirrors Lean's `WithdrawalProof` shape
     with variable-size leaf and siblings):
@@ -3088,7 +3097,7 @@ Where:
      `CBE-uint(resource.toNat) ++ CBE-uint(amount)`).
   * Each `PendingWithdrawal` encodes as
     `CBE-uint(resource.toNat) ++ CBE-bstr(EthAddress.toBytes recipient) ++
-     CBE-uint(amount) ++ CBE-uint(l2LogIndex)`.
+     CBE-amount(amount) ++ CBE-uint(l2LogIndex) ++ CBE-uint(wdId)`.
   * The two Bool mirrors (`boldCircuitClosed`, `ammDisabled`) encode
     as canonical `0`/`1` CBE uints; the decoder rejects any other
     value (`nonCanonical`).

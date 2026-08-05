@@ -6164,7 +6164,16 @@ structure PendingWithdrawal where
   recipient   : EthAddress       -- Fin (2^160)
   amount      : Amount
   l2LogIndex  : Nat
+  wdId        : WithdrawalId     -- the key this leaf occupies
 ```
+
+`wdId` records the leaf's own key in `pending`, and therefore its
+position in the withdrawal SMT.  It is what the L1's
+`withdrawWithProof` binds a submitted proof's index to; without it
+the L1 had nothing in the leaf to check the index against and bound
+it to `l2LogIndex`, a counter the tree is not keyed by.
+`appendWithdrawal` overwrites the field with the key it inserts at,
+so the two cannot disagree at the allocation site.
 
 `DepositId` is the canonical big-endian numeric form of the
 32-byte L1 deposit-receipt hash; `WithdrawalId` is an

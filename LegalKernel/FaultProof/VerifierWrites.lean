@@ -1639,7 +1639,8 @@ theorem derivePendingCellValue_correct
     (rcp : LegalKernel.Bridge.EthAddress)
     (h_act : st.action = .withdraw r sender amount rcp) :
     derivePendingCellValue
-        { resource := r, recipient := rcp, amount := amount, l2LogIndex := idx }
+        { resource := r, recipient := rcp, amount := amount, l2LogIndex := idx
+        , wdId := es.bridge.nextWdId }
       = getCellValue (productionApplyBudget es st idx)
           (.bridgePending es.bridge.nextWdId) := by
   show _ = (match (productionApplyBudget es st idx).bridge.pending[es.bridge.nextWdId]? with
@@ -1649,7 +1650,8 @@ theorem derivePendingCellValue_correct
   rw [productionApplyBudget_bridge, h_act]
   show _ = (match (LegalKernel.Bridge.BridgeState.appendWithdrawal es.bridge
               { resource := r, recipient := rcp, amount := amount,
-                l2LogIndex := idx }).pending[es.bridge.nextWdId]? with
+                l2LogIndex := idx,
+                wdId := es.bridge.nextWdId }).pending[es.bridge.nextWdId]? with
             | some pw => ByteArray.mk
                            (Encoding.Bridge.PendingWithdrawal.encode pw).toArray
             | none    => ByteArray.empty)

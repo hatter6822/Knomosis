@@ -1954,16 +1954,28 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///           CBE bytes   recipientL1  (29 bytes; 1 tag + 8 length + 20 payload)
     ///           CBE amount  amount       (17 bytes; 1 tag + 16 LE)
     ///           CBE uint    l2LogIndex   (9 bytes)
-    ///         Total: 64 bytes — the audit-2 lossless 20-byte address
-    ///         encoding, plus the amount on the wide head.  `amount` is
-    ///         wei-denominated and this is the EXIT path, so a narrow
-    ///         head would have capped what a withdrawal could redeem
-    ///         (and silently truncated anything above it).
+    ///           CBE uint    wdId         (9 bytes)
+    ///         The audit-2 lossless 20-byte address encoding, plus the
+    ///         amount on the wide head.  `amount` is wei-denominated and
+    ///         this is the EXIT path, so a narrow head would have capped
+    ///         what a withdrawal could redeem (and silently truncated
+    ///         anything above it).
+    ///
+    ///         `wdId` is the withdrawal's key in Lean's
+    ///         `BridgeState.pending`, and therefore its POSITION in the
+    ///         SMT `WithdrawalRoot.rangeRoot` builds.  It is the field a
+    ///         submitted proof's index is bound to.  It used to be
+    ///         absent, and the binding was to `l2LogIndex` — a different
+    ///         counter, which advances on every action while the
+    ///         withdrawal id advances only on withdrawals.  The two
+    ///         diverge permanently after the first non-withdraw action,
+    ///         so every honest proof was rejected.
     struct PendingWithdrawal {
         uint64 resourceId;
         address recipientL1;
         uint256 amount;
         uint64 l2LogIndex;
+        uint64 wdId;
     }
 
     /// @notice The proof shape mirrors Lean's `WithdrawalProof`:
@@ -2018,7 +2030,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // length comparison that the keccak check already
         // subsumes.
         if (keccak256(proofLeaf) != leafHash) revert InvalidProof();
-        if (proofIndex != wd.l2LogIndex) revert InvalidProof();
+        // Bind the proof's tree position to the leaf's OWN claim about
+        // where it sits.  The check exists so a prover cannot choose
+        // the position; binding it to `l2LogIndex` did that job for a
+        // counter the tree is not keyed by, so it rejected every honest
+        // proof instead.  `wdId` is the key `appendWithdrawal` inserted
+        // at, which is exactly the SMT position.
+        if (proofIndex != wd.wdId) revert InvalidProof();
         if (!SmtVerifier.verifyProof(uint256(proofIndex), proofLeaf, siblings, root)) {
             revert InvalidProof();
         }
@@ -2076,6 +2094,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         (wd.recipientL1, off) = CBEDecode.readAddressExact(leafBlob, off);
         (wd.amount, off) = CBEDecode.readAmount(leafBlob, off);
         (wd.l2LogIndex, off) = CBEDecode.readUint(leafBlob, off);
+        (wd.wdId, off) = CBEDecode.readUint(leafBlob, off);
         CBEDecode.assertFullyConsumed(leafBlob, off);
     }
 

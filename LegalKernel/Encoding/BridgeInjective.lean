@@ -334,11 +334,11 @@ The inner-record injectivity theorem for the 4-field
 `Encoding/State.lean`). -/
 
 /-- EI.7.b — `Bridge.PendingWithdrawal.encode_injective`.  Equal
-    canonical encodings imply structural equality on the 4-field
+    canonical encodings imply structural equality on the 5-field
     record.
 
-    **Hypotheses.**  Canonical-encoding bounds on the three `Nat`
-    fields (resource, amount, l2LogIndex).  The recipient
+    **Hypotheses.**  Canonical-encoding bounds on the four `Nat`
+    fields (resource, amount, l2LogIndex, wdId).  The recipient
     (`EthAddress`) has no explicit bound: `toBytes` always produces
     a fixed 20-byte payload that satisfies the underlying
     `byteArray_roundtrip`'s size bound unconditionally. -/
@@ -347,13 +347,15 @@ theorem Bridge.PendingWithdrawal.encode_injective
     (h_res₁ : wd₁.resource.toNat < 256 ^ 8)
     (h_amt₁ : wd₁.amount < 256 ^ 32)
     (h_idx₁ : wd₁.l2LogIndex < 256 ^ 8)
+    (h_wid₁ : wd₁.wdId < 256 ^ 8)
     (h_res₂ : wd₂.resource.toNat < 256 ^ 8)
     (h_amt₂ : wd₂.amount < 256 ^ 32)
     (h_idx₂ : wd₂.l2LogIndex < 256 ^ 8)
+    (h_wid₂ : wd₂.wdId < 256 ^ 8)
     (h : Bridge.PendingWithdrawal.encode wd₁ = Bridge.PendingWithdrawal.encode wd₂) :
     wd₁ = wd₂ := by
-  have r₁ := pendingWithdrawal_roundtrip wd₁ [] h_res₁ h_amt₁ h_idx₁
-  have r₂ := pendingWithdrawal_roundtrip wd₂ [] h_res₂ h_amt₂ h_idx₂
+  have r₁ := pendingWithdrawal_roundtrip wd₁ [] h_res₁ h_amt₁ h_idx₁ h_wid₁
+  have r₂ := pendingWithdrawal_roundtrip wd₂ [] h_res₂ h_amt₂ h_idx₂ h_wid₂
   simp at r₁ r₂
   rw [h] at r₁
   have heq : (Except.ok (wd₁, ([] : Stream))
@@ -374,9 +376,11 @@ theorem Bridge.PendingWithdrawal.encodeAsBytes_injective
     (h_res₁ : wd₁.resource.toNat < 256 ^ 8)
     (h_amt₁ : wd₁.amount < 256 ^ 32)
     (h_idx₁ : wd₁.l2LogIndex < 256 ^ 8)
+    (h_wid₁ : wd₁.wdId < 256 ^ 8)
     (h_res₂ : wd₂.resource.toNat < 256 ^ 8)
     (h_amt₂ : wd₂.amount < 256 ^ 32)
     (h_idx₂ : wd₂.l2LogIndex < 256 ^ 8)
+    (h_wid₂ : wd₂.wdId < 256 ^ 8)
     (h : Bridge.PendingWithdrawal.encodeAsBytes wd₁ =
          Bridge.PendingWithdrawal.encodeAsBytes wd₂) :
     wd₁ = wd₂ := by
@@ -389,7 +393,7 @@ theorem Bridge.PendingWithdrawal.encodeAsBytes_injective
     rw [h_arr]
   rw [List.toList_toArray, List.toList_toArray] at h_list
   exact Bridge.PendingWithdrawal.encode_injective wd₁ wd₂
-    h_res₁ h_amt₁ h_idx₁ h_res₂ h_amt₂ h_idx₂ h_list
+    h_res₁ h_amt₁ h_idx₁ h_wid₁ h_res₂ h_amt₂ h_idx₂ h_wid₂ h_list
 
 /-! ## EI.7.d — `Bridge.BridgeState.encodePending_injective`
 
@@ -424,11 +428,13 @@ theorem Bridge.BridgeState.encodePending_injective
     (h_wd₁ : ∀ p ∈ bs₁.pending.toList,
               p.2.resource.toNat < 256 ^ 8 ∧
               p.2.amount < 256 ^ 32 ∧
-              p.2.l2LogIndex < 256 ^ 8)
+              p.2.l2LogIndex < 256 ^ 8 ∧
+              p.2.wdId < 256 ^ 8)
     (h_wd₂ : ∀ p ∈ bs₂.pending.toList,
               p.2.resource.toNat < 256 ^ 8 ∧
               p.2.amount < 256 ^ 32 ∧
-              p.2.l2LogIndex < 256 ^ 8)
+              p.2.l2LogIndex < 256 ^ 8 ∧
+              p.2.wdId < 256 ^ 8)
     (h : Bridge.BridgeState.encodePending bs₁ =
          Bridge.BridgeState.encodePending bs₂) :
     bs₁.pending.Equiv bs₂.pending := by
@@ -523,8 +529,8 @@ theorem Bridge.BridgeState.encodePending_injective
       have h_wd : bs₁.pending.toList[i].2 = bs₂.pending.toList[i].2 :=
         Bridge.PendingWithdrawal.encodeAsBytes_injective
           bs₁.pending.toList[i].2 bs₂.pending.toList[i].2
-          h_wd_bounds₁.1 h_wd_bounds₁.2.1 h_wd_bounds₁.2.2
-          h_wd_bounds₂.1 h_wd_bounds₂.2.1 h_wd_bounds₂.2.2
+          h_wd_bounds₁.1 h_wd_bounds₁.2.1 h_wd_bounds₁.2.2.1 h_wd_bounds₁.2.2.2
+          h_wd_bounds₂.1 h_wd_bounds₂.2.1 h_wd_bounds₂.2.2.1 h_wd_bounds₂.2.2.2
           h_bytes
       have : (bs₁.pending.toList[i].1, bs₁.pending.toList[i].2)
            = (bs₂.pending.toList[i].1, bs₂.pending.toList[i].2) := by
@@ -651,11 +657,13 @@ theorem Bridge.BridgeState.encode_injective
     (h_pend_wd₁ : ∀ p ∈ bs₁.pending.toList,
                   p.2.resource.toNat < 256 ^ 8 ∧
                   p.2.amount < 256 ^ 32 ∧
-                  p.2.l2LogIndex < 256 ^ 8)
+                  p.2.l2LogIndex < 256 ^ 8 ∧
+                  p.2.wdId < 256 ^ 8)
     (h_pend_wd₂ : ∀ p ∈ bs₂.pending.toList,
                   p.2.resource.toNat < 256 ^ 8 ∧
                   p.2.amount < 256 ^ 32 ∧
-                  p.2.l2LogIndex < 256 ^ 8)
+                  p.2.l2LogIndex < 256 ^ 8 ∧
+                  p.2.wdId < 256 ^ 8)
     (h_nxt₁ : bs₁.nextWdId < 256 ^ 8)
     (h_nxt₂ : bs₂.nextWdId < 256 ^ 8)
     (h_ammEth₁ : bs₁.ammReserveEth < 256 ^ 32)
