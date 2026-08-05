@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 import {KnomosisFaultProofMigration} from "src/contracts/KnomosisFaultProofMigration.sol";
@@ -150,7 +150,7 @@ contract KnomosisFaultProofMigrationTest is Test {
 
     function test_activate_after_grace_window_succeeds() public {
         KnomosisFaultProofMigration m = _deployMigration();
-        vm.roll(block.number + GRACE + 1);
+        vm.roll(vm.getBlockNumber() + GRACE + 1);
         m.activate();
         assertTrue(m.activated());
     }
@@ -163,7 +163,7 @@ contract KnomosisFaultProofMigrationTest is Test {
 
     function test_activate_double_call_rejected() public {
         KnomosisFaultProofMigration m = _deployMigration();
-        vm.roll(block.number + GRACE + 1);
+        vm.roll(vm.getBlockNumber() + GRACE + 1);
         m.activate();
         vm.expectRevert(KnomosisFaultProofMigration.AlreadyActivated.selector);
         m.activate();

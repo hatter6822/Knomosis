@@ -2,7 +2,7 @@
 //
 //  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 /// @title KnomosisFaultProofMigration
 /// @notice Workstream-H migration handoff contract.  Moves

@@ -81,8 +81,8 @@ curl -sSfL https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundr
 tar xzf /tmp/foundry.tar.gz -C /usr/local/foundry/bin
 export PATH="/usr/local/foundry/bin:$PATH"
 
-# Install solc 0.8.20 (one-time):
-curl -sSfL https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux \
+# Install solc 0.8.36 (one-time):
+curl -sSfL https://github.com/ethereum/solidity/releases/download/v0.8.36/solc-static-linux \
   -o /usr/local/bin/solc
 chmod +x /usr/local/bin/solc
 
@@ -103,7 +103,7 @@ make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 
 `foundry.toml` pins:
 
-* `solc_version = "0.8.20"` with `evm_version = "shanghai"`.
+* `solc_version = "0.8.36"` with `evm_version = "shanghai"`.
 * `via_ir = true` — required because `KnomosisBridge.withdrawWithProof`
   and a few other functions are stack-too-deep without it.
 * `optimizer_runs = 200`.

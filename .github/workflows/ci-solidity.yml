@@ -47,7 +47,7 @@
 # installed from a version-pinned release artifact (matching
 # `solidity/README.md`) rather than a third-party action, so no
 # un-pinnable action enters the supply chain.  `forge` auto-manages the
-# solc version pinned in `foundry.toml` (0.8.20) via svm on first build.
+# solc version pinned in `foundry.toml` (0.8.36) via svm on first build.
 
 name: CI (Solidity)
 
@@ -159,7 +159,7 @@ jobs:
           "$HOME/.foundry/bin/forge" --version
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
-      - name: Install solc 0.8.20
+      - name: Install solc 0.8.36
         # foundry.toml pins `solc = "/usr/local/bin/solc"`, so forge uses
         # this exact binary rather than an svm-managed one.  Install it
         # there to match the contract's pinned compiler (and the setup in
@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux -o /tmp/solc
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/ethereum/solidity/releases/download/v0.8.36/solc-static-linux -o /tmp/solc
           sudo install -m 0755 /tmp/solc /usr/local/bin/solc
           solc --version
 

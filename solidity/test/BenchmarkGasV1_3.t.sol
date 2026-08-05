@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
@@ -1056,7 +1056,7 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         );
         boldProof = _encodeWithdrawalProof(boldLeaf, 0, siblings);
 
-        vm.roll(block.number + DISPUTE_WINDOW_BLOCKS);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW_BLOCKS);
     }
 
     /// @notice `withdrawWithProof`, native-ETH leg (canonical 64-sibling

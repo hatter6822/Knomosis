@@ -74,7 +74,7 @@ topic:
 | Project version | `v0.8.4` (Lean + Rust in lockstep; `kernelVersion` in `LegalKernel.lean`) |
 | Lean toolchain | `leanprover/lean4:v4.29.1` (pinned in [`../lean-toolchain`](../lean-toolchain)) |
 | Rust toolchain | stable **1.97** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.97`) |
-| Solidity toolchain | Foundry **v1.7.1** + solc **0.8.20** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
+| Solidity toolchain | Foundry **v1.7.1** + solc **0.8.36** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
 | Vendored Solidity deps | OpenZeppelin **v5.0.2**, forge-std **v1.9.4** |
 | Kernel TCB | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` (Lean core + Std core only) |
 | Kernel axioms | exactly `propext`, `Classical.choice`, `Quot.sound` — **no custom axioms** |
@@ -140,7 +140,7 @@ Knomosis develops on **Linux** and **macOS** (x86-64 and arm64); CI runs on
 macOS. macOS contributors provision per stack manually: `elan` + the Lean
 toolchain are macOS-native (see
 [§5.5](#55-per-stack-manual-setup-when-you-skip-setupsh)), Foundry installs via
-`foundryup`, and `solc 0.8.20` via a macOS build or package manager.
+`foundryup`, and `solc 0.8.36` via a macOS build or package manager.
 
 **You must have, before running setup:**
 
@@ -212,7 +212,7 @@ trust story:
    baked into the script.
 4. Installs `elan` (also SHA-256-pinned to a specific commit, never `master`) so
    you can switch toolchains later.
-5. Installs the Solidity toolchain: Foundry v1.7.1 + solc 0.8.20 (each
+5. Installs the Solidity toolchain: Foundry v1.7.1 + solc 0.8.36 (each
    checksum-pinned) and vendors OpenZeppelin + forge-std via
    `solidity/scripts/vendor-deps.sh`.  These install to `/usr/local`
    (matching the README + CI) when it is writable, and otherwise fall back to
@@ -491,7 +491,7 @@ make testnet-acceptance-dryrun  # in-memory deploy dry-run
 `solidity/foundry.toml` pins the solc **binary path**
 (`solc = "/usr/local/bin/solc"`), `evm_version = shanghai`, `via_ir = true`
 (required: a few functions are stack-too-deep without it), and
-`optimizer_runs = 200`. The 0.8.20 compiler version is enforced by `setup.sh`
+`optimizer_runs = 200`. The 0.8.36 compiler version is enforced by `setup.sh`
 and CI installing exactly that binary at that path — `foundry.toml` carries no
 `solc_version` constraint, so a different compiler placed at
 `/usr/local/bin/solc` would be used silently. CI's `forge` job uses

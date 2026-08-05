@@ -466,7 +466,7 @@ make snapshot-gas-selftest  # behavioural self-tests for the gate + generator
   honest.
 
 Baselines are stable only for the pinned toolchain (Foundry v1.7.1,
-solc 0.8.20, the committed `foundry.toml`) — regenerate with exactly
+solc 0.8.36, the committed `foundry.toml`) — regenerate with exactly
 that toolchain.
 
 **Reading a row.**  The user-tx column is the measured transaction

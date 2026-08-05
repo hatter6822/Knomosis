@@ -3,7 +3,7 @@
 // Knomosis — proof-carrying state transition system.
 // Cross-stack consumer for the GP.6.5 BOLD-specific deposit corpus.
 //
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";

@@ -2,7 +2,7 @@
 //
 //  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 /// @title SmtMultiVerifier
 /// @notice Solidity port of `LegalKernel.FaultProof.multiWalk` — ONE

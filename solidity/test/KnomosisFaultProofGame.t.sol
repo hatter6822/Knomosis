@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
@@ -789,19 +789,19 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         // Round 1: midpoint of [0, 4] is 2.  The sequencer submits the
         // honest commits[2]; the challenger DISAGREES, so the range
         // narrows to [0, (2, commits[2])] — `high` is now a midpoint.
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         vm.prank(sequencer);
         game.submitMidpoint(gameId, commits[2]);
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         vm.prank(challenger);
         game.respondToMidpoint(gameId, false);
 
         // Round 2: midpoint of [0, 2] is 1.  Same pattern — the range
         // narrows to the single step [0, (1, commits[1])].
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         vm.prank(sequencer);
         game.submitMidpoint(gameId, commits[1]);
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         vm.prank(challenger);
         game.respondToMidpoint(gameId, false);
 
@@ -853,16 +853,16 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         // keyed on `g.high.idx` zeroed the wrong slot.  The midpoint
         // claim (0xAD) is arbitrary: this game settles by timeout, not
         // by terminal step, so its truth is irrelevant.
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         vm.prank(sequencer);
         game.submitMidpoint(firstGameId, bytes32(uint256(0xAD)));
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         vm.prank(challenger);
         game.respondToMidpoint(firstGameId, false);
 
         // Settle by timeout (the sequencer's turn after the response;
         // it stalls past the deadline and loses).
-        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.roll(vm.getBlockNumber() + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(firstGameId);
         (, , , , , , , , , , ,
@@ -892,7 +892,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             10, bytes32(uint256(0xC1)), LOW_ROOT, 0);
-        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.roll(vm.getBlockNumber() + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
         // Game settled in challenger's favour (sequencer timed out).
@@ -910,7 +910,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         uint256 challengerBefore = challenger.balance;
         uint256 treasuryBefore   = treasury.balance;
 
-        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.roll(vm.getBlockNumber() + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
 
@@ -955,7 +955,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
 
         // Sequencer times out → challenger wins.  This MUST NOT revert
         // (settlement is not bricked by the reverting treasury).
-        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.roll(vm.getBlockNumber() + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         brickGame.claimTimeout(gameId);
 
@@ -986,7 +986,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             12, bytes32(uint256(0xC1)), LOW_ROOT, 0);
-        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.roll(vm.getBlockNumber() + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
         // Verify slashing was invoked.
@@ -1007,7 +1007,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             12, bytes32(uint256(0xC1)), LOW_ROOT, 0);
-        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.roll(vm.getBlockNumber() + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
         // Verify state-root revert range update fired.
@@ -1019,7 +1019,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             12, bytes32(uint256(0xC1)), LOW_ROOT, 0);
-        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.roll(vm.getBlockNumber() + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
 
@@ -1034,7 +1034,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             64, bytes32(uint256(0xC1)), LOW_ROOT, 0);
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         vm.prank(sequencer);
         game.submitMidpoint(gameId, bytes32(uint256(0xAD)));
         // No revert — midpoint accepted.
@@ -1044,7 +1044,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             65, bytes32(uint256(0xC1)), LOW_ROOT, 0);
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         vm.prank(challenger);
         vm.expectRevert(KnomosisFaultProofGame.NotResponsible.selector);
         game.submitMidpoint(gameId, bytes32(uint256(0xAD)));
@@ -1054,7 +1054,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             66, bytes32(uint256(0xC1)), LOW_ROOT, 0);
-        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.roll(vm.getBlockNumber() + BISECTION_TIMEOUT + 1);
         vm.prank(sequencer);
         vm.expectRevert(KnomosisFaultProofGame.TurnDeadlineExpired.selector);
         game.submitMidpoint(gameId, bytes32(uint256(0xAD)));
@@ -1064,7 +1064,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             67, bytes32(uint256(0xC1)), LOW_ROOT, 0);
-        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
         // No midpoint submitted yet.  Challenger tries to respond.
         vm.prank(challenger);
         vm.expectRevert(KnomosisFaultProofGame.NoPendingMidpoint.selector);

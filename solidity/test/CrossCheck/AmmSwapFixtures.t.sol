@@ -3,7 +3,7 @@
 // Knomosis — proof-carrying state transition system.
 // Cross-stack consumer for the GP.11.7 embedded-AMM swap corpus.
 //
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {CrossCheckFramework} from "./Framework.t.sol";

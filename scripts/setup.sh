@@ -175,14 +175,14 @@ FOUNDRY_VERSION="v1.7.1"
 FOUNDRY_SHA256_X86="cf7e688ed0c4c48adffca788b496076e31060b67ac5afe1e43dbb5499c20c88b"
 FOUNDRY_SHA256_ARM="c8fe8fa09ae3aba2c81b510c6f9da3a9d468029b9580e690b245b3f0aea687ae"
 
-# solc 0.8.20 static binary (linux x86_64 only — the upstream v0.8.20
+# solc 0.8.36 static binary (linux x86_64 only — the upstream v0.8.36
 # release does not ship an ARM static binary; ARM users must build
 # from source or install via package manager).  Bumping requires
 # recomputing the SHA in the same commit; regenerate via:
-#   curl -fsSL "https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux" \
+#   curl -fsSL "https://github.com/ethereum/solidity/releases/download/v0.8.36/solc-static-linux" \
 #     | sha256sum
-SOLC_VERSION="v0.8.20"
-SOLC_SHA256_X86="0479d44fdf9c501c25337fdc540419f1593b884a87b47f023da4f1c700fda782"
+SOLC_VERSION="v0.8.36"
+SOLC_SHA256_X86="c8d35afdddc3cd2743ee88b8f25e0fecd16e2bdd5f2120f37e52cd9cc45ae0e6"
 
 # -------- Parse toolchain spec --------
 if [ ! -f "${LEAN_TOOLCHAIN_FILE}" ]; then
@@ -235,8 +235,8 @@ _path_writable_or_creatable() {
 
 # Match a `--version` line for an EXACT version token, not an arbitrary
 # substring.  The pinned version must be delimited by a non-version character
-# (or a string edge) on BOTH sides, so a future "1.7.10" / "0.8.200" release is
-# NOT accepted as the pinned "1.7.1" / "0.8.20".  Dots in the pin are escaped so
+# (or a string edge) on BOTH sides, so a future "1.7.10" / "0.8.360" release is
+# NOT accepted as the pinned "1.7.1" / "0.8.36".  Dots in the pin are escaped so
 # they match literally (not as the regex "any char").  Handles both observed
 # forge formats ("1.7.1-stable" and "...-v1.7.1") and the solc format.  Reads
 # the version output on stdin; returns grep's exit status.
@@ -456,7 +456,7 @@ do_solidity_install() {
   # build (e.g. "...-v1.7.1" vs "1.7.1-stable"), so match the v-stripped version
   # as a bounded TOKEN (`_version_token_match`) rather than a bare substring —
   # otherwise a future "1.7.10" would satisfy the "1.7.1" pin.  The solc check
-  # below uses the same helper for the same reason ("0.8.20" vs "0.8.200").
+  # below uses the same helper for the same reason ("0.8.36" vs "0.8.360").
   if ! "${foundry_install_dir}/forge" --version 2>/dev/null | _version_token_match "${FOUNDRY_VERSION#v}"; then
     echo "error: forge at ${foundry_install_dir} is not the pinned ${FOUNDRY_VERSION} (or fails to run)" >&2
     return 1

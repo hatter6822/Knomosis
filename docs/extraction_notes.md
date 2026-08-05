@@ -252,7 +252,7 @@ name the precise swap-points and consuming theorems.
     (SC.3) mechanically ratify byte-for-byte agreement
     between the Lean references and the Solidity
     implementations on every covered surface.  The
-    `foundry.toml` pins `solc_version = "0.8.20"` with
+    `foundry.toml` pins `solc_version = "0.8.36"` with
     `evm_version = "shanghai"` and `via_ir = true`; any
     deployment that diverges from the pin must re-run the
     cross-stack suite under the new toolchain.

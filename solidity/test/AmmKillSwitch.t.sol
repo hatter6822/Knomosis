@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
@@ -350,7 +350,16 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
         bridge.submitStateRoot(root, logIdx, _signStateRootAs(ATTESTOR_PK, bridge, root, logIdx));
-        vm.roll(block.number + 100); // past the 100-block dispute window
+        // `vm.getBlockNumber()`, not `block.number`.  `block.number` is
+        // the NUMBER opcode, which is genuinely constant within a call
+        // frame, so the Yul optimiser may read it once and reuse the
+        // value.  `vm.roll` mutates it out of band, which the optimiser
+        // cannot see.  This helper runs twice per test, and under solc
+        // 0.8.36 the second call reused the FIRST read — rolling to 101
+        // again instead of 201, leaving the second state root inside its
+        // dispute window and reverting `PreFinalisation()`.  The
+        // cheatcode is an external staticcall, so it cannot be hoisted.
+        vm.roll(vm.getBlockNumber() + 100); // past the 100-block dispute window
         bytes memory proofBlob = _encodeWithdrawalProof(leaf, leafIdx, siblings);
         bridge.withdrawWithProof(logIdx, proofBlob, leaf);
     }

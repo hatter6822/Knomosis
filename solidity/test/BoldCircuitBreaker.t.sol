@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
@@ -1234,7 +1234,7 @@ contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness, BoldTestSupport 
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
         bridge.submitStateRoot(root, logIdx, _signStateRoot(bridge, root, logIdx));
-        vm.roll(block.number + 100);
+        vm.roll(vm.getBlockNumber() + 100);
         bytes memory proofBlob = _encodeWithdrawalProof(leaf, leafIdx, siblings);
         bridge.withdrawWithProof(logIdx, proofBlob, leaf);
     }

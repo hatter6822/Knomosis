@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -398,7 +398,7 @@ contract KnomosisBridgeTest is Test {
 
     function test_hasOpenDisputeOlderThan_after_window() public {
         bridge.submitStateRoot(keccak256("r"), 1, _signStateRoot(keccak256("r"), 1));
-        vm.roll(block.number + DISPUTE_WINDOW);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW);
         assertFalse(bridge.hasOpenDisputeOlderThan(0));
     }
 
@@ -514,7 +514,7 @@ contract KnomosisBridgeTest is Test {
     function test_audit_revertToPriorRoot_blocks_withdrawal_for_reverted_indices() public {
         bridge.submitStateRoot(keccak256("r1"), 1, _signStateRoot(keccak256("r1"), 1));
         // Wait past finalisation.
-        vm.roll(block.number + DISPUTE_WINDOW);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW);
         assertTrue(bridge.isStateRootFinalised(1));
 
         // Revert it.
@@ -550,7 +550,7 @@ contract KnomosisBridgeTest is Test {
 
         // Submit a fresh state root at idx 3 (post-revert correction).
         // First the cooldown breaker would block; advance past cooldown.
-        vm.roll(block.number + COOLDOWN_BLOCKS);
+        vm.roll(vm.getBlockNumber() + COOLDOWN_BLOCKS);
         bridge.submitStateRoot(keccak256("r3"), 3, _signStateRoot(keccak256("r3"), 3));
 
         // Idx 1 and 2 are reverted; idx 3 is NOT.
@@ -571,7 +571,7 @@ contract KnomosisBridgeTest is Test {
         bridge.revertToPriorRoot(2);
 
         // Submit at idx 3 (post-cooldown).
-        vm.roll(block.number + COOLDOWN_BLOCKS);
+        vm.roll(vm.getBlockNumber() + COOLDOWN_BLOCKS);
         bridge.submitStateRoot(keccak256("r3"), 3, _signStateRoot(keccak256("r3"), 3));
         assertFalse(bridge.isStateRootReverted(3));
 

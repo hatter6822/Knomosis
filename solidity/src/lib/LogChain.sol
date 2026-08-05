@@ -2,7 +2,7 @@
 //
 //  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 /// @title LogChain
 /// @notice The L1 spelling of the L2 log-entry hash chain.

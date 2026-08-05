@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
+import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -19,7 +20,7 @@ import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
 ///         (`test_reference_anchor_*`) and to the Lean spec
 ///         (`test/CrossCheck/DepositFeeSplit.t.sol`).  No file checks
 ///         the formula against itself.
-contract BridgeFeeSplitTest is Test {
+contract BridgeFeeSplitTest is Test, DepositEventDecoder {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
 
@@ -111,45 +112,50 @@ contract BridgeFeeSplitTest is Test {
         internal
         returns (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant)
     {
-        (userAmount, poolAmount, budgetGrant) =
+        // The whole expected receipt as ONE value.  Previously its nine
+        // fields were nine live locals here, and the nine-argument
+        // `receiptHash` and `emit` held them all across two calls.
+        // AMM-disabled suite, so `ammSeedAmount` stays 0
+        // (`freePoolAmount == poolAmount`).
+        DepositReceipt memory want;
+        want.sender = user;
+        want.resourceId = NATIVE_ETH;
+        want.token = address(0);
+        (want.userAmount, want.poolAmount, want.budgetGrant) =
             FeeSplitMath.split(v, feeBps, bridge.weiPerBudgetUnitEth());
-
-        uint64 nonce = bridge.depositNonce(user);
-        // AMM-disabled suite: ammSeedAmount is 0 (freePoolAmount == poolAmount).
-        bytes32 expectedHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(),
-            user,
-            NATIVE_ETH,
-            address(0),
-            userAmount,
-            poolAmount,
-            0,
-            budgetGrant,
-            nonce
-        );
+        want.nonce = bridge.depositNonce(user);
+        want.receiptHash = _receiptHashOf(bridge.deploymentId(), want);
 
         uint256 tvlBefore = bridge.totalLockedValue();
-
-        vm.expectEmit(true, true, true, true, address(bridge));
-        emit DepositWithFeeInitiated(
-            user,
-            NATIVE_ETH,
-            address(0),
-            userAmount,
-            poolAmount,
-            0,
-            budgetGrant,
-            nonce,
-            expectedHash
-        );
+        _expectDeposit(bridge, want);
 
         vm.prank(user);
         bridge.depositETHWithFee{value: v}(feeBps);
 
         // Conservation + accounting invariants on the live contract.
-        assertEq(userAmount + poolAmount, v, "split must conserve msg.value");
+        assertEq(want.userAmount + want.poolAmount, v, "split must conserve msg.value");
         assertEq(bridge.totalLockedValue(), tvlBefore + v, "TVL grows by full deposit");
-        assertEq(bridge.depositNonce(user), nonce + 1, "nonce increments");
+        assertEq(bridge.depositNonce(user), want.nonce + 1, "nonce increments");
+        return (want.userAmount, want.poolAmount, want.budgetGrant);
+    }
+
+    /// @dev Arm `expectEmit` for a receipt.  The nine positional
+    ///      arguments `emit` requires are confined to this one frame —
+    ///      Solidity has no struct splat, so the field list has to be
+    ///      written once somewhere; once is the point.
+    function _expectDeposit(KnomosisBridge bridge, DepositReceipt memory r) private {
+        vm.expectEmit(true, true, true, true, address(bridge));
+        emit DepositWithFeeInitiated(
+            r.sender,
+            r.resourceId,
+            r.token,
+            r.userAmount,
+            r.poolAmount,
+            r.ammSeedAmount,
+            r.budgetGrant,
+            r.nonce,
+            r.receiptHash
+        );
     }
 
     // ------------------------------------------------------------------

@@ -6012,7 +6012,7 @@ to the relevant theorems.
     deployment audit bar:* higher than for upgradeable
     contracts; every contract is `immutable`, with no proxy / no
     `initialize` / no admin role (§15D.8.2).  *Compiler pin:*
-    `foundry.toml` pins `solc_version = "0.8.20"` with
+    `foundry.toml` pins `solc_version = "0.8.36"` with
     `evm_version = "shanghai"` and `via_ir = true`.
   * **TA-2.5 EIP-1271 contract correctness.**  *Statement:* for
     every smart-contract wallet `W` the deployment admits, `W`'s

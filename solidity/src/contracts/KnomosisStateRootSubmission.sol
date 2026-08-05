@@ -5,7 +5,7 @@
 //  This program comes with ABSOLUTELY NO WARRANTY.
 //  This is free software, and you are welcome to redistribute it
 //  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 

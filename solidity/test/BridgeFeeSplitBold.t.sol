@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
+import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 import {CbeTestEncoder} from "./utils/CbeTestEncoder.sol";
@@ -37,7 +38,7 @@ import {
 ///         deployed (the constructor's `symbol()` cross-check reads it).
 ///         `vm.etch` copies runtime code and resets storage, hence the
 ///         `pure` `symbol()` in `MockBold` and the post-etch `mint`.
-contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport {
+contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport, DepositEventDecoder {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
 
@@ -197,14 +198,17 @@ contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport {
         internal
         returns (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant)
     {
-        (userAmount, poolAmount, budgetGrant) =
+        // The whole expected receipt as ONE value; see
+        // `DepositEventDecoder`.  AMM-disabled suite, so `ammSeedAmount`
+        // stays 0 (`freePoolAmount == poolAmount`).
+        DepositReceipt memory want;
+        want.sender = user;
+        want.resourceId = RESOURCE_BOLD;
+        want.token = BOLD;
+        (want.userAmount, want.poolAmount, want.budgetGrant) =
             FeeSplitMath.split(amount, feeBps, bridge.weiPerBudgetUnitBold());
-
-        uint64 nonce = bridge.depositNonce(user);
-        // AMM-disabled suite: ammSeedAmount is 0 (freePoolAmount == poolAmount).
-        bytes32 expectedHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(), user, RESOURCE_BOLD, BOLD, userAmount, poolAmount, 0, budgetGrant, nonce
-        );
+        want.nonce = bridge.depositNonce(user);
+        want.receiptHash = _receiptHashOf(bridge.deploymentId(), want);
 
         uint256 tvlBefore = bridge.totalLockedValue();
         uint256 bridgeBalBefore = MockBold(BOLD).balanceOf(address(bridge));
@@ -215,31 +219,26 @@ contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport {
         vm.prank(user);
         bridge.depositBoldWithFee(amount, feeBps);
 
-        (
-            uint256 u,
-            uint256 p,
-            uint64 g,
-            uint64 n,
-            bytes32 rh,
-            address sender,
-            uint64 rid,
-            address tok
-        ) = _findEvent(vm.getRecordedLogs());
+        // Two pointers where there were sixteen live locals.
+        DepositReceipt memory got = _findDepositReceipt(vm.getRecordedLogs());
 
         // Event field equality against the reference computation.
-        assertEq(sender, user, "event sender");
-        assertEq(rid, RESOURCE_BOLD, "event resourceId == BOLD");
-        assertEq(tok, BOLD, "event token == BOLD address");
-        assertEq(u, userAmount, "event userAmount");
-        assertEq(p, poolAmount, "event poolAmount");
-        assertEq(g, budgetGrant, "event budgetGrant");
-        assertEq(n, nonce, "event depositorNonce");
-        assertEq(rh, expectedHash, "event receiptHash");
+        assertEq(got.sender, want.sender, "event sender");
+        assertEq(got.resourceId, want.resourceId, "event resourceId == BOLD");
+        assertEq(got.token, want.token, "event token == BOLD address");
+        assertEq(got.userAmount, want.userAmount, "event userAmount");
+        assertEq(got.poolAmount, want.poolAmount, "event poolAmount");
+        assertEq(got.budgetGrant, want.budgetGrant, "event budgetGrant");
+        assertEq(got.nonce, want.nonce, "event depositorNonce");
+        assertEq(got.receiptHash, want.receiptHash, "event receiptHash");
+
+        (userAmount, poolAmount, budgetGrant) =
+            (want.userAmount, want.poolAmount, want.budgetGrant);
 
         // Conservation + accounting invariants on the live contract.
         assertEq(userAmount + poolAmount, amount, "split must conserve amount");
         assertEq(bridge.totalLockedValue(), tvlBefore + amount, "TVL grows by full deposit");
-        assertEq(bridge.depositNonce(user), nonce + 1, "nonce increments");
+        assertEq(bridge.depositNonce(user), want.nonce + 1, "nonce increments");
         assertEq(
             MockBold(BOLD).balanceOf(address(bridge)),
             bridgeBalBefore + amount,
@@ -1022,7 +1021,7 @@ contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport {
         //     what's checked), then the dispute window elapses.
         uint64 atLogIndexHigh = 1;
         bridge.submitStateRoot(root, atLogIndexHigh, _signStateRoot(bridge, root, atLogIndexHigh));
-        vm.roll(block.number + 100); // == disputeWindowBlocks
+        vm.roll(vm.getBlockNumber() + 100); // == disputeWindowBlocks
         assertTrue(bridge.isStateRootFinalised(atLogIndexHigh), "state root finalised");
 
         // (4) Redeem: recipient receives `wAmount` BOLD; bridge + TVL debit.
@@ -1122,7 +1121,7 @@ contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder, BoldTestSupport {
 
         uint64 atLogIndexHigh = 1;
         bridge.submitStateRoot(root, atLogIndexHigh, _signStateRoot(bridge, root, atLogIndexHigh));
-        vm.roll(block.number + 100); // == disputeWindowBlocks
+        vm.roll(vm.getBlockNumber() + 100); // == disputeWindowBlocks
         bytes memory proofBlob = _encodeWithdrawalProof(leaf, idx, siblings);
         bridge.withdrawWithProof(atLogIndexHigh, proofBlob, leaf);
 

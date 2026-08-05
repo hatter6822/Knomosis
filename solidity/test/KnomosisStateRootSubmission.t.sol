@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
@@ -43,7 +43,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         // Roll past the rate-limit window (lastSubmissionBlock starts
         // at 0; require block.number ≥ MIN_INTERVAL for the first
         // submission to clear).
-        vm.roll(block.number + MIN_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
     }
 
     /* -------- Constructor -------- */
@@ -151,7 +151,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
             0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
-        vm.roll(block.number + MIN_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
         vm.prank(sequencer);
         vm.expectRevert(KnomosisStateRootSubmission.AlreadyClaimed.selector);
         registry.submitStateRoot{value: BOND}(
@@ -175,7 +175,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
             0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
-        vm.roll(block.number + MIN_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
         vm.prank(sequencer);
         // Submit at idx 1 with WRONG prevLogEntryHash.
         vm.expectRevert(KnomosisStateRootSubmission.HashChainBroken.selector);
@@ -197,7 +197,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
             0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
-        vm.roll(block.number + DISPUTE_WINDOW + 1);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
 
         uint256 bondBefore = sequencer.balance;
         registry.finaliseStateRoot(0);
@@ -219,7 +219,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
             0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
-        vm.roll(block.number + DISPUTE_WINDOW + 1);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
         registry.finaliseStateRoot(0);
         vm.expectRevert(KnomosisStateRootSubmission.AlreadyFinalised.selector);
         registry.finaliseStateRoot(0);
@@ -299,7 +299,7 @@ contract KnomosisStateRootSubmissionTest is Test {
     function _submitChain(uint64 upToIdx) internal returns (bytes32 nextHash) {
         nextHash = bytes32(0);
         for (uint64 i = 0; i <= upToIdx; i++) {
-            vm.roll(block.number + MIN_INTERVAL + 1);
+            vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
             vm.prank(sequencer);
             registry.submitStateRoot{value: BOND}(
                 i, bytes32(uint256(0xAAA) + i), nextHash, ACTION_COMMIT);

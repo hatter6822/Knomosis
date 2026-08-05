@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -183,7 +183,7 @@ contract KnomosisSequencerStakeTest is Test {
         vm.prank(sequencer);
         stake.deposit{value: 10 ether}();
 
-        vm.roll(block.number + DISPUTE_WINDOW + 1);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
         vm.prank(sequencer);
         stake.withdraw(1 ether);
         assertEq(stake.totalStaked(), 9 ether);
