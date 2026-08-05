@@ -552,7 +552,7 @@ Two hypotheses run through the section and neither is decoration:
     Without it the frontier may collapse two genuinely different cells,
     and a write to the collapsed one becomes invisible to the bundle.
   * `CanonicalBounds` — the state's balances fit the amount head.
-    Without it a balance past `2^128` encodes to bytes that decode to
+    Without it a balance past `2^256` encodes to bytes that decode to
     something else, so the reader would disagree with the state at a
     cell the bundle opened honestly.
 
@@ -584,7 +584,7 @@ theorem budgetPolicy_mem_multiFrontierOf (es : ExtendedState) (st : SignedAction
 
     The decode is where `CanonicalBounds` enters: `getCellValue` writes
     the balance through the 33-byte amount head, and that round-trips
-    only inside `2^128`.  Off the frontier the two readers genuinely
+    only inside `2^256`.  Off the frontier the two readers genuinely
     differ — the bundle's is `none` — which is the partiality the
     derivations rely on, so the membership hypothesis is not
     removable. -/

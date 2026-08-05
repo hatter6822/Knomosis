@@ -145,11 +145,15 @@ theorem balanceCell_absent_of_balance_zero (es : ExtendedState)
     zero.
 
     **The bound is on the converse only**, and that asymmetry is the
-    whole content of finding C-3.  `encodeAmount` is a 16-byte
-    little-endian body, so it truncates modulo `2^128`: without a
-    bound, a balance of a nonzero multiple of `2^128` also encodes as
-    `encodeAmount 0` and its cell reads absent, which is precisely the
-    residual the zero filter does not close.  The hypothesis is the
+    whole content of finding C-3.  `encodeAmount` is a 32-byte
+    little-endian body, so it truncates modulo `2^256`: without a
+    bound, a balance of a nonzero multiple of `2^256` would also encode
+    as `encodeAmount 0` and its cell read absent, which is precisely
+    the residual the zero filter does not close.  C-3 is since closed —
+    `Laws.AmountBounded` enforces the ceiling on every crediting law
+    and `FaultProof.canonicalBounds_base_amt_of_reachable` proves it
+    unreachable — so this hypothesis is now dischargeable rather than
+    standing.  The hypothesis is the
     narrow, per-cell form of `ExtendedState.CanonicalBounds.base_amt`
     rather than the whole bundle, so a consumer sees exactly what it
     needs.  The free direction is
@@ -191,8 +195,8 @@ private theorem getBalance_eq_lookup (es : ExtendedState)
     `getBalance = 0 → cell absent` (contrapositively), which evaluates
     the encoder at `0` and never inverts it.
 
-    Its converse — a recipient's cell is live — is where the `2^128`
-    truncation bites, and `exists_mem_bulkRecipients_iff_cell_live`
+    Its converse — a recipient's cell is live — is where the `2^256`
+    truncation would bite, and `exists_mem_bulkRecipients_iff_cell_live`
     carries the bound for it. -/
 theorem mem_bulkRecipients_of_cell_live (es : ExtendedState)
     (r : ResourceId) (excluded : ActorId) (a : ActorId)

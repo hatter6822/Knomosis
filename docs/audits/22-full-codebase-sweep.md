@@ -17,10 +17,11 @@ default either way.
   * **39 went through adversarial verification**;
     **37 were upheld** and
     **2 refuted**.
-  * The verification stage was **capped per area**, so a finding's
-    absence from the list below means "not re-checked", **not**
-    "refuted".  Raw findings that never reached verification are not
-    reproduced here; they are recoverable from the run journals.
+  * That stage was **capped per area**.  The 28 findings it did not
+    reach were put through the same adversarial stage afterwards —
+    see "Second verification pass" at the end of this document — so
+    **every finding in this register now carries an independent
+    verdict**.  Across both passes: 67 verdicts, 62 upheld, 5 refuted.
 
 Severities below are the VERIFIER's corrected severity, which in two
 cases is lower than the reporting auditor's.  Post-verification split:
@@ -2812,4 +2813,826 @@ loop decodes each `LogEntry` before replay). A 65-clause policy (or a
 fails at frame decode with `DecodeError.invalidLength` and never
 reaches `AdmissibleWith`, never reaches `apply_admissible_with`, and
 never lands in …
+
+
+---
+
+## Second verification pass — the remainder
+
+The first pass capped verification per area, leaving 28 findings re-
+checked by nobody. They were put through the same adversarial stage
+afterwards, so EVERY finding in this register now carries an
+independent verdict. The result is reassuring about the original
+triage: of the 28, exactly one is major and the rest are minor or
+informational — the severity-ordered sampling had already caught what
+mattered.
+
+  * **28 re-verified**; **25 upheld**, **3 refuted**.
+  * Corrected severities: 16 minor, 11 info, 1 major.
+Several verdicts are 'real but reclassified': the observation holds
+and the reasoning is sound, but the consequence the reporting auditor
+drew does not follow, so the entry is recorded at the severity its
+actual impact warrants.
+
+
+### MAJOR — The idempotency cache replays a stored response without binding it to the request body, and its namespace is the service credential rather than the end user
+
+*Verifier confidence:* high
+
+Traced and confirmed on both halves. (1) No body binding:
+`IdempotencyCache::get` (idempotency.rs:139-158) keys solely on
+`scoped_key(credential, key)` (idempotency.rs:97-103) and
+`submit/handler.rs:54-57` returns `cached` at line 55, ten lines
+before `decode_body` at line 66 — the SignedAction bytes are never
+read, let alone compared. idempotency.rs:31-33 concedes this outright
+('the cache does not fingerprint the body'). No test covers same-
+key/different-body:
+`idempotency_key_replays_cached_response_without_resubmit`
+(tests/integration.rs:650-679) only varies the key, never the body.
+(2) The namespace is the *service* credential: `scoped_key` takes
+`crate::auth::bearer_credential_key` over the bearer token
+(handler.rs:143, auth.rs:189-191), and the target deployment is one
+BFF holding one 'bearer service credential' for all its end users
+(auth.rs:18-26, cors.rs:10). What makes this a defect rather than a
+documented client responsibility is that the project's own contract
+asserts the opposite safety property and its own plan recommends the
+colliding key: gateway.openapi.yaml:543-548 states 'two clients
+independently choosing the same value (nonce `1`, say) do not collide
+and neither observes the other's verdict', while
+gateway_integration_plan.md:908-909 tells the BFF to 'use the action
+nonce' as the key — and nonces are per-actor (`expectsNonce es a`,
+LegalKernel/Authority/Nonce.lean:244, with
+`expectsNonce_advance_other` at :271 confirming independence across
+actors), so two end users of one BFF both at nonce 1 produce the
+identical scoped key. The result is exactly …
+
+
+### MINOR — The C-3 AmountBounded conjunct is absent from the three signer-aware admission gates, so the budget grant can run when the kernel step no-ops
+
+*Verifier confidence:* high
+
+Traced end to end. `Action.compileTransition` returns
+`Laws.freezeResource 0` for `.topUpActionBudget` /
+`.topUpActionBudgetFor` / `.claimBudgetRefund`
+(Action.lean:600,609,619), so `AdmissibleWith` conjunct 5
+(SignedAction.lean:309) is vacuous for them.
+`Laws.topUpActionBudget.pre` has TWO conjuncts
+(TopUpActionBudget.lean:16-20): balance ≥ gasAmount AND
+`AmountBounded` on the post-debit state. `topUpActionBudget_gasCheck`
+(SignedAction.lean:750-758) enforces seven conjuncts and mirrors only
+the first; `topUpActionBudgetFor_gate` (SignedAction.lean:891-903) and
+`claimBudgetRefund_gate` (SignedAction.lean:1090-1105, which does
+mirror the solvency conjunct — cf. `refund_pre_iff_pool_solvent`,
+BudgetRefund.lean:284-297) likewise omit the ceiling conjunct.
+`apply_admissible_with_budget` then runs `apply_admissible_with`
+(which is `step_impl`, SignedAction.lean:615) and `applyGrant`
+independently (SignedAction.lean:1195-1229), so a failing
+`AmountBounded` no-ops the kernel step while the budget grant still
+lands. The bridge production path shares the identical gate list
+(Bridge/Admissible.lean:496-517), so it is not saved by being bridge-
+aware. The comment at SignedAction.lean:618-620 ("the admission gate
+rejects the action earlier when the gas precondition fails, so the no-
+op branch is reachable only by callers that bypass the budget gate")
+is now false. Constructibility: `Laws.mint.pre` is `amount > 0 ∧
+AmountBounded` (Mint.lean:55), so a single mint of `maxAmount - 2` to
+`gasPoolActor` at r=0 is admissible and puts the pool one step from
+the ceiling. Severity held at minor …
+
+
+### MINOR — Laws.topUpActionBudget and Laws.depositWithFee ship with no conservation, locality, or classification results, unlike every sibling law
+
+*Verifier confidence:* high
+
+Confirmed by reading both files whole.
+`LegalKernel/Laws/TopUpActionBudget.lean` is 27 lines and contains
+only the `Transition` — no theorems, no instances.
+`LegalKernel/Laws/DepositWithFee.lean` is 46 lines with exactly one
+theorem (`depositWithFee_other_resource_untouched`, line 28) and no
+instances. The two structurally identical siblings carry the full
+ladder: `topUpActionBudgetFor_isConservative/_isMonotonic/_localTo/_fr
+eezePreserving_empty` (TopUpActionBudgetFor.lean:304,320,333,370) and
+`claimBudgetRefund_*` (ClaimBudgetRefund.lean:308,322,334,369). A
+repo-wide grep for any classification instance naming either law
+returns nothing. The results are true — `topUpActionBudget`'s
+`apply_impl` is debit-then-credit of the same `gasAmount` with
+`getBalance ≥ gasAmount` in `pre`, conservative including the `a =
+poolActor` self-case; `depositWithFee` is credit-only, hence
+monotonic. `ConservativeLawSet.cons` / `MonotonicLawSet.cons` /
+`FreezePreservingLawSet.cons` (Conservation.lean:833,848,864) each
+demand the instance, so the laws cannot be consed. Downgrading the
+narrative slightly: the instance argument is an ordinary instance-
+implicit, so a deployment could discharge it locally with `haveI`
+rather than being forced to drop the ratified claim. That makes this a
+real library-completeness gap (and an `implement-the-improvement`
+obligation) rather than a hard blocker.
+
+
+### MINOR — `CanonicalBounds.base_amt` and `Laws.bulkRecipients` docstrings state a `2^128` amount-head modulus that the code has not used since `maxAmount` became `2^256`
+
+*Verifier confidence:* high
+
+PARTLY real — the anchor site holds, the second cited site does not.
+CONFIRMED: LegalKernel/FaultProof/Commit.lean:719-721 documents the
+field as "Each inner balance fits the 33-byte amount head's `2^128`
+range" while line 722 is `base_amt : ... q.2 < 256 ^ 32`;
+`cborAmountHeadEncode` (Encoding/CBOR.lean:403-404) is `cbeTagAmount
+:: natToBytesLE n 32` and `Laws.maxAmount` (Laws/AmountBound.lean:77)
+is `256 ^ 32`, so the stated modulus is off by 2^128 and a 33-byte
+head cannot describe a 2^128 range at all. The drift is broader than
+the finding says: LegalKernel/FaultProof/SubStep.lean:147-149 still
+calls `encodeAmount` "a 16-byte little-endian body, so it truncates
+modulo `2^128`", Encoding/StateInjective.lean:113-120 says "the bound
+is `2^128`", and FaultProof/Terminate.lean:555 says "a balance past
+`2^128`". REFUTED: the second cited site is already correct —
+Laws/BulkBound.lean:95-97 reads `2^256` in all three places, and lines
+105-113 explicitly say C-3 is "since **closed** ... proved unreachable
+by `FaultProof.canonicalBounds_base_amt_of_reachable`", so the
+finding's claim that it "still describes the C-3 obligation as open"
+and asserts a `2^128` truncation mechanism is false against HEAD. No
+behavioural impact — every enforced bound in code is `256 ^ 32` — so
+this is documentation-only, but a fix is implied by the project's
+implement-the-improvement rule.
+
+
+### MINOR — Admissibility conjunct 5 is `True` for the three signer-aware value-moving actions, so the documented `apply_admissible` entry point moves funds with no gate at all
+
+*Verifier confidence:* high
+
+Traced end to end and the mechanism holds. `AdmissibleWith` conjunct 5
+is `(Action.compile st.action).transition.pre es.base`
+(Authority/SignedAction.lean:309); `Action.compileTransition` returns
+`Laws.freezeResource 0` for `.topUpActionBudget` /
+`.topUpActionBudgetFor` / `.claimBudgetRefund`
+(Authority/Action.lean:600,609,619) and `Laws.freezeResource`'s `pre`
+is `fun _ => True` (Laws/Freeze.lean:71-74), so conjunct 5 is vacuous
+for exactly those three. Meanwhile `apply_admissible_with` steps
+`Action.toTransition st.action st.signer` (SignedAction.lean:606,622),
+which for `.claimBudgetRefund` is `Laws.claimBudgetRefund signer
+poolActor gasResource (budgetUnits * weiPerBudgetUnit)`
+(Action.lean:704-711), whose only precondition is `getBalance s
+gasResource poolActor >= refundAmount` plus `AmountBounded`
+(Laws/ClaimBudgetRefund.lean:97-102) — nothing pins `poolActor =
+Bridge.gasPoolActor`, the rate, or the claimant's retirable budget.
+All nine of those checks live only in `claimBudgetRefund_gate`
+(SignedAction.lean:1090-1106), reached only from
+`apply_admissible_with_budget` /
+`apply_bridge_admissible_with_budget`. So the `apply_admissible`
+docstring (SignedAction.lean:1229-1231, "the only externally callable
+state-advance path. The dependent `Admissible` witness ensures every
+call site has discharged the five-condition check") is false in both
+halves: it is not the only path, and the check is vacuous for the
+three signer-aware value-moving constructors. Downgrading from exploit
+to hazard: no in-repo production caller uses it —
+Runtime/Loop.lean:220,558 and …
+
+
+### MINOR — `gapCountClosed` is dead code whose docstring claims the verifier uses it; the closed form the on-chain length gate depends on is never proved equal to the gap enumeration
+
+*Verifier confidence:* high
+
+Confirmed on both halves. (a) Dead code + false docstring:
+`gapCountClosed` (FaultProof/Frontier.lean:854-856) claims 'The
+verifier uses this', but `verifierPostRootMulti` computes `let levels
+:= multiGapLevels smtDepth preOpened` and gates on
+`b.proof.isWellFormedFor levels` (FaultProof/Terminate.lean:463-464) —
+the enumeration, never the closed form. Tree-wide grep puts `gapCountC
+losed`/`gapCount`/`activeAt`/`mergesAt`/`gapsAt`/`adjacentDivs` only
+in their own definitions (Frontier.lean:826-856) and one test
+(Test/FaultProof/Frontier.lean:180-190) that checks `gapCount ==
+gapCountClosed` on exactly two frontiers. (b) No proof links the three
+quantities: no theorem `gapCount = gapCountClosed`, and none relating
+either to `(multiGapLevels d opened).length`;
+`multiGapLevels_length_eq` (MultiProof.lean:954-956) relates gap
+levels to `multiSiblings`, both enumerations. (c) The closed form is
+what L1 enforces: `SmtMultiVerifier.gapCount` is `g = SMT_DEPTH + 1 -
+m + Σ divLevel` (solidity/src/lib/SmtMultiVerifier.sol:158-166, self-
+described as 'mirroring Lean's `gapCountClosed`') and `requireShape`
+derives `wantMask = (g+7)/8`, the padding-bit sweep and `wantSibs =
+popcount*32` from it (:264-300). The only cross-stack link is a
+fixture column: Test/Bridge/CrossCheck/MultiProof.lean:208 emits
+`levels.length` under key `gapCount`, read back by
+solidity/test/CrossCheck/MultiProof.t.sol:189-207. Held at minor
+rather than major: divergence is hypothetical today and agreement is
+implicitly exercised on every multiproof corpus entry (a mismatch
+reverts inside `requireShape`), so this …
+
+
+### MINOR — `BoundsReachable`'s stated justification for leaving `eb_val` undischarged ('advances a nonce by one') is false for `budgetBalance`
+
+*Verifier confidence:* high
+
+The quoted text is present and is contradicted 270 lines later in the
+same file. FaultProof/BoundsReachable.lean:41-50 still groups 'the
+`2^64` value fields (`nonces_val`, `eb_val`)' under one argument —
+'Each step adds at most a bounded number of entries and advances a
+nonce by one, so `2^64` is unreachable in any real trace' — offering
+`AdmissibleReachableIn` + `expectsNonce_le_of_reachableIn` as the
+substitute. The same file's § at :313-370 says the opposite for the
+budget field: '**The budget half is NOT the same argument, and an
+earlier draft of this docstring stated it wrongly**', citing (i)
+`ActorBudget.normalise` flooring a stale cell at the unbounded policy
+`freeTier` before the credit and (ii) `depositWithFee`'s `budgetGrant`
+reaching `applyGrant` via `depositWithFee_signerCheck`, which
+constrains the signer (`= bridgeActor`) and not the amount — unlike
+`topUpActionBudget_gasCheck`'s `budgetIncrement ≤
+MAX_TOPUP_BUDGET_PER_ACTION` (Authority/SignedAction.lean:682, :755,
+:902). I confirmed the uncapped grant at SignedAction.lean:1197-1198
+and :1737-1738 (`ebs.topUp recipient currentEpoch freeTier
+budgetGrant`), and the free-tier lift is an executable pin at
+Test/Authority/ActorBudget.lean:126-143 ('OBLIGATION: the free tier
+lifts a balance past the grant cap'). The underlying residual is real
+— the file itself notes at :359-370 that at the ceiling Lean's
+`Encodable Nat` truncates while Solidity's `CBEEncode._leBytes`
+reverts, so the stacks diverge. Two corrections to the finding's
+narrative keep this at minor rather than major: a true per-step bound
+DOES exist and …
+
+
+### MINOR — Authenticated read responses carry an ETag with no Cache-Control, and Vary: Origin is emitted only on the origin-allowed branch
+
+*Verifier confidence:* high
+
+Both code facts verified. (a) `actor_balance` (balances.rs:63) and
+`actor_balances` (balances.rs:127) attach `ETag` + `X-Knomosis-Seq`
+via `json_with_seq` (balances.rs:145-149), which sets no cache
+directive; a repo-wide grep for `Cache-Control` in runtime/knomosis-
+gateway/src returns only the two SSE paths (conn.rs:602,
+events/stream.rs:166) — no read endpoint emits one. (b)
+`cors::response_headers` returns `Vec::new()` on both the origin-
+absent and origin-not-allowed branches (cors.rs:118-123), so `Vary:
+Origin` (cors.rs:126) is emitted only when the origin is on the
+allowlist, even though the response demonstrably varies on Origin
+whenever a policy is configured. Severity held at minor rather than
+raised: scenario (a) is overstated — there is no `Last-Modified`, so
+heuristic freshness computes to ~0 and a private cache revalidates
+(re-presenting the credential through `auth::gate`), and RFC 9111 §3.5
+forbids a shared cache from storing Authorization-bearing responses at
+all, so 'served after credential rotation' is not established.
+Scenario (b) is a genuine conformance bug but its reachable surface is
+the three auth-exempt paths (`/healthz`, `/readyz`, `/rpc`,
+auth.rs:202-204), which also flow through `respond`/`cors::decorate`
+(handler.rs:112-117) and carry only public data — so the concrete harm
+is a broken legitimate cross-origin client (e.g. the wallet Add-
+Network `/rpc` flow), not disclosure. Real defensive-header gap worth
+fixing (`Cache-Control: no-store` on authenticated reads;
+unconditional `Vary: Origin` whenever a policy is configured), no
+security break.
+
+
+### MINOR — Watermark fallback `oldest_seq - 1` collides with the live-tail sentinel when the ring starts at seq 1
+
+*Verifier confidence:* high
+
+Traced end to end and it holds. `mux.rs:195-200` `next_resume` =
+`ring.watermark().or_else(|| ring.oldest_seq().map(|s|
+s.saturating_sub(1))).unwrap_or(previous)`. `ring.rs:198-199`/`214`
+show `watermark` stays `None` until a second distinct seq is ingested,
+so a mux that has seen only group 1 has `watermark() == None` and
+`oldest_seq() == Some(1)` → `next_resume` returns 0. 0 is the reserved
+live-tail sentinel, not "just before seq 1": `subscribe.rs:30-31`
+("`0` means start from the live tail") and the server
+`event_cache.rs:340-345` returns `RangeOutcome::AtLiveTail` for
+`from_seq == 0` *even on a populated cache*, and its own docstring
+(event_cache.rs:299-306) states the exclusive `seq > from_seq`
+contract cannot express "from seq 1" — `FROM_OLDEST` (u64::MAX) is the
+intended encoding. So on a drop/`--sse-stale-secs` fire in that state
+the resubscribe skips every event cached between the drop and
+reconnect. The loss is silent: `ring.rs:206-212` `push` only guards
+monotonicity (no contiguity/gap check), and `position`
+(ring.rs:281-284) with `last_evicted == None` classifies a client
+cursor `(1,0)` as `InWindow` against a ring whose oldest is still
+`(1,0)`, so no `Behind` signal and no backfill steer. Narrow
+precondition (gateway started against a fresh log so the ring's oldest
+is exactly seq 1, drop before any second seq), and the blast radius is
+the SSE notification surface rather than consensus — but it defeats
+the module's stated no-silent-gap property (mux.rs:20-32, §2 principle
+7). Minor, as reported.
+
+
+### MINOR — Multi-subscription fan-in can silently drop records: `push`'s reject is ignored and the dedup guard is monotonic-only
+
+*Verifier confidence:* medium
+
+Mechanism verified. `EventRing::push` (ring.rs:205-225) rejects any
+`cursor <= last` where `last` is a monotone frontier persisting across
+eviction — a strictly-increasing gate, not a seen-set.
+`http/server.rs:133-140` spawns N muxes sharing one `Arc<FanoutState>`
+whose ring is a single `Mutex<EventRing>` (fanout/mod.rs:36-56), and
+`Mux::run_epoch` throws the bool away at mux.rs:159, so a drop is
+never logged or counted. The divergence premise checks out in the
+upstream: the broadcast uses a once-per-batch registry snapshot and a
+mid-batch registrant is 'uniformly EXCLUDED from this batch ... or
+skip[s] them (`resume_from = 0` live-tail)' (knomosis-event-
+subscribe/src/server.rs:1301-1315). Every mux starts at `resume_from =
+0` (mux.rs:114) and `next_resume` degrades to `previous` (=0) while
+the ring is still empty (mux.rs:195-200), so a mux whose first connect
+fails (`ConnectFailed`, subscribe.rs:196-199) re-enters live-tail
+later, widening the skew window. No downstream signal exists:
+`position` infers contiguity from `last_evicted`/`oldest` only
+(ring.rs:254-295), so a hole in the middle of the retained window
+still reports `InWindow` and clients get ...100 then 106 with no gap.
+This directly refutes the explicit claim at mux.rs:16-17 and
+http/server.rs:128-131 that 'N > 1 loses no record'; no test covers
+N>1. Held at minor rather than major because `--upstream-
+subscriptions` defaults to 1 (config.rs:1376) and the loss
+additionally requires the leading mux to be backlogged at the instant
+the trailing mux pushes — a genuine race, not deterministic. Post-
+startup …
+
+
+### MINOR — The SSE ring is bounded in record count but not in bytes
+
+*Verifier confidence:* high
+
+Verified: eviction is purely count-based — `while self.buf.len() >
+self.capacity` (ring.rs:219-223) — and I found no byte accounting
+anywhere under knomosis-gateway/src/events/ (grep for
+data.len()/total_bytes/max_bytes returns nothing). Each retained
+`EventRecord` owns the fully rendered JSON `String` (ring.rs:92,
+produced at mux.rs:236-244), and the rendering expands: `hex()` is 2x
+for byte fields (decode.rs:123-131) and an unknown tag base64s the
+entire payload (decode.rs:107). The size premise holds:
+`IdentityRegistered.key` is an unbounded `Vec<u8>` (knomosis-
+indexer/src/event.rs:144-148) capped only by `HARD_MAX_BYTE_STRING_LEN
+= 1 MiB` (decoder.rs:77) and the 1 MiB frame default (gateway
+config.rs:132, ceiling 16 MiB; host frame.rs:88), and the Lean side
+really does impose no key-length bound — `abbrev PublicKey : Type :=
+ByteArray` (Authority/Crypto.lean:55) with `lex_pre := fun (_ : State)
+=> True` (Laws/RegisterIdentity.lean:50). At the default
+`ring_capacity: 4096` (config.rs:536) the worst case is multi-GiB
+resident memory. Kept at minor rather than major: a read-side
+availability/resource-bound gap on a BFF service, not a consensus or
+admissibility break, and each oversized action must first be admitted
+(nonce + budget cost).
+
+
+### MINOR — `records_after` scans and clones the entire ring under the shared mutex on every client poll
+
+*Verifier confidence:* high
+
+The code fact is exactly as described: `records_after` filters the
+whole `VecDeque` and collects a fresh `Vec` (ring.rs:230-236), and
+`run_stream` calls it while holding the shared ring guard together
+with `position` (dispatch.rs:153-161). The deque is provably sorted by
+the strictly-increasing `push` invariant (ring.rs:205-216), so
+`VecDeque::partition_point` would reduce this to O(log n) + O(matches)
+— the scan is genuinely unnecessary. Cited constants check out:
+`STREAM_POLL = 100ms` (stream.rs:37-38), `max_streams: 256`,
+`ring_capacity: 4096` (config.rs:536-537). The failure narrative is
+overstated: for a caught-up client (the common case) the filter
+matches nothing, so there are no `Arc` refcount bumps — just ~4096
+derefs and cursor compares per poll, an aggregate lock-held duty cycle
+of tens of ms/sec, not enough to starve the mux writer. The
+amplification is real only once clients accumulate backlogs, when the
+clones do occur under the lock. Efficiency/scalability defect with a
+clear fix, no correctness impact.
+
+
+### MINOR — Strict-mode refund pool-solvency check multiplies two wire-controlled integers without overflow checking and fails OPEN on wrap
+
+*Verifier confidence:* high
+
+Traced and confirmed the arithmetic defect. runtime/knomosis-
+host/src/budget.rs:1486 is `let refund_amount =
+u128::from(budget_units) * wei_per_budget_unit;` — a plain `*`; grep
+for `checked_mul`/`saturating_mul` in that file returns only this
+line, so there is no guarded variant anywhere. Both operands are full-
+range and wire-derived: budget.rs:590 decodes `budget_units` via
+`cur.read_uint()` (budget.rs:~760, unconstrained `u64::from_le_bytes`)
+and `wei_per_budget_unit` via `cur.read_amount()` (budget.rs:806-812),
+which rejects only `head[17..33]` non-zero, i.e. accepts all of `[0,
+2^128)`. Product range is `[0, 2^192)`. runtime/Cargo.toml:248-254
+`[profile.release]` sets opt-level/lto/codegen-units/debug/panic/strip
+and NOT `overflow-checks`, so release wraps; the wrapped value can be
+0 (4 * 2^126), and budget.rs:1487's `balance_of(...) < refund_amount`
+then passes against an empty pool — the check inverts from fail-closed
+to fail-open. The upstream guards I looked for do not close it: the
+only bounds before line 1486 are `wei != 0`, `budget_units != 0`,
+`gas_resource in {0,1}`, and signer != bridge/pool
+(budget.rs:1465-1483) — none bounds magnitude. The debug/release
+verdict split is also real (`catch_unwinding_submit`, server.rs:484).
+What lowers this from the reported framing: the arm is inside `if
+self.strict`, and `with_strict_checks()` (budget.rs:1252) has exactly
+one caller in the tree — kernel.rs:820, inside a `#[test]`. Production
+wiring at main.rs:191-193 builds
+`BudgetGate::new(policy).with_epoch_length(...)` with strict OFF, and
+attaches it only to …
+
+
+### MINOR — `read_current_epoch` fails open on a corrupt cell, silently wiping a live epoch's grant/consumption counters
+
+*Verifier confidence:* high
+
+Confirmed, including the outlier claim and the destructive
+consequence. runtime/knomosis-indexer/src/budget_view.rs:106-114: the
+wrong-length arm logs `tracing::warn!` and returns `Ok(0)` rather than
+an error. Every sibling I checked fails closed: cursor.rs:218-221
+`decode_cursor` -> `CursorError::CorruptCell`;
+combined_transaction.rs:959-964 `read_cell` ->
+`BudgetStorageError::CorruptCell`; indexer.rs:488-493 `balance_get` ->
+`BalanceError::CorruptCell`. All three are same-shape `Some(bytes) if
+bytes.len() == N` / `Some(bytes) =>` matches, so this one is genuinely
+the odd path out. The blast radius traces through: budget_view.rs:210
+`let persisted_epoch = read_current_epoch(tx)?;` -> 211 `if new_epoch
+== persisted_epoch { return Ok(false) }` -> 214
+`tx.reset_current_epoch()?`, which at combined_transaction.rs:732-745
+executes `DELETE FROM actor_budgets_current_epoch_grants` and `DELETE
+FROM actor_budgets_current_epoch_consumed`. With a corrupt cell mid-
+epoch-7 the fabricated 0 makes `7 != 0` true, so the live epoch's
+grant/consumption rows are unconditionally deleted and the cell
+rewritten to 7 — self-healing but data-destroying, and the lifetime
+tables are not epoch-scoped so it is unreconstructable. Called from
+indexer.rs:345 in `apply_batch`, on every batch. No upstream guard:
+`epoch_length = 0` only short-circuits via `epoch_for_seq` returning
+0, which does not help when the persisted value is the corrupt one.
+Severity stays minor rather than higher because the indexer is a read-
+only view (it feeds `BudgetReadView::remaining_this_epoch`, not an
+admission gate), and …
+
+
+### MINOR — `--epoch-length` is neither persisted nor validated, so a restart under a different value silently mis-scopes the per-epoch budget tables
+
+*Verifier confidence:* high
+
+Traced end to end. `epoch_for_seq` (budget_view.rs:176-184) derives
+the epoch purely from the in-memory flag, and
+`dispatch_epoch_if_crossed` (budget_view.rs:204-223) compares that
+against the PERSISTED `c/current_epoch` cell (key
+`b"c/current_epoch"`, budget_view.rs:82). The flag reaches the indexer
+only through `Indexer::open_with_config` (indexer.rs:248-269), which
+stores it in the struct and logs it; the only durable check on open is
+`ensure_identifier(storage, INDEXER_IDENTIFIER)` (indexer.rs:253),
+which validates a fixed identifier string, not any config. Grep over
+runtime/ shows `epoch_length` never written to storage anywhere (only
+config.rs:292/310 parse, main.rs:84/113 pass-through). So the two
+numbers being compared are only commensurate if the divisor never
+changed. Both branches of the failure scenario hold: a changed divisor
+that yields a different quotient fires `tx.reset_current_epoch()` mid-
+epoch (budget_view.rs:214), wiping live
+`current_epoch_grants`/`consumed`; a changed divisor that happens to
+yield the same quotient returns `Ok(false)` and suppresses the reset,
+so `remaining_this_epoch` (budget_view.rs:532-535) under-reports
+indefinitely. Note the same non-persistence applies to `--gas-pool-
+actor`, and `epoch_length = 0` is not distinguished from a real value
+— it maps to epoch 0 via `checked_div` returning `None`, so switching
+100 -> 0 also triggers a spurious reset. Severity minor, not major:
+the indexer is a read/index view, the kernel's own admission gate
+keeps its epoch state independently in `knomosis-
+host::budget::BudgetGate`, and …
+
+
+### MINOR — CBEEncode._leBytes reverts on values >= 2^64 where Lean's cborHeadEncode truncates, turning a no-op step into an un-adjudicable revert
+
+*Verifier confidence:* high
+
+Confirmed on both stacks, and the repo's own source agrees. Lean:
+`cborHeadEncode major n = major :: natToBytesLE n 8`
+(Encoding/CBOR.lean:315, with natToBytesLE at 214-216 taking `n % 256`
+per byte) truncates mod 2^64 and its own docstring says so;
+`budgetCellValue` (FaultProof/CellStore.lean:109-112) encodes
+`budgetBalance : Nat` through exactly that head. Solidity:
+CBEEncode._leBytes (lib/CBEEncode.sol:73-79) reverts `CBEValueTooWide`
+when `widthBytes < 32 && n >= 1<<(8*widthBytes)`, and `uintValue`(102)
+-> `epochBudgetValue`(153-159) is what
+StepWrites.deriveEpochBudgetCellValue returns (StepWrites.sol:1043),
+with `_topUp` doing an unbounded `bn.budgetBalance + amount` (242). No
+bound exists on the Lean side: ActorBudget.topUp is a plain Nat add
+(ActorBudget.lean:53) and `mkBounded` clamps only actionCost
+(`.bounded freeTier (max actionCost 1) currentEpoch`,
+Authority/Nonce.lean:80-81), leaving freeTier an unbounded Nat that
+`normalise` floors every stale cell to.
+FaultProof/BoundsReachable.lean:329-370 states this finding verbatim —
+'The Solidity mirror does not truncate: it REVERTS ... the party whose
+turn it is would lose by timeout' — and lists the routes: freeTier at
+2^64 ('a configuration a deployment controls and nothing currently
+rejects'), an oversized bridge-signed grant (depositWithFee is signer-
+checked, not amount-checked), or ~1.8e13 capped top-ups. Not minor-by-
+narrative but minor-by-reachability: the L1 clamp
+MAX_BUDGET_PER_DEPOSIT = 1e12 (KnomosisBridge.sol:398,1293) makes the
+volume route economically absurd, so the practical trigger is …
+
+
+### MINOR — StepWrites.decodeBudgetPolicy omits Lean's actionCost != 0 canonicality gate, so the L1 adjudicates a policy the Lean verifier refuses
+
+*Verifier confidence:* high
+
+Real, and I confirmed every link.
+solidity/src/lib/StepWrites.sol:177-190 (`decodeBudgetPolicy`) checks
+only `value.length != 4 * CBE_UINT_LEN` and the constructor tag
+`_readUint(value,0) != 0`; it accepts `actionCost = 0`. Its Lean
+counterpart `Encoding.BudgetPolicy.decode`
+(LegalKernel/Encoding/State.lean:980-984) returns `.error
+(.nonCanonical "budgetPolicy actionCost must be >= 1")`. That `none`
+propagates: `deriveEpochBudgetCellValue`
+(LegalKernel/FaultProof/VerifierWrites.lean:495-503) returns `none` on
+any policy-decode failure and `derivedCellValue`'s `.epochBudget` arm
+(LegalKernel/FaultProof/Terminate.lean:218-222) forwards it, so
+`verifierPostRootMulti` yields no root — and since the epoch-budget
+cell is written on EVERY action, the Lean verifier adjudicates NO step
+under such a policy while KnomosisStepVMRoot adjudicates all of them
+(StepWrites.sol:1002,1038 is the only decode site; no compensating
+gate exists anywhere in solidity/src). The trigger value is exactly
+`canonicalAbsentValue .budgetPolicy = .bounded 0 0 0`
+(LegalKernel/FaultProof/CellValue.lean:82-84), so it arises whenever
+the policy cell is canonically absent, not just via an explicit
+literal. What caps severity: (a) reachability is narrow — the CLI
+genesis path routes through `mkBounded` with `getD 1`
+(Main.lean:1078,1082) and `mkBounded` clamps `max actionCost 1`
+(LegalKernel/Authority/Nonce.lean:80-81); `ExtendedState.empty` is
+`.bounded 0 1 0` (Nonce.lean:202,217); `advanceEpoch` preserves the
+cost; only a direct record literal reaches it, and such a state does
+not round-trip the CBE state …
+
+
+### INFO — The kernel's unrestricted `Reachable` relation is the universal relation, so `invariant_preservation` over it is unusable for any non-constant predicate
+
+*Verifier confidence:* high
+
+The mathematical claim checks out: `Transition` (Kernel.lean:164-175)
+constrains nothing, `step_impl` is `if t.pre s then t.apply_impl s
+else s` (Kernel.lean:196), and at `t := ⟨fun _ => True, fun _ =>
+isTrue trivial, fun _ => s'⟩` the `ite` iota-reduces so
+`Reachable.step s0 t Reachable.base trivial : Reachable s0 s'`
+typechecks for any `s'`. Hence `Reachable` is universal and
+`invariant_preservation`'s `h_step` at the unrestricted relation is
+dischargeable only for predicates constant on `State`. But this is not
+a defect and not an undocumented trap — it is the stated design,
+spelled out 70 lines below the cited docstring in the same file:
+Kernel.lean:334-345 says verbatim that "properties that fail under the
+unrestricted `Reachable` relation may still hold under
+`ReachableViaLaws`, as long as the offending laws aren't in the
+deployed set", and gives the mint/transfer conservation example.
+`ReachableViaLaws` + `invariant_preservation_via_laws`
+(Kernel.lean:350,382) are the supplied instruments, and every
+substantive invariant in the tree uses a restricted relation
+(`Conservation.lean:607,669,802`; `Bridge.BridgeReachable`;
+`FaultProof.AdmissibleReachableIn`). Grep shows no production consumer
+of the unrestricted `invariant_preservation` at all — only the axiom-
+footprint assertion and the trivial-invariant term-stability tests
+(KernelTests.lean:232-260). The cited docstring's claim ("illegal
+applications cannot extend the reachable set") is literally true of
+the constructor and asserts nothing about non-universality. True
+observation, no action implied.
+
+
+### INFO — The fail-closed startup warning understates the auth-exempt surface: it omits /rpc
+
+*Verifier confidence:* high
+
+Confirmed by direct read. `runtime/knomosis-
+gateway/src/http/server.rs:116-120` warns "every request except
+/healthz and /readyz will be rejected (401/403)", while
+`auth.rs:202-204` is `matches!(path, "/healthz" | "/readyz" | "/rpc")`
+and `gate` (auth.rs:213-215) returns `None` for every exempt path
+before any credential check; `rate_limit_check`'s own docstring
+(auth.rs:236) even names all three. `/rpc` is not a static probe:
+`rpc.rs:107-119` parses a JSON body up to `--max-frame-size` and
+`handle_one`'s `eth_blockNumber` arm (rpc.rs:167) reads the indexer
+cursor via `current_block` → `read_cursor(&reads.storage)`
+(rpc.rs:216-224). So the operator-facing message describes a strictly
+smaller open surface than the code implements. No exploit — a
+documentation/message accuracy defect on an operator-facing security
+control, and the code's own comments are the better artefact, so the
+fix is to correct the warning string. Severity info is right.
+
+
+### INFO — write_response emits Content-Length on 204 No Content responses, which RFC 9110 forbids
+
+*Verifier confidence:* high
+
+Confirmed. `http/conn.rs:1176` writes `Content-Length: {}`
+unconditionally for every outcome; the only status-sensitive code in
+the writer is `reason_phrase` (conn.rs:1235 maps 204). Nothing strips
+it — `grep -n 204 http/{conn,handler,plain,tls}.rs` finds only the
+reason-phrase arm, and `router.rs:161-162` explicitly documents that
+"the IO shell emits Content-Length: 0" for `no_content()`. Both 204
+producers are live: `cors.rs:170` (`preflight`, reachable whenever
+`--cors-origin` is set) and `rpc.rs:136` (JSON-RPC notification / all-
+notification batch, on the auth-exempt `/rpc`). RFC 9110 §8.6 is a
+MUST NOT for 1xx and 204. Impact is conformance only: the declared
+length agrees with the actual empty body, so there is no
+request/response desync and mainstream intermediaries tolerate it; the
+sharp edge is that this is a hand-rolled reader/writer that rejects
+framing sloppiness on the request side (conn.rs:991-1007). Info.
+
+
+### INFO — Host budget decoder narrows the CBE amount space to 2^128 while the Lean encoder/kernel admits up to 2^256, so identical bytes get different verdicts on the two stacks
+
+*Verifier confidence:* high
+
+Divergence confirmed on both sides. Rust: runtime/knomosis-
+host/src/budget.rs:804-807 rejects any amount with a non-zero byte in
+`head[17..33]` as `BudgetDecodeError::AmountTooWide`, capping the
+accepted space at `[0, 2^128)`. Lean:
+LegalKernel/Laws/AmountBound.lean:77 `def maxAmount : Nat := 256 ^ 32`
+(= 2^256) and line 96 `getBalance s r a + amount < maxAmount`;
+Encoding/Encodable.lean:244-245 `encodeAmount = cborAmountHeadEncode`
+over the full 32-byte payload (CBOR.lean:403, 33-byte head), and
+Encodable.lean:253 `amount_roundtrip` is proved for `n < 256 ^ 32`. So
+`[2^128, 2^256)` is encodable, round-trippable and admissible on the
+Lean side and unparseable on the Rust side — a genuine accept/reject
+boundary split between stacks that are meant to agree byte-for-byte.
+Impact is correctly bounded to informational: the direction is fail-
+closed (reject, not truncate — the comment at budget.rs:800-804 says
+so explicitly and cites C-3), and the path is dev-only —
+`decode_budget_view` has exactly one caller outside its own module,
+kernel.rs:533 inside `mod mock`, and kernel.rs:552 maps the error to
+`Verdict::ParseError`; production `CommandKernel` forwards the CBE
+bytes to the Lean binary opaquely. The project already tracks the
+general remedy (open task 'Widen the Rust amount representation to
+256-bit'). Real observation, correct severity as filed.
+
+
+### INFO — `BalanceView::credit` writes a saturated `u128::MAX` balance non-transactionally before returning the overflow error
+
+*Verifier confidence:* high
+
+The code behaviour is exactly as described: `BalanceView::credit`
+(balance.rs:212-235) on `checked_add` -> `None` calls `self.set(actor,
+resource, Amount::MAX)` — which is an unconditional `self.storage.put`
+(balance.rs:191-201) with no transaction — and only then returns
+`BalanceError::CreditOverflow`. `credit_overflow_saturates`
+(balance.rs:520-541) asserts the persisted `u128::MAX` after the
+error, so it is intentional and pinned, not an oversight. I could not
+refute the write itself. What I can refute is the impact framing. (a)
+The production path is the transactional twin
+`indexer::balance_credit` (indexer.rs:513-533) reached via
+`apply_batch`; every mutation there rides one `begin_combined_tx`
+(indexer.rs:338) and the `?` on error drops the tx without commit, and
+`SqliteCombinedTransaction`/`SqliteBudgetTransaction` ROLLBACK on Drop
+(budget_storage.rs:800-806, combined_transaction.rs:302), so the
+saturated cell never lands. (b) There is no non-test caller of
+`BalanceView::credit` in the workspace: grep for `.credit(` hits only
+balance.rs:507/516/526/604; every other `BalanceView` use
+(main.rs:225, gateway-bench fixture.rs:168, indexer tests) calls
+`get`/`set`/`scan_all` only. (c) The behaviour is documented on the
+method and in the module header (balance.rs:38-42, 205-207), so an
+external caller is warned rather than surprised. It is a genuine fail-
+open API wart on a `pub` surface worth removing (write-then-error is
+never the safer order), but with zero live callers and a rollback-
+protected production path it carries no action beyond hygiene — info,
+not minor.
+
+
+### INFO — CBE amount-head constants are documented at 17 bytes while the code and the Lean authority use 33
+
+*Verifier confidence:* high
+
+Verified every citation. decoder.rs:64-65 reads `/// Length of a CBE
+amount head (1-byte tag + 16-byte LE u128).` immediately above `pub
+const AMOUNT_HEAD_LEN: usize = 33;` — the prose sums to 17.
+`write_amount` (decoder.rs:537-541) says 'on the 16-byte amount head';
+`EncodeError::AmountExceedsBound` (decoder.rs:528-530) says 'they ride
+the 16-byte amount head'. `read_amount` (decoder.rs:234-237) says 'The
+head is 32 bytes' — that is the body width, not the head. Only
+`write_amount_head` (decoder.rs:502-511) is correct, and its own body
+confirms the layout: `push(CBE_TAG_AMOUNT)` + 16 LE bytes + 16 zero
+bytes = 33. The Lean authority agrees with the code, not the comments:
+`cborAmountHeadDecode` reads `natFromBytesLE rest 32` after the tag
+(CBOR.lean:413-421) and `cborAmountHeadEncode_length` proves `= 33`
+(CBOR.lean:433-437). So the constant and both stacks are right and
+four doc comments are wrong — no runtime or wire effect, and round-
+trip/cross-stack corpora are unaffected because nothing reads the
+prose. Pure comment rot on a wire-format spec that three stacks must
+agree on; per the project's implement-the-improvement rule the fix
+direction is to correct the comments (here the docs are the inferior
+artefact). Info.
+
+
+### INFO — `terminateOnSingleStep` omits the turn-deadline check that every other move enforces
+
+*Verifier confidence:* high
+
+The code fact is exact: KnomosisFaultProofGame.sol:397 and :432 gate
+on `block.number > g.turnDeadline`; terminateOnSingleStep (lines
+465-483) checks only status, `high.idx - low.idx == 1`,
+`!hasPendingMidpoint` and `msg.sender == responsible` — grep for
+`turnDeadline` returns hits at 112/365/397/415/432/455/583 and none
+inside terminate. So terminate and claimTimeout (line 580-591,
+requires `block.number > g.turnDeadline`) are simultaneously callable
+after expiry and can race. But the auditor's failure scenario is
+unreachable, for two independent reasons. (1) `g.turn` is Sequencer
+whenever `hasPendingMidpoint` is false: it is set Sequencer at
+initiateChallenge:363-364, flipped to Challenger only in
+submitMidpoint:413 (which sets hasPendingMidpoint=true) and back to
+Sequencer only in respondToMidpoint:453 (which clears it). terminate
+requires `!hasPendingMidpoint` (line 470), so `responsible` is ALWAYS
+`g.sequencer` — a challenger can never call it, so no challenger
+front-run and no challenger-triggered slash of the sequencer. (2) The
+move is truth-determining: executeStepToRootMulti recomputes the post-
+root from `g.low.commit` and the derived writes, so a late terminate
+settles on the merits (an incorrect sequencer still loses). The
+residual is only that the sequencer can escape a `TimedOutSequencer`
+slash by playing late when its root is in fact correct — and the
+migration-plan spec for this entry point
+(docs/planning/fault_proof_migration_plan.md:3265-3285) deliberately
+lists no deadline step, unlike submitMidpoint (step 3, line 3211) and
+respondToMidpoint (step 3). …
+
+
+### INFO — SMT leaf level hashes two variable-length operands with no length separation, leaving an unguarded concatenation boundary
+
+*Verifier confidence:* high
+
+The described code shape is exactly as reported: SmtVerifier.sol:84-95
+hashes `abi.encodePacked(leafSibling, leaf)` / `(leaf, leafSibling)`
+with both operands `bytes memory`, while the upper-level loop at
+113-119 reverts `SmtBadSiblingSize` unless every sibling is exactly 32
+bytes — the leaf-adjacent sibling `siblings[SMT_HEIGHT-1]` is consumed
+before the loop and is exempt by construction. I confirmed the safety
+today rests on the leaf's rigidity, not on any check in the verifier:
+KnomosisBridge.withdrawWithProof (2022) passes `proofLeaf`, which
+keccak-equals `leafBlob` (line 2019), and `_decodePendingWithdrawal`
+(2067-2079) forces exactly 9 (readUint) + 29 (readBytesExact 20-byte
+address) + 33 (readAmount = 1 tag + readUint256LE) + 9 bytes with
+`assertFullyConsumed` — an exactly-80-byte leaf, confirming the
+finding's arithmetic over the stale 64-byte struct comment at line
+1956. With the leaf width fixed, the level-0 split point is a function
+of the preimage length in both bit0 branches, so the only alternative
+parse is the cross-branch one the auditor describes (leaf window
+shifted by the sibling length), which needs the honest amount's byte
+31 to equal TAG_AMOUNT 0x06 among ~10 other fixed bytes — i.e. an
+amount above 6·2^248. Latent, defense-in-depth only: any future
+variable-width leaf field removes the rigidity and there is no
+structural check to fall back on.
+
+
+### INFO — REFUTED — `CellTag.decode` handles only tags 0..6, so every honest fault-proof `MultiBundle`/`KernelStep` fails to decode
+
+*Verifier confidence:* high
+
+Refuted against HEAD — the gap the finding describes was already
+closed. `CellTag.decode` (Encoding/KernelStep.lean:100-183) has
+explicit arms for all fifteen tags: 7..12 as singleton passthroughs at
+lines 165-170, `.epochBudget` at 171-180 (with the same `< 2^64` actor
+bound as the other key-bearing tags), and `.budgetPolicy` at line 181,
+with `.invalidConstructorIndex` only at line 182 for `other >= 15`. It
+mirrors `CellTag.encode` (lines 64-95) constructor for constructor.
+The finding also claims "the module ships no round-trip or injectivity
+theorem": false — `cellTag_roundtrip` at line 224 discharges every tag
+including 7..14 (lines 325-364, `nat_roundtrip 7`…`nat_roundtrip 14`).
+`git log -- LegalKernel/Encoding/KernelStep.lean` shows commit ee72b6b
+"Close the CellTag codec gap...", so the finding was written against a
+pre-ee72b6b tree. The failure scenario cannot occur: encoding a
+`stepMultiBundle` `KernelStep` and decoding it now round-trips.
+Residual nit only: the module header at line 60 still describes the
+tag space as "the frozen tag (0..16)" when there are fifteen
+constructors (0..14).
+
+
+### INFO — REFUTED — `declareLocalPolicy` accepts policies the CBE decoder rejects, so one user action permanently breaks snapshot restore
+
+*Verifier confidence:* high
+
+The write-side observation is literally true —
+`legalkernel_declareLocalPolicy`'s `lex_pre` is `fun (_ :
+LegalKernel.State) => True` (LegalKernel/Laws/LocalPolicy.lean:64) and
+`applyActionToLocalPolicies` stores the payload verbatim
+(Authority/SignedAction.lean:554-557, wired at :633). But the scenario
+needs an over-cap policy to REACH that call, and it cannot. Every
+production ingress for a `SignedAction` is `Encodable.decode (T :=
+SignedAction)` — Main.lean:107 (`decodeSignedActionStream`, feeding
+`readSignedActionsFromFile`) and Runtime/LogFile.lean:150 (log
+replay). That routes constructor index 15 through `Encodable.decode (T
+:= LocalPolicy)` (Encoding/Action.lean:499-503), i.e.
+`LocalPolicy.decode`, which rejects `clauses.length >
+MAX_CLAUSES_PER_POLICY` (Encoding/LocalPolicy.lean:396-404), and whose
+clause decoder rejects the three per-list caps
+(Encoding/LocalPolicy.lean:130-182). A signed `declareLocalPolicy`
+with 65 clauses or a 65-entry `denyTags` is refused at decode, before
+admission; the same gate means such bytes could never sit in a log
+either. The design is explicit at Authority/LocalPolicy.lean:60-64
+('enforced at the LP.2 `fieldsBounded` level ... they are *not* new
+admissibility conjuncts'). No Rust path builds a declareLocalPolicy
+action (runtime/knomosis-l1-ingest/src/action.rs mentions index 15
+only in a doc table). The sole non-decode writer of `localPolicies` in
+production is the genesis hook `gasPoolGenesisState`
+(Bridge/GasPoolPolicy.lean:1063-1065), whose 5-clause policy is proved
+bounded by `gasPoolPolicy_fieldsBounded` (:733). Unreachable as …
+
+
+### INFO — REFUTED — The CORS preflight short-circuit is evaluated before both the auth gate and the rate limiter, for every path and every Origin
+
+*Verifier confidence:* high
+
+The code fact is accurate (handler.rs:105-109 short-circuits
+OPTIONS+Origin before the gates computed at handler.rs:121-122), but
+the claimed consequence is refuted. The gateway's rate limiter is
+*per-credential only*: auth.rs:249 (`let token =
+bearer_token(header)?;`) returns None — i.e. no throttle — for any
+request lacking a bearer token, and auth.rs:214-231 `gate` 401s
+anonymous requests before `rate_limit_check` is ever reached (they are
+chained by `.or_else`, handler.rs:121-122). So anonymous traffic was
+never throttled on any path; the preflight bypasses nothing. The
+anonymous 401 path is in fact *more* expensive per request than the
+204 preflight, because `finalize` (handler.rs:163-172) runs a
+serde_json parse + reserialize on every application/problem+json body
+while `cors::preflight` (cors.rs:165+) just builds a headers-only 204.
+Two further guards: conn.rs:800-802/850-855 reject any OPTIONS
+carrying a body at the framing layer (400), so no buffering primitive
+exists; and `preflight` ignores the request path entirely, so it is
+not a path-enumeration oracle. Answering a preflight before auth is
+also mandated by the Fetch standard, and the short-circuit is gated on
+`--cors-origin` being configured (state.cors.is_some()). True
+observation, no defect.
 

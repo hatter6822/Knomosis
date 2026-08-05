@@ -716,9 +716,13 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   base_outer_len : es.base.balances.toList.length < 256 ^ 8
   /-- Each inner `BalanceMap` pair-list length fits. -/
   base_inner_len : ∀ p ∈ es.base.balances.toList, p.2.toList.length < 256 ^ 8
-  /-- Each inner balance fits the 33-byte amount head's `2^128`
-      range (not the `2^64` an identifier field would impose — a
-      wei-denominated balance crosses `2^64` at ~18.45 ETH). -/
+  /-- Each inner balance fits the 33-byte amount head's `2^256`
+      range — the width of an EVM word, and the same ceiling
+      `Laws.maxAmount` enforces as a precondition conjunct on every
+      crediting law.  Not the `2^64` an identifier field would impose:
+      a wei-denominated balance crosses `2^64` at ~18.45 ETH.  This
+      field is DISCHARGED rather than assumed, by
+      `FaultProof.canonicalBounds_base_amt_of_reachable`. -/
   base_amt : ∀ p ∈ es.base.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 32
   /-- Each inner-map framed-bytes size fits. -/
   base_inner_size : ∀ p ∈ es.base.balances.toList,

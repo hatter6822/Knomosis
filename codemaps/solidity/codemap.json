@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "16e33d3db100b8ca2cd1ad502fdaefbdd4e7f5374382da0cb8ef4f9e6ca03a67"
+    "source_digest": "d453bde2109b4e94153a5c7f9c1d4a10aa9fb978f714780577cddc21428cc65a"
   },
   "summary": {
     "module_count": 103,
@@ -3496,13 +3496,13 @@
         {
           "kind": "function",
           "name": "_leafPreimage",
-          "line": 596,
+          "line": 597,
           "called": []
         },
         {
           "kind": "function",
           "name": "_deriveConsumed",
-          "line": 611,
+          "line": 612,
           "called": []
         }
       ]
@@ -4727,13 +4727,13 @@
         {
           "kind": "function",
           "name": "planGrant",
-          "line": 69,
+          "line": 81,
           "called": []
         },
         {
           "kind": "function",
           "name": "planBalances",
-          "line": 123,
+          "line": 142,
           "called": [
             "_planRefundBalances"
           ]
@@ -4741,7 +4741,7 @@
         {
           "kind": "function",
           "name": "_planRefundBalances",
-          "line": 269,
+          "line": 288,
           "called": []
         }
       ]
@@ -4917,7 +4917,7 @@
         {
           "kind": "function",
           "name": "applyGrantAt",
-          "line": 293,
+          "line": 310,
           "called": [
             "ActorBudget",
             "_topUp"
@@ -4926,7 +4926,7 @@
         {
           "kind": "function",
           "name": "deriveEpochBudget",
-          "line": 327,
+          "line": 345,
           "called": [
             "ActorBudget",
             "BudgetPolicy",
@@ -4937,13 +4937,13 @@
         {
           "kind": "function",
           "name": "creditFits",
-          "line": 400,
+          "line": 419,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveTransferBalances",
-          "line": 408,
+          "line": 427,
           "called": [
             "creditFits"
           ]
@@ -4951,7 +4951,7 @@
         {
           "kind": "function",
           "name": "deriveCreditBalance",
-          "line": 432,
+          "line": 451,
           "called": [
             "creditFits"
           ]
@@ -4959,13 +4959,13 @@
         {
           "kind": "function",
           "name": "deriveDebitBalance",
-          "line": 441,
+          "line": 460,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveDepositBalance",
-          "line": 458,
+          "line": 477,
           "called": [
             "creditFits"
           ]
@@ -4973,13 +4973,13 @@
         {
           "kind": "function",
           "name": "deriveChainPair",
-          "line": 476,
+          "line": 495,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveTopUpBalances",
-          "line": 497,
+          "line": 516,
           "called": [
             "creditFits",
             "deriveChainPair"
@@ -4988,7 +4988,7 @@
         {
           "kind": "function",
           "name": "deriveDepositWithFeeBalances",
-          "line": 528,
+          "line": 547,
           "called": [
             "creditFits"
           ]
@@ -4996,7 +4996,7 @@
         {
           "kind": "function",
           "name": "deriveAmmSwapBalances",
-          "line": 551,
+          "line": 570,
           "called": [
             "creditFits"
           ]
@@ -5004,7 +5004,7 @@
         {
           "kind": "function",
           "name": "deriveReclaimBalances",
-          "line": 569,
+          "line": 588,
           "called": [
             "creditFits",
             "deriveChainPair"
@@ -5013,19 +5013,19 @@
         {
           "kind": "function",
           "name": "deriveRegistryCellValue",
-          "line": 608,
+          "line": 627,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveDeclaredPolicyCellValue",
-          "line": 632,
+          "line": 651,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveRegistryFromFields",
-          "line": 647,
+          "line": 666,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -5033,25 +5033,25 @@
         {
           "kind": "function",
           "name": "deriveRevokedPolicyCellValue",
-          "line": 666,
+          "line": 685,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveConsumedCellValue",
-          "line": 679,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "derivePendingCellValue",
           "line": 698,
           "called": []
         },
         {
           "kind": "function",
+          "name": "derivePendingCellValue",
+          "line": 717,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "deriveNextWdIdCellValue",
-          "line": 718,
+          "line": 737,
           "called": [
             "decodeNonce"
           ]
@@ -5059,37 +5059,37 @@
         {
           "kind": "struct",
           "name": "Cell",
-          "line": 731,
+          "line": 750,
           "called": []
         },
         {
           "kind": "error",
           "name": "ActionNotAdjudicable",
-          "line": 745,
+          "line": 764,
           "called": []
         },
         {
           "kind": "function",
           "name": "isAdjudicable",
-          "line": 758,
+          "line": 777,
           "called": []
         },
         {
           "kind": "error",
           "name": "ActionFieldsTooShort",
-          "line": 763,
+          "line": 782,
           "called": []
         },
         {
           "kind": "function",
           "name": "_fieldUint64",
-          "line": 769,
+          "line": 788,
           "called": []
         },
         {
           "kind": "function",
           "name": "_appendUniform",
-          "line": 787,
+          "line": 806,
           "called": [
             "Cell"
           ]
@@ -5097,7 +5097,7 @@
         {
           "kind": "function",
           "name": "deriveWriteSet",
-          "line": 813,
+          "line": 832,
           "called": [
             "ActionNotAdjudicable",
             "Cell",
@@ -5110,7 +5110,7 @@
         {
           "kind": "function",
           "name": "_need",
-          "line": 923,
+          "line": 942,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -5118,7 +5118,7 @@
         {
           "kind": "function",
           "name": "canonicalAbsentValue",
-          "line": 954,
+          "line": 973,
           "called": [
             "ActionNotAdjudicable"
           ]
@@ -5126,7 +5126,7 @@
         {
           "kind": "function",
           "name": "isCanonicallyAbsent",
-          "line": 995,
+          "line": 1014,
           "called": [
             "canonicalAbsentValue"
           ]
@@ -5134,7 +5134,7 @@
         {
           "kind": "function",
           "name": "deriveEpochBudgetCellValue",
-          "line": 1006,
+          "line": 1025,
           "called": [
             "ActorBudget",
             "decodeActorBudget",
@@ -12577,13 +12577,13 @@
         {
           "kind": "function",
           "name": "test_uniformWrites_are_fail_closed",
-          "line": 628,
+          "line": 629,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_balanceWrites_match_lean",
-          "line": 660,
+          "line": 661,
           "called": [
             "_assertBalanceWrite",
             "_skipWithReason",
@@ -12594,13 +12594,13 @@
         {
           "kind": "function",
           "name": "_assertBalanceWrite",
-          "line": 676,
+          "line": 677,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recordWrites_match_lean",
-          "line": 731,
+          "line": 732,
           "called": [
             "_assertRecordWrite",
             "_skipWithReason",
@@ -12611,19 +12611,19 @@
         {
           "kind": "function",
           "name": "_assertRecordWrite",
-          "line": 747,
+          "line": 748,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_nextWdIdWrite_advances_by_one",
-          "line": 788,
+          "line": 789,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_canonicalAbsentValues_match_lean",
-          "line": 815,
+          "line": 816,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -12638,13 +12638,13 @@
         {
           "kind": "function",
           "name": "test_canonicalAbsence_rejects_present_values",
-          "line": 855,
+          "line": 856,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_the_fold_reaches_the_published_root",
-          "line": 891,
+          "line": 892,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12658,7 +12658,7 @@
         {
           "kind": "function",
           "name": "test_leafPreimage_is_reconstructible",
-          "line": 945,
+          "line": 946,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12668,7 +12668,7 @@
         {
           "kind": "function",
           "name": "test_writeSet_matches_lean",
-          "line": 973,
+          "line": 974,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12678,7 +12678,7 @@
         {
           "kind": "function",
           "name": "assertWriteSetExternal",
-          "line": 988,
+          "line": 989,
           "called": [
             "beginEntry",
             "checkEq"
@@ -12687,7 +12687,7 @@
         {
           "kind": "function",
           "name": "test_writeSet_refuses_only_the_bulk_pair",
-          "line": 1038,
+          "line": 1039,
           "called": [
             "beginEntry",
             "checkGe"
@@ -12696,7 +12696,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 1064,
+          "line": 1065,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12707,7 +12707,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 1092,
+          "line": 1093,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -12719,7 +12719,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 1118,
+          "line": 1119,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -12732,7 +12732,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 1168,
+          "line": 1169,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -12744,7 +12744,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 1216,
+          "line": 1217,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12754,13 +12754,13 @@
         {
           "kind": "function",
           "name": "_tryActionCommit",
-          "line": 1246,
+          "line": 1247,
           "called": []
         },
         {
           "kind": "function",
           "name": "describeRevert",
-          "line": 1259,
+          "line": 1260,
           "called": [
             "revertSelector"
           ]
@@ -12768,7 +12768,7 @@
         {
           "kind": "function",
           "name": "test_every_declared_error_is_described",
-          "line": 1274,
+          "line": 1275,
           "called": [
             "assertEveryDeclaredErrorIsDescribed"
           ]

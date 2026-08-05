@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2d975beb9c887ee254fc462cea16cddf5b76a82c2281f9c0e32135aca1be3d84"
+    "source_digest": "76e75585bd1041e1ae96aa4cd0aaff4b266d8da22cd59d555f0372fccc9662d6"
   },
   "summary": {
     "module_count": 342,
@@ -19928,7 +19928,7 @@
         {
           "kind": "theorem",
           "name": "BalanceMap.encode_injective",
-          "line": 130,
+          "line": 132,
           "called": [
             "AmountValue",
             "BalanceMap",
@@ -19944,7 +19944,7 @@
         {
           "kind": "theorem",
           "name": "BalanceMap.encode_injective_to_equiv",
-          "line": 229,
+          "line": 231,
           "called": [
             "BalanceMap",
             "BalanceMap.encode",
@@ -19954,7 +19954,7 @@
         {
           "kind": "theorem",
           "name": "BalanceMap.encodeAsBytes_injective",
-          "line": 265,
+          "line": 267,
           "called": [
             "BalanceMap",
             "BalanceMap.encode",
@@ -19965,7 +19965,7 @@
         {
           "kind": "def",
           "name": "State.Equiv",
-          "line": 320,
+          "line": 322,
           "called": [
             "BalanceMap",
             "ResourceId",
@@ -19975,7 +19975,7 @@
         {
           "kind": "theorem",
           "name": "State.Equiv.outer_keys_agree",
-          "line": 329,
+          "line": 331,
           "called": [
             "ResourceId",
             "State",
@@ -19985,7 +19985,7 @@
         {
           "kind": "theorem",
           "name": "State.Equiv.inner_equiv",
-          "line": 334,
+          "line": 336,
           "called": [
             "BalanceMap",
             "ResourceId",
@@ -19996,7 +19996,7 @@
         {
           "kind": "theorem",
           "name": "State.Equiv.outer_isSome_eq",
-          "line": 342,
+          "line": 344,
           "called": [
             "ResourceId",
             "State",
@@ -20006,7 +20006,7 @@
         {
           "kind": "theorem",
           "name": "State.Equiv.refl",
-          "line": 370,
+          "line": 372,
           "called": [
             "State",
             "State.Equiv"
@@ -20015,7 +20015,7 @@
         {
           "kind": "theorem",
           "name": "State.Equiv.symm",
-          "line": 382,
+          "line": 384,
           "called": [
             "State",
             "State.Equiv"
@@ -20024,7 +20024,7 @@
         {
           "kind": "def",
           "name": "State.outerProj",
-          "line": 408,
+          "line": 410,
           "called": [
             "BalanceMap",
             "BalanceMap.encodeAsBytes",
@@ -20034,7 +20034,7 @@
         {
           "kind": "theorem",
           "name": "state_encode_eq_via_outerProj",
-          "line": 420,
+          "line": 422,
           "called": [
             "State",
             "State.encode",
@@ -20045,7 +20045,7 @@
         {
           "kind": "theorem",
           "name": "State.encode_injective",
-          "line": 450,
+          "line": 452,
           "called": [
             "BalanceMap.encodeAsBytes",
             "BalanceMap.encodeAsBytes_injective",
@@ -20063,7 +20063,7 @@
         {
           "kind": "theorem",
           "name": "nonceState_pair_proj_injective",
-          "line": 692,
+          "line": 694,
           "called": [
             "ActorId",
             "Nonce"
@@ -20072,7 +20072,7 @@
         {
           "kind": "theorem",
           "name": "NonceState.encode_injective",
-          "line": 720,
+          "line": 722,
           "called": [
             "ActorId",
             "Nonce",
@@ -20087,7 +20087,7 @@
         {
           "kind": "theorem",
           "name": "NonceState.expectedNonce_eq_of_encode_eq",
-          "line": 803,
+          "line": 805,
           "called": [
             "ActorId",
             "NonceState",
@@ -20098,7 +20098,7 @@
         {
           "kind": "theorem",
           "name": "keyRegistry_pair_proj_injective",
-          "line": 832,
+          "line": 834,
           "called": [
             "ActorId",
             "PublicKey"
@@ -20107,7 +20107,7 @@
         {
           "kind": "theorem",
           "name": "KeyRegistry.encodeMap_injective",
-          "line": 855,
+          "line": 857,
           "called": [
             "ActorId",
             "KeyRegistry",
@@ -20123,7 +20123,7 @@
         {
           "kind": "theorem",
           "name": "State.Equiv.getBalance_eq",
-          "line": 936,
+          "line": 938,
           "called": [
             "ActorId",
             "Encoding",
@@ -22634,7 +22634,7 @@
         {
           "kind": "theorem",
           "name": "getBalance_lt_of_canonicalBounds",
-          "line": 801,
+          "line": 805,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -22646,7 +22646,7 @@
         {
           "kind": "theorem",
           "name": "expectsNonce_lt_of_canonicalBounds",
-          "line": 817,
+          "line": 821,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -22657,7 +22657,7 @@
         {
           "kind": "theorem",
           "name": "registry_size_lt_of_canonicalBounds",
-          "line": 829,
+          "line": 833,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -22668,7 +22668,7 @@
         {
           "kind": "theorem",
           "name": "localPolicy_bounded_of_canonicalBounds",
-          "line": 835,
+          "line": 839,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -22680,7 +22680,7 @@
         {
           "kind": "theorem",
           "name": "depositRecord_bounded_of_canonicalBounds",
-          "line": 841,
+          "line": 845,
           "called": [
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
@@ -22690,7 +22690,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_bounded_of_canonicalBounds",
-          "line": 850,
+          "line": 854,
           "called": [
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
@@ -22700,7 +22700,7 @@
         {
           "kind": "theorem",
           "name": "actorBudget_bounded_of_canonicalBounds",
-          "line": 859,
+          "line": 863,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -22711,7 +22711,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_bounded_of_canonicalBounds",
-          "line": 872,
+          "line": 876,
           "called": [
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
@@ -22721,7 +22721,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free",
-          "line": 902,
+          "line": 906,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encode_injective",
@@ -22750,7 +22750,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_includes_ammState",
-          "line": 1032,
+          "line": 1036,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -22761,7 +22761,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeBase",
-          "line": 1047,
+          "line": 1051,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending"
@@ -22770,7 +22770,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeAmmSuffix",
-          "line": 1057,
+          "line": 1061,
           "called": [
             "encodeAmount"
           ]
@@ -22778,7 +22778,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encode_factored",
-          "line": 1067,
+          "line": 1071,
           "called": [
             "Bridge.BridgeState.encode",
             "bridgeStateEncodeAmmSuffix",
@@ -22788,7 +22788,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_amm_genesis_suffix_const",
-          "line": 1076,
+          "line": 1080,
           "called": [
             "bridgeStateEncodeAmmSuffix"
           ]
@@ -22796,7 +22796,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_2",
-          "line": 1099,
+          "line": 1103,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -22812,7 +22812,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_3",
-          "line": 1134,
+          "line": 1138,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -22824,7 +22824,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_reflects_ammDisabled",
-          "line": 1173,
+          "line": 1177,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -22841,7 +22841,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedStateConcat_reflects_ammDisabled",
-          "line": 1263,
+          "line": 1267,
           "called": [
             "ExtendedState",
             "ExtendedState.empty",
@@ -30770,7 +30770,7 @@
         {
           "kind": "theorem",
           "name": "balanceCell_absent_iff_balance_zero",
-          "line": 156,
+          "line": 160,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30784,7 +30784,7 @@
         {
           "kind": "theorem",
           "name": "getBalance_eq_lookup",
-          "line": 173,
+          "line": 177,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30795,7 +30795,7 @@
         {
           "kind": "theorem",
           "name": "mem_bulkRecipients_of_cell_live",
-          "line": 196,
+          "line": 200,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30811,7 +30811,7 @@
         {
           "kind": "theorem",
           "name": "exists_mem_bulkRecipients_iff_cell_live",
-          "line": 223,
+          "line": 227,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30828,7 +30828,7 @@
         {
           "kind": "def",
           "name": "Action.distributeOthers_subSteps",
-          "line": 261,
+          "line": 265,
           "called": [
             "ActorId",
             "Amount",
@@ -30845,7 +30845,7 @@
         {
           "kind": "def",
           "name": "Action.proportionalDilute_subSteps",
-          "line": 292,
+          "line": 296,
           "called": [
             "ActorId",
             "Amount",
@@ -30863,7 +30863,7 @@
         {
           "kind": "def",
           "name": "Action.subSteps",
-          "line": 316,
+          "line": 320,
           "called": [
             "Action",
             "ExtendedState",
@@ -30876,7 +30876,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_bound",
-          "line": 328,
+          "line": 332,
           "called": [
             "Action",
             "Action.distributeOthers_subSteps",
@@ -30892,7 +30892,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_eq_of_within_cap",
-          "line": 364,
+          "line": 368,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30907,7 +30907,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_complete_of_pre",
-          "line": 378,
+          "line": 382,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30922,7 +30922,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_noop_above_cap",
-          "line": 393,
+          "line": 397,
           "called": [
             "ActorId",
             "Amount",
@@ -30935,7 +30935,7 @@
         {
           "kind": "def",
           "name": "SubStep.writeCells",
-          "line": 409,
+          "line": 413,
           "called": [
             "CellTag",
             "ResourceId",
@@ -30945,7 +30945,7 @@
         {
           "kind": "theorem",
           "name": "SubStep.writeCells_length",
-          "line": 414,
+          "line": 418,
           "called": [
             "ResourceId",
             "SubStep"
@@ -30954,7 +30954,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_affectedActors_nodup",
-          "line": 424,
+          "line": 428,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30967,7 +30967,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_deterministic",
-          "line": 451,
+          "line": 455,
           "called": [
             "Action",
             "Action.subSteps",
@@ -49116,8 +49116,8 @@
         },
         {
           "kind": "def",
-          "name": "grantTripleOf",
-          "line": 1492,
+          "name": "grantPlanOf",
+          "line": 1500,
           "called": [
             "Action",
             "ActorId",
@@ -49130,7 +49130,7 @@
         {
           "kind": "def",
           "name": "uniformWriteGoldens",
-          "line": 1504,
+          "line": 1512,
           "called": [
             "Action",
             "ActorId",
@@ -49140,7 +49140,7 @@
             "es",
             "fixtureBase",
             "getCellValue",
-            "grantTripleOf",
+            "grantPlanOf",
             "mint",
             "probes",
             "productionApplyBudget",
@@ -49154,7 +49154,7 @@
         {
           "kind": "def",
           "name": "balanceGolden",
-          "line": 1563,
+          "line": 1581,
           "called": [
             "uint256BE"
           ]
@@ -49162,7 +49162,7 @@
         {
           "kind": "def",
           "name": "balanceWriteGoldens",
-          "line": 1575,
+          "line": 1593,
           "called": [
             "ActorId",
             "BalanceMap",
@@ -49184,7 +49184,7 @@
         {
           "kind": "def",
           "name": "recordWriteGoldens",
-          "line": 1648,
+          "line": 1666,
           "called": [
             "actionFieldsForL1",
             "budgetGrant",
@@ -49199,7 +49199,7 @@
         {
           "kind": "def",
           "name": "multiProofGoldens",
-          "line": 1730,
+          "line": 1748,
           "called": [
             "Action",
             "ActorId",
@@ -49242,7 +49242,7 @@
         {
           "kind": "def",
           "name": "writeSetGoldens",
-          "line": 1841,
+          "line": 1859,
           "called": [
             "Action",
             "ActorId",
@@ -49274,7 +49274,7 @@
         {
           "kind": "def",
           "name": "absentValueProbeTags",
-          "line": 1899,
+          "line": 1917,
           "called": [
             "CellTag"
           ]
@@ -49282,7 +49282,7 @@
         {
           "kind": "def",
           "name": "absentValueGoldens",
-          "line": 1908,
+          "line": 1926,
           "called": [
             "canonicalAbsentValue"
           ]
@@ -49290,7 +49290,7 @@
         {
           "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1923,
+          "line": 1941,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -49299,7 +49299,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1940,
+          "line": 1958,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "absentValueGoldens",

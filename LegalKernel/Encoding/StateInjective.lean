@@ -112,13 +112,15 @@ notion. -/
         Deployment-level constraint (§8.8.6).
       * `h_amt₁ / h_amt₂` — per-amount canonical-encoding bounds.
         Balances ride the 33-byte amount head, so the bound is
-        `2^128`, not the `2^64` the identifier head imposes.  That
+        `2^256`, not the `2^64` the identifier head imposes.  That
         difference is the whole point of the wide head: a
         wei-denominated balance crosses `2^64` at ~18.45 ETH and
         balances accumulate, so the narrow bound was reachable on
         ordinary states and this hypothesis was not discharge-able in
-        practice.  At `2^128` it is — the entire ETH supply is about
-        `2^87` wei.
+        practice.  At `2^256` it is discharged outright — the ceiling
+        is `Laws.maxAmount`, a precondition conjunct on every crediting
+        law, proved unreachable by
+        `FaultProof.canonicalBounds_base_amt_of_reachable`.
 
     The actor-key side has no hypothesis: every `a : ActorId =
     UInt64` automatically satisfies `a.toNat < 2^64`.
@@ -178,7 +180,7 @@ theorem BalanceMap.encode_injective
   -- Per-pair round-trip hypotheses for the value carrier
   -- (`AmountValue`).  Each `p` in the projected list satisfies
   -- `p.2.val = q.2` for some `q ∈ bm.toList`; the amount bound
-  -- `h_amt` supplies the `< 2^128` requirement.
+  -- `h_amt` supplies the `< 2^256` requirement.
   have hV₁ : ∀ p ∈ bm₁.toList.map balanceMapPair,
               ∀ (rest : Stream),
                 Encodable.decode (T := AmountValue) (Encodable.encode p.2 ++ rest) =
