@@ -530,7 +530,20 @@ def tests : List TestCase :=
         let _a14b := @refund_pre_implies_pool_solvent
         let _a15 := @refund_pays_exact_amount_from_pool
         let _a16 := @refund_conserves_supply
-        let _a17 := @refund_other_actor_untouched
+        -- Ascribed rather than merely named: the locality claim IS the
+        -- three hypotheses plus the equation, and a bare `let _ := @thm`
+        -- would survive any of them changing.
+        let _a17 : ∀ (claimant other : ActorId) (gasResource : ResourceId)
+            (refundAmt : Amount) (s : State),
+            (Laws.claimBudgetRefund claimant gasPoolActor gasResource refundAmt).pre s →
+            other ≠ claimant →
+            other ≠ gasPoolActor →
+            getBalance
+                (step_impl s
+                  (Laws.claimBudgetRefund claimant gasPoolActor gasResource refundAmt))
+                gasResource other
+              = getBalance s gasResource other :=
+          refund_other_actor_untouched
         pure ()
     }
   , { name := "GP.9.1: term-level API stability (Action layer + admission gate)"
@@ -540,7 +553,12 @@ def tests : List TestCase :=
         let _t1 := @Authority.claimBudgetRefund_gate
         let _t2 := @Authority.refundConsumeExtra
         let _t3 := @Authority.refundConsumeExtra_eq_zero_of_ne_refund
-        let _t4 := @Authority.claimBudgetRefund_gate_true_of_ne
+        let _t4 : ∀ (action : Action) (signer : ActorId) (es : ExtendedState)
+            (refundRate : ResourceId → Nat),
+            (∀ (gr : ResourceId) (bu w : Nat) (pa : ActorId),
+              action ≠ Action.claimBudgetRefund gr bu w pa) →
+            Authority.claimBudgetRefund_gate action signer es refundRate = true :=
+          Authority.claimBudgetRefund_gate_true_of_ne
         -- Admission-gate soundness theorems (kernel).
         let _t5 := @Authority.claimBudgetRefund_gate_characterization
         let _t6 := @Authority.admission_refund_consumes_budget
@@ -550,7 +568,16 @@ def tests : List TestCase :=
         let _t9 := @Authority.refund_rejected_when_rate_mismatch
         let _t10 := @Authority.refund_rejected_when_over_refundable
         let _t11 := @Authority.refund_rejected_when_pool_insolvent
-        let _t11b := @Authority.refund_rejected_when_rate_disabled
+        let _t11b : ∀ (gasResource : ResourceId)
+            (budgetUnits weiPerBudgetUnit : Nat) (poolActor signer : ActorId)
+            (es : ExtendedState) (refundRate : ResourceId → Nat)
+            (freeTier actionCost currentEpoch : Nat),
+            es.budgetPolicy = BudgetPolicy.bounded freeTier actionCost currentEpoch →
+            refundRate gasResource = 0 →
+            Authority.claimBudgetRefund_gate
+                (Action.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+                signer es refundRate ≠ true :=
+          Authority.refund_rejected_when_rate_disabled
         -- Production-path (bridge-aware) admission mirrors.  The two
         -- refund-specific mirrors close the GP.9.1 soundness gap: the
         -- runtime entry's refund consume + free-tier preservation are
@@ -558,12 +585,46 @@ def tests : List TestCase :=
         -- disabled default.
         let _t12 := @admission_consumes_budget_on_success_bridge
         let _t13 := @admission_refund_consumes_budget_bridge
-        let _t14 := @admission_refund_preserves_free_tier_bridge
+        let _t14 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+            (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+            (poolActor signer : ActorId) (nonce : Nonce) (sig : Signature)
+            (idx : Nat)
+            (h : BridgeAdmissibleWith verify P d es
+              { action := Action.claimBudgetRefund gasResource budgetUnits
+                            weiPerBudgetUnit poolActor,
+                signer := signer, nonce := nonce, sig := sig })
+            (refundRate : ResourceId → Nat)
+            (freeTier actionCost currentEpoch : Nat),
+            es.budgetPolicy = BudgetPolicy.bounded freeTier actionCost currentEpoch →
+            signer ≠ bridgeActor →
+            Authority.claimBudgetRefund_gate
+                (Action.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+                signer es refundRate = true →
+            ∀ {es' : ExtendedState},
+              apply_bridge_admissible_with_budget verify P d es
+                  { action := Action.claimBudgetRefund gasResource budgetUnits
+                                weiPerBudgetUnit poolActor,
+                    signer := signer, nonce := nonce, sig := sig }
+                  idx h refundRate = some es' →
+              freeTier ≤ es'.epochBudgets.currentBudget signer currentEpoch freeTier :=
+          admission_refund_preserves_free_tier_bridge
         -- The four rate-generic agreement corollaries the mirrors rest on
         -- now thread `refundRate` (the S1 generalisation).
         let _t15 := @apply_bridge_admissible_with_budget_epochBudgets_eq
         let _t16 := @apply_bridge_admissible_with_budget_none_iff
-        let _t17 := @apply_bridge_admissible_with_budget_kernel_epochBudgets
+        let _t17 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+            (st : SignedAction) (idx : Nat)
+            (h : BridgeAdmissibleWith verify P d es st)
+            {refundRate : ResourceId → Nat} {es' : ExtendedState},
+            apply_bridge_admissible_with_budget verify P d es st idx h refundRate
+                = some es' →
+            ∃ esK,
+              apply_admissible_with_budget verify P d es st
+                  (BridgeAdmissibleWith.toAdmissibleWith h) refundRate = some esK
+                ∧ esK.epochBudgets = es'.epochBudgets :=
+          apply_bridge_admissible_with_budget_kernel_epochBudgets
         -- GP.9.1 round-trip non-profitability seal — the economic gate
         -- closing the top-up → refund pool-drain vector (the topUp side of
         -- the refund mechanism: the rate pin alone could not bound how
@@ -574,7 +635,25 @@ def tests : List TestCase :=
         let _t21 := @Authority.topUpActionBudget_roundtrip_not_profitable
         let _t22 := @Authority.topUpActionBudgetFor_roundtrip_not_profitable
         let _t23 := @topUpActionBudget_roundtrip_not_profitable_bridge
-        let _t24 := @topUpActionBudgetFor_roundtrip_not_profitable_bridge
+        -- The economic seal, ascribed: the whole content is the final
+        -- inequality, and a name-only pin would not notice it flipping.
+        let _t24 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+            (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
+            (budgetIncrement : Nat) (poolActor signer : ActorId) (nonce : Nonce)
+            (sig : Signature) (idx : Nat)
+            (h : BridgeAdmissibleWith verify P d es
+              { action := Action.topUpActionBudgetFor recipient gasResource
+                            gasAmount budgetIncrement poolActor,
+                signer := signer, nonce := nonce, sig := sig })
+            (refundRate : ResourceId → Nat) {es' : ExtendedState},
+            apply_bridge_admissible_with_budget verify P d es
+                { action := Action.topUpActionBudgetFor recipient gasResource
+                              gasAmount budgetIncrement poolActor,
+                  signer := signer, nonce := nonce, sig := sig }
+                idx h refundRate = some es' →
+            budgetIncrement * refundRate gasResource ≤ gasAmount :=
+          topUpActionBudgetFor_roundtrip_not_profitable_bridge
         pure ()
     }
   ]

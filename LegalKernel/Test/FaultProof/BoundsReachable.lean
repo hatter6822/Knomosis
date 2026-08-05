@@ -141,14 +141,55 @@ def tests : List TestCase :=
     }
   , { name := "term-level API stability: the bound is inductive"
     , body := do
-        -- The two theorems the discharge composes.
-        let _a1 := @balancesBounded_apply_impl
-        let _a2 := @balancesBounded_step_impl
-        let _a3 := @balancesBounded_admissible_step
-        let _a4 := @balancesBounded_of_admissibleReachable
-        let _a5 := @canonicalBounds_base_amt_of_reachable
-        let _a6 := @canonicalBounds_base_amt_of_balancesBounded
-        let _a7 := @admissibleReachable_of_bridgeReachable
+        -- The theorems the discharge composes.  Ascribed, not merely
+        -- named: a bare `let _ := @thm` pins only that the NAME still
+        -- exists, and what this suite has to catch is the bound itself
+        -- weakening — `< maxAmount` drifting, or a hypothesis being
+        -- added to the induction.
+        let _a1 : ∀ (a : Action) (signer : ActorId) (s : State),
+            (∀ (r : ResourceId) (a' : ActorId), getBalance s r a' < Laws.maxAmount) →
+            (a.toTransition signer).pre s →
+            ∀ (r : ResourceId) (a' : ActorId),
+              getBalance ((a.toTransition signer).apply_impl s) r a' < Laws.maxAmount :=
+          balancesBounded_apply_impl
+        let _a2 : ∀ (a : Action) (signer : ActorId) (s : State),
+            (∀ (r : ResourceId) (a' : ActorId), getBalance s r a' < Laws.maxAmount) →
+            ∀ (r : ResourceId) (a' : ActorId),
+              getBalance (step_impl s (a.toTransition signer)) r a' < Laws.maxAmount :=
+          balancesBounded_step_impl
+        let _a3 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+            (st : SignedAction) (idx : Nat)
+            (h : Bridge.BridgeAdmissibleWith verify P d es st),
+            BalancesBounded es →
+            BalancesBounded
+              (Bridge.apply_bridge_admissible_with verify P d es st idx h) :=
+          fun _ _ _ _ _ _ h hb => balancesBounded_admissible_step h hb
+        let _a4 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (es es' : ExtendedState),
+            BalancesBounded es →
+            AdmissibleReachable verify P d es es' →
+            BalancesBounded es' :=
+          fun _ _ _ _ _ hb hr => balancesBounded_of_admissibleReachable hb hr
+        let _a5 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (es es' : ExtendedState),
+            BalancesBounded es →
+            AdmissibleReachable verify P d es es' →
+            ∀ (p : ResourceId × BalanceMap), p ∈ es'.base.balances.toList →
+            ∀ (q : ActorId × Amount), q ∈ Std.TreeMap.toList p.snd →
+              q.snd < 256 ^ 32 :=
+          fun _ _ _ _ _ hb hr => canonicalBounds_base_amt_of_reachable hb hr
+        let _a6 : ∀ (es : ExtendedState),
+            BalancesBounded es →
+            ∀ (p : ResourceId × BalanceMap), p ∈ es.base.balances.toList →
+            ∀ (q : ActorId × Amount), q ∈ Std.TreeMap.toList p.snd →
+              q.snd < 256 ^ 32 :=
+          canonicalBounds_base_amt_of_balancesBounded
+        let _a7 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (es es' : ExtendedState),
+            Bridge.BridgeReachable verify P d es es' →
+            AdmissibleReachable verify P d es es' :=
+          fun _ _ _ _ _ hr => admissibleReachable_of_bridgeReachable hr
         pure ()
     }
   , { name := "term-level API stability: the trace-length bounds (W2)"
@@ -156,9 +197,29 @@ def tests : List TestCase :=
         -- The nonce argument that justifies NOT widening the 8-byte
         -- head.  Its conclusion is deliberately weaker than the amount
         -- bound's — `≤ start + n`, not an unconditional `< 2^64`.
-        let _b1 := @expectsNonce_admissible_step_le
-        let _b2 := @expectsNonce_le_of_reachableIn
-        let _b3 := @expectsNonce_lt_of_reachableIn
+        let _b1 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+            (st : SignedAction) (idx : Nat)
+            (h : Bridge.BridgeAdmissibleWith verify P d es st) (a : ActorId),
+            expectsNonce
+                (Bridge.apply_bridge_admissible_with verify P d es st idx h) a
+              ≤ expectsNonce es a + 1 :=
+          fun _ _ _ _ _ _ h a => expectsNonce_admissible_step_le h a
+        -- The `+ n` in the conclusion is the point of the ascription:
+        -- an unascribed pin would survive this weakening to `+ 2 * n`.
+        let _b2 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (n : Nat)
+            (es es' : ExtendedState),
+            AdmissibleReachableIn verify P d n es es' →
+            ∀ (a : ActorId), expectsNonce es' a ≤ expectsNonce es a + n :=
+          fun _ _ _ _ _ _ hr => expectsNonce_le_of_reachableIn hr
+        let _b3 : ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+            (P : AuthorityPolicy) (d : ByteArray) (n : Nat)
+            (es es' : ExtendedState),
+            AdmissibleReachableIn verify P d n es es' →
+            ∀ (a : ActorId), expectsNonce es a = 0 → n < 256 ^ 8 →
+              expectsNonce es' a < 256 ^ 8 :=
+          fun _ _ _ _ _ _ hr => expectsNonce_lt_of_reachableIn hr
         pure ()
     }
   ]
