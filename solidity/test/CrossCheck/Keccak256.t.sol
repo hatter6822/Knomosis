@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
 
@@ -58,14 +58,11 @@ contract Keccak256CrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".header.isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("keccak256 fallback (FNV-1a-64); cross-check skipped");
-            return;
-        }
+        _requireKeccakLinked(raw, ".header.isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes memory input =
                 vm.parseJsonBytes(raw, string.concat(base, ".input"));
             bytes32 expected =
@@ -73,7 +70,7 @@ contract Keccak256CrossCheck is CrossCheckFramework {
             bytes32 actual = keccak256(input);
             string memory label =
                 vm.parseJsonString(raw, string.concat(base, ".label"));
-            assertEq(actual, expected, string.concat("keccak mismatch at ", label));
+            checkEq(actual, expected, string.concat("keccak mismatch at ", label));
         }
     }
 

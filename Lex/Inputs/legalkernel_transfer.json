@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 95, "column": 0},
+ {"position": {"line": 114, "column": 0},
   "file": "LegalKernel/Laws/Transfer.lean"},
  "signed_by": {"name": "sender", "kind": "actorRef"},
  "schema_version": 1,
@@ -13,7 +13,8 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr": "fun s => getBalance s r sender ≥ amount ∧ amount > 0\n  ",
+ "pre_expr":
+ "fun s => getBalance s r sender ≥ amount ∧ amount > 0 ∧\n             LegalKernel.Laws.AmountBounded\n               (setBalance s r sender (getBalance s r sender - amount))\n               r receiver amount\n  ",
  "params":
  [{"type": "ResourceId", "name": "r", "kind": "explicit"},
   {"type": "ActorId", "name": "sender", "kind": "explicit"},

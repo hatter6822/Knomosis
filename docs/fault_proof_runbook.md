@@ -16,10 +16,98 @@ Workstream-H fault-proof migration.
 
 ---
 
+## 0. The terminal step adjudicates — what changed, and the residue
+
+**This section used to be a deployment blocker.**  It read: do not
+deploy this system as an adjudicating backstop, because the bisection
+narrowing works and the step that decides the winner does not.
+`terminateOnSingleStep` fed `g.low.commit` — a state root — to
+`KnomosisStepVM.executeStep`, whose own header stated that its output
+"is NOT byte-identical to" a `commitExtendedState` value, and compared
+the result to `g.high.commit`, another state root.  Two different
+constructions, so the comparison never succeeded: **an honest sequencer
+lost every game it correctly defended.**
+
+The 278-entry cross-stack corpus could not report it and never could.
+It pinned Lean's `stepVMHash` against Solidity's `executeStep` — two
+implementations of the SAME bespoke recipe.  They agreed on all 278
+entries; agreement between them said nothing about whether either
+equalled a published state root, which is the only property the game
+needs.  That column and its driver are gone, along with the recipe.
+
+**It is closed.**  `terminateOnSingleStep` calls
+`KnomosisStepVMRoot.executeStepToRootMulti`, which returns a post-state
+ROOT computed by folding the step's DERIVED cell writes into
+`g.low.commit`.  It derives both halves rather than accepting them —
+the cell list from `StepWrites.deriveWriteSet`, whose frontier is
+checked against the submitted one as a SET so a responder cannot omit
+a write, and each cell's value from `StepWrites` / `StepPlan`, which
+are `productionApplyBudget` re-expressed cell-locally.  Every
+derivation EVALUATES its law's precondition and returns the pre-values
+when it fails, so a failing precondition is a no-op rather than a
+revert — a revert would not be a verdict, since the terminal step is
+callable only by whoever's turn it is.
+
+**What a responding party submits** is a deduplicating pre-root
+multiproof: the step's frontier (every cell it touches, with that
+cell's proven pre-value) plus ONE shared sibling list.  Four operator-
+visible consequences.  The bundle's ORDER does not matter — the
+verifier sorts, so a terminate cannot fail on a formatting question.
+A cell the step writes twice (a self-transfer) is opened once, so the
+responsible party is not charged for a redundant walk.  The wire's
+length is fixed by the cell set, so a truncated proof reverts with a
+named error rather than being padded out and walked to a wrong root.
+And the read-only budget-policy cell rides IN the frontier — there is
+no separate policy opening to forget.  `knomosis
+export-terminate-bundle` emits exactly this shape (`opened_cells`,
+`gap_mask_hex`, `siblings_hex`) and the observer forwards it.
+
+The evidence is a corpus column on both stacks: `multiProofGoldens`
+carries, per probe, the pre-root, the action, the frontier, the wire,
+and TWO independently-computed post-roots — the one the fold reaches
+and the one `commitExtendedState (productionApplyBudget …)` gives from
+the post-STATE.  Both the L1 verifier
+(`CrossCheck/StepVMRootMulti.t.sol`) and the Lean one
+(`FaultProof/Terminate.lean`) reach it, and the corpus asserts the two
+numbers coincide — which is more than agreeing with another verifier.
+The game's own honest-sequencer-wins test is driven by that probe
+rather than by hand-built values: with a real fold, a fabricated `low`
+has no wire that reproduces it, so the honest path is only reachable
+from a real one.
+
+**Operator obligation, in force: do not authorise the bulk laws.**  A
+deployment leaning on the fault proof must not permit
+`distributeOthers` / `proportionalDilute` in its `AuthorityPolicy`.  A
+verifier cannot tell a complete recipient set from one missing an entry
+— the missing cell's opening is simply absent, the short bundle folds,
+and the resulting root is one where that recipient was never credited,
+which the sequencer that published it can then successfully defend.
+The two laws remain available to deployments using the
+adjudicator-quorum backstop.  `FaultProof.FaultProofAdjudicable` is the
+predicate; it is false on exactly those two, mirrored by
+`StepWrites.isAdjudicable` and pinned per kind across all twenty-five
+variants by the corpus's `adjudicable` column.  The contract refuses
+them before verifying any opening.
+
+**The old recipe is gone.**  `KnomosisStepVM.sol`,
+`SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
+the 37 theorems pinning their per-variant arms were deleted once
+nothing referenced them.  What survives from that surface is the L1
+FIELD LAYOUT — `actionKindByte`, `actionFieldsForL1`, the big-endian
+encoders and the log-entry chain's `l1ActionCommit` — which the
+root-computing step VM reads unchanged.  The Lean MODEL of the
+terminal step (`Step.kernelStepApply`) routes through the verifier, so
+it computes what the contract computes.
+
+---
+
 ## 1. Pre-deployment checklist
 
 Before deploying the Workstream-H contracts:
 
+  - [ ] **§0 read and accepted.**  In particular: the deployment's
+        `AuthorityPolicy` must not authorise `distributeOthers` /
+        `proportionalDilute`, which the fault proof cannot adjudicate.
   - [ ] **Lean side green**: `lake build`, `lake test`,
         `lake exe count_sorries`, `lake exe tcb_audit`,
         `lake exe stub_audit`, `lake exe lex_lint`,
@@ -83,6 +171,26 @@ All five must succeed (no revert).
 ## 3. Operational monitoring
 
 ### 3.1 State-root submission monitoring
+
+**Sequencer obligation: bind the action.**
+`submitStateRoot(logIndex, stateCommit, prevLogEntryHash, actionCommit)`
+takes a fourth argument, and getting it wrong is a *liveness* failure
+for the sequencer rather than a submission-time error — the contract
+folds the value into the chain without interpreting it, so a wrong
+`actionCommit` is accepted at publish time and surfaces only when the
+root is challenged, at which point every honest
+`terminateOnSingleStep` reverts `ActionNotInLogChain` and the sequencer
+loses by timeout.
+
+Compute it as
+`keccak256(abi.encodePacked(uint8 actionKind, uint64 signer, bytes actionFields))`
+over the action that carried `logIndex - 1` to `logIndex` — the same
+triple the terminate call passes. Lean's
+`LegalKernel.FaultProof.StepVMCoherence.l1ActionCommit` is the
+reference implementation, and `step_vm.json`'s
+`expectedActionCommitHex` pins the two stacks byte-for-byte, so an
+integration can check its own encoder against the corpus before it
+publishes anything.
 
 Track the following events from `KnomosisStateRootSubmission`:
 

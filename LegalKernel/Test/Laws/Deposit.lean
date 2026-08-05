@@ -56,7 +56,7 @@ def tests : List TestCase :=
     , body := do
         let s := setBalance emptyState 1 10 100
         let _proof : TotalSupply (step_impl s (deposit 1 10 50 0)) 1 = TotalSupply s 1 + 50 :=
-          totalSupply_after_deposit 1 10 50 0 s
+          totalSupply_after_deposit 1 10 50 0 s (by decide)
         assertEq (expected := TotalSupply s 1 + 50)
                  (actual   := TotalSupply (step_impl s (deposit 1 10 50 0)) 1)
                  "supply shifted by deposit amount"
@@ -64,7 +64,7 @@ def tests : List TestCase :=
   , { name := "deposit_not_conservative term-level API"
     , body := do
         let _proof : ¬ IsConservative (deposit 1 10 50 0) :=
-          deposit_not_conservative 1 10 50 0 (by decide)
+          deposit_not_conservative 1 10 50 0 (by decide) (by decide)
         pure ()
     }
   , { name := "deposit_other_resource_untouched: BalanceMap unchanged at r' ≠ r"

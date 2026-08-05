@@ -166,6 +166,10 @@ jobs:
             dict: ''
           - target: indexer_decode_event
             dict: fuzz/dictionaries/indexer.dict
+          - target: observer_cell_proof_json
+            dict: ''
+          - target: observer_terminate_bundle_json
+            dict: ''
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5

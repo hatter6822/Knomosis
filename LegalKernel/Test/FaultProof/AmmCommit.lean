@@ -154,11 +154,11 @@ def tests : List TestCase :=
               Bridge.BridgeState.encodeConsumed bs ++
               Bridge.BridgeState.encodePending bs ++
               Encodable.encode (T := Nat) bs.nextWdId ++
-              Encodable.encode (T := Nat) bs.ammReserveEth ++
-              Encodable.encode (T := Nat) bs.ammReserveBold ++
+              encodeAmount bs.ammReserveEth ++
+              encodeAmount bs.ammReserveBold ++
               Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-              Encodable.encode (T := Nat) bs.boldTvlCap ++
-              Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+              encodeAmount bs.boldTvlCap ++
+              encodeAmount bs.boldTotalLockedValue ++
               Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0) :=
           bridgeState_commit_includes_ammState
         pure ()
@@ -230,11 +230,11 @@ def tests : List TestCase :=
           Bridge.BridgeState.encodeConsumed bs ++
           Bridge.BridgeState.encodePending bs ++
           Encodable.encode (T := Nat) bs.nextWdId ++
-          Encodable.encode (T := Nat) bs.ammReserveEth ++
-          Encodable.encode (T := Nat) bs.ammReserveBold ++
+          encodeAmount bs.ammReserveEth ++
+          encodeAmount bs.ammReserveBold ++
           Encodable.encode (T := Nat) 2 ++
-          Encodable.encode (T := Nat) bs.boldTvlCap ++
-          Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+          encodeAmount bs.boldTvlCap ++
+          encodeAmount bs.boldTotalLockedValue ++
           Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0)
         match Bridge.BridgeState.decode tampered with
         | .error _ => pure ()
@@ -313,11 +313,11 @@ def tests : List TestCase :=
           Bridge.BridgeState.encodeConsumed bs ++
           Bridge.BridgeState.encodePending bs ++
           Encodable.encode (T := Nat) bs.nextWdId ++
-          Encodable.encode (T := Nat) bs.ammReserveEth ++
-          Encodable.encode (T := Nat) bs.ammReserveBold ++
+          encodeAmount bs.ammReserveEth ++
+          encodeAmount bs.ammReserveBold ++
           Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-          Encodable.encode (T := Nat) bs.boldTvlCap ++
-          Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+          encodeAmount bs.boldTvlCap ++
+          encodeAmount bs.boldTotalLockedValue ++
           Encodable.encode (T := Nat) 2
         match Bridge.BridgeState.decode tampered with
         | .error _ => pure ()
@@ -356,12 +356,68 @@ def tests : List TestCase :=
           bridgeState_commit_extends_v1_3
         pure ()
     }
+  -- H-1. The published state root binds ALL SEVEN `ExtendedState`
+  --     sub-states.  Before H-1 it bound five: `epochBudgets` and
+  --     `budgetPolicy` were omitted, so two executions agreeing on
+  --     every committed sub-state but disagreeing on budget grants or
+  --     consumption produced the SAME root and a fault proof had
+  --     nothing to challenge.  These are value-level pins: mutate one
+  --     of the two formerly-unbound fields and the root must move.
+  , { name := "H-1: state root reflects epochBudgets"
+    , body := do
+        let base : Authority.ExtendedState := { base := genesisState
+                                              , nonces := Authority.NonceState.empty
+                                              , registry := Authority.KeyRegistry.empty }
+        -- Same state, except one actor holds a budget cell.
+        let withBudget : Authority.ExtendedState :=
+          { base with
+            epochBudgets := Authority.EpochBudgetState.empty.topUp 7 0 0 500 }
+        Test.assert
+          (commitExtendedState base != commitExtendedState withBudget)
+          "a differing epochBudgets ledger must change the state root"
+    }
+  , { name := "H-1: state root reflects budgetPolicy"
+    , body := do
+        let base : Authority.ExtendedState := { base := genesisState
+                                              , nonces := Authority.NonceState.empty
+                                              , registry := Authority.KeyRegistry.empty }
+        let otherPolicy : Authority.ExtendedState :=
+          { base with budgetPolicy := .bounded 10 1 100 }
+        Test.assert
+          (commitExtendedState base != commitExtendedState otherPolicy)
+          "a differing budgetPolicy must change the state root"
+    }
+  , { name := "H-1: commitExtendedState binds seven sub-states"
+    , body := do
+        -- The decomposition theorem now yields SEVEN sub-commit
+        -- equalities; this pins its arity so a future field added to
+        -- `ExtendedState` without extending the commitment is caught.
+        let _proof : ∀ (es₁ es₂ : Authority.ExtendedState),
+            Bridge.CollisionFreeOn
+              [extendedStatePreimage es₁, extendedStatePreimage es₂]
+              LegalKernel.Runtime.hashBytes →
+            commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂ →
+            commitState es₁.base = commitState es₂.base ∧
+            commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
+            commitKeyRegistry es₁.registry = commitKeyRegistry es₂.registry ∧
+            commitLocalPolicies es₁.localPolicies = commitLocalPolicies es₂.localPolicies ∧
+            commitBridgeState es₁.bridge = commitBridgeState es₂.bridge ∧
+            commitEpochBudgets es₁.epochBudgets = commitEpochBudgets es₂.epochBudgets ∧
+            commitBudgetPolicy es₁.budgetPolicy = commitBudgetPolicy es₂.budgetPolicy :=
+          commitExtendedStateConcat_subcommits_eq_under_collision_free
+        pure ()
+    }
   -- 26. Term-level API: commitBridgeState_reflects_ammDisabled
   --     (toList hypotheses, same rationale as test 25).
   , { name := "GP.11.10: commitBridgeState_reflects_ammDisabled API stable"
     , body := do
         let _proof : ∀ (bs₁ bs₂ : Bridge.BridgeState),
-            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            Bridge.CollisionFreeOn
+              [ ByteArray.mk (Encoding.Encodable.encode
+                  (T := Bridge.BridgeState) bs₁).toArray
+              , ByteArray.mk (Encoding.Encodable.encode
+                  (T := Bridge.BridgeState) bs₂).toArray ]
+              LegalKernel.Runtime.hashBytes →
             bs₁.consumed.toList = bs₂.consumed.toList →
             bs₁.pending.toList = bs₂.pending.toList →
             bs₁.nextWdId = bs₂.nextWdId →
@@ -375,14 +431,16 @@ def tests : List TestCase :=
           commitBridgeState_reflects_ammDisabled
         pure ()
     }
-  -- 27. Term-level API: commitExtendedState_reflects_ammDisabled —
+  -- 27. Term-level API: commitExtendedStateConcat_reflects_ammDisabled —
   --     the GP.11.10 TOP-LEVEL headline (the kill switch is reflected
   --     in the published state root itself, with no hypotheses on the
   --     non-bridge sub-states).
-  , { name := "GP.11.10: commitExtendedState_reflects_ammDisabled API stable"
+  , { name := "GP.11.10: commitExtendedStateConcat_reflects_ammDisabled API stable"
     , body := do
         let _proof : ∀ (es₁ es₂ : Authority.ExtendedState),
-            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            Bridge.CollisionFreeOn
+              (extendedStateCommitPreimages es₁ es₂)
+              LegalKernel.Runtime.hashBytes →
             es₁.bridge.consumed.toList = es₂.bridge.consumed.toList →
             es₁.bridge.pending.toList = es₂.bridge.pending.toList →
             es₁.bridge.nextWdId = es₂.bridge.nextWdId →
@@ -392,8 +450,8 @@ def tests : List TestCase :=
             es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap →
             es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue →
             es₁.bridge.ammDisabled ≠ es₂.bridge.ammDisabled →
-            commitExtendedState es₁ ≠ commitExtendedState es₂ :=
-          commitExtendedState_reflects_ammDisabled
+            commitExtendedStateConcat es₁ ≠ commitExtendedStateConcat es₂ :=
+          commitExtendedStateConcat_reflects_ammDisabled
         pure ()
     }
   -- 28. Value-level: flipping ONLY ammDisabled on a populated extended

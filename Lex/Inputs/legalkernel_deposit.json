@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 87, "column": 0},
+ {"position": {"line": 88, "column": 0},
   "file": "LegalKernel/Laws/Deposit.lean"},
  "signed_by": {"name": "bridge", "kind": "actorRef"},
  "schema_version": 1,
@@ -12,7 +12,8 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr": "fun _ => True\n  ",
+ "pre_expr":
+ "fun s =>\n                                LegalKernel.Laws.AmountBounded s r recipient amount\n  ",
  "params":
  [{"type": "ResourceId", "name": "r", "kind": "explicit"},
   {"type": "ActorId", "name": "recipient", "kind": "explicit"},

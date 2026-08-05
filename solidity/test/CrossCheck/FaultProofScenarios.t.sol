@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
 
@@ -28,8 +28,9 @@ contract FaultProofScenariosCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory outcome = vm.parseJsonString(raw, string.concat(base, ".expectedFinalOutcome"));
-            assertGt(bytes(outcome).length, 0, "non-empty outcome");
+            checkGt(bytes(outcome).length, 0, "non-empty outcome");
         }
     }
 

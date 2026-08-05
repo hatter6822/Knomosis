@@ -2,52 +2,13 @@
 //
 //  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
+import {SmtCellVerifierProxy} from "test/utils/SmtCellVerifierProxy.sol";
 
-/// @title SmtCellVerifierProxy
-/// @notice External wrapper exposing `SmtCellVerifier`'s internal
-///         library functions for tests.  All calldata-typed parameters
-///         need an `external` boundary so Foundry can supply
-///         `bytes memory` fixtures (which get re-wrapped as
-///         `bytes calldata` at the proxy boundary).
-contract SmtCellVerifierProxy {
-    function emptySubtreeHash(uint256 d) external pure returns (bytes32) {
-        return SmtCellVerifier.emptySubtreeHash(d);
-    }
-
-    function precomputeEmptySubtreeHashes() external pure returns (bytes32[256] memory) {
-        return SmtCellVerifier.precomputeEmptySubtreeHashes();
-    }
-
-    function readKeyBitMSBFirst(bytes calldata smtKey, uint256 d) external pure returns (uint256) {
-        return SmtCellVerifier.readKeyBitMSBFirst(smtKey, d);
-    }
-
-    function readBitmaskBit(bytes calldata bitmask, uint256 d) external pure returns (uint256) {
-        return SmtCellVerifier.readBitmaskBit(bitmask, d);
-    }
-
-    function recomputeRoot(
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bytes32) {
-        return SmtCellVerifier.recomputeRoot(smtKey, leafPreimage, proofData);
-    }
-
-    function verifyCellProof(
-        bytes32 root,
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bool) {
-        return SmtCellVerifier.verifyCellProof(root, smtKey, leafPreimage, proofData);
-    }
-}
 
 /// @title SmtCellVerifierTest
 /// @notice Workstream SC.2.e — Forge test suite for the
@@ -1198,6 +1159,148 @@ contract SmtCellVerifierTest is Test {
             }
         }
     }
+
+    /* ---------------------------------------------------------- */
+    /* The word-hoisted bit readers equal the byte-wise spec      */
+    /* ---------------------------------------------------------- */
+
+    /// @dev The byte-wise key-bit reader, verbatim as the walk read it
+    ///      before the word hoist, and as Lean's `BitsKey ByteArray`
+    ///      instance defines it: byte `d / 8`, bit `7 - (d % 8)`,
+    ///      MSB-first, and `0` for any index past the key's end.
+    ///
+    ///      This lives in the TEST rather than the library on purpose.
+    ///      The library now loads the key once and shifts, which is a
+    ///      different computation reaching the same answer; a
+    ///      differential test is only evidence if one side is the
+    ///      unoptimised statement of the convention.
+    function _refKeyBit(bytes memory k, uint256 d) private pure returns (uint256) {
+        uint256 byteIdx = d >> 3;
+        if (byteIdx >= k.length) return 0;
+        return (uint256(uint8(k[byteIdx])) >> (7 - (d & 7))) & 1;
+    }
+
+    /// @dev The byte-wise bitmask-bit reader: byte `d / 8`, bit
+    ///      `d % 8`, LSB-first within the byte — the key's mirror
+    ///      image, and the reason both conventions are worth pinning.
+    function _refBitmaskBit(bytes memory m, uint256 d) private pure returns (uint256) {
+        uint256 byteIdx = d >> 3;
+        if (byteIdx >= m.length) return 0;
+        return (uint256(uint8(m[byteIdx])) >> (d & 7)) & 1;
+    }
+
+    /// @dev The lengths that matter: empty, sub-byte, byte-aligned,
+    ///      one short of a word, exactly a word, and over-long.  The
+    ///      short cases are what the right-zero-padding exists for; the
+    ///      over-long case is what proves the hoist reads only the
+    ///      first word.
+    function _bitReaderCases() private pure returns (bytes[6] memory cases) {
+        cases[0] = hex"";
+        cases[1] = hex"A5";
+        cases[2] = hex"A5C3F00F0102FF80";
+        cases[3] =
+            hex"A5C3F00F0102FF80A5C3F00F0102FF80A5C3F00F0102FF80A5C3F00F0102FF";
+        cases[4] =
+            hex"A5C3F00F0102FF80A5C3F00F0102FF80A5C3F00F0102FF80A5C3F00F0102FF80";
+        cases[5] =
+            hex"A5C3F00F0102FF80A5C3F00F0102FF80A5C3F00F0102FF80A5C3F00F0102FF8011223344";
+    }
+
+    /// @notice **The hoisted key reader is the byte-wise one, on the
+    ///         walk's domain.**
+    ///
+    /// @dev    The walk bounds-checked and byte-indexed the key once
+    ///         per level, 256 times over a value that never changes.
+    ///         It now loads one word and shifts.  Agreement has to hold
+    ///         at every index the walk uses INCLUDING the ones past a
+    ///         short key's end, because those must read 0 — which the
+    ///         word form gets from right-zero-padding rather than from
+    ///         a length check.
+    ///
+    ///         Swept over `d < 256` because that is the hoist's whole
+    ///         claim; `test_word_readers_diverge_past_the_first_word`
+    ///         is the other half, pinning where it stops holding.
+    function test_keyWord_readers_agree_with_the_byte_wise_reference() public view {
+        bytes[6] memory cases = _bitReaderCases();
+        for (uint256 c = 0; c < cases.length; c++) {
+            uint256 w = SmtCellVerifier.keyWord(cases[c]);
+            for (uint256 d = 0; d < 256; d++) {
+                assertEq(
+                    SmtCellVerifier.keyBitFromWord(w, d),
+                    _refKeyBit(cases[c], d),
+                    string.concat(
+                        "key bit ", vm.toString(d), " case ", vm.toString(c))
+                );
+            }
+        }
+    }
+
+    /// @notice **The hoisted bitmask reader is the byte-wise one, on
+    ///         the walk's domain.**
+    function test_bitmaskWord_readers_agree_with_the_byte_wise_reference() public view {
+        bytes[6] memory cases = _bitReaderCases();
+        for (uint256 c = 0; c < cases.length; c++) {
+            uint256 w = smt.bitmaskWord(cases[c]);
+            for (uint256 d = 0; d < 256; d++) {
+                assertEq(
+                    SmtCellVerifier.bitmaskBitFromWord(w, d),
+                    _refBitmaskBit(cases[c], d),
+                    string.concat(
+                        "mask bit ", vm.toString(d), " case ", vm.toString(c))
+                );
+            }
+        }
+    }
+
+    /// @notice **Where the hoist stops being valid, asserted.**
+    ///
+    /// @dev    A key LONGER than 32 bytes has bits at index 256 and
+    ///         above, and the byte-wise reader returns them — Lean's
+    ///         `BitsKey ByteArray` instance reads any `i < 8 * size`,
+    ///         so that is the faithful behaviour and the general
+    ///         contract keeps it.  The word form cannot: it holds the
+    ///         first 32 bytes and nothing else.
+    ///
+    ///         This is exactly the divergence the sweep above caught
+    ///         when the hoist was first applied to
+    ///         `readKeyBitMSBFirst` itself.  Recording it as a test
+    ///         rather than a comment is what stops a future author
+    ///         "simplifying" the byte-wise reader into the word one and
+    ///         silently narrowing a Lean-faithful helper.
+    function test_word_readers_diverge_past_the_first_word() public view {
+        // Case 5 is the 36-byte input; byte 32 is 0x11.
+        bytes memory long_ = _bitReaderCases()[5];
+        assertEq(long_.length, 36, "the over-long case is 36 bytes");
+
+        // Bit 259 MSB-first is byte 32, bit 7-3=4 of 0x11 => 1.
+        assertEq(smt.readKeyBitMSBFirst(long_, 259), 1, "byte-wise reads past the word");
+        // Bit 256 LSB-first is byte 32, bit 0 of 0x11 => 1.
+        assertEq(smt.readBitmaskBit(long_, 256), 1, "byte-wise reads past the word");
+
+        // The walk never asks: its domain is 0..255, which is why the
+        // hoist is sound where it is used.
+        assertEq(SmtCellVerifier.SMT_DEPTH, 256, "the walk's domain");
+    }
+
+    /// @notice The two conventions genuinely differ — a negative
+    ///         control for the pair above.
+    ///
+    /// @dev    Both readers now share one word-loading path, so a
+    ///         transcription slip that gave the bitmask the key's
+    ///         `255 - d` offset would make both tests above pass
+    ///         against a reference that had drifted with them if the
+    ///         references were shared.  They are not shared, and this
+    ///         asserts the answers differ on a byte where they must.
+    function test_key_and_bitmask_bit_orders_are_mirror_images() public view {
+        bytes memory one = hex"01"; // 0000_0001
+        // MSB-first: bit 7 is the LSB, so only index 7 is set.
+        assertEq(smt.readKeyBitMSBFirst(one, 7), 1, "key: bit 7 is the LSB");
+        assertEq(smt.readKeyBitMSBFirst(one, 0), 0, "key: bit 0 is the MSB");
+        // LSB-first: bit 0 is the LSB, so only index 0 is set.
+        assertEq(smt.readBitmaskBit(one, 0), 1, "mask: bit 0 is the LSB");
+        assertEq(smt.readBitmaskBit(one, 7), 0, "mask: bit 7 is the MSB");
+    }
+
 }
 
 /// @title SmtCellVerifierGasTest

@@ -17,11 +17,27 @@ fs_permissions = [
     # docs/sepolia_deployment_runbook.md.
     { access = "read-write", path = "./deployments" },
     { access = "read", path = "./test/CrossCheck/fixtures" },
-    { access = "read", path = "./test/goldens" }
+    { access = "read", path = "./test/goldens" },
+    # `StepVMRootMulti.t.sol::test_every_declared_error_is_described` reads the
+    # compiled ABI back to prove its revert-name table covers every error the
+    # verifier path declares.  A table that fell behind would mislabel the
+    # failure it exists to explain, so completeness is checked rather than
+    # maintained by hand.
+    { access = "read", path = "./out" }
 ]
 gas_reports = ["*"]
 verbosity = 2
 fuzz = { runs = 256 }
+# The cross-stack byte-equivalence suites replay whole fixture corpora in a
+# single test body — `StepVM.t.sol`'s 278-entry happy-path comparison alone
+# needs well past the ~1.07e9 default and fails `EvmError: OutOfGas` under it.
+# That limit is not a safety property here (these are pure-view replays, not
+# deployed code paths), and leaving it at the default meant the only lane that
+# could run the corpus was `verify_keccak_crossstack.sh`, which passes
+# `--gas-limit` explicitly.  A bare `forge test` silently skipped the corpus
+# instead, so the shortfall never surfaced.  Set it here so the default lane
+# runs what it claims to run.
+gas_limit = 50000000000
 
 [profile.ci]
 fuzz = { runs = 1000 }

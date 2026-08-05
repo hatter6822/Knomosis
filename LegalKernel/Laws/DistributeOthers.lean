@@ -37,6 +37,8 @@ This module is **not** part of the trusted computing base.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
+import LegalKernel.Laws.BulkBound
 import Lex.DSL.Law
 
 open Std
@@ -47,27 +49,34 @@ namespace Laws
 
 /-! ## Definition (WU R.8) -/
 
-/-- Distribute `amount` units of `r` to every actor in `r`'s
-    `BalanceMap` *except* `excluded`.  Actors absent from the
-    `BalanceMap` (zero-balance actors) receive nothing — to reach them,
-    a deployment must mint to them first.
+/-- Distribute `amount` units of `r` to every actor holding a positive
+    balance of `r` *except* `excluded`.  Actors with no balance of `r`
+    receive nothing — to reach them, a deployment must mint to them
+    first — and so do actors whose `BalanceMap` entry is present but
+    zero, which is the same thing as far as the state-commitment root
+    is concerned (see `bulkRecipients`).
 
-    * Precondition: `amount > 0`.
-    * Effect: for each `(actor, balance)` in `bm := s.balances[r]?.getD
-      ∅` with `actor ≠ excluded`, replace the balance with `balance +
-      amount`.  Other resources, the excluded actor, and absent actors
-      are unchanged.
+    * Precondition: `amount > 0 ∧ BulkBounded s r excluded`.
+    * Effect: for each `(actor, balance)` in
+      `bulkRecipients s r excluded`, replace the balance with
+      `balance + amount`.  Other resources, the excluded actor, and
+      actors with no live balance are unchanged.
 
-    `decPre` is inferred: the precondition is a single decidable
-    arithmetic comparison over `Nat`. -/
+    The recipient list is `Laws.bulkRecipients`, not a local
+    re-derivation: `Action.stateWriteCells` declares the same list as
+    this action's cell footprint, and a fault proof is sound only if
+    the declaration and the fold cannot disagree.
+
+    `decPre` is inferred: the precondition is a decidable arithmetic
+    comparison conjoined with the decidable recipient bound. -/
 def distributeOthers
     (r : ResourceId) (excluded : ActorId) (amount : Amount) : Transition where
-  pre        := fun _ => amount > 0
+  pre        := fun s => amount > 0 ∧ BulkBounded s r excluded ∧
+                         AmountBoundedAll s r (bulkRecipients s r excluded)
+                           (fun _ => amount)
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
-    let bm := s.balances[r]?.getD ∅
-    let toReward := bm.toList.filter (fun kv => kv.1 != excluded)
-    toReward.foldl
+    (bulkRecipients s r excluded).foldl
       (fun s' kv => setBalance s' r kv.1 (getBalance s' r kv.1 + amount))
       s
 
@@ -82,12 +91,14 @@ lexlaw legalkernel_distributeOthers where
   lex_signed_by       deployer
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (excluded : ActorId) (amount : Amount)
-  lex_pre             := fun _ => amount > 0
+  lex_pre             := fun s => amount > 0 ∧
+                                LegalKernel.Laws.BulkBounded s r excluded ∧
+                                LegalKernel.Laws.AmountBoundedAll s r
+                                  (LegalKernel.Laws.bulkRecipients s r excluded)
+                                  (fun _ => amount)
   lex_impl            :=
     fun s =>
-      let bm := s.balances[r]?.getD ∅
-      let toReward := bm.toList.filter (fun kv => kv.1 != excluded)
-      toReward.foldl
+      (LegalKernel.Laws.bulkRecipients s r excluded).foldl
         (fun s' kv => setBalance s' r kv.1 (getBalance s' r kv.1 + amount))
         s
   -- Per plan §19.4 LX.29: `distributeOthers` claims `monotonic`
@@ -228,14 +239,8 @@ theorem distributeOthers_excluded_unchanged
   show getBalance ((distributeOthers r excluded amount).apply_impl s) r excluded
      = getBalance s r excluded
   simp only [distributeOthers]
-  apply foldl_setBalance_excluded_untouched
-  intro kv hkv
-  -- kv ∈ filter (·.1 != excluded) bm.toList, so kv.1 != excluded.
-  have := List.mem_filter.mp hkv
-  intro heq
-  have h_neq : (kv.1 != excluded) = true := this.2
-  rw [heq] at h_neq
-  simp at h_neq
+  exact foldl_setBalance_excluded_untouched _ s r excluded amount
+    (fun _ hkv => bulkRecipients_key_ne_excluded s r excluded hkv)
 
 /-! ## Arithmetic + monotonicity classification (WU R.9) -/
 
@@ -267,19 +272,16 @@ private theorem foldl_setBalance_totalSupply
 
 /-- The supply equation for `distributeOthers`: post-distribution
     supply at `r` equals pre-distribution supply plus `amount`
-    multiplied by the number of non-excluded actors in the resource's
-    `BalanceMap`.
+    multiplied by the number of recipients (`bulkRecipients`).
 
-    Equivalently: each non-excluded actor receives `+ amount`, and the
-    total supply growth is the per-actor amount times the number of
-    such actors. -/
+    Equivalently: each recipient receives `+ amount`, and the total
+    supply growth is the per-actor amount times the number of
+    recipients. -/
 theorem totalSupply_after_distributeOthers
     (r : ResourceId) (excluded : ActorId) (amount : Amount) (s : State)
     (hpre : (distributeOthers r excluded amount).pre s) :
     TotalSupply (step_impl s (distributeOthers r excluded amount)) r =
-    TotalSupply s r +
-    amount *
-      ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).length := by
+    TotalSupply s r + amount * (bulkRecipients s r excluded).length := by
   rw [step_impl]
   simp only [if_pos hpre]
   show TotalSupply ((distributeOthers r excluded amount).apply_impl s) r = _
@@ -312,10 +314,16 @@ instance distributeOthers_isMonotonic
 
     Proof structure: bound the filter length below by `1` via
     membership of `(non_excluded, amount)` in the filtered list, then
-    combine with the supply equation and conservation hypothesis. -/
+    combine with the supply equation and conservation hypothesis.
+
+    `hbound` is what the witness state needs to satisfy the C-3
+    ceiling conjunct: the fixture's single recipient starts at
+    `amount` and is credited `amount`, so the law is a no-op — and
+    the witness would not witness — unless the doubled value stays
+    under `Laws.maxAmount`. -/
 theorem distributeOthers_not_conservative
     (r : ResourceId) (excluded : ActorId) (amount : Amount)
-    (hpos : amount > 0) :
+    (hpos : amount > 0) (hbound : amount + amount < maxAmount) :
     ¬ IsConservative (distributeOthers r excluded amount) := by
   intro hcons
   -- Pick a non-excluded actor.  ActorId is UInt64 (modular arithmetic),
@@ -329,7 +337,52 @@ theorem distributeOthers_not_conservative
     · rw [if_pos h, h]; decide
     · rw [if_neg h]; exact Ne.symm h
   let s : State := setBalance genesisState r non_excluded amount
-  have hpre : (distributeOthers r excluded amount).pre s := hpos
+  -- The fixture state holds exactly one entry at `r`, so the
+  -- recipient bound is satisfied with room to spare.
+  have h_map : s.balances[r]?.getD ∅ = (∅ : BalanceMap).insert non_excluded amount := by
+    show (((∅ : Std.TreeMap ResourceId BalanceMap _).insert r
+            (((∅ : Std.TreeMap ResourceId BalanceMap _)[r]?.getD ∅).insert
+              non_excluded amount)))[r]?.getD ∅ = _
+    rw [RBMap.find?_insert_self]
+    simp only [Option.getD_some]
+    rfl
+  have hbound' : BulkBounded s r excluded := by
+    refine bulkBounded_of_map_length_le s r excluded ?_
+    rw [h_map]
+    -- One insert into the empty map, so `size ≤ 1 ≤ 256`.
+    simp only [Std.TreeMap.length_toList, maxRecipientsPerBulkAction]
+    exact Nat.le_trans (Std.TreeMap.size_insert_le) (by simp)
+  -- The fixture's one recipient holds `amount` and is credited
+  -- `amount`, so the ceiling conjunct is exactly `hbound`.
+  have hceil : AmountBoundedAll s r (bulkRecipients s r excluded)
+      (fun _ => amount) := by
+    intro kv _
+    show getBalance s r kv.1 + amount < maxAmount
+    -- The fixture's map holds exactly one entry, so any actor reads
+    -- either `amount` (the one entry) or `0` (absent).  Both are
+    -- `≤ amount`, so the identity of `kv.1` never has to be pinned
+    -- down — which is the whole difficulty here, since `bulkRecipients`
+    -- filters a `toList` rather than exposing the entry directly.
+    have h_some : s.balances[r]? =
+        some ((∅ : BalanceMap).insert non_excluded amount) := by
+      show (((∅ : Std.TreeMap ResourceId BalanceMap _).insert r
+              (((∅ : Std.TreeMap ResourceId BalanceMap _)[r]?.getD ∅).insert
+                non_excluded amount)))[r]? = _
+      rw [RBMap.find?_insert_self]
+      rfl
+    have hle : getBalance s r kv.1 ≤ amount := by
+      unfold getBalance
+      rw [h_some]
+      show ((∅ : BalanceMap).insert non_excluded amount)[kv.1]?.getD 0 ≤ amount
+      by_cases ha : kv.1 = non_excluded
+      · rw [ha, RBMap.find?_insert_self]
+        simp
+      · rw [RBMap.find?_insert_other _ _ _ _ (Ne.symm ha)]
+        simp
+    -- Chained rather than `omega`: `maxAmount` is a `def` for `256 ^ 32`,
+    -- which omega will not unfold, so it sees no constraints at all.
+    exact Nat.lt_of_le_of_lt (Nat.add_le_add_right hle amount) hbound
+  have hpre : (distributeOthers r excluded amount).pre s := ⟨hpos, hbound', hceil⟩
   have hcons_r := hcons.conserves r s hpre
   have hpost := totalSupply_after_distributeOthers r excluded amount s hpre
   -- Show the filtered-toList length is ≥ 1 by exhibiting an element.
@@ -345,16 +398,14 @@ theorem distributeOthers_not_conservative
     exact RBMap.find?_insert_self _ _ _
   have h_mem : (non_excluded, amount) ∈ (s.balances[r]?.getD ∅).toList :=
     Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_lookup
+  -- The witness holds `amount > 0`, so it survives the zero filter too.
   have h_in_filter :
-      (non_excluded, amount) ∈
-        (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded) := by
-    apply List.mem_filter.mpr
-    refine ⟨h_mem, ?_⟩
-    simp [h_neq]
-  have h_len_pos :
-      1 ≤ ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).length := by
+      (non_excluded, amount) ∈ bulkRecipients s r excluded :=
+    (mem_bulkRecipients_iff s r excluded _).mpr
+      ⟨h_mem, h_neq, Nat.pos_iff_ne_zero.mp hpos⟩
+  have h_len_pos : 1 ≤ (bulkRecipients s r excluded).length := by
     -- Membership ⇒ list is non-empty ⇒ length ≥ 1.
-    cases h_eq : (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded) with
+    cases h_eq : bulkRecipients s r excluded with
     | nil => rw [h_eq] at h_in_filter; cases h_in_filter
     | cons _ _ => simp
   -- Combine: hcons_r + hpost give amount * len = 0; h_len_pos + hpos
@@ -362,19 +413,15 @@ theorem distributeOthers_not_conservative
   rw [hcons_r] at hpost
   -- hpost : TotalSupply s r = TotalSupply s r + amount * len.
   -- From hpost: amount * len = 0 by Nat additive cancellation.
-  have h_zero :
-      amount *
-        ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).length = 0 := by
-    have h : TotalSupply s r + 0 = TotalSupply s r +
-        amount *
-          ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).length := by
+  have h_zero : amount * (bulkRecipients s r excluded).length = 0 := by
+    have h : TotalSupply s r + 0 =
+        TotalSupply s r + amount * (bulkRecipients s r excluded).length := by
       rw [Nat.add_zero]; exact hpost
     exact (Nat.add_left_cancel h).symm
   -- amount * len = 0 with len ≥ 1 forces amount = 0 (in Nat).
   have h_amt_zero : amount = 0 := by
     have h_amt_le :
-        amount ≤ amount *
-          ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).length :=
+        amount ≤ amount * (bulkRecipients s r excluded).length :=
       Nat.le_mul_of_pos_right amount h_len_pos
     rw [h_zero] at h_amt_le
     exact Nat.le_zero.mp h_amt_le

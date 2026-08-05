@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -33,12 +34,10 @@ import {
 ///         keyed attestor (so the end-to-end withdrawal tests can sign a
 ///         state root), and the role-distinctness / no-self-as-role
 ///         constructor guards.
-contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness {
+contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness, BoldTestSupport {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
 
-    /// @dev Local mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_BOLD`.
     uint64 private constant RESOURCE_BOLD = 1;
 
@@ -69,11 +68,6 @@ contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness {
 
     /// @notice Place a fresh conformant `MockBold` at the pinned BOLD
     ///         address (resets its storage).
-    function _etchBold() internal {
-        MockBold impl = new MockBold();
-        vm.etch(BOLD, address(impl).code);
-    }
-
     /// @notice Place a conformant `MockLiquityV2TroveManager` at each of
     ///         the three pinned Liquity TroveManager addresses.  Default
     ///         `shutdownTime = 0` on all three (healthy branches).
@@ -154,12 +148,6 @@ contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness {
     }
 
     /// @notice Mint `amount` BOLD to `user` and approve `bridge` for it.
-    function _mintApprove(KnomosisBridge bridge, address user, uint256 amount) internal {
-        MockBold(BOLD).mint(user, amount);
-        vm.prank(user);
-        MockBold(BOLD).approve(address(bridge), amount);
-    }
-
     /// @notice Deposit `amount` BOLD at `feeBps` as `user`.
     function _depositBold(KnomosisBridge bridge, address user, uint256 amount, uint16 feeBps)
         internal
@@ -1246,7 +1234,7 @@ contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness {
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
         bridge.submitStateRoot(root, logIdx, _signStateRoot(bridge, root, logIdx));
-        vm.roll(block.number + 100);
+        vm.roll(vm.getBlockNumber() + 100);
         bytes memory proofBlob = _encodeWithdrawalProof(leaf, leafIdx, siblings);
         bridge.withdrawWithProof(logIdx, proofBlob, leaf);
     }
@@ -1285,11 +1273,10 @@ contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness {
 ///         the next CREATE from this probe and pass it as the role,
 ///         forcing the constructor's `args.boldCircuitBreaker ==
 ///         address(this)` check to fire.
-contract BridgeSelfRoleProbe is Test {
+contract BridgeSelfRoleProbe is Test, BoldTestSupport {
     uint256 private constant ATTESTOR_PK = 0xA77E5709;
     address private constant BREAKER = address(0xB12E6B6E);
     address private constant ADMIN = address(0xAD814);
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
 
     /// @notice Deploy a bridge passing the bridge's own (predicted)
     ///         address as the `boldCircuitBreaker`.  Triggers
@@ -1355,12 +1342,11 @@ contract BridgeSelfRoleProbe is Test {
 ///         withdrawals (those require the full state-root + finalisation
 ///         flow, which the unit-level `_finaliseAndRedeem` covers
 ///         deterministically).
-contract BoldHandler {
+contract BoldHandler is BoldTestSupport {
     /// @dev `vm` accessor (forge cheatcodes); inherited contracts can't
     ///      use `Test`'s `vm` directly without inheriting Test.
     Vm internal constant VM_CHEATS = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
 
     KnomosisBridge public immutable bridge;
     address public immutable alice;
@@ -1412,10 +1398,6 @@ contract BoldHandler {
         try bridge.setBoldTvlCap(newCap) {} catch {}
     }
 
-    function _bound(uint256 x, uint256 lo, uint256 hi) internal pure returns (uint256) {
-        if (hi <= lo) return lo;
-        return lo + (x % (hi - lo + 1));
-    }
 }
 
 /// @title BoldCircuitBreakerInvariantTest
@@ -1424,8 +1406,7 @@ contract BoldHandler {
 ///         across ARBITRARY sequences of (deposit, close, open,
 ///         setCap) operations — stronger than the per-call assertions
 ///         in the stateless fuzz tests above.
-contract BoldCircuitBreakerInvariantTest is Test {
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+contract BoldCircuitBreakerInvariantTest is Test, BoldTestSupport {
     address private constant LIQUITY_TM_ETH = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
     address private constant LIQUITY_TM_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
     address private constant LIQUITY_TM_RETH = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e;

@@ -181,6 +181,25 @@ const LINGER_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
 /// not pin the worker thread.
 const LINGER_DRAIN_MAX_BYTES: usize = 4 * 1024 * 1024;
 
+/// Cumulative wallclock cap on [`lingering_drain`].
+///
+/// The byte cap and the per-read timeout above do NOT bound the drain
+/// together: a peer that sends one byte per read, each arriving inside
+/// [`LINGER_DRAIN_TIMEOUT`], makes every read "productive", so the byte cap is
+/// approached one byte at a time and the loop can run for
+/// `LINGER_DRAIN_MAX_BYTES` reads — on the order of weeks — pinning a
+/// connection thread and its `--max-connections` slot the whole time.  This is
+/// the same slow-drip shape [`DeadlineStream`] exists to bound on the request
+/// path; the drain needs its own bound because it runs after the handler, on a
+/// raw socket, outside that wrapper.
+const LINGER_DRAIN_BUDGET: Duration = Duration::from_secs(5);
+
+/// Floor for the shrinking per-read timeout inside [`lingering_drain`].
+/// `set_read_timeout(Some(ZERO))` means *no timeout* on Unix, so a naive
+/// "remaining budget" cap would turn the last read into a blocking one at
+/// exactly the wrong moment.
+const LINGER_DRAIN_MIN_TIMEOUT: Duration = Duration::from_millis(1);
+
 /// A `Read + Write` wrapper that bounds **reads** by a per-request wallclock
 /// deadline — the slow-loris bound the per-read socket timeout alone cannot
 /// provide (a drip just under each per-read timeout keeps every read
@@ -314,18 +333,27 @@ impl<S: Write> Write for DeadlineStream<S> {
 /// semantics) or when there is no unread body to drain.
 fn lingering_drain(socket: Option<&TcpStream>) {
     let Some(sock) = socket else { return };
-    // A short per-read timeout bounds the wait when the peer has stopped
-    // sending (it is reading our response, not writing more).  We are closing
-    // right after, so we need not restore the prior timeout.
-    if sock.set_read_timeout(Some(LINGER_DRAIN_TIMEOUT)).is_err() {
-        return;
-    }
     // `&TcpStream` implements `Read`, so a shared handle suffices (the `reader`
     // owns the other clone; we are done reading through it).
     let mut s: &TcpStream = sock;
     let mut scratch = [0u8; 16 * 1024];
     let mut drained = 0usize;
+    let deadline = Instant::now() + LINGER_DRAIN_BUDGET;
     while drained < LINGER_DRAIN_MAX_BYTES {
+        // Cap each read at the SMALLER of the per-read timeout and the budget
+        // still remaining, so the cumulative drain is bounded by the budget
+        // rather than by (byte cap x per-read timeout).  We are closing right
+        // after, so we need not restore the prior timeout.
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        let per_read = remaining
+            .min(LINGER_DRAIN_TIMEOUT)
+            .max(LINGER_DRAIN_MIN_TIMEOUT);
+        if sock.set_read_timeout(Some(per_read)).is_err() {
+            break;
+        }
         match s.read(&mut scratch) {
             // `Ok(0)`: peer half-closed (it read our response and closed) — a
             // graceful FIN exchange, no RST owed.  `Err(_)`: the per-read
@@ -479,6 +507,13 @@ fn serve_parsed<T: Read + Write>(
     // A request denied (or routed to SSE) before its body was read, OR whose
     // body read failed mid-stream, leaves the connection unsafe to keep alive.
     let must_close = body_failed || (!body_read && content_length > 0);
+    // Computed ONCE, above the match, so no response arm can reach for the raw
+    // `keep_alive` and forget `must_close`.  The SSE-HEAD arm did exactly that:
+    // its comment reasoned about the GET (which carries no request body), but
+    // the arm handles a HEAD, and a HEAD arriving with a declared body left
+    // those bytes unread in the socket for the next keep-alive request to parse
+    // as a request line — request smuggling.
+    let keep = keep_alive && !must_close;
 
     match handled {
         Handled::Respond(outcome) => {
@@ -489,7 +524,6 @@ fn serve_parsed<T: Read + Write>(
                 start.elapsed(),
                 request_id,
             );
-            let keep = keep_alive && !must_close;
             if write_response(reader.get_mut(), &outcome, keep, is_head).is_err() {
                 return ConnControl::Close;
             }
@@ -510,13 +544,18 @@ fn serve_parsed<T: Read + Write>(
         Handled::Stream { cors_headers, .. } if is_head => {
             log_request(&head.method, &head.path, 200, start.elapsed(), request_id);
             let stream_head = stream_head_outcome(&cors_headers, request_id);
-            // A GET stream carries no request body, so keep-alive is unaffected.
-            if write_response(reader.get_mut(), &stream_head, keep_alive, true).is_err() {
+            if write_response(reader.get_mut(), &stream_head, keep, true).is_err() {
                 return ConnControl::Close;
             }
-            if keep_alive {
+            if keep {
                 ConnControl::KeepAlive
             } else {
+                // Same lingering-close discipline as the `Respond` arm: a HEAD
+                // that declared a body we never read must have it drained
+                // before the socket closes, or the RST truncates our response.
+                if must_close && content_length > 0 {
+                    lingering_drain(socket);
+                }
                 ConnControl::Close
             }
         }
@@ -753,6 +792,15 @@ enum Version {
     Http11,
 }
 
+/// Methods for which no gateway route reads a request body.
+///
+/// `POST` and `PUT` are excluded (the submit path reads their bodies);
+/// everything else the router accepts is bodiless, so a `Content-Length` on
+/// one is a framing error rather than something to drain.
+fn method_has_no_body(method: &str) -> bool {
+    matches!(method, "GET" | "HEAD" | "OPTIONS" | "DELETE" | "TRACE")
+}
+
 /// Read one strict HTTP/1.1 request **head**: the request line, the header
 /// section, and the validated framing decision (`Content-Length` bounded by
 /// `max_body`).  The body is read separately by the caller (so an
@@ -790,6 +838,20 @@ fn read_head<R: BufRead>(reader: &mut R, max_body: usize) -> Result<RequestHead,
             413,
             "Payload Too Large",
             format!("request body exceeds the {max_body}-byte limit"),
+        ));
+    }
+    // A declared body on a method that has none is rejected at the framing
+    // layer rather than routed and then relied upon to be drained.  No route
+    // reads a body for these methods, so such a body would sit unread in the
+    // socket and the next keep-alive request would parse it as a request line —
+    // the smuggling primitive.  `must_close` catches the same shape one layer
+    // down; this refuses it outright, which is the guarantee that does not
+    // depend on every response arm remembering to consult `must_close`.
+    if content_length > 0 && method_has_no_body(&method) {
+        return Err(reject(
+            400,
+            "Bad Request",
+            format!("{method} requests must not carry a body"),
         ));
     }
 
@@ -930,6 +992,15 @@ fn insert_header(headers: &mut HeaderSet, name: &str, value: &str) -> Result<(),
         }
         if value.contains(',') {
             return Err(reject(400, "Bad Request", "multiple Content-Length values"));
+        }
+        // RFC 7230 §3.3.2: `Content-Length = 1*DIGIT`.  A sign is NOT a
+        // digit, but `str::parse::<u64>` accepts a leading `+` (so a bare
+        // `parse` would read `+5` as 5).  An edge proxy that rejects — or
+        // normalises — such a value while this reader silently accepts it
+        // is exactly the framing disagreement that enables request
+        // smuggling, so validate the digits explicitly before parsing.
+        if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(reject(400, "Bad Request", "malformed Content-Length"));
         }
         let n = value
             .parse::<u64>()
@@ -1317,6 +1388,38 @@ mod tests {
         ));
     }
 
+    /// RFC 7230 §3.3.2 restricts `Content-Length` to `1*DIGIT`.  A signed
+    /// or otherwise non-digit value must be rejected rather than coerced:
+    /// `str::parse::<u64>` accepts a leading `+`, so a bare `parse` would
+    /// read `+5` as 5 and frame the body differently from an edge proxy
+    /// that rejects the same header — a request-smuggling desync.
+    /// Note: surrounding optional whitespace is NOT a violation — RFC 7230
+    /// §3.2.4 strips OWS from the field value, and `read_headers` trims
+    /// before this check, so `Content-Length:  5` is a valid 5.
+    #[test]
+    fn rejects_non_digit_content_length() {
+        for value in ["+5", "-5", "5.0", "0x5", "5e0", ""] {
+            let raw = format!("POST /v1/actions HTTP/1.1\r\nContent-Length: {value}\r\n\r\nhello");
+            assert!(
+                matches!(
+                    parse(raw.as_bytes(), 1024),
+                    Err(RequestError::Reject { status: 400, .. })
+                ),
+                "Content-Length: {value:?} must be rejected 400"
+            );
+        }
+    }
+
+    /// Leading zeros ARE legal `1*DIGIT` (RFC 7230 §3.3.2), so `007` must
+    /// still frame a 7-byte body rather than being rejected alongside the
+    /// signed forms above.
+    #[test]
+    fn accepts_zero_padded_content_length() {
+        let raw = b"POST /v1/actions HTTP/1.1\r\nContent-Length: 007\r\n\r\n1234567";
+        let parsed = parse(raw, 1024).expect("zero-padded Content-Length is valid");
+        assert_eq!(parsed.body, b"1234567");
+    }
+
     #[test]
     fn rejects_oversized_body() {
         let raw = b"POST /v1/actions HTTP/1.1\r\nContent-Length: 100\r\n\r\n";
@@ -1343,6 +1446,64 @@ mod tests {
             parse(absolute, 1024),
             Err(RequestError::Reject { status: 400, .. })
         ));
+    }
+
+    /// A body declared on a bodiless method is a framing error, not something
+    /// to route and then drain.
+    ///
+    /// No gateway route reads a body for these methods, so those bytes would
+    /// sit unread in the socket and the next keep-alive request would parse
+    /// them as a request line — request smuggling.  Rejecting at the framing
+    /// layer is the guarantee that does not depend on every response arm
+    /// remembering to consult `must_close`.
+    #[test]
+    fn body_on_a_bodiless_method_is_rejected() {
+        for method in ["GET", "HEAD", "OPTIONS", "DELETE", "TRACE"] {
+            let raw = format!(
+                "{method} /v1/events HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhello"
+            );
+            match head(raw.as_bytes(), 1024) {
+                Err(RequestError::Reject { status: 400, .. }) => {}
+                Err(other) => panic!("{method} with a body: wrong rejection {other:?}"),
+                Ok(_) => panic!("{method} with a body must be rejected 400, was accepted"),
+            }
+        }
+        // A zero-length declaration is fine (some clients always send it).
+        let zero = b"GET /v1/events HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n";
+        assert!(head(zero, 1024).is_ok());
+        // POST still carries one — the submit path reads it.
+        let post = b"POST /v1/actions HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhello";
+        assert_eq!(head(post, 1024).unwrap().content_length, 5);
+    }
+
+    /// The lingering drain is bounded in cumulative wallclock time, not only
+    /// in bytes and per-read time.
+    ///
+    /// A peer sending one byte per read — each arriving inside the per-read
+    /// timeout, so every read is "productive" — approaches the 4 MiB byte cap
+    /// one byte at a time.  With only the byte cap and the per-read timeout,
+    /// that is `LINGER_DRAIN_MAX_BYTES` reads of up to a second each: weeks of
+    /// a pinned connection thread and a held `--max-connections` slot.  The
+    /// budget is what makes the two caps bound the drain together.
+    #[test]
+    fn linger_drain_budget_bounds_the_byte_cap() {
+        use super::{
+            LINGER_DRAIN_BUDGET, LINGER_DRAIN_MAX_BYTES, LINGER_DRAIN_MIN_TIMEOUT,
+            LINGER_DRAIN_TIMEOUT,
+        };
+        // The budget must actually bind: without it the worst case is
+        // (byte cap x per-read timeout), which it must be far below.
+        let unbounded_worst_case =
+            LINGER_DRAIN_TIMEOUT.saturating_mul(u32::try_from(LINGER_DRAIN_MAX_BYTES).unwrap());
+        assert!(
+            LINGER_DRAIN_BUDGET < unbounded_worst_case,
+            "the budget must bound the byte-cap-times-per-read-timeout worst case"
+        );
+        // `set_read_timeout(Some(ZERO))` means *no timeout* on Unix, so the
+        // shrinking per-read cap must never reach zero.
+        assert!(!LINGER_DRAIN_MIN_TIMEOUT.is_zero());
+        assert!(LINGER_DRAIN_MIN_TIMEOUT <= LINGER_DRAIN_TIMEOUT);
+        assert!(LINGER_DRAIN_MIN_TIMEOUT <= LINGER_DRAIN_BUDGET);
     }
 
     #[test]

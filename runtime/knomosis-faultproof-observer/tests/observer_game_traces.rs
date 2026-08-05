@@ -174,10 +174,16 @@ struct FixtureClaim {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 enum FixtureTransition {
-    SubmitMidpoint { midpoint: FixtureClaim },
+    // Only the COMMIT is on the wire: the index is derived by
+    // `apply_transition` from the range, on both sides, mirroring
+    // `KnomosisFaultProofGame.submitMidpoint`'s on-chain `mpIdx`.
+    SubmitMidpoint { midpoint_commit: String },
     RespondAgree,
     RespondDisagree,
-    TerminateOnSingleStep { claimed_post_commit: String },
+    // No payload: the contract compares the step VM's output against
+    // the on-chain `g.high.commit`, so there is no caller-supplied
+    // claim to carry.
+    TerminateOnSingleStep,
     TimeoutLoss,
 }
 
@@ -303,16 +309,20 @@ impl FixtureGameState {
 impl FixtureTransition {
     fn decode(&self) -> Result<GameTransition, String> {
         match self {
-            FixtureTransition::SubmitMidpoint { midpoint } => {
-                Ok(GameTransition::SubmitMidpoint(midpoint.decode()?))
-            }
+            FixtureTransition::SubmitMidpoint { midpoint_commit } => Ok(
+                GameTransition::SubmitMidpoint(hex_to_bytes32(midpoint_commit)?),
+            ),
             FixtureTransition::RespondAgree => Ok(GameTransition::RespondAgree),
             FixtureTransition::RespondDisagree => Ok(GameTransition::RespondDisagree),
-            FixtureTransition::TerminateOnSingleStep {
-                claimed_post_commit,
-            } => Ok(GameTransition::TerminateOnSingleStep {
-                claimed_post_commit: hex_to_bytes32(claimed_post_commit)?,
-            }),
+            FixtureTransition::TerminateOnSingleStep => {
+                Ok(GameTransition::TerminateOnSingleStep {
+                    // Local-only field; the corpus never carries a
+                    // terminate outcome (see the Lean-side
+                    // `transitionJson` docstring), so any value is
+                    // unobservable here.
+                    expected_post_commit: [0u8; 32],
+                })
+            }
             FixtureTransition::TimeoutLoss => Ok(GameTransition::TimeoutLoss),
         }
     }

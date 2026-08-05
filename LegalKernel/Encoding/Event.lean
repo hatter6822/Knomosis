@@ -20,7 +20,7 @@ it; `knomosis-event-subscribe::event_type` peeks its leading tag)
 but had no Lean-side authority.  This module IS that authority.
 
 **Layout.**  Each `Event` is encoded as a constructor-tag uint
-(matching `Event.tag`, frozen indices 0..20) followed by the
+(matching `Event.tag`, frozen indices 0..22) followed by the
 constructor's fields in declaration order, mirroring
 `Encoding.Action.encode`:
 
@@ -81,8 +81,8 @@ def Event.encode : Event → Stream
       Encodable.encode (T := Nat) 0 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) a.toNat ++
-      Encodable.encode (T := Nat) oldV ++
-      Encodable.encode (T := Nat) newV
+      encodeAmount oldV ++
+      encodeAmount newV
   | .nonceAdvanced a oldN newN =>
       Encodable.encode (T := Nat) 1 ++
       Encodable.encode (T := Nat) a.toNat ++
@@ -113,19 +113,19 @@ def Event.encode : Event → Stream
       Encodable.encode (T := Nat) 8 ++
       Encodable.encode (T := Nat) resource.toNat ++
       Encodable.encode (T := Nat) recipient.toNat ++
-      Encodable.encode (T := Nat) amount
+      encodeAmount amount
   | .withdrawalRequested resource sender amount recipientL1 withdrawalId =>
       Encodable.encode (T := Nat) 9 ++
       Encodable.encode (T := Nat) resource.toNat ++
       Encodable.encode (T := Nat) sender.toNat ++
-      Encodable.encode (T := Nat) amount ++
+      encodeAmount amount ++
       Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes recipientL1) ++
       Encodable.encode (T := Nat) withdrawalId
   | .depositCredited resource recipient amount depositId =>
       Encodable.encode (T := Nat) 10 ++
       Encodable.encode (T := Nat) resource.toNat ++
       Encodable.encode (T := Nat) recipient.toNat ++
-      Encodable.encode (T := Nat) amount ++
+      encodeAmount amount ++
       Encodable.encode (T := Nat) depositId
   | .localPolicyDeclared actor policy =>
       -- The `policy` field is a CBE BYTE STRING wrapping the
@@ -161,34 +161,34 @@ def Event.encode : Event → Stream
       Encodable.encode (T := Nat) gameId ++
       Encodable.encode (T := Nat) winner.toNat ++
       Encodable.encode (T := Nat) loser.toNat ++
-      Encodable.encode (T := Nat) payout
+      encodeAmount payout
   | .depositWithFeeCredited resource recipient poolActor userAmount poolAmount budgetGrant depositId =>
       Encodable.encode (T := Nat) 16 ++
       Encodable.encode (T := Nat) resource.toNat ++
       Encodable.encode (T := Nat) recipient.toNat ++
       Encodable.encode (T := Nat) poolActor.toNat ++
-      Encodable.encode (T := Nat) userAmount ++
-      Encodable.encode (T := Nat) poolAmount ++
+      encodeAmount userAmount ++
+      encodeAmount poolAmount ++
       Encodable.encode (T := Nat) budgetGrant ++
       Encodable.encode (T := Nat) depositId
   | .actionBudgetTopUp signer gasResource gasAmount budgetIncrement poolActor =>
       Encodable.encode (T := Nat) 17 ++
       Encodable.encode (T := Nat) signer.toNat ++
       Encodable.encode (T := Nat) gasResource.toNat ++
-      Encodable.encode (T := Nat) gasAmount ++
+      encodeAmount gasAmount ++
       Encodable.encode (T := Nat) budgetIncrement ++
       Encodable.encode (T := Nat) poolActor.toNat
   | .gasPoolClaim resource sequencer amount =>
       Encodable.encode (T := Nat) 18 ++
       Encodable.encode (T := Nat) resource.toNat ++
       Encodable.encode (T := Nat) sequencer.toNat ++
-      Encodable.encode (T := Nat) amount
+      encodeAmount amount
   | .delegatedActionBudgetTopUp recipient signer gasResource gasAmount budgetIncrement poolActor =>
       Encodable.encode (T := Nat) 19 ++
       Encodable.encode (T := Nat) recipient.toNat ++
       Encodable.encode (T := Nat) signer.toNat ++
       Encodable.encode (T := Nat) gasResource.toNat ++
-      Encodable.encode (T := Nat) gasAmount ++
+      encodeAmount gasAmount ++
       Encodable.encode (T := Nat) budgetIncrement ++
       Encodable.encode (T := Nat) poolActor.toNat
   | .budgetConsumed actor amount =>
@@ -199,13 +199,13 @@ def Event.encode : Event → Stream
       Encodable.encode (T := Nat) 21 ++
       Encodable.encode (T := Nat) fromResource.toNat ++
       Encodable.encode (T := Nat) toResource.toNat ++
-      Encodable.encode (T := Nat) amountIn ++
-      Encodable.encode (T := Nat) amountOut ++
+      encodeAmount amountIn ++
+      encodeAmount amountOut ++
       Encodable.encode (T := Nat) ammReserveActor.toNat
   | .ammReservesReclaimed resource amount reserveActor poolActor =>
       Encodable.encode (T := Nat) 22 ++
       Encodable.encode (T := Nat) resource.toNat ++
-      Encodable.encode (T := Nat) amount ++
+      encodeAmount amount ++
       Encodable.encode (T := Nat) reserveActor.toNat ++
       Encodable.encode (T := Nat) poolActor.toNat
 
@@ -232,9 +232,9 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (a, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (oldV, s₄) =>
-          match Action.readNatField s₄ with
+          match Action.readAmountField s₄ with
           | .ok (newV, s₅) => .ok (.balanceChanged r a oldV newV, s₅)
           | .error e => .error e
         | .error e => .error e
@@ -288,7 +288,7 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
     | .ok (resource, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (recipient, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) => .ok (.rewardIssued resource recipient amount, s₄)
         | .error e => .error e
       | .error e => .error e
@@ -298,7 +298,7 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
     | .ok (resource, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (sender, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) =>
           match Encodable.decode (T := ByteArray) s₄ with
           | .ok (rcpBytes, s₅) =>
@@ -320,7 +320,7 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
     | .ok (resource, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (recipient, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) =>
           match Action.readNatField s₄ with
           | .ok (depositId, s₅) => .ok (.depositCredited resource recipient amount depositId, s₅)
@@ -387,7 +387,7 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
       | .ok (winner, s₃) =>
         match Action.readUInt64Field s₃ with
         | .ok (loser, s₄) =>
-          match Action.readNatField s₄ with
+          match Action.readAmountField s₄ with
           | .ok (payout, s₅) => .ok (.faultProofGameSettled gameId winner loser payout, s₅)
           | .error e => .error e
         | .error e => .error e
@@ -400,9 +400,9 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
       | .ok (recipient, s₃) =>
         match Action.readUInt64Field s₃ with
         | .ok (poolActor, s₄) =>
-          match Action.readNatField s₄ with
+          match Action.readAmountField s₄ with
           | .ok (userAmount, s₅) =>
-            match Action.readNatField s₅ with
+            match Action.readAmountField s₅ with
             | .ok (poolAmount, s₆) =>
               match Action.readNatField s₆ with
               | .ok (budgetGrant, s₇) =>
@@ -422,7 +422,7 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
     | .ok (signer, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (gasResource, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (gasAmount, s₄) =>
           match Action.readNatField s₄ with
           | .ok (budgetIncrement, s₅) =>
@@ -439,7 +439,7 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
     | .ok (resource, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (sequencer, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) => .ok (.gasPoolClaim resource sequencer amount, s₄)
         | .error e => .error e
       | .error e => .error e
@@ -451,7 +451,7 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
       | .ok (signer, s₃) =>
         match Action.readUInt64Field s₃ with
         | .ok (gasResource, s₄) =>
-          match Action.readNatField s₄ with
+          match Action.readAmountField s₄ with
           | .ok (gasAmount, s₅) =>
             match Action.readNatField s₅ with
             | .ok (budgetIncrement, s₆) =>
@@ -477,9 +477,9 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
     | .ok (fromResource, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (toResource, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amountIn, s₄) =>
-          match Action.readNatField s₄ with
+          match Action.readAmountField s₄ with
           | .ok (amountOut, s₅) =>
             match Action.readUInt64Field s₅ with
             | .ok (ammReserveActor, s₆) =>
@@ -493,7 +493,7 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
   | .ok (22, s₁) =>
     match Action.readUInt64Field s₁ with
     | .ok (resource, s₂) =>
-      match Action.readNatField s₂ with
+      match Action.readAmountField s₂ with
       | .ok (amount, s₃) =>
         match Action.readUInt64Field s₃ with
         | .ok (reserveActor, s₄) =>

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 /// @title SmtVerifier
 /// @notice Solidity port of `LegalKernel.Bridge.WithdrawalRoot.verifyProof`
@@ -113,11 +113,21 @@ library SmtVerifier {
                 if (sibling.length != 32) {
                     revert SmtBadSiblingSize(arrayIndex, sibling.length);
                 }
+                // The size check above makes `sibling` exactly one
+                // word, so the pair is hashed through the EVM scratch
+                // space rather than by allocating and copying a fresh
+                // 64-byte `bytes` per level.  Byte-identical: both
+                // forms hash the same 64-byte concatenation.
+                bytes32 sib;
+                /// @solidity memory-safe-assembly
+                assembly {
+                    sib := mload(add(sibling, 32))
+                }
                 uint256 bit = (idx >> i) & 1;
                 if (bit == 1) {
-                    current = keccak256(abi.encodePacked(sibling, current));
+                    current = _hashPair(sib, current);
                 } else {
-                    current = keccak256(abi.encodePacked(current, sibling));
+                    current = _hashPair(current, sib);
                 }
             }
         }
@@ -147,15 +157,18 @@ library SmtVerifier {
         h = bytes32(0);
         unchecked {
             for (uint256 i = 0; i < level; ++i) {
-                h = keccak256(abi.encodePacked(h, h));
+                h = _hashPair(h, h);
             }
         }
     }
 
     /// @notice The top-level empty-subtree hash for the standard
-    ///         `SMT_HEIGHT = 64` tree.  Provided as a convenience
-    ///         for tests; production code should snapshot this
-    ///         result in an `immutable` field if used repeatedly.
+    ///         `SMT_HEIGHT = 64` tree.
+    ///
+    /// @dev    `SMT_HEIGHT` sequential hashes.  A caller needing it
+    ///         repeatedly in one transaction should hoist it into a
+    ///         local, the same way `emptyProofSiblings` does — it is
+    ///         a constant of the scheme, not a function of any input.
     function defaultHashTop() internal pure returns (bytes32) {
         return emptyHashAtLevel(SMT_HEIGHT);
     }
@@ -169,13 +182,42 @@ library SmtVerifier {
     ///
     ///         Used by tests and by the canonical non-membership
     ///         proof shape.
+    ///
+    /// @dev    Built in ONE ascending pass.  Calling
+    ///         `emptyHashAtLevel(level)` per entry — as this did — is
+    ///         quadratic: that function restarts the recurrence from
+    ///         `bytes32(0)` every time, so producing a 64-entry chain
+    ///         cost `64·63/2 = 2016` hashes to compute 63 distinct
+    ///         values.  The chain is a prefix of itself, so one
+    ///         accumulator suffices; the entries are written
+    ///         back-to-front because `siblings` is root-adjacent-first
+    ///         while the recurrence runs leaf-upward.
     function emptyProofSiblings() internal pure returns (bytes[] memory siblings) {
         siblings = new bytes[](SMT_HEIGHT);
-        for (uint256 i = 0; i < SMT_HEIGHT; ++i) {
-            // siblings[i] sits at level (SMT_HEIGHT - 1 - i) of
-            // the SMT (root-to-leaf order).
-            uint256 level = SMT_HEIGHT - 1 - i;
-            siblings[i] = abi.encodePacked(emptyHashAtLevel(level));
+        bytes32 h = bytes32(0); // level 0: the `emptyLeafHash` sentinel.
+        unchecked {
+            for (uint256 level = 0; level < SMT_HEIGHT; ++level) {
+                // siblings[i] sits at level (SMT_HEIGHT - 1 - i), so
+                // level `level` lands at index `SMT_HEIGHT - 1 - level`.
+                siblings[SMT_HEIGHT - 1 - level] = abi.encodePacked(h);
+                h = _hashPair(h, h);
+            }
         }
     }
+
+    /// @notice `keccak256(a ‖ b)` through the EVM scratch space.
+    ///
+    /// @dev    Identical output to `keccak256(abi.encodePacked(a, b))`
+    ///         and identical to `SmtCellVerifier._hashPair`, without
+    ///         allocating a 64-byte `bytes` per call — which matters
+    ///         because every caller here is a loop.
+    function _hashPair(bytes32 a, bytes32 b) private pure returns (bytes32 value) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            mstore(0x00, a)
+            mstore(0x20, b)
+            value := keccak256(0x00, 0x40)
+        }
+    }
+
 }

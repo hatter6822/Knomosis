@@ -161,14 +161,21 @@ def transferVsMintBytes : TestCase := {
     else pure ()
 }
 
-/-- Spot-check: encoded byte length for transfer (5 nat fields × 9 bytes
-    each = 45 bytes). -/
+/-- Spot-check: encoded byte length for transfer.  Four 9-byte uint
+    heads (tag, resource, sender, receiver) plus ONE 33-byte amount
+    head = 69 bytes.  The amount rides `cbeTagAmount` (1 tag byte + 32
+    LE body bytes) because a value-carrying field both passes `2^64`
+    (a wei balance does at ~18.45 ETH) and *accumulates* past any
+    per-input gate; identifiers stay on the 8-byte head. -/
 def transferByteLength : TestCase := {
   name := "Action.transfer encoded length"
   body := do
     let bytes := Encodable.encode (T := Action) (.transfer 1 2 3 4)
-    -- 5 Nat fields × 9 bytes each = 45 bytes total.
-    assertEq (45 : Nat) bytes.length "encoded length"
+    -- 4 × 9 (tag + 3 ids) + 1 × 33 (amount) = 69 bytes total.
+    assertEq (69 : Nat) bytes.length "encoded length"
+    -- The amount head starts at offset 36 and carries the amount tag.
+    assertEq ([0x06, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : List UInt8)
+      ((bytes.drop 36).take 33) "transfer amount head"
 }
 
 /-- Term-level API check: `action_roundtrip` signature. -/
@@ -602,9 +609,131 @@ def claimBudgetRefundFieldInjective : TestCase := {
     else pure ()
 }
 
-/-- All tests. -/
+/-- A non-zero 20-byte `EthAddress` for the `.withdraw` sample. -/
+def sampleAddr : Bridge.EthAddress :=
+  (Bridge.EthAddress.ofBytes
+      (ByteArray.mk #[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                      11, 12, 13, 14, 15, 16, 17, 18, 19, 20])).getD
+    Bridge.EthAddress.zero
+
+/-! ## Per-constructor completeness oracle
+
+`Action` has 25 frozen constructors.  Before this, the suite pinned only
+spot-checks, so nothing mechanically established that a sweep touched
+every variant — a constructor could be added, or an existing one's
+encoding changed, without any test noticing.
+
+`requiredTag` is TOTAL over `Action`.  That totality is the structural
+half of the guard: a new constructor fails to elaborate here until it is
+handled, and the resulting build error is what forces `sampleActions`
+below to be extended in the same change.  The table is spelled by hand
+rather than read back from `Action.tag`, so it doubles as a
+non-circular pin catching a renumbering of either side. -/
+
+/-- A minimal `Dispute` for the nested `.dispute` sample. -/
+def sampleDispute : Disputes.Dispute :=
+  { challenger := 3
+  , claim      := .preconditionFalse 7
+  , evidence   := ByteArray.empty
+  , nonce      := 1
+  , sig        := ByteArray.empty }
+
+/-- A minimal `Verdict` for the nested `.verdict` sample. -/
+def sampleVerdict : Disputes.Verdict :=
+  { disputeId  := 7
+  , outcome    := .upheld
+  , rationale  := ByteArray.empty
+  , signatures := [] }
+
+/-- One representative action per frozen constructor, in tag order. -/
+def sampleActions : List Action :=
+  [ .transfer 1 2 3 100
+  , .mint 1 2 100
+  , .burn 1 2 50
+  , .freezeResource 7
+  , .replaceKey 5 (ByteArray.mk #[0xab, 0xcd])
+  , .reward 1 2 100
+  , .distributeOthers 1 2 50
+  , .proportionalDilute 1 2 100
+  , .dispute sampleDispute
+  , .disputeWithdraw 9
+  , .verdict sampleVerdict
+  , .rollback 11
+  , .registerIdentity 7 (ByteArray.mk #[0x01, 0x02, 0x03])
+  , .deposit 1 2 100 42
+  , .withdraw 1 2 100 sampleAddr
+  , .declareLocalPolicy { clauses := [] }
+  , .revokeLocalPolicy
+  , .faultProofChallenge (ByteArray.mk #[0xAA]) 1 2 (ByteArray.mk #[0xBB])
+  , .faultProofResolution (ByteArray.mk #[0xCC]) 1 2 3
+  , .depositWithFee 1 10 99 50 50 200 42
+  , .topUpActionBudget 1 2 3 4
+  , .topUpActionBudgetFor 20 1 2 3 4
+  , .claimBudgetRefund 0 89 1000 1
+  , .ammSwap 0 1 1000 995 77
+  , .reclaimAmmReserves 0 5000 77 88 ]
+
+/-- The frozen tag every `Action` constructor must carry.  Total over
+    `Action` — see the section note above. -/
+def requiredActionTag : Action → Nat
+  | .transfer             .. =>  0
+  | .mint                 .. =>  1
+  | .burn                 .. =>  2
+  | .freezeResource       .. =>  3
+  | .replaceKey           .. =>  4
+  | .reward               .. =>  5
+  | .distributeOthers     .. =>  6
+  | .proportionalDilute   .. =>  7
+  | .dispute              .. =>  8
+  | .disputeWithdraw      .. =>  9
+  | .verdict              .. => 10
+  | .rollback             .. => 11
+  | .registerIdentity     .. => 12
+  | .deposit              .. => 13
+  | .withdraw             .. => 14
+  | .declareLocalPolicy   .. => 15
+  | .revokeLocalPolicy       => 16
+  | .faultProofChallenge  .. => 17
+  | .faultProofResolution .. => 18
+  | .depositWithFee       .. => 19
+  | .topUpActionBudget    .. => 20
+  | .topUpActionBudgetFor .. => 21
+  | .claimBudgetRefund    .. => 22
+  | .ammSwap              .. => 23
+  | .reclaimAmmReserves   .. => 24
+
+/-- The sweep covers exactly the 25 frozen tags 0..24, one action per
+    tag, and `Action.tag` agrees with the hand-spelled table. -/
+def actionSweepCoversAllTags : TestCase := {
+  name := "Action sweep covers tags 0..24"
+  body := do
+    let tags := sampleActions.map Action.tag
+    assertEq (25 : Nat) tags.length "sample count"
+    assertEq (List.range 25) tags "sample tags are 0..24 in order"
+    for a in sampleActions do
+      assertEq (requiredActionTag a) (Action.tag a)
+        s!"Action.tag agrees with requiredActionTag for tag {requiredActionTag a}"
+}
+
+/-- Every frozen constructor round-trips encode→decode. -/
+def actionSweepRoundtrips : TestCase := {
+  name := "Action codec round-trips all 25 constructors"
+  body := do
+    for a in sampleActions do
+      let bytes := Encodable.encode (T := Action) a
+      match Action.decode bytes with
+      | .ok (a', rest) =>
+        assertEq a a' s!"action {Action.tag a} round-trip value"
+        assertEq ([] : Stream) rest s!"action {Action.tag a} round-trip tail"
+      | .error e =>
+        throw <| IO.userError s!"action {Action.tag a} decode failed: {repr e}"
+}
+
+/-- Workstream Phase-4 `Action` codec test cases, including the
+    per-constructor completeness oracle. -/
 def tests : List TestCase :=
-  [transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
+  [actionSweepCoversAllTags, actionSweepRoundtrips,
+   transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
    distributeOthersRT, proportionalDiluteRT, registerIdentityRT,
    registerIdentityVsReplaceKeyBytes, transferVsMintBytes,
    transferByteLength, actionRoundtripAPI, actionInjectiveAPI,

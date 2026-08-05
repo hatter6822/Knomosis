@@ -7,271 +7,18 @@
   under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
-import LegalKernel
+/-
+Replay — entry point for the `knomosis-replay` audit binary.
 
-/-!
-Phase-5 `knomosis-replay` binary.
-
-A focused, single-purpose tool: given a log file path and an optional
-genesis state path, replay the log and print the final state hash.
-This is the WU 5.5 deliverable in standalone form (the `knomosis` binary
-also exposes a `replay` subcommand, but `knomosis-replay` is the
-auditor's entry point — it has no other modes and does not write
-to the log file).
-
-Usage:
-
-  knomosis-replay LOG [SNAPSHOT]
-
-If `SNAPSHOT` is provided, replay starts from the snapshot's
-`(seedHash, state)` rather than from the empty genesis.  The
-`unrestricted` policy is hard-coded (see `Main.lean` for the
-production-policy story).
-
-Acceptance (Genesis Plan §13.2): the final state hash matches the
-hash the `knomosis` runtime printed when it processed the same actions
-online.  CI exercises this by running `knomosis process` then
-`knomosis-replay` on the resulting log and asserting the hashes are
-byte-identical.
+The flag parser, the usage text, and the replay driver live in
+`LegalKernel.Runtime.ReplayCli` so they are importable by the test
+driver; a root-level `main` here cannot coexist with any sibling
+binary's `main` in a single module.  See that module's docstring.
 -/
 
-open LegalKernel
-open LegalKernel.Authority
-open LegalKernel.Runtime
-open LegalKernel.Encoding
+import LegalKernel.Runtime.ReplayCli
 
-/-- The `unrestricted` policy: every signer can issue every action. -/
-def replayPolicy : AuthorityPolicy := AuthorityPolicy.unrestricted
-
-/-- The empty genesis state used when no snapshot is provided. -/
-def replayGenesis : ExtendedState := ExtendedState.empty
-
-/-- Format a `ContentHash` (32 bytes after Audit-3.1 width
-    unification) as a hex string (64 chars on the post-Audit-3
-    canonical width).  Mirror of the `Main.lean` helper; duplicated
-    to keep the two binaries independent (each binary should be
-    readable in isolation). -/
-def formatHashHex (h : ContentHash) : String :=
-  let toHex (b : UInt8) : String :=
-    let hi := b.toNat / 16
-    let lo := b.toNat % 16
-    let toChar (n : Nat) : Char :=
-      if n < 10 then Char.ofNat (n + 48)
-               else Char.ofNat (n - 10 + 97)
-    String.ofList [toChar hi, toChar lo]
-  h.toList.foldl (fun acc b => acc ++ toHex b) ""
-
-/-- Print usage and exit. -/
-def usage : IO UInt32 := do
-  IO.println "knomosis-replay — Phase-5 replay tool"
-  IO.println ""
-  IO.println "Usage:"
-  IO.println "  knomosis-replay [--allow-fallback-hash] LOG [SNAPSHOT]"
-  IO.println ""
-  IO.println "Replays LOG (an append-only Knomosis log file) against the empty"
-  IO.println "genesis state (or, if SNAPSHOT is given, against the snapshot's"
-  IO.println "starting state) and prints the final state hash."
-  IO.println ""
-  IO.println "Audit-3.1: by default, knomosis-replay refuses to run with the"
-  IO.println "Lean fallback hash (FNV-1a-64 padded to 32) because the"
-  IO.println "auditor's reproduction guarantee is meaningless under a"
-  IO.println "non-cryptographic hash.  Pass --allow-fallback-hash to opt in"
-  IO.println "for explicit test runs."
-  IO.println ""
-  IO.println "Output formats:"
-  IO.println "  OK <hash> via=<id>          (clean replay, exit 0)"
-  IO.println "  FALLBACK_HASH_NOT_PERMITTED (audit-3.1, fallback w/o flag, exit 1)"
-  IO.println "  REPLAY_ERROR <repr>         (replay failure, exit 1)"
-  IO.println "  SNAPSHOT_ERROR <repr>       (snapshot restore failed, exit 1)"
-  IO.println "  SNAPSHOT_DECODE_ERROR <repr> (snapshot bytes invalid, exit 1)"
-  IO.println "  SNAPSHOT_INDEX_OVERRUN ...  (snapshot logIndex > log size, exit 1)"
-  IO.println "  LOG_TRUNCATED <count>       (info; replay still proceeds)"
-  pure 0
-
-/-- Run replay against the given log + optional snapshot.  Prints
-    one of:
-
-    * `OK <hash>` on a clean replay (exit code 0).
-    * `REPLAY_ERROR <repr>` on a replay-time failure (exit 1).
-    * `SNAPSHOT_ERROR <repr>` when a requested snapshot fails to
-      restore — the tool exits non-zero (exit 1) WITHOUT proceeding
-      to replay against the wrong starting state.
-    * `SNAPSHOT_DECODE_ERROR <repr>` when the snapshot bytes don't
-      parse — same exit semantics as `SNAPSHOT_ERROR`.
-    * `SNAPSHOT_INDEX_OVERRUN snap_index=N log_entries=M` when the
-      snapshot's recorded `logIndex` exceeds the log file's entry
-      count — exit 1 (the snapshot doesn't fit on top of the log).
-    * `LOG_TRUNCATED <count>` (info, not failure) when the log file
-      had a partial tail; replay still proceeds against the
-      recovered prefix.
-
-    Snapshot+log semantics (Genesis Plan §13.2): when a snapshot is
-    provided, the log file is expected to be the *full* log (the
-    same file the runtime appends to), and `knomosis-replay` slices it
-    to entries `[snap.logIndex..)` to apply "only subsequent log
-    entries".  Equivalent: the on-disk LOG always contains the full
-    history; SNAPSHOT just lets a fresh replica skip the prefix.
-
-    Security note: failing fast on snapshot errors is critical.
-    Earlier drafts silently continued with an empty genesis when a
-    snapshot failed, which would print an `OK` line containing the
-    hash of an empty-replay state — masking the snapshot failure
-    and presenting fake-valid output to the caller.  The current
-    implementation refuses to produce an `OK` line unless the
-    requested starting state was successfully recovered. -/
-def runReplay (logPath : System.FilePath)
-    (snapshotPath : Option System.FilePath)
-    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
-  -- Step 0 — deployment-config reconstruction.  The auditor has no CLI
-  -- config flags (unlike `knomosis replay`, which re-supplies them and
-  -- only cross-checks the sidecars).  It must instead RE-DERIVE the
-  -- producer's config from the persisted sidecars: the budget policy +
-  -- epoch length (`<LOG>.budgetcfg`), the gas-pool policy
-  -- (`<LOG>.gaspoolcfg`), and the refund rate (`<LOG>.refundratecfg`).
-  -- All three participate in the log's post-state hashes (the refund
-  -- rate additionally gates which `claimBudgetRefund` actions are
-  -- admissible), so without reconstructing them a config-bearing log
-  -- would be rejected or would replay to a divergent hash.  A corrupt
-  -- sidecar fails loudly — the auditor must never silently audit under
-  -- the wrong config.
-  let budgetCfg? ← match ← BudgetSidecar.load logPath with
-    | .error msg => IO.println s!"CONFIG_ERROR {msg}"; return 1
-    | .ok c => pure c
-  let gasPoolCfg? ← match ← GasPoolSidecar.load logPath with
-    | .error msg => IO.println s!"CONFIG_ERROR {msg}"; return 1
-    | .ok c => pure c
-  let refundCfg? ← match ← RefundRateSidecar.load logPath with
-    | .error msg => IO.println s!"CONFIG_ERROR {msg}"; return 1
-    | .ok c => pure c
-  -- Replay PARAMS (applied regardless of snapshot, since they are not
-  -- captured in the snapshot's state): epoch length, refund rate, and the
-  -- gas-pool-intersected AuthorityPolicy.
-  let epochLength : Nat := (budgetCfg?.map (·.epochLength)).getD 0
-  let refundRate : ResourceId → Nat :=
-    (refundCfg?.map (·.toRefundRate)).getD (fun _ => 0)
-  let auditorPolicy : AuthorityPolicy :=
-    Bridge.gasPoolGenesisPolicyOfConfig replayPolicy gasPoolCfg?
-  -- The from-genesis seed STATE must carry the producer's budget policy +
-  -- gas-pool localPolicies; a snapshot already captures both in its
-  -- restored state (and its budget policy's `currentEpoch` may have
-  -- advanced past genesis), so the snapshot path below uses its state
-  -- as-is and only this from-genesis seed is reconstructed.
-  let reconstructedGenesis :=
-    Bridge.gasPoolGenesisStateOfConfig
-      ((budgetCfg?.map (fun bc =>
-          { replayGenesis with budgetPolicy := BudgetSidecar.toPolicy bc })).getD
-        replayGenesis)
-      gasPoolCfg?
-  -- Step 1: optionally load the snapshot.  Fail fast on error.
-  -- The seed triple is (seedHash, seedState, snapLogIndex); snapLogIndex
-  -- is 0 when no snapshot is provided, otherwise the snapshot's
-  -- recorded `logIndex` (used to slice the log to post-snapshot entries).
-  let seedResult : Except String (ContentHash × ExtendedState × Nat) ←
-    match snapshotPath with
-    | none => pure (Except.ok (zeroHash, reconstructedGenesis, 0))
-    | some p => do
-      match (← loadSnapshot p) with
-      | .ok snap =>
-        match restoreSnapshot snap with
-        | .ok (st, sh, idx) => pure (Except.ok (sh, st, idx))
-        | .error e          => pure (Except.error s!"SNAPSHOT_ERROR {repr e}")
-      | .error e            => pure (Except.error s!"SNAPSHOT_DECODE_ERROR {repr e}")
-  match seedResult with
-  | Except.error msg =>
-    IO.println msg
-    pure 1
-  | Except.ok (seedHash, seedState, snapLogIndex) =>
-    -- Step 2: read the log.
-    let (entries, _, frameErr?) ← readAllEntries logPath
-    if let some _ := frameErr? then
-      IO.println s!"LOG_TRUNCATED entries={entries.length}"
-    -- Step 3: slice to post-snapshot entries.  Genesis Plan §13.2
-    -- semantics: replica applies "only subsequent log entries".
-    if snapLogIndex > entries.length then
-      IO.println s!"SNAPSHOT_INDEX_OVERRUN snap_index={snapLogIndex} log_entries={entries.length}"
-      pure 1
-    else
-      let tail := entries.drop snapLogIndex
-      -- Step 4: replay the post-snapshot tail.  AR.2.4: deploymentId
-      -- is threaded into the parameterised `replayFromSeedWith` so
-      -- cross-deployment-replay rejection is observable in the
-      -- auditor binary.  GP.9.1 auditor fix: the reconstructed
-      -- `auditorPolicy` (gas-pool-intersected) and the persisted
-      -- `epochLength` / `refundRate` are threaded so a config-bearing
-      -- log audits to the same state hash `knomosis replay` produces;
-      -- `snapLogIndex` is the absolute start index, so a snapshot
-      -- replay advances budget epochs from the correct base.
-      match replayFromSeedWith Verify deploymentId auditorPolicy seedHash
-              seedState tail snapLogIndex epochLength refundRate with
-      | .ok finalState =>
-        let h := hashEncodable finalState
-        IO.println s!"OK {formatHashHex h} via={hashImplementationIdentifier ()}"
-        pure 0
-      | .error e =>
-        IO.println s!"REPLAY_ERROR {repr e}"
-        pure 1
-
-/-- Audit-3.1: pre-flight hash-grade check.  Auditor binary refuses
-    to run under the Lean fallback hash unless the operator
-    explicitly opts in.  Returns true iff the binary should proceed. -/
-def checkHashGrade (allowFallback : Bool) : IO Bool := do
-  if isProductionHash then
-    pure true
-  else if allowFallback then
-    IO.eprintln s!"WARN: knomosis-replay running with fallback hash \
-                   ({hashImplementationIdentifier ()})"
-    pure true
-  else
-    IO.println "FALLBACK_HASH_NOT_PERMITTED"
-    IO.eprintln s!"knomosis-replay refuses to run with the Lean fallback hash. \
-                   The auditor's reproduction guarantee is meaningless under \
-                   a non-cryptographic hash. Pass --allow-fallback-hash to \
-                   opt in for explicit test runs."
-    pure false
-
-/-- AR.2.6: shared hex-decoding helpers (copy of `Main.lean`'s
-    versions; duplicated so each binary remains independent). -/
-def hexCharToNibble (c : Char) : Option Nat :=
-  if c ≥ '0' && c ≤ '9' then some (c.toNat - '0'.toNat)
-  else if c ≥ 'a' && c ≤ 'f' then some (10 + c.toNat - 'a'.toNat)
-  else if c ≥ 'A' && c ≤ 'F' then some (10 + c.toNat - 'A'.toNat)
-  else none
-
-/-- AR.2.6: hex → ByteArray.  Even length, lower/upper case. -/
-def decodeHexString (s : String) : Option ByteArray := Id.run do
-  let cs := s.toList
-  if cs.length % 2 ≠ 0 then return none
-  let mut bytes : List UInt8 := []
-  let mut idx : Nat := 0
-  let csA := cs.toArray
-  while idx < cs.length do
-    let hi := hexCharToNibble (csA[idx]!)
-    let lo := hexCharToNibble (csA[idx + 1]!)
-    match hi, lo with
-    | some h, some l => bytes := bytes ++ [(h * 16 + l).toUInt8]
-    | _, _ => return none
-    idx := idx + 2
-  return some (ByteArray.mk bytes.toArray)
-
-/-- Pre-parse global flags from the argument list.  Audit-3.1
-    introduces `--allow-fallback-hash`; AR.2.6 adds
-    `--deployment-id <hex>` (REQUIRED on the audit binary). -/
-def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List String :=
-  let rec go (xs : List String) : Bool × Option ByteArray × List String :=
-    match xs with
-    | [] => (false, none, [])
-    | "--allow-fallback-hash" :: rest =>
-      -- This position sets the flag to `true` regardless of the
-      -- recursive result, so the recursive flag value is discarded.
-      let (_, did, tail) := go rest
-      (true, did, tail)
-    | "--deployment-id" :: hex :: rest =>
-      let (allow, _, tail) := go rest
-      (allow, decodeHexString hex, tail)
-    | x :: rest =>
-      let (allow, did, tail) := go rest
-      (allow, did, x :: tail)
-  go args
+open LegalKernel.Runtime.ReplayCli
 
 /-- The `knomosis-replay` entry point.  Dispatches on argv.
 
@@ -282,7 +29,17 @@ def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List Str
     deploymentId.  The dev-mode `knomosis` binary remains permissive
     (warns but proceeds); only `knomosis-replay` is strict. -/
 def main (args : List String) : IO UInt32 := do
-  let (allowFallbackHash, depId?, rest) := parseGlobalFlags args
+  let flags := parseGlobalFlags args
+  match flags.flagError with
+  | some msg =>
+    IO.println "FLAG_ERROR"
+    IO.eprintln s!"knomosis-replay: {msg}"
+    let _ ← usage
+    return 1
+  | none => pure ()
+  let allowFallbackHash := flags.allowFallbackHash
+  let depId? := flags.deploymentId
+  let rest := flags.positional
   if !(← checkHashGrade allowFallbackHash) then
     pure 1
   else
@@ -300,7 +57,17 @@ def main (args : List String) : IO UInt32 := do
       pure 1
     | some depId =>
       match rest with
-      | [log] => runReplay (System.FilePath.mk log) none depId
+      | [log] => runReplay (System.FilePath.mk log) none depId flags.requiredAttestor
       | [log, snap] =>
           runReplay (System.FilePath.mk log) (some (System.FilePath.mk snap)) depId
-      | _ => usage
+            flags.requiredAttestor
+      | _ =>
+        -- A wrong ARGUMENT COUNT is a usage error, not a successful
+        -- audit.  `usage` prints to stdout and returns 0 (it is also
+        -- the `--help` path); the exit code here must be non-zero so a
+        -- CI job or a shell `set -e` sees the failure.
+        IO.println "USAGE_ERROR"
+        IO.eprintln
+          s!"knomosis-replay expects LOG [SNAPSHOT]; got {rest.length} positional argument(s)."
+        let _ ← usage
+        pure 1

@@ -12,15 +12,24 @@ LegalKernel.Test.FaultProof.Settlement — value-level tests for the
 composite trust-model upgrade theorem (Workstream H §12.4.4 /
 WU H.4.4c).
 
-Exercises the three settlement branches:
-  * Challenger responds truthfully → wins.
-  * Sequencer responds with disputed-high.commit, kernel computes
-    truth → mismatch → challenger wins.
-  * Sequencer's cell proofs fail → challenger wins.
+Exercises every settlement branch:
+  * The step VM reproduces the COMMITTED endpoint → the responder
+    wins (both turn parities).
+  * It does not → the responder loses (both turn parities).
+  * The submitted pre-state is not `range.low.commit` → the
+    responder loses.
+  * A bisection round is still open → the transition is refused.
 
 Plus the composite theorem and the trace-bridge lemma.  Tests are
 value-level: actually run `applyTransition`, build minimal
 KernelSteps, and observe the resulting `gs'.status`.
+
+Note the shape change.  These cases used to hand `applyTransition`
+a `claimedPostCommit` and check it against the step's own
+`postStateCommit`; both came from the caller, so every case passed
+for the caller's chosen reason.  The settlement now compares the
+step VM's computed output against `range.high.commit`, so the
+fixtures below build the games around the COMPUTED value.
 -/
 
 import LegalKernel.FaultProof.Settlement
@@ -33,13 +42,6 @@ open LegalKernel.Disputes
 open LegalKernel.Test
 
 namespace LegalKernel.Test.FaultProof.Settlement
-
-/-- A non-zero commit (32 bytes of `0x01`). -/
-private def oneCommit : StateCommit :=
-  ByteArray.mk #[1, 1, 1, 1, 1, 1, 1, 1,
-                 1, 1, 1, 1, 1, 1, 1, 1,
-                 1, 1, 1, 1, 1, 1, 1, 1,
-                 1, 1, 1, 1, 1, 1, 1, 1]
 
 /-- A second non-zero commit, distinct from `oneCommit`. -/
 private def twoCommit : StateCommit :=
@@ -55,8 +57,32 @@ private def threeCommit : StateCommit :=
                  3, 3, 3, 3, 3, 3, 3, 3,
                  3, 3, 3, 3, 3, 3, 3, 3]
 
+/-- A populated state, and the real single step from it.
+
+    The fixtures used to be abstract 32-byte constants with an EMPTY
+    opening bundle, which the old `kernelStepApply` accepted
+    vacuously.  The verifier re-derives the cell list and verifies
+    every opening against the running root, so a step has to be a REAL
+    one over a REAL state to apply at all — and `low` has to be that
+    state's published root.  That is a strengthening: the tests below
+    now settle on a step whose post-root anyone can reproduce. -/
+private def settlementBase : ExtendedState :=
+  let st : LegalKernel.State :=
+    { balances := (∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+                    (((∅ : BalanceMap).insert 7 100).insert 8 40) }
+  { base          := st
+  , nonces        := { next := (∅ : Std.TreeMap ActorId Nonce compare).insert 7 3 }
+  , registry      := (∅ : KeyRegistry).insert 7 (ByteArray.mk #[1, 2, 3])
+  , bridge        := LegalKernel.Bridge.BridgeState.empty
+  , epochBudgets  := (∅ : EpochBudgetState).insert 7
+                       { lastSeenEpoch := 2, budgetBalance := 50 }
+  , budgetPolicy  := .bounded 100 1 2 }
+
+/-- The published root of `settlementBase` — the agreed `low`. -/
+private def oneCommit : StateCommit := commitExtendedState settlementBase
+
 /-- A single-step disputed range with low and high commits
-    distinct.  `low = oneCommit`, `high = twoCommit`. -/
+    distinct.  `low` is the real pre-root, `high = twoCommit`. -/
 private def singleStepRange : DisputedRange :=
   { low  := { idx := 0, commit := oneCommit },
     high := { idx := 1, commit := twoCommit } }
@@ -89,20 +115,49 @@ private def sequencerRespondingGame : GameState :=
   , status          := .inProgress
   , deploymentId    := ByteArray.empty }
 
-/-- A trivial signed action used to build minimal KernelSteps. -/
+/-- The action the real step applies. -/
 private def trivialSignedAction : SignedAction :=
-  { action := .freezeResource 0
-  , signer := 1
-  , nonce  := 0
+  { action := .transfer 1 7 8 30
+  , signer := 7
+  , nonce  := 3
   , sig    := ByteArray.empty }
 
-/-- A KernelStep whose cell proofs trivially verify against `low`
-    commit and whose claimed `postStateCommit = X`. -/
+/-- The canonical step from `settlementBase`, with the claim and the
+    declared pre-commit left free.
+
+    `postStateCommit` is a claim the settlement no longer reads; it is
+    kept only because `KernelStep` has the field, and one of the tests
+    below exists to show that varying it changes nothing.  Varying
+    `preStateCommit` DOES matter — the transition refuses a step whose
+    declared pre-commit is not the range's `low`. -/
 private def stepClaiming (preCommit postCommit : StateCommit) : KernelStep :=
-  { preStateCommit  := preCommit
-  , signedAction    := trivialSignedAction
-  , postStateCommit := postCommit
-  , cellProofs      := CellProofBundle.empty }
+  { buildKernelStep settlementBase trivialSignedAction 0 with
+      preStateCommit  := preCommit
+    , postStateCommit := postCommit }
+
+/-- What the step VM actually computes from the agreed pre-root.  This
+    is the value the settlement compares against `range.high.commit`,
+    so the fixtures below are built around it rather than around a
+    caller-supplied claim.
+
+    It is `some`, and it is the published root of the production
+    advance — which is the whole point of the flip.  A bundle the
+    responder controls no longer sets it. -/
+private def computedFor (_preCommit : StateCommit) : StateCommit :=
+  commitExtendedState (productionApplyBudget settlementBase trivialSignedAction 0)
+
+/-- A single-step game whose committed endpoint IS what the step VM
+    computes, so the responder's position is upheld. -/
+private def matchingGame (turn : TurnSide) : GameState :=
+  { challengerRespondingGame with
+      range := { low  := { idx := 0, commit := oneCommit },
+                 high := { idx := 1, commit := computedFor oneCommit } },
+      turn  := turn }
+
+/-- A single-step game whose committed endpoint is NOT what the step
+    VM computes — the fabricated-state-root case. -/
+private def mismatchGame (turn : TurnSide) : GameState :=
+  { challengerRespondingGame with turn := turn }
 
 /-- Tests for the composite trust-model theorem at value level. -/
 def tests : List TestCase :=
@@ -124,80 +179,98 @@ def tests : List TestCase :=
         -- high.commit = twoCommit = truth(1); no disagreement.
         assert (¬ isDis) "decide returns false when high = truth"
     }
-  , -- ===== Branch 1: challenger responds with truthful step =====
-    { name := "challenger truthful response → challengerWon (value level)"
+  , -- ===== The responder wins iff the step VM reproduces `high` =====
+    { name := "sequencer responder, step reproduces high → sequencerWon"
     , body := do
-        -- Empty cell-proof bundle verifies against ANY commit (no
-        -- proofs to fail).  The step's `postStateCommit = truth =
-        -- threeCommit` is the truthful post-commit.
-        let truthCommit := threeCommit
-        let step := stepClaiming oneCommit truthCommit
-        -- Challenger's `claimedPostCommit` matches the kernel's
-        -- computation: both equal `truthCommit`.
-        let claimedPostCommit := truthCommit
-        match applyTransition challengerRespondingGame
-                (.terminateOnSingleStep step claimedPostCommit) with
+        let step := stepClaiming oneCommit twoCommit
+        match applyTransition (matchingGame .sequencer)
+                (.terminateOnSingleStep step) with
         | .ok gs' =>
-          assertEq (expected := GameStatus.challengerWon)
-                   (actual := gs'.status)
-                   "challenger wins under truthful response"
-        | .error e =>
-          assert false s!"transition should succeed; got error {repr e}"
+          assertEq (expected := GameStatus.sequencerWon) (actual := gs'.status)
+            "an honest sequencer defending a true endpoint wins"
+        | .error e => assert false s!"transition should succeed; got {repr e}"
     }
-  , -- ===== Branch 2: sequencer responds with wrong commit =====
-    { name := "sequencer claims wrong commit → challengerWon (value level)"
+  , { name := "challenger responder, step reproduces high → challengerWon"
     , body := do
-        -- Kernel computes `truthCommit = threeCommit`; sequencer
-        -- claims `twoCommit` (the disputed range.high.commit).  The
-        -- L1 step VM detects mismatch, rules against the sequencer.
-        let truthCommit := threeCommit
-        let step := stepClaiming oneCommit truthCommit
-        let claimedPostCommit := twoCommit  -- sequencer's wrong claim
-        match applyTransition sequencerRespondingGame
-                (.terminateOnSingleStep step claimedPostCommit) with
+        let step := stepClaiming oneCommit twoCommit
+        match applyTransition (matchingGame .challenger)
+                (.terminateOnSingleStep step) with
         | .ok gs' =>
-          assertEq (expected := GameStatus.challengerWon)
-                   (actual := gs'.status)
-                   "sequencer loses when claim differs from kernel"
-        | .error e =>
-          assert false s!"transition should succeed; got error {repr e}"
+          assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
+            "the win follows the turn, not the party"
+        | .error e => assert false s!"transition should succeed; got {repr e}"
     }
-  , -- ===== Branch 3: sequencer's truthful response wins =====
-    { name := "sequencer truthful claim → sequencerWon (sanity check)"
+  , -- ===== The load-bearing branch: a fabricated endpoint loses =====
+    { name := "sequencer responder, step differs from high → challengerWon"
     , body := do
-        -- If the sequencer's claim DOES match the kernel's truth,
-        -- they win.  This is the "honest sequencer" case (no
-        -- disagreement, but the bisection ran by mistake).  Tests
-        -- the contract's deterministic settlement.
-        let truthCommit := threeCommit
-        let step := stepClaiming oneCommit truthCommit
-        let claimedPostCommit := truthCommit  -- sequencer truthful
-        match applyTransition sequencerRespondingGame
-                (.terminateOnSingleStep step claimedPostCommit) with
+        -- `mismatchGame`'s endpoint is `twoCommit`, which is not what
+        -- the step VM computes, so the sequencer cannot defend it —
+        -- no adjudicator participates.
+        let step := stepClaiming oneCommit twoCommit
+        match applyTransition (mismatchGame .sequencer)
+                (.terminateOnSingleStep step) with
         | .ok gs' =>
-          assertEq (expected := GameStatus.sequencerWon)
-                   (actual := gs'.status)
-                   "sequencer wins when their claim matches kernel"
-        | .error e =>
-          assert false s!"transition should succeed; got error {repr e}"
+          assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
+            "a fabricated endpoint cannot be defended"
+        | .error e => assert false s!"transition should succeed; got {repr e}"
     }
-  , -- ===== Branch 4: challenger's wrong claim loses =====
-    { name := "challenger wrong claim → sequencerWon (adversarial)"
+  , { name := "challenger responder, step differs from high → sequencerWon"
     , body := do
-        -- An adversarial challenger that claims a commit not matching
-        -- the kernel's output LOSES.  Tests that the determinism
-        -- is symmetric.
-        let truthCommit := threeCommit
-        let step := stepClaiming oneCommit truthCommit
-        let claimedPostCommit := twoCommit  -- challenger's wrong claim
-        match applyTransition challengerRespondingGame
-                (.terminateOnSingleStep step claimedPostCommit) with
+        -- Symmetric: the settlement is turn-based, not party-based.
+        let step := stepClaiming oneCommit twoCommit
+        match applyTransition (mismatchGame .challenger)
+                (.terminateOnSingleStep step) with
         | .ok gs' =>
-          assertEq (expected := GameStatus.sequencerWon)
-                   (actual := gs'.status)
-                   "challenger loses on wrong claim"
+          assertEq (expected := GameStatus.sequencerWon) (actual := gs'.status)
+            "the determinism is symmetric across turn parities"
+        | .error e => assert false s!"transition should succeed; got {repr e}"
+    }
+  , -- ===== The claim the responder used to control is now inert =====
+    { name := "step.postStateCommit does not affect the outcome"
+    , body := do
+        -- The regression for the vacuity.  Under the old
+        -- `kernelStepApply` the responder set `postStateCommit` and
+        -- the settlement compared it against itself, so this pair of
+        -- steps would have settled DIFFERENTLY.  Now the field is
+        -- never read and both must settle identically.
+        let stepA := stepClaiming oneCommit twoCommit
+        let stepB := stepClaiming oneCommit (computedFor oneCommit)
+        match applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepA),
+              applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepB) with
+        | .ok a, .ok b =>
+          assertEq (expected := a.status) (actual := b.status)
+            "the responder's own claim must not move the settlement"
+          assertEq (expected := GameStatus.challengerWon) (actual := a.status)
+            "and both lose, because neither reproduces the endpoint"
+        | _, _ => assert false "both transitions should succeed"
+    }
+  , -- ===== The pre-state is the committed one, not the caller's =====
+    { name := "wrong pre-state → responder loses"
+    , body := do
+        -- Re-executing from a pre-state of the responder's choosing
+        -- would let them manufacture any post-commit; the transition
+        -- refuses it.  `twoCommit ≠ range.low.commit = oneCommit`.
+        let step := stepClaiming twoCommit (computedFor twoCommit)
+        match applyTransition (matchingGame .sequencer)
+                (.terminateOnSingleStep step) with
+        | .ok gs' =>
+          assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
+            "a step from an uncommitted pre-state loses"
+        | .error e => assert false s!"transition should succeed; got {repr e}"
+    }
+  , -- ===== Terminating mid-bisection is refused =====
+    { name := "pending midpoint → terminationDuringBisection"
+    , body := do
+        -- Mirrors the contract's `MidpointAlreadyPending`.  This
+        -- error variant existed but was unreachable.
+        let g := { matchingGame .sequencer with
+                     pendingMidpoint := some { idx := 1, commit := oneCommit } }
+        let step := stepClaiming oneCommit twoCommit
+        match applyTransition g (.terminateOnSingleStep step) with
+        | .ok _ => assert false "should refuse to terminate mid-bisection"
         | .error e =>
-          assert false s!"transition should succeed; got error {repr e}"
+          assertEq (expected := GameError.terminationDuringBisection) (actual := e)
+            "got the expected error variant"
     }
   , -- ===== Bridge lemma =====
     { name := "inDisagreementWithTruth_implies_settlementDisagreement"
@@ -227,19 +300,61 @@ def tests : List TestCase :=
         assert true "bridge lemma produces settlementDisagreement"
     }
   , -- ===== Type-stability checks =====
-    { name := "honest_challenger_responds_truthfully_wins type stable"
+    { name := "terminate_responder_wins_when_step_reproduces_high type stable"
     , body := do
-        let _ := @honest_challenger_responds_truthfully_wins
-        assert true "challenger-win theorem API stable"
+        let _proof :
+            ∀ (gs gs' : GameState) (step : KernelStep),
+              gs.status = .inProgress →
+              gs.range.isSingleStep →
+              gs.pendingMidpoint = none →
+              step.preStateCommit = gs.range.low.commit →
+              kernelStepApply step = some gs.range.high.commit →
+              applyTransition gs (.terminateOnSingleStep step) = .ok gs' →
+              gs'.status =
+                (match gs.turn with
+                 | .sequencer  => GameStatus.sequencerWon
+                 | .challenger => GameStatus.challengerWon) :=
+          terminate_responder_wins_when_step_reproduces_high
+        assert true "responder-win theorem API stable"
     }
-  , { name := "sequencer_responding_with_disputed_high_loses type stable"
+  , { name := "terminate_responder_loses_when_step_differs type stable"
     , body := do
-        let _ := @sequencer_responding_with_disputed_high_loses
-        assert true "sequencer-loss theorem API stable"
+        let _proof :
+            ∀ (gs gs' : GameState) (step : KernelStep) (computed : StateCommit),
+              gs.status = .inProgress →
+              gs.range.isSingleStep →
+              gs.pendingMidpoint = none →
+              step.preStateCommit = gs.range.low.commit →
+              kernelStepApply step = some computed →
+              computed ≠ gs.range.high.commit →
+              applyTransition gs (.terminateOnSingleStep step) = .ok gs' →
+              gs'.status =
+                (match gs.turn with
+                 | .sequencer  => GameStatus.challengerWon
+                 | .challenger => GameStatus.sequencerWon) :=
+          terminate_responder_loses_when_step_differs
+        assert true "responder-loss theorem API stable"
     }
   , { name := "honest_challenger_wins_against_invalid_state_root type stable"
     , body := do
-        let _ := @honest_challenger_wins_against_invalid_state_root
+        -- Fully ascribed: the composite is the workstream's headline
+        -- claim, so its exact hypothesis set is the thing worth
+        -- pinning.  Note there is no `claimedPostCommit` parameter
+        -- and no response-branch disjunction any more — the
+        -- settlement reads both sides from the game state.
+        let _proof :
+            ∀ (truth : LogIndex → StateCommit) (gs gs' : GameState)
+              (step : KernelStep),
+              gs.status = .inProgress →
+              gs.range.isSingleStep →
+              gs.pendingMidpoint = none →
+              step.preStateCommit = gs.range.low.commit →
+              gs.turn = .sequencer →
+              settlementDisagreement truth gs →
+              kernelStepApply step = some (truth gs.range.high.idx) →
+              applyTransition gs (.terminateOnSingleStep step) = .ok gs' →
+              gs'.status = .challengerWon :=
+          honest_challenger_wins_against_invalid_state_root
         assert true "composite #232 theorem API stable"
     }
   , -- ===== Game-state well-shaped =====

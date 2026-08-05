@@ -8,28 +8,44 @@
 -/
 
 /-
-LegalKernel.FaultProof.Commit — state-commitment scheme for the
-fault-proof game (Workstream H §12 / WUs H.2.1 – H.2.5).
+LegalKernel.FaultProof.Commit — the RETIRED concatenation
+state-commitment (Workstream H §12 / WUs H.2.1 – H.2.5).
 
-**Design.**  Each sub-state of `ExtendedState` is committed via
-its canonical CBE encoding hashed with the deployment-supplied
-hash function; the top-level `commitExtendedState` combines all
-five sub-state commits via a final hash.
+**This is not the published root.**  `commitExtendedState`, the
+value a sequencer publishes to L1, is the SMT root over the state's
+cells (`FaultProof/StateCells.lean`).  `commitExtendedStateConcat`
+below is the construction it replaced: each sub-state of
+`ExtendedState` committed via its canonical CBE encoding, and the
+seven sub-state commits hashed together.
 
-The plan §12.2 also describes a Sparse-Merkle-Tree variant that
-allows L1 gas-efficient cell-level Merkle proofs.  The
-correctness arguments below hold under the simpler hash-of-
-canonical-encoding scheme; SMT is a deployment-time optimisation
-(documented as a follow-up; see Genesis Plan §15.8).
+**Why it was replaced, and why it is kept.**  Workstream H chose
+the concatenation over a Sparse Merkle Tree on the grounds that the
+SMT was a gas optimisation and the soundness arguments held under
+either representation.  The first half was wrong: a concatenation
+hash cannot be updated incrementally, so the L1 step VM — which
+holds the root and the proven cells, never the sub-state encodings —
+cannot recompute a post-root from a pre-root, and the fault-proof
+game's terminal comparison was between two different constructions.
+The representation was never a gas question.
+
+The theorems below are true and are retained as the record of that
+construction and as the migration reference for a deployment that
+published concatenation roots.  They are NOT an equal alternative:
+nothing computes `commitExtendedStateConcat` on any production
+path.
 
 **Headline theorems.**
 
-  * `commitExtendedState_size = 32` — uniform 32-byte output.
-  * `commitExtendedState_deterministic` — equal states ⇒ equal commits.
-  * `commitExtendedState_injective_under_collision_free` (#220) — under
-    `CollisionFree hashBytes`, equal commits imply observably-equal
-    states.  This is one of the four load-bearing theorems of
-    Workstream H.
+  * `commitExtendedStateConcat_size = 32` — uniform 32-byte output.
+  * `commitExtendedStateConcat_deterministic` — equal states ⇒ equal commits.
+  * `commitExtendedStateConcat_injective_under_collision_free` (#220) — under
+    collision-freeness of `hashBytes` on the commitment chain's own
+    pre-images, equal commits imply observably-equal states.  The
+    published root's counterpart is
+    `commitExtendedState_determines_cells`
+    (`FaultProof/StateCellsInjective.lean`), which concludes
+    per-cell agreement — behavioural rather than `extEq`, because a
+    cell root cannot separate states no cell read can separate.
 
 This module is **not** part of the trusted computing base.  Bugs
 here would weaken fault-proof game's correctness but cannot
@@ -42,6 +58,8 @@ import LegalKernel.Bridge.Eip712
 import LegalKernel.Bridge.HashAdaptor
 import LegalKernel.Bridge.State
 import LegalKernel.Encoding.State
+import LegalKernel.FaultProof.Cell
+import LegalKernel.FaultProof.StateCells
 import LegalKernel.Encoding.StateInjective
 import LegalKernel.Encoding.LocalPolicyInjective
 import LegalKernel.Encoding.BridgeInjective
@@ -54,13 +72,6 @@ open LegalKernel.Authority
 open LegalKernel.Bridge
 open LegalKernel.Encoding
 open LegalKernel.Runtime
-
-/-! ## State commitment type -/
-
-/-- The 32-byte top-level state commitment.  The sequencer
-    publishes this value to L1 as the "state root"; the L1
-    fault-proof game contract holds it for dispute resolution. -/
-abbrev StateCommit : Type := ByteArray
 
 /-! ## Per-sub-state commit functions -/
 
@@ -92,18 +103,72 @@ def commitBridgeState (bs : BridgeState) : ByteArray :=
   hashBytes
     (ByteArray.mk (Encodable.encode (T := BridgeState) bs).toArray)
 
+/-- Commit the per-actor epoch-budget ledger (H-1).
+
+    `epochBudgets` is live, mutable state — `Bridge/Admissible.lean`
+    rewrites it on admitted actions and the GP.3.2 admission gate
+    meters spending against it — so leaving it outside the published
+    root meant two executions could disagree on budget grants or
+    consumption and still produce the same state root. -/
+def commitEpochBudgets (ebs : EpochBudgetState) : ByteArray :=
+  hashBytes
+    (ByteArray.mk (Encodable.encode (T := EpochBudgetState) ebs).toArray)
+
+/-- Commit the budget policy (H-1): the metering parameters
+    (`freeTier`, `actionCost`, `epochLength`) the admission gate reads.
+    Bound for the same reason as `epochBudgets` — a root that does not
+    fix the policy does not fix what "within budget" means. -/
+def commitBudgetPolicy (bp : BudgetPolicy) : ByteArray :=
+  hashBytes
+    (ByteArray.mk (Encodable.encode (T := BudgetPolicy) bp).toArray)
+
 /-! ## Top-level state commitment -/
 
-/-- The top-level state commitment: a single 32-byte hash
-    binding every sub-state in canonical order.  This is the
-    value the sequencer publishes to L1 as the state root. -/
-def commitExtendedState (es : ExtendedState) : StateCommit :=
-  hashBytes
-    (commitState        es.base ++
-     commitNonceState   es.nonces ++
-     commitKeyRegistry  es.registry ++
-     commitLocalPolicies es.localPolicies ++
-     commitBridgeState  es.bridge)
+/-- The byte string `commitExtendedStateConcat` hashes: the seven
+    sub-state commits concatenated in canonical order.  Named so the
+    injectivity theorems can list it as a hash pre-image. -/
+def extendedStatePreimage (es : ExtendedState) : ByteArray :=
+  commitState        es.base ++
+  commitNonceState   es.nonces ++
+  commitKeyRegistry  es.registry ++
+  commitLocalPolicies es.localPolicies ++
+  commitBridgeState  es.bridge ++
+  commitEpochBudgets es.epochBudgets ++
+  commitBudgetPolicy es.budgetPolicy
+
+/-- The top-level state commitment: a single 32-byte hash binding
+    every sub-state in canonical order.  This is the value the
+    sequencer publishes to L1 as the state root.
+
+    "Every sub-state" is all SEVEN `ExtendedState` fields.  Before H-1
+    this bound only five: `epochBudgets` and `budgetPolicy` were
+    omitted, so the published root did not fix the per-actor budget
+    ledger or the metering parameters, and a fault proof had nothing to
+    challenge when they were forged. -/
+def commitExtendedStateConcat (es : ExtendedState) : StateCommit :=
+  hashBytes (extendedStatePreimage es)
+
+/-- The seven sub-state encodings `commitExtendedStateConcat` hashes
+    beneath its top-level pre-image, in commit order.  Naming them
+    lets the injectivity chain state exactly which pre-images its
+    collision-resistance hypothesis covers (see
+    `Bridge.CollisionFreeOn`). -/
+def subStatePreimages (es : ExtendedState) : List ByteArray :=
+  [ ByteArray.mk (State.encode es.base).toArray
+  , ByteArray.mk (NonceState.encode es.nonces).toArray
+  , ByteArray.mk (KeyRegistry.encodeMap es.registry).toArray
+  , ByteArray.mk (Encodable.encode (T := LocalPolicies) es.localPolicies).toArray
+  , ByteArray.mk (Encodable.encode (T := BridgeState) es.bridge).toArray
+  , ByteArray.mk (Encodable.encode (T := EpochBudgetState) es.epochBudgets).toArray
+  , ByteArray.mk (Encodable.encode (T := BudgetPolicy) es.budgetPolicy).toArray ]
+
+/-- Every pre-image the `commitExtendedStateConcat` injectivity chain
+    feeds to `hashBytes` for a pair of states: the two top-level
+    seven-commit concatenations, then each side's seven sub-state
+    encodings. -/
+def extendedStateCommitPreimages (es₁ es₂ : ExtendedState) : List ByteArray :=
+  extendedStatePreimage es₁ :: extendedStatePreimage es₂ ::
+    (subStatePreimages es₁ ++ subStatePreimages es₂)
 
 /-! ## Determinism theorems -/
 
@@ -122,14 +187,14 @@ theorem commitLocalPolicies_deterministic (lp₁ lp₂ : LocalPolicies) (h : lp�
 theorem commitBridgeState_deterministic (bs₁ bs₂ : BridgeState) (h : bs₁ = bs₂) :
     commitBridgeState bs₁ = commitBridgeState bs₂ := by rw [h]
 
-theorem commitExtendedState_deterministic (es₁ es₂ : ExtendedState) (h : es₁ = es₂) :
-    commitExtendedState es₁ = commitExtendedState es₂ := by rw [h]
+theorem commitExtendedStateConcat_deterministic (es₁ es₂ : ExtendedState) (h : es₁ = es₂) :
+    commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂ := by rw [h]
 
 /-! ## Output-size theorems -/
 
-theorem commitExtendedState_size (es : ExtendedState) :
-    (commitExtendedState es).size = 32 := by
-  unfold commitExtendedState
+theorem commitExtendedStateConcat_size (es : ExtendedState) :
+    (commitExtendedStateConcat es).size = 32 := by
+  unfold commitExtendedStateConcat
   exact hashAdaptor_thirty_two_byte_output _
 
 theorem commitState_size (s : LegalKernel.State) :
@@ -155,6 +220,18 @@ theorem commitLocalPolicies_size (lp : LocalPolicies) :
 theorem commitBridgeState_size (bs : BridgeState) :
     (commitBridgeState bs).size = 32 := by
   unfold commitBridgeState
+  exact hashAdaptor_thirty_two_byte_output _
+
+/-- The epoch-budget sub-commit is 32 bytes (H-1). -/
+theorem commitEpochBudgets_size (ebs : EpochBudgetState) :
+    (commitEpochBudgets ebs).size = 32 := by
+  unfold commitEpochBudgets
+  exact hashAdaptor_thirty_two_byte_output _
+
+/-- The budget-policy sub-commit is 32 bytes (H-1). -/
+theorem commitBudgetPolicy_size (bp : BudgetPolicy) :
+    (commitBudgetPolicy bp).size = 32 := by
+  unfold commitBudgetPolicy
   exact hashAdaptor_thirty_two_byte_output _
 
 /-! ## Extensional equality on `ExtendedState`
@@ -192,65 +269,92 @@ def extendedStateExtensionallyEqual (es₁ es₂ : ExtendedState) : Prop :=
 /-! ## Per-sub-state injectivity (#256)
 
 Each per-sub-state commit is hash-of-canonical-encoding.  Under
-`CollisionFree hashBytes`, equal commits imply equal canonical
+collision-freeness on those encodings, equal commits imply equal canonical
 encodings.  Equal canonical encodings imply extensional equality
 of the underlying TreeMap (canonical encoding is by `toList`). -/
 
-/-- Bytes-injectivity for `commitState`: under `CollisionFree`,
+/-- Bytes-injectivity for `commitState`: under collision-freeness on the level's pre-images,
     equal commits imply equal canonical encoded bytes. -/
 theorem commitState_bytes_injective_under_collision_free
     (s₁ s₂ : LegalKernel.State)
-    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      [ByteArray.mk (State.encode s₁).toArray, ByteArray.mk (State.encode s₂).toArray] hashBytes)
     (h : commitState s₁ = commitState s₂) :
     ByteArray.mk (State.encode s₁).toArray =
     ByteArray.mk (State.encode s₂).toArray := by
   unfold commitState at h
-  exact h_cf _ _ h
+  exact h_cf.apply (by simp) (by simp) h
 
 /-- Bytes-injectivity for `commitNonceState`. -/
 theorem commitNonceState_bytes_injective_under_collision_free
     (n₁ n₂ : NonceState)
-    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      [ByteArray.mk (NonceState.encode n₁).toArray, ByteArray.mk (NonceState.encode n₂).toArray] hashBytes)
     (h : commitNonceState n₁ = commitNonceState n₂) :
     ByteArray.mk (NonceState.encode n₁).toArray =
     ByteArray.mk (NonceState.encode n₂).toArray := by
   unfold commitNonceState at h
-  exact h_cf _ _ h
+  exact h_cf.apply (by simp) (by simp) h
 
 /-- Bytes-injectivity for `commitKeyRegistry`. -/
 theorem commitKeyRegistry_bytes_injective_under_collision_free
     (kr₁ kr₂ : KeyRegistry)
-    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      [ByteArray.mk (KeyRegistry.encodeMap kr₁).toArray, ByteArray.mk (KeyRegistry.encodeMap kr₂).toArray] hashBytes)
     (h : commitKeyRegistry kr₁ = commitKeyRegistry kr₂) :
     ByteArray.mk (KeyRegistry.encodeMap kr₁).toArray =
     ByteArray.mk (KeyRegistry.encodeMap kr₂).toArray := by
   unfold commitKeyRegistry at h
-  exact h_cf _ _ h
+  exact h_cf.apply (by simp) (by simp) h
 
 /-- Bytes-injectivity for `commitLocalPolicies`. -/
 theorem commitLocalPolicies_bytes_injective_under_collision_free
     (lp₁ lp₂ : LocalPolicies)
-    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      [ByteArray.mk (Encodable.encode (T := LocalPolicies) lp₁).toArray, ByteArray.mk (Encodable.encode (T := LocalPolicies) lp₂).toArray] hashBytes)
     (h : commitLocalPolicies lp₁ = commitLocalPolicies lp₂) :
     ByteArray.mk (Encodable.encode (T := LocalPolicies) lp₁).toArray =
     ByteArray.mk (Encodable.encode (T := LocalPolicies) lp₂).toArray := by
   unfold commitLocalPolicies at h
-  exact h_cf _ _ h
+  exact h_cf.apply (by simp) (by simp) h
 
 /-- Bytes-injectivity for `commitBridgeState`. -/
 theorem commitBridgeState_bytes_injective_under_collision_free
     (bs₁ bs₂ : BridgeState)
-    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      [ByteArray.mk (Encodable.encode (T := BridgeState) bs₁).toArray, ByteArray.mk (Encodable.encode (T := BridgeState) bs₂).toArray] hashBytes)
     (h : commitBridgeState bs₁ = commitBridgeState bs₂) :
     ByteArray.mk (Encodable.encode (T := BridgeState) bs₁).toArray =
     ByteArray.mk (Encodable.encode (T := BridgeState) bs₂).toArray := by
   unfold commitBridgeState at h
-  exact h_cf _ _ h
+  exact h_cf.apply (by simp) (by simp) h
+
+/-- Bytes-injectivity for `commitEpochBudgets` (H-1). -/
+theorem commitEpochBudgets_bytes_injective_under_collision_free
+    (e₁ e₂ : EpochBudgetState)
+    (h_cf : Bridge.CollisionFreeOn
+      [ByteArray.mk (Encodable.encode (T := EpochBudgetState) e₁).toArray, ByteArray.mk (Encodable.encode (T := EpochBudgetState) e₂).toArray] hashBytes)
+    (h : commitEpochBudgets e₁ = commitEpochBudgets e₂) :
+    ByteArray.mk (Encodable.encode (T := EpochBudgetState) e₁).toArray =
+    ByteArray.mk (Encodable.encode (T := EpochBudgetState) e₂).toArray := by
+  unfold commitEpochBudgets at h
+  exact h_cf.apply (by simp) (by simp) h
+
+/-- Bytes-injectivity for `commitBudgetPolicy` (H-1). -/
+theorem commitBudgetPolicy_bytes_injective_under_collision_free
+    (p₁ p₂ : BudgetPolicy)
+    (h_cf : Bridge.CollisionFreeOn
+      [ByteArray.mk (Encodable.encode (T := BudgetPolicy) p₁).toArray, ByteArray.mk (Encodable.encode (T := BudgetPolicy) p₂).toArray] hashBytes)
+    (h : commitBudgetPolicy p₁ = commitBudgetPolicy p₂) :
+    ByteArray.mk (Encodable.encode (T := BudgetPolicy) p₁).toArray =
+    ByteArray.mk (Encodable.encode (T := BudgetPolicy) p₂).toArray := by
+  unfold commitBudgetPolicy at h
+  exact h_cf.apply (by simp) (by simp) h
 
 /-! ## Top-level injectivity (#220)
 
 The headline trust-model theorem of the workstream's commitment
-scheme: under `CollisionFree hashBytes`, two distinct
+scheme: under collision-freeness of `hashBytes` on the pre-images below, two distinct
 extensional state representations cannot share a top-level
 commit.
 
@@ -347,37 +451,82 @@ private theorem byteArray_concat_five_split
   have ⟨e_1, e_2⟩ := byteArrayAppendInj e_l3 h₁
   exact ⟨e_1, e_2, e_3, e_4, e_5⟩
 
-/-- The five-component decomposition of `commitExtendedState`'s
-    pre-image hash.  Under `CollisionFree hashBytes` plus the
+
+/-- Helper: split a 224-byte (7 × 32) ByteArray-backed concatenation
+    into its seven 32-byte components.  Composed from
+    `byteArray_concat_five_split` by peeling the two trailing segments
+    with `byteArrayAppendInj` — `++` is left-associated, so the
+    seven-fold concatenation is `(five-fold ++ a₆) ++ a₇`. -/
+private theorem byteArray_concat_seven_split
+    (a₁ a₂ a₃ a₄ a₅ a₆ a₇ b₁ b₂ b₃ b₄ b₅ b₆ b₇ : ByteArray)
+    (s₁ : a₁.size = 32) (s₂ : a₂.size = 32) (s₃ : a₃.size = 32)
+    (s₄ : a₄.size = 32) (s₅ : a₅.size = 32) (s₆ : a₆.size = 32)
+    (_s₇ : a₇.size = 32)
+    (t₁ : b₁.size = 32) (t₂ : b₂.size = 32) (t₃ : b₃.size = 32)
+    (t₄ : b₄.size = 32) (t₅ : b₅.size = 32) (t₆ : b₆.size = 32)
+    (_t₇ : b₇.size = 32)
+    (h : a₁ ++ a₂ ++ a₃ ++ a₄ ++ a₅ ++ a₆ ++ a₇ =
+         b₁ ++ b₂ ++ b₃ ++ b₄ ++ b₅ ++ b₆ ++ b₇) :
+    a₁ = b₁ ∧ a₂ = b₂ ∧ a₃ = b₃ ∧ a₄ = b₄ ∧ a₅ = b₅ ∧
+      a₆ = b₆ ∧ a₇ = b₇ := by
+  -- Peel `a₇` / `b₇`: the six-fold prefixes are both 192 bytes.
+  have size6 :
+      (a₁ ++ a₂ ++ a₃ ++ a₄ ++ a₅ ++ a₆).size =
+      (b₁ ++ b₂ ++ b₃ ++ b₄ ++ b₅ ++ b₆).size := by
+    simp [ByteArray.size_append, s₁, s₂, s₃, s₄, s₅, s₆, t₁, t₂, t₃, t₄, t₅, t₆]
+  obtain ⟨h6, h_a₇⟩ := byteArrayAppendInj h size6
+  -- Peel `a₆` / `b₆`: the five-fold prefixes are both 160 bytes.
+  have size5 :
+      (a₁ ++ a₂ ++ a₃ ++ a₄ ++ a₅).size =
+      (b₁ ++ b₂ ++ b₃ ++ b₄ ++ b₅).size := by
+    simp [ByteArray.size_append, s₁, s₂, s₃, s₄, s₅, t₁, t₂, t₃, t₄, t₅]
+  obtain ⟨h5, h_a₆⟩ := byteArrayAppendInj h6 size5
+  -- The remaining five-fold split is the existing lemma.
+  obtain ⟨e₁, e₂, e₃, e₄, e₅⟩ :=
+    byteArray_concat_five_split _ _ _ _ _ _ _ _ _ _
+      s₁ s₂ s₃ s₄ s₅ t₁ t₂ t₃ t₄ t₅ h5
+  exact ⟨e₁, e₂, e₃, e₄, e₅, h_a₆, h_a₇⟩
+
+/-- The seven-component decomposition of `commitExtendedStateConcat`'s
+    pre-image hash.  Under collision-freeness of `hashBytes` on the pre-images below plus the
     32-byte size invariants, equal top-level commits imply
     sub-state-commit-wise equality. -/
-theorem commitExtendedState_subcommits_eq_under_collision_free
-    (es₁ es₂ : ExtendedState) (h_cf : Bridge.CollisionFree hashBytes)
-    (h : commitExtendedState es₁ = commitExtendedState es₂) :
+theorem commitExtendedStateConcat_subcommits_eq_under_collision_free
+    (es₁ es₂ : ExtendedState)
+    (h_cf : Bridge.CollisionFreeOn
+      [extendedStatePreimage es₁, extendedStatePreimage es₂] hashBytes)
+    (h : commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂) :
     commitState es₁.base = commitState es₂.base ∧
     commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
     commitKeyRegistry es₁.registry = commitKeyRegistry es₂.registry ∧
     commitLocalPolicies es₁.localPolicies = commitLocalPolicies es₂.localPolicies ∧
-    commitBridgeState es₁.bridge = commitBridgeState es₂.bridge := by
-  -- commitExtendedState es = hashBytes (5 sub-commits concatenated).
+    commitBridgeState es₁.bridge = commitBridgeState es₂.bridge ∧
+    commitEpochBudgets es₁.epochBudgets = commitEpochBudgets es₂.epochBudgets ∧
+    commitBudgetPolicy es₁.budgetPolicy = commitBudgetPolicy es₂.budgetPolicy := by
+  -- commitExtendedStateConcat es = hashBytes (7 sub-commits concatenated).
   -- Under collision-freedom, equal hashes ⇒ equal pre-images.
   have h_concat :
       commitState es₁.base ++ commitNonceState es₁.nonces ++
         commitKeyRegistry es₁.registry ++ commitLocalPolicies es₁.localPolicies ++
-        commitBridgeState es₁.bridge =
+        commitBridgeState es₁.bridge ++ commitEpochBudgets es₁.epochBudgets ++
+        commitBudgetPolicy es₁.budgetPolicy =
       commitState es₂.base ++ commitNonceState es₂.nonces ++
         commitKeyRegistry es₂.registry ++ commitLocalPolicies es₂.localPolicies ++
-        commitBridgeState es₂.bridge :=
-    h_cf _ _ h
-  -- Apply the five-fold split with each segment's 32-byte size.
-  exact byteArray_concat_five_split _ _ _ _ _ _ _ _ _ _
+        commitBridgeState es₂.bridge ++ commitEpochBudgets es₂.epochBudgets ++
+        commitBudgetPolicy es₂.budgetPolicy :=
+    h_cf.apply (by simp [extendedStatePreimage])
+      (by simp [extendedStatePreimage]) h
+  -- Apply the seven-fold split with each segment's 32-byte size.
+  exact byteArray_concat_seven_split _ _ _ _ _ _ _ _ _ _ _ _ _ _
     (commitState_size _) (commitNonceState_size _) (commitKeyRegistry_size _)
     (commitLocalPolicies_size _) (commitBridgeState_size _)
+    (commitEpochBudgets_size _) (commitBudgetPolicy_size _)
     (commitState_size _) (commitNonceState_size _) (commitKeyRegistry_size _)
-    (commitLocalPolicies_size _) (commitBridgeState_size _) h_concat
+    (commitLocalPolicies_size _) (commitBridgeState_size _)
+    (commitEpochBudgets_size _) (commitBudgetPolicy_size _) h_concat
 
 /-- #220: Top-level commitment injectivity under
-    `CollisionFree hashBytes`.  Equal top-level commits imply
+    `CollisionFreeOn`.  Equal top-level commits imply
     extensional equality of the underlying states.
 
     **Important: this theorem proves the *encoded* sub-state
@@ -401,9 +550,11 @@ theorem commitExtendedState_subcommits_eq_under_collision_free
     through bytes-equality (which is what the cryptographic
     argument gives) and then closes via the encoder's
     determinism + canonicalisation. -/
-theorem commitExtendedState_subcommits_bytes_eq_under_collision_free
-    (es₁ es₂ : ExtendedState) (h_cf : Bridge.CollisionFree hashBytes)
-    (h : commitExtendedState es₁ = commitExtendedState es₂) :
+theorem commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free
+    (es₁ es₂ : ExtendedState)
+    (h_cf : Bridge.CollisionFreeOn
+      (extendedStateCommitPreimages es₁ es₂) hashBytes)
+    (h : commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂) :
     ByteArray.mk (State.encode es₁.base).toArray =
       ByteArray.mk (State.encode es₂.base).toArray ∧
     ByteArray.mk (NonceState.encode es₁.nonces).toArray =
@@ -413,19 +564,69 @@ theorem commitExtendedState_subcommits_bytes_eq_under_collision_free
     ByteArray.mk (Encodable.encode (T := LocalPolicies) es₁.localPolicies).toArray =
       ByteArray.mk (Encodable.encode (T := LocalPolicies) es₂.localPolicies).toArray ∧
     ByteArray.mk (Encodable.encode (T := BridgeState) es₁.bridge).toArray =
-      ByteArray.mk (Encodable.encode (T := BridgeState) es₂.bridge).toArray := by
-  obtain ⟨h_s, h_n, h_kr, h_lp, h_bs⟩ :=
-    commitExtendedState_subcommits_eq_under_collision_free es₁ es₂ h_cf h
-  exact ⟨commitState_bytes_injective_under_collision_free _ _ h_cf h_s,
-         commitNonceState_bytes_injective_under_collision_free _ _ h_cf h_n,
-         commitKeyRegistry_bytes_injective_under_collision_free _ _ h_cf h_kr,
-         commitLocalPolicies_bytes_injective_under_collision_free _ _ h_cf h_lp,
-         commitBridgeState_bytes_injective_under_collision_free _ _ h_cf h_bs⟩
+      ByteArray.mk (Encodable.encode (T := BridgeState) es₂.bridge).toArray ∧
+    ByteArray.mk (Encodable.encode (T := EpochBudgetState) es₁.epochBudgets).toArray =
+      ByteArray.mk (Encodable.encode (T := EpochBudgetState) es₂.epochBudgets).toArray ∧
+    ByteArray.mk (Encodable.encode (T := BudgetPolicy) es₁.budgetPolicy).toArray =
+      ByteArray.mk (Encodable.encode (T := BudgetPolicy) es₂.budgetPolicy).toArray := by
+  -- Each step below draws its two pre-images from the full set, so
+  -- the shared hypothesis restricts to every sub-call by `mono`.
+  have sub : ∀ x y : ByteArray,
+      x ∈ extendedStateCommitPreimages es₁ es₂ →
+      y ∈ extendedStateCommitPreimages es₁ es₂ →
+      Bridge.CollisionFreeOn [x, y] hashBytes := by
+    intro x y hx hy
+    refine h_cf.mono ?_
+    intro z hz
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
+    rcases hz with rfl | rfl
+    · exact hx
+    · exact hy
+  have mem₁ : ∀ z ∈ subStatePreimages es₁,
+      z ∈ extendedStateCommitPreimages es₁ es₂ := by
+    intro z hz
+    exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+      (List.mem_append_left _ hz))
+  have mem₂ : ∀ z ∈ subStatePreimages es₂,
+      z ∈ extendedStateCommitPreimages es₁ es₂ := by
+    intro z hz
+    exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+      (List.mem_append_right _ hz))
+  obtain ⟨h_s, h_n, h_kr, h_lp, h_bs, h_eb, h_bp⟩ :=
+    commitExtendedStateConcat_subcommits_eq_under_collision_free es₁ es₂
+      (h_cf.mono (by
+        intro z hz
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
+        simp only [extendedStateCommitPreimages, List.mem_cons]
+        rcases hz with rfl | rfl
+        · exact Or.inl rfl
+        · exact Or.inr (Or.inl rfl))) h
+  exact ⟨commitState_bytes_injective_under_collision_free _ _
+           (sub _ _ (mem₁ _ (by simp [subStatePreimages]))
+                    (mem₂ _ (by simp [subStatePreimages]))) h_s,
+         commitNonceState_bytes_injective_under_collision_free _ _
+           (sub _ _ (mem₁ _ (by simp [subStatePreimages]))
+                    (mem₂ _ (by simp [subStatePreimages]))) h_n,
+         commitKeyRegistry_bytes_injective_under_collision_free _ _
+           (sub _ _ (mem₁ _ (by simp [subStatePreimages]))
+                    (mem₂ _ (by simp [subStatePreimages]))) h_kr,
+         commitLocalPolicies_bytes_injective_under_collision_free _ _
+           (sub _ _ (mem₁ _ (by simp [subStatePreimages]))
+                    (mem₂ _ (by simp [subStatePreimages]))) h_lp,
+         commitBridgeState_bytes_injective_under_collision_free _ _
+           (sub _ _ (mem₁ _ (by simp [subStatePreimages]))
+                    (mem₂ _ (by simp [subStatePreimages]))) h_bs,
+         commitEpochBudgets_bytes_injective_under_collision_free _ _
+           (sub _ _ (mem₁ _ (by simp [subStatePreimages]))
+                    (mem₂ _ (by simp [subStatePreimages]))) h_eb,
+         commitBudgetPolicy_bytes_injective_under_collision_free _ _
+           (sub _ _ (mem₁ _ (by simp [subStatePreimages]))
+                    (mem₂ _ (by simp [subStatePreimages]))) h_bp⟩
 
 /-! ## EI.8 — Extensional-equality lift of the subcommits theorem
 
 The bytes-equality theorem
-`commitExtendedState_subcommits_bytes_eq_under_collision_free`
+`commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free`
 establishes that under collision-freedom of `hashBytes`, equal
 top-level commits imply equal sub-state CBE encodings (modulo
 `ByteArray.mk ∘ .toArray` framing).  Workstream EI lifts this from
@@ -441,7 +642,7 @@ This sub-section ships:
     requires the EI.2 `State.Equiv` rather than a flat `Std.TreeMap.Equiv`.
 
   * **EI.8.b**
-    `commitExtendedState_subcommits_extensional_eq_under_collision_free`
+    `commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free`
     — the headline composition theorem.  Routes the five sub-state
     bytes-equalities (from the existing theorem) through EI.2.d /
     EI.3.a / EI.4.a / EI.5.d / EI.7.e to derive the per-sub-state
@@ -464,7 +665,7 @@ fault-proof game's correctness. -/
     encode to the same canonical bytes" through the EI.2 – EI.7
     `Equiv` conclusions.
 
-    The shape mirrors the byte-decomposition of `commitExtendedState`:
+    The shape mirrors the byte-decomposition of `commitExtendedStateConcat`:
     five conjuncts for the five sub-states (`base`, `nonces`,
     `registry`, `localPolicies`, `bridge`-as-three-fields).
 
@@ -515,8 +716,10 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   base_outer_len : es.base.balances.toList.length < 256 ^ 8
   /-- Each inner `BalanceMap` pair-list length fits. -/
   base_inner_len : ∀ p ∈ es.base.balances.toList, p.2.toList.length < 256 ^ 8
-  /-- Each inner amount value fits. -/
-  base_amt : ∀ p ∈ es.base.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 8
+  /-- Each inner balance fits the 33-byte amount head's `2^128`
+      range (not the `2^64` an identifier field would impose — a
+      wei-denominated balance crosses `2^64` at ~18.45 ETH). -/
+  base_amt : ∀ p ∈ es.base.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 32
   /-- Each inner-map framed-bytes size fits. -/
   base_inner_size : ∀ p ∈ es.base.balances.toList,
                     (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8
@@ -544,8 +747,8 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
                  (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8
   /-- Each deposit record's fields fit. -/
   bs_cons_rec : ∀ p ∈ es.bridge.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-                p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+                p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8
   /-- The bridge pending-map pair-list length fits. -/
   bs_pend_len : es.bridge.pending.toList.length < 256 ^ 8
   /-- Each per-withdrawal-id fits. -/
@@ -556,27 +759,132 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   /-- Each pending withdrawal's fields fit. -/
   bs_pend_wd : ∀ p ∈ es.bridge.pending.toList,
                p.2.resource.toNat < 256 ^ 8 ∧
-               p.2.amount < 256 ^ 8 ∧
+               p.2.amount < 256 ^ 32 ∧
                p.2.l2LogIndex < 256 ^ 8
   /-- The bridge nextWdId fits. -/
   bs_nxt : es.bridge.nextWdId < 256 ^ 8
   /-- GP.11.8: AMM ETH reserve fits. -/
-  bs_ammEth : es.bridge.ammReserveEth < 256 ^ 8
+  bs_ammEth : es.bridge.ammReserveEth < 256 ^ 32
   /-- GP.11.8: AMM BOLD reserve fits. -/
-  bs_ammBold : es.bridge.ammReserveBold < 256 ^ 8
+  bs_ammBold : es.bridge.ammReserveBold < 256 ^ 32
   /-- GP.11.8: BOLD TVL cap fits. -/
-  bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 8
+  bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 32
   /-- GP.11.8: BOLD total locked value fits. -/
-  bs_totalLocked : es.bridge.boldTotalLockedValue < 256 ^ 8
+  bs_totalLocked : es.bridge.boldTotalLockedValue < 256 ^ 32
+  /-- The epoch-budget pair-list length fits. -/
+  eb_len : es.epochBudgets.toList.length < 256 ^ 8
+  /-- Each per-actor budget's epoch and balance fit. -/
+  eb_val : ∀ p ∈ es.epochBudgets.toList,
+           p.2.lastSeenEpoch < 256 ^ 8 ∧ p.2.budgetBalance < 256 ^ 8
+  /-- The budget policy's three scalars fit, and its per-action cost is
+      at least one.
+
+      The `1 ≤ actionCost` conjunct is not a width bound and is not
+      decoration: `BudgetPolicy.mkBounded` clamps the cost to that
+      floor and `BudgetPolicy.decode` rejects a zero, so a policy with
+      `actionCost = 0` is one no deployment can hold and no encoding
+      round-trips.  A zero-cost policy would also make the admission
+      budget gate vacuous, which is the reason the clamp exists. -/
+  bp_val : ∀ ft ac ce, es.budgetPolicy = .bounded ft ac ce →
+           ft < 256 ^ 8 ∧ ac < 256 ^ 8 ∧ ce < 256 ^ 8 ∧ 1 ≤ ac
+
+/-! ### Reading the bounds off a cell
+
+`CanonicalBounds` is stated over the sub-state maps' pair lists,
+because that is the form the encoders consume.  A cell reader reaches
+a value through `getElem?` with a default, so every consumer would
+otherwise repeat the same membership translation — and the
+`none` branches, where the default supplies the bound, are easy to get
+subtly wrong.  These do it once. -/
+
+/-- A balance read through `getBalance` fits the amount head, absent
+    entries included: the default is `0`. -/
+theorem getBalance_lt_of_canonicalBounds (es : ExtendedState)
+    (r : ResourceId) (a : ActorId) (h : ExtendedState.CanonicalBounds es) :
+    LegalKernel.getBalance es.base r a < 256 ^ 32 := by
+  unfold LegalKernel.getBalance
+  match h_outer : es.base.balances[r]? with
+  | none    => exact Nat.pow_pos (by decide)
+  | some bm =>
+    show bm[a]?.getD 0 < 256 ^ 32
+    match h_inner : bm[a]? with
+    | none   => exact Nat.pow_pos (by decide)
+    | some v =>
+      simp only [Option.getD_some]
+      exact h.base_amt (r, bm) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_outer)
+        (a, v) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_inner)
+
+/-- A nonce read through `expectsNonce` fits the uint head. -/
+theorem expectsNonce_lt_of_canonicalBounds (es : ExtendedState) (a : ActorId)
+    (h : ExtendedState.CanonicalBounds es) :
+    Authority.expectsNonce es a < 256 ^ 8 := by
+  unfold Authority.expectsNonce
+  match h_n : es.nonces.next[a]? with
+  | none   => exact Nat.pow_pos (by decide)
+  | some n =>
+    show (some n).getD 0 < 256 ^ 8
+    simp only [Option.getD_some]
+    exact h.nonces_val (a, n) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_n)
+
+/-- A live registry key's size fits. -/
+theorem registry_size_lt_of_canonicalBounds (es : ExtendedState) (a : ActorId)
+    (pk : Authority.PublicKey) (h_r : es.registry[a]? = some pk)
+    (h : ExtendedState.CanonicalBounds es) : pk.size < 256 ^ 8 :=
+  h.registry_size (a, pk) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_r)
+
+/-- A live local policy's fields are bounded. -/
+theorem localPolicy_bounded_of_canonicalBounds (es : ExtendedState) (a : ActorId)
+    (p : Authority.LocalPolicy) (h_p : es.localPolicies[a]? = some p)
+    (h : ExtendedState.CanonicalBounds es) : LocalPolicy.fieldsBounded p :=
+  h.lp_pol (a, p) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_p)
+
+/-- A live consumed-deposit record's fields are bounded. -/
+theorem depositRecord_bounded_of_canonicalBounds (es : ExtendedState)
+    (d : Bridge.DepositId) (rec : Bridge.DepositRecord)
+    (h_d : es.bridge.consumed[d]? = some rec)
+    (h : ExtendedState.CanonicalBounds es) :
+    rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 32 ∧
+      rec.poolAmount < 256 ^ 32 ∧ rec.budgetGrant < 256 ^ 8 :=
+  h.bs_cons_rec (d, rec) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_d)
+
+/-- A live pending withdrawal's fields are bounded. -/
+theorem pendingWithdrawal_bounded_of_canonicalBounds (es : ExtendedState)
+    (w : Bridge.WithdrawalId) (pw : Bridge.PendingWithdrawal)
+    (h_w : es.bridge.pending[w]? = some pw)
+    (h : ExtendedState.CanonicalBounds es) :
+    pw.resource.toNat < 256 ^ 8 ∧ pw.amount < 256 ^ 32 ∧ pw.l2LogIndex < 256 ^ 8 :=
+  h.bs_pend_wd (w, pw) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_w)
+
+/-- An actor's epoch budget is bounded, absent entries included: the
+    default `ActorBudget.empty` is all zeros. -/
+theorem actorBudget_bounded_of_canonicalBounds (es : ExtendedState) (a : ActorId)
+    (h : ExtendedState.CanonicalBounds es) :
+    (es.epochBudgets[a]?.getD Authority.ActorBudget.empty).lastSeenEpoch < 256 ^ 8 ∧
+      (es.epochBudgets[a]?.getD Authority.ActorBudget.empty).budgetBalance < 256 ^ 8 := by
+  match h_b : es.epochBudgets[a]? with
+  | none   =>
+    exact ⟨Nat.pow_pos (by decide), Nat.pow_pos (by decide)⟩
+  | some b =>
+    simp only [Option.getD_some]
+    exact h.eb_val (a, b) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_b)
+
+/-- The budget policy's width bounds, with the anti-spam floor
+    separated out — a caller usually needs only one of the two. -/
+theorem budgetPolicy_bounded_of_canonicalBounds (es : ExtendedState)
+    (ft ac ce : Nat) (h_pol : es.budgetPolicy = .bounded ft ac ce)
+    (h : ExtendedState.CanonicalBounds es) :
+    ft < 256 ^ 8 ∧ ac < 256 ^ 8 ∧ ce < 256 ^ 8 :=
+  let ⟨h₁, h₂, h₃, _⟩ := h.bp_val ft ac ce h_pol
+  ⟨h₁, h₂, h₃⟩
 
 /-- EI.8.b — Composition theorem.  Under
-    `CollisionFree hashBytes` plus the canonical-bounds invariants
+    `CollisionFreeOn` plus the canonical-bounds invariants
     on both `ExtendedState`s, equal top-level commits imply
     extensional state equality (the per-sub-state `Equiv`
     conjunction packaged as `ExtendedState.extEq`).
 
     **Proof.**  Compose the existing bytes-equality theorem
-    `commitExtendedState_subcommits_bytes_eq_under_collision_free`
+    `commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free`
     with the per-sub-state EI lemmas:
 
       * `State.encode_injective` (EI.2.d) for `base`.
@@ -592,17 +900,18 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
 
     Workstream EI (`docs/planning/encoder_injectivity_plan.md` §4.8
     EI.8.b).  Retires CLAUDE.md footnote 1. -/
-theorem commitExtendedState_subcommits_extensional_eq_under_collision_free
+theorem commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free
     (es₁ es₂ : ExtendedState)
-    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      (extendedStateCommitPreimages es₁ es₂) hashBytes)
     (h_b₁ : ExtendedState.CanonicalBounds es₁)
     (h_b₂ : ExtendedState.CanonicalBounds es₂)
-    (h : commitExtendedState es₁ = commitExtendedState es₂) :
+    (h : commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂) :
     ExtendedState.extEq es₁ es₂ := by
   -- Step 1: Apply the existing bytes-equality theorem to extract the
   -- five sub-state byte-array equalities.
-  obtain ⟨h_b, h_n, h_kr, h_lp, h_bs⟩ :=
-    commitExtendedState_subcommits_bytes_eq_under_collision_free es₁ es₂ h_cf h
+  obtain ⟨h_b, h_n, h_kr, h_lp, h_bs, _h_eb, h_bp⟩ :=
+    commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free es₁ es₂ h_cf h
   -- Step 2: Strip the `ByteArray.mk ∘ .toArray` framing on each
   -- sub-state byte-equality to recover the underlying `Stream` (List
   -- UInt8) equality that the EI lemmas consume.
@@ -726,11 +1035,11 @@ theorem bridgeState_commit_includes_ammState (bs : Bridge.BridgeState) :
       Bridge.BridgeState.encodeConsumed bs ++
       Bridge.BridgeState.encodePending bs ++
       Encodable.encode (T := Nat) bs.nextWdId ++
-      Encodable.encode (T := Nat) bs.ammReserveEth ++
-      Encodable.encode (T := Nat) bs.ammReserveBold ++
+      encodeAmount bs.ammReserveEth ++
+      encodeAmount bs.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-      Encodable.encode (T := Nat) bs.boldTvlCap ++
-      Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+      encodeAmount bs.boldTvlCap ++
+      encodeAmount bs.boldTotalLockedValue ++
       Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0) := by
   rfl
 
@@ -747,11 +1056,11 @@ def bridgeStateEncodeBase (bs : Bridge.BridgeState) : Encoding.Stream :=
     which is the structural reason the v1.2→v1.4 migration is
     deterministic (see `bridgeState_amm_genesis_suffix_const`). -/
 def bridgeStateEncodeAmmSuffix (bs : Bridge.BridgeState) : Encoding.Stream :=
-  Encodable.encode (T := Nat) bs.ammReserveEth ++
-  Encodable.encode (T := Nat) bs.ammReserveBold ++
+  encodeAmount bs.ammReserveEth ++
+  encodeAmount bs.ammReserveBold ++
   Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-  Encodable.encode (T := Nat) bs.boldTvlCap ++
-  Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+  encodeAmount bs.boldTvlCap ++
+  encodeAmount bs.boldTotalLockedValue ++
   Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0)
 
 /-- GP.11.8: the v1.4 encoding factorizes as a v1.2 base prefix
@@ -849,7 +1158,7 @@ theorem bridgeState_commit_extends_v1_3
 
 
 /-- GP.11.10 headline: `ammDisabled` is *reflected in the state-root
-    preimage*.  Under `CollisionFree hashBytes`, two bridge states
+    preimage*.  Under collision-freeness of `hashBytes` on the pre-images below, two bridge states
     that agree on every other field but differ on the `ammDisabled`
     kill-switch mirror produce **different** bridge-state commitments
     — so a sequencer cannot publish a state root that silently
@@ -864,7 +1173,10 @@ theorem bridgeState_commit_extends_v1_3
     range then forces the two flags to agree — contradiction. -/
 theorem commitBridgeState_reflects_ammDisabled
     (bs₁ bs₂ : Bridge.BridgeState)
-    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      [ ByteArray.mk (Encodable.encode (T := BridgeState) bs₁).toArray
+      , ByteArray.mk (Encodable.encode (T := BridgeState) bs₂).toArray ]
+      hashBytes)
     (h_consumed : bs₁.consumed.toList = bs₂.consumed.toList)
     (h_pending  : bs₁.pending.toList  = bs₂.pending.toList)
     (h_nextWdId : bs₁.nextWdId = bs₂.nextWdId)
@@ -898,19 +1210,19 @@ theorem commitBridgeState_reflects_ammDisabled
       Bridge.BridgeState.encodeConsumed bs₁ ++
       Bridge.BridgeState.encodePending bs₁ ++
       Encodable.encode (T := Nat) bs₁.nextWdId ++
-      Encodable.encode (T := Nat) bs₁.ammReserveEth ++
-      Encodable.encode (T := Nat) bs₁.ammReserveBold ++
+      encodeAmount bs₁.ammReserveEth ++
+      encodeAmount bs₁.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs₁.boldCircuitClosed then 1 else 0) ++
-      Encodable.encode (T := Nat) bs₁.boldTvlCap ++
-      Encodable.encode (T := Nat) bs₁.boldTotalLockedValue =
+      encodeAmount bs₁.boldTvlCap ++
+      encodeAmount bs₁.boldTotalLockedValue =
       Bridge.BridgeState.encodeConsumed bs₂ ++
       Bridge.BridgeState.encodePending bs₂ ++
       Encodable.encode (T := Nat) bs₂.nextWdId ++
-      Encodable.encode (T := Nat) bs₂.ammReserveEth ++
-      Encodable.encode (T := Nat) bs₂.ammReserveBold ++
+      encodeAmount bs₂.ammReserveEth ++
+      encodeAmount bs₂.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs₂.boldCircuitClosed then 1 else 0) ++
-      Encodable.encode (T := Nat) bs₂.boldTvlCap ++
-      Encodable.encode (T := Nat) bs₂.boldTotalLockedValue := by
+      encodeAmount bs₂.boldTvlCap ++
+      encodeAmount bs₂.boldTotalLockedValue := by
     simp only [Bridge.BridgeState.encodeConsumed, Bridge.BridgeState.encodePending,
                h_consumed, h_pending, h_nextWdId, h_ammEth, h_ammBold,
                h_circuit, h_tvlCap, h_totalLocked]
@@ -938,20 +1250,21 @@ theorem commitBridgeState_reflects_ammDisabled
   exact h_ne h_flag
 
 /-- GP.11.10 top-level headline: `ammDisabled` is reflected in the
-    published STATE ROOT itself.  Under `CollisionFree hashBytes`, two
+    published STATE ROOT itself.  Under collision-freeness of `hashBytes` on the pre-images below, two
     extended states whose bridge sub-states agree on every other
     field but differ on the `ammDisabled` kill-switch mirror produce
-    **different** `commitExtendedState` roots — regardless of their
+    **different** `commitExtendedStateConcat` roots — regardless of their
     kernel / nonce / registry / policy sub-states.
 
     **Proof.**  Equal top-level roots decompose (under
     collision-freedom) into equal per-sub-state commits
-    (`commitExtendedState_subcommits_eq_under_collision_free`); the
+    (`commitExtendedStateConcat_subcommits_eq_under_collision_free`); the
     bridge sub-commit equality then contradicts
     `commitBridgeState_reflects_ammDisabled`. -/
-theorem commitExtendedState_reflects_ammDisabled
+theorem commitExtendedStateConcat_reflects_ammDisabled
     (es₁ es₂ : ExtendedState)
-    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      (extendedStateCommitPreimages es₁ es₂) hashBytes)
     (h_consumed : es₁.bridge.consumed.toList = es₂.bridge.consumed.toList)
     (h_pending  : es₁.bridge.pending.toList  = es₂.bridge.pending.toList)
     (h_nextWdId : es₁.bridge.nextWdId = es₂.bridge.nextWdId)
@@ -961,11 +1274,27 @@ theorem commitExtendedState_reflects_ammDisabled
     (h_tvlCap   : es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap)
     (h_totalLocked : es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue)
     (h_ne : es₁.bridge.ammDisabled ≠ es₂.bridge.ammDisabled) :
-    commitExtendedState es₁ ≠ commitExtendedState es₂ := by
+    commitExtendedStateConcat es₁ ≠ commitExtendedStateConcat es₂ := by
   intro h_eq
-  obtain ⟨_, _, _, _, h_bs⟩ :=
-    commitExtendedState_subcommits_eq_under_collision_free es₁ es₂ h_cf h_eq
-  exact commitBridgeState_reflects_ammDisabled es₁.bridge es₂.bridge h_cf
+  obtain ⟨_, _, _, _, h_bs, _, _⟩ :=
+    commitExtendedStateConcat_subcommits_eq_under_collision_free es₁ es₂
+      (h_cf.mono (by
+        intro z hz
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
+        simp only [extendedStateCommitPreimages, List.mem_cons]
+        rcases hz with rfl | rfl
+        · exact Or.inl rfl
+        · exact Or.inr (Or.inl rfl))) h_eq
+  refine commitBridgeState_reflects_ammDisabled es₁.bridge es₂.bridge
+    (h_cf.mono (by
+      intro z hz
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
+      simp only [extendedStateCommitPreimages]
+      rcases hz with rfl | rfl
+      · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+          (List.mem_append_left _ (by simp [subStatePreimages])))
+      · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+          (List.mem_append_right _ (by simp [subStatePreimages])))))
     h_consumed h_pending h_nextWdId h_ammEth h_ammBold h_circuit
     h_tvlCap h_totalLocked h_ne h_bs
 
@@ -973,8 +1302,8 @@ theorem commitExtendedState_reflects_ammDisabled
 
 /-- An empty `ExtendedState` has a deterministic, well-formed
     commit. -/
-example : (commitExtendedState ExtendedState.empty).size = 32 :=
-  commitExtendedState_size _
+example : (commitExtendedStateConcat ExtendedState.empty).size = 32 :=
+  commitExtendedStateConcat_size _
 
 end FaultProof
 end LegalKernel

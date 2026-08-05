@@ -72,11 +72,16 @@ pub enum MethodSelector {
     /// for production calldata.  Kept for integration smoke tests
     /// that exercise the minimum encoding path.
     TerminateOnSingleStep,
-    /// **FULL-FORM** `terminateOnSingleStep(uint256, uint8, bytes, uint64, (uint8,uint256,uint256,bytes,bytes32)[], bytes32)`.
+    /// **FULL-FORM** `terminateOnSingleStep(uint256, uint8, bytes, uint64, CellOpening, CellOpening[])`.
     /// This is the production contract's actual signature — the
     /// fields are `(gameId, actionKind, actionFields, signer,
-    /// cellProofs, claimedPostCommit)`.  Use this selector for
-    /// any calldata the observer broadcasts to L1.
+    /// cellProofs)`.  Use this selector for any calldata the observer
+    /// broadcasts to L1.
+    ///
+    /// There is no `claimedPostCommit` argument: the contract computes
+    /// the post-commit from the step and compares it against the
+    /// on-chain `g.high.commit`, so the claim is not the caller's to
+    /// make.
     TerminateOnSingleStepFull,
     /// `claimTimeout(uint256 gameId)`.
     ClaimTimeout,
@@ -98,16 +103,39 @@ impl MethodSelector {
             Self::RespondToMidpoint => "respondToMidpoint(uint256,bool)",
             Self::TerminateOnSingleStep => "terminateOnSingleStep(uint256,bytes32)",
             // Full-form Solidity signature (per
-            // `solidity/src/contracts/KnomosisFaultProofGame.sol:383`):
+            // `solidity/src/contracts/KnomosisFaultProofGame.sol`):
             // `terminateOnSingleStep(uint256 gameId, uint8 actionKind,
             //                        bytes actionFields, uint64 signer,
-            //                        CellProof[] cellProofs,
-            //                        bytes32 claimedPostCommit)`
-            // The `CellProof` struct's canonical ABI tuple is
-            // `(uint8, uint256, uint256, bytes, bytes32)` — see
-            // `KnomosisStepVM::CellProof`.
+            //                        OpenedCell[] opened,
+            //                        bytes gapMask, bytes siblings)`
+            // `KnomosisStepVMRoot::OpenedCell`'s canonical ABI tuple is
+            // `(uint8, uint256, uint256, bytes)`: the cell's identity
+            // and its proven PRE-state value.
+            //
+            // **The per-opening path is gone**, and its absence is the
+            // point.  The bundle is a DEDUPLICATING PRE-ROOT
+            // MULTIPROOF: every cell is opened against the same root,
+            // so they share one `gapMask` + `siblings` pair instead of
+            // carrying a 256-level path each, and a cell written twice
+            // appears once.  The separate `policyOpening` went the same
+            // way — under a multiproof a read is a write of the same
+            // value, so the budget-policy cell is one more entry in
+            // `opened`.
+            //
+            // There is NO trailing `bytes32 claimedPostCommit`.  An
+            // earlier form spelled one, which changed the 4-byte
+            // selector — so every honest terminate reverted with an
+            // unknown-selector fallback and the observer could not win
+            // a game it had correctly bisected.  The contract
+            // adjudicates against the on-chain `g.high.commit` rather
+            // than against a claim the caller supplies, so the Rust
+            // side moves, not the contract.
+            //
+            // This string is pinned against the COMPILED ABI by
+            // `runtime/tests/cross-stack/method_selectors.json`, so a
+            // signature drift breaks the build rather than the game.
             Self::TerminateOnSingleStepFull => {
-                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32)[],bytes32)"
+                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes)[],bytes,bytes)"
             }
             Self::ClaimTimeout => "claimTimeout(uint256)",
         }
@@ -170,14 +198,14 @@ pub enum SubmitError {
     #[error("mock submitter received unexpected network call")]
     MockUnsupported,
 
-    /// The off-chain terminate-bundle oracle's `claimed_post_commit`
-    /// disagrees with the strategy's `claimed_post_commit`.  This
+    /// The off-chain terminate-bundle oracle's `expected_post_commit`
+    /// disagrees with the strategy's `expected_post_commit`.  This
     /// indicates the truth oracle and the bundle oracle have
     /// drifted (e.g., operator pointed at two different knomosis
     /// binaries / log files).  Workstream SVC.5 defence-in-depth:
     /// refuse to broadcast a calldata that would lose the game.
     #[error(
-        "terminate-bundle oracle's claimed_post_commit disagrees with strategy's; \
+        "terminate-bundle oracle's expected_post_commit disagrees with strategy's; \
          truth oracle and bundle oracle have drifted"
     )]
     BundleCommitMismatch,
@@ -248,7 +276,7 @@ pub fn encode_calldata_with_bundle(
     match (mv, bundle) {
         (
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit,
+                expected_post_commit,
             },
             Some(b),
         ) => {
@@ -259,7 +287,7 @@ pub fn encode_calldata_with_bundle(
             // operator pointed at two different `knomosis` binaries
             // or two different log files).  Refuse to broadcast
             // a calldata that would lose the game.
-            if b.claimed_post_commit != claimed_post_commit {
+            if b.expected_post_commit != expected_post_commit {
                 return Err(SubmitError::BundleCommitMismatch);
             }
             Ok(encode_terminate_full_calldata(
@@ -267,8 +295,9 @@ pub fn encode_calldata_with_bundle(
                 b.action_kind,
                 &b.action_fields,
                 b.signer,
-                &b.cell_proofs,
-                claimed_post_commit,
+                &b.opened_cells,
+                &b.gap_mask,
+                &b.siblings,
             ))
         }
         (mv, _) => encode_calldata(game_id, mv),
@@ -302,11 +331,11 @@ pub fn encode_respond_calldata(game_id: u128, agree: bool) -> Vec<u8> {
 /// contract's signature; use [`encode_terminate_full_calldata`]
 /// for production calldata.
 #[must_use]
-pub fn encode_terminate_calldata(game_id: u128, claimed_post_commit: StateCommit) -> Vec<u8> {
+pub fn encode_terminate_calldata(game_id: u128, expected_post_commit: StateCommit) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + 32 + 32);
     out.extend_from_slice(&MethodSelector::TerminateOnSingleStep.selector());
     out.extend_from_slice(&u256_be(game_id));
-    out.extend_from_slice(&claimed_post_commit);
+    out.extend_from_slice(&expected_post_commit);
     out
 }
 
@@ -360,19 +389,87 @@ pub struct CellProof {
         deserialize_with = "deserialize_bytes_hex_or_array"
     )]
     pub cell_value: Vec<u8>,
-    /// The pre-step state commit at which this cell value is
-    /// witness-valid.  Must equal the
-    /// `terminateOnSingleStep`'s implicit pre-state commit
-    /// (the high-commit of the disputed range at the
-    /// settle-time).
+    /// The cell's SMT opening against the root this proof is
+    /// against: a 32-byte bitmask followed by one 32-byte sibling per
+    /// set bit, in depth order.  Mirrors Lean's
+    /// `SmtCellProof.toWireBytes`.
     ///
-    /// JSON wire format: Lean emits as a 64-hex-char string
-    /// (lowercase, no `0x` prefix).
+    /// This is what an L1 verifier can actually check, and it is now
+    /// the ONLY binding.  A `witness_commit` word used to ride
+    /// alongside — a claim that the value came from a state whose root
+    /// is the pre-state root, checkable only by a party holding the
+    /// whole `ExtendedState`, and settable freely by a responder.  The
+    /// step VM verifies this opening against the running root instead.
+    ///
+    /// **Openings are CHAINED.**  Within a bundle, proof `i` opens
+    /// against the root write `i-1` produced, not against the
+    /// pre-state root: an opening goes stale the moment a write lands,
+    /// and two writes at the same cell (a self-transfer) are reachable
+    /// by anyone.
+    ///
+    /// JSON wire format: a lowercase hex string (no `0x` prefix), as
+    /// emitted by `LegalKernel.Runtime.CellProofJson`.  The
+    /// deserializer accepts the native byte-array form too, and
+    /// enforces the shape — see [`deserialize_proof_data_hex_or_array`].
     #[serde(
-        serialize_with = "serialize_bytes32_hex",
-        deserialize_with = "deserialize_bytes32_hex_or_array"
+        serialize_with = "serialize_bytes_hex",
+        deserialize_with = "deserialize_proof_data_hex_or_array"
     )]
-    pub witness_commit: [u8; 32],
+    pub proof_data: Vec<u8>,
+}
+
+/// One opened cell in a MULTIPROOF terminate bundle: its identity and
+/// its proven PRE-state value, with no opening of its own.
+///
+/// Mirrors the Solidity `KnomosisStepVMRoot::OpenedCell` struct and
+/// Lean's `MultiBundle.cells` entries.  The whole difference from
+/// [`CellProof`] is the missing path: under a multiproof every cell is
+/// opened against the SAME root, so the openings share one sibling
+/// list and a per-cell path would be redundant.  A cell also appears
+/// exactly once, so `pre_value` is unambiguously the pre-state's
+/// rather than "the running state's, which is the pre-state's only for
+/// the first write".
+///
+/// Built by Lean's `buildTerminateBundle` and supplied to the observer
+/// out of band (a `knomosis` subprocess).  The observer ABI-encodes
+/// it; it does not construct proofs.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct OpenedCell {
+    /// The cell kind (uint8 in Solidity; 0=Balance, 1=Nonce,
+    /// 2=Registry, …, 14=BudgetPolicy).
+    pub cell_kind: u8,
+    /// The first key (resource id / actor id / deposit id /
+    /// withdrawal id, depending on `cell_kind`).  Encoded as uint256.
+    ///
+    /// JSON wire format: Lean emits a 16-hex-char big-endian string;
+    /// the deserializer also accepts a native JSON number so a
+    /// `Serialize` round-trip parses.
+    #[serde(
+        serialize_with = "serialize_u128_hex_lowpadded",
+        deserialize_with = "deserialize_u128_hex_or_number"
+    )]
+    pub key_a: u128,
+    /// The second key (actor id for balance cells; 0 otherwise).
+    #[serde(
+        serialize_with = "serialize_u128_hex_lowpadded",
+        deserialize_with = "deserialize_u128_hex_or_number"
+    )]
+    pub key_b: u128,
+    /// The cell's CBE-encoded PRE-state value, as opaque bytes.
+    ///
+    /// Not trusted: it enters the verifier's PRE-side fold, which must
+    /// reproduce the submitted pre-root, so a lie moves the aggregate
+    /// off it.  There is no per-opening verdict to fail — that is what
+    /// the single aggregate root check buys.
+    ///
+    /// JSON wire format: a lowercase hex string (no `0x` prefix), as
+    /// emitted by `LegalKernel.FaultProof.TerminateBundle`.  The
+    /// deserializer accepts the native byte-array form too.
+    #[serde(
+        serialize_with = "serialize_bytes_hex",
+        deserialize_with = "deserialize_bytes_hex_or_array"
+    )]
+    pub pre_value: Vec<u8>,
 }
 
 /// Encode a `u128` as a 16-character lowercase big-endian hex
@@ -491,17 +588,28 @@ where
     Ok(bytes)
 }
 
-/// Encode a `[u8; 32]` as a 64-character lowercase hex string.
-fn serialize_bytes32_hex<S>(value: &[u8; 32], ser: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    ser.serialize_str(&hex::encode(value))
-}
+/// Upper bound on a decoded `CellProof::proof_data`.
+///
+/// Exact rather than round: an opening is a 32-byte bitmask followed by
+/// at most one 32-byte sibling per level, and the SMT is `SMT_DEPTH =
+/// 256` deep, so `32 * (1 + 256)` is the largest opening the tree can
+/// produce.  Mirrors the Solidity constant
+/// `KnomosisStepVM.MAX_PROOF_DATA_BYTES`; the two are pinned equal by
+/// the cross-stack method-selector export.
+pub const MAX_PROOF_DATA_BYTES: usize = 32 * (1 + 256);
 
-/// Deserialize `[u8; 32]` from either a hex string (Lean's wire
-/// form) OR a 32-element JSON byte array.
-fn deserialize_bytes32_hex_or_array<'de, D>(de: D) -> Result<[u8; 32], D::Error>
+/// Deserialize a `CellProof::proof_data` and enforce its shape.
+///
+/// Rejects a length that is zero, not a multiple of 32, or above
+/// [`MAX_PROOF_DATA_BYTES`] — the same three checks
+/// `KnomosisStepVM.executeStep` applies at intake.  Doing it here means
+/// a malformed bundle is rejected while reading the file, not after a
+/// reverted L1 transaction has cost gas and a game clock.
+///
+/// Zero length is a rejection, not an "empty opening": every opening
+/// carries the bitmask, so an empty `proof_data` is a proof that was
+/// never built.
+fn deserialize_proof_data_hex_or_array<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -515,20 +623,28 @@ where
     let bytes = match HexOrBytes::deserialize(de)? {
         HexOrBytes::Str(s) => {
             let trimmed = s.strip_prefix("0x").unwrap_or(&s);
+            // Pre-check the hex length so a pathological string is
+            // rejected before `hex::decode` allocates for it.
+            if trimmed.len() > MAX_PROOF_DATA_BYTES * 2 {
+                return Err(D::Error::custom(format!(
+                    "proof_data hex exceeds cap: {} chars > {} max",
+                    trimmed.len(),
+                    MAX_PROOF_DATA_BYTES * 2,
+                )));
+            }
             hex::decode(trimmed)
-                .map_err(|e| D::Error::custom(format!("invalid hex bytes32 {trimmed:?}: {e}")))?
+                .map_err(|e| D::Error::custom(format!("invalid proof_data hex: {e}")))?
         }
         HexOrBytes::Bytes(b) => b,
     };
-    if bytes.len() != 32 {
+    if bytes.is_empty() || bytes.len() % 32 != 0 || bytes.len() > MAX_PROOF_DATA_BYTES {
         return Err(D::Error::custom(format!(
-            "expected 32 bytes, got {}",
-            bytes.len()
+            "proof_data must be a nonzero multiple of 32 bytes up to {}, got {}",
+            MAX_PROOF_DATA_BYTES,
+            bytes.len(),
         )));
     }
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&bytes);
-    Ok(out)
+    Ok(bytes)
 }
 
 /// `ActionKind` values supported by `KnomosisStepVM` (mirror of
@@ -663,51 +779,110 @@ pub fn encode_terminate_full_calldata(
     action_kind: u8,
     action_fields: &[u8],
     signer: u64,
-    cell_proofs: &[CellProof],
-    claimed_post_commit: StateCommit,
+    opened: &[OpenedCell],
+    gap_mask: &[u8],
+    siblings: &[u8],
 ) -> Vec<u8> {
-    // Header layout (6 head words, 32 bytes each = 192 bytes):
-    //   word 0: gameId            (uint256)
-    //   word 1: actionKind        (uint8 in uint256 slot)
+    // Head layout (7 head words, 32 bytes each = 224 bytes):
+    //   word 0: gameId              (uint256)
+    //   word 1: actionKind          (uint8 in uint256 slot)
     //   word 2: actionFields offset (relative to start of args)
-    //   word 3: signer            (uint64 in uint256 slot)
-    //   word 4: cellProofs offset (relative to start of args)
-    //   word 5: claimedPostCommit (bytes32)
-    const HEAD_WORDS: usize = 6;
+    //   word 3: signer              (uint64 in uint256 slot)
+    //   word 4: opened offset       (OpenedCell[])
+    //   word 5: gapMask offset      (bytes)
+    //   word 6: siblings offset     (bytes)
+    //
+    // The chained form carried a `policyOpening` struct and a
+    // `writeOpenings` array of six-word tuples.  Under a multiproof
+    // the policy cell is one more entry in `opened` — a read is a
+    // write of the same value — and the per-opening sibling paths
+    // collapse into the single `gapMask` + `siblings` pair.
+    //
+    // `expected_post_commit` is NOT a calldata word: the contract
+    // recomputes the post-commit and compares it against the on-chain
+    // `g.high.commit`.  It rides the bundle only to feed the caller's
+    // `BundleCommitMismatch` cross-oracle check.
+    const HEAD_WORDS: usize = 7;
     const WORD: usize = 32;
     let head_bytes: usize = HEAD_WORDS * WORD;
 
-    // First, encode the dynamic tails so we know their offsets
-    // and lengths.
-    //
-    // Tail entry 1: actionFields as `bytes`.
     let action_fields_tail = encode_dynamic_bytes(action_fields);
-    // Tail entry 2: cellProofs as `CellProof[]`.
-    let cell_proofs_tail = encode_cell_proof_array(cell_proofs);
+    let opened_tail = encode_opened_cell_array(opened);
+    let gap_mask_tail = encode_dynamic_bytes(gap_mask);
+    let siblings_tail = encode_dynamic_bytes(siblings);
 
-    // Offsets are computed relative to the start of the args
-    // (right after the 4-byte selector).
     let action_fields_offset: u128 = head_bytes as u128;
-    let cell_proofs_offset: u128 = (head_bytes + action_fields_tail.len()) as u128;
+    let opened_offset: u128 = (head_bytes + action_fields_tail.len()) as u128;
+    let gap_mask_offset: u128 = (head_bytes + action_fields_tail.len() + opened_tail.len()) as u128;
+    let siblings_offset: u128 =
+        (head_bytes + action_fields_tail.len() + opened_tail.len() + gap_mask_tail.len()) as u128;
 
-    let mut out =
-        Vec::with_capacity(4 + head_bytes + action_fields_tail.len() + cell_proofs_tail.len());
+    let mut out = Vec::with_capacity(
+        4 + head_bytes
+            + action_fields_tail.len()
+            + opened_tail.len()
+            + gap_mask_tail.len()
+            + siblings_tail.len(),
+    );
     out.extend_from_slice(&MethodSelector::TerminateOnSingleStepFull.selector());
-    // word 0: gameId
     out.extend_from_slice(&u256_be(game_id));
-    // word 1: actionKind (uint8 → left-padded 32 bytes)
     out.extend_from_slice(&u256_be(u128::from(action_kind)));
-    // word 2: actionFields offset
     out.extend_from_slice(&u256_be(action_fields_offset));
-    // word 3: signer
     out.extend_from_slice(&u256_be(u128::from(signer)));
-    // word 4: cellProofs offset
-    out.extend_from_slice(&u256_be(cell_proofs_offset));
-    // word 5: claimedPostCommit
-    out.extend_from_slice(&claimed_post_commit);
-    // Tails.
+    out.extend_from_slice(&u256_be(opened_offset));
+    out.extend_from_slice(&u256_be(gap_mask_offset));
+    out.extend_from_slice(&u256_be(siblings_offset));
     out.extend_from_slice(&action_fields_tail);
-    out.extend_from_slice(&cell_proofs_tail);
+    out.extend_from_slice(&opened_tail);
+    out.extend_from_slice(&gap_mask_tail);
+    out.extend_from_slice(&siblings_tail);
+    out
+}
+
+/// Encode an `OpenedCell[]`: length, then one pointer per element,
+/// then the elements.
+///
+/// Each element is a dynamic tuple (it holds a `bytes`), so the
+/// pointers are required and are relative to the start of the
+/// pointer region — the same discipline the chained `CellOpening[]`
+/// used.
+fn encode_opened_cell_array(cells: &[OpenedCell]) -> Vec<u8> {
+    let n = cells.len();
+    let per_element: Vec<Vec<u8>> = cells.iter().map(encode_opened_cell_tuple).collect();
+    let mut pointers = Vec::with_capacity(n * 32);
+    let mut data_offset: u128 = (n as u128) * 32;
+    for elem in &per_element {
+        pointers.extend_from_slice(&u256_be(data_offset));
+        data_offset += elem.len() as u128;
+    }
+    let data: Vec<u8> = per_element.into_iter().flatten().collect();
+    let mut out = Vec::with_capacity(32 + pointers.len() + data.len());
+    out.extend_from_slice(&u256_be(n as u128));
+    out.extend_from_slice(&pointers);
+    out.extend_from_slice(&data);
+    out
+}
+
+/// Encode a single `OpenedCell` tuple
+/// `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes preValue)`.
+///
+/// One dynamic field, so one offset — the tuple is four head words
+/// and a `bytes` tail.  Its chained predecessor had two dynamic
+/// fields (`cellValue` and `proofData`) and six head words; the
+/// opening is gone because every cell is opened against the same
+/// root and they share one sibling list.
+fn encode_opened_cell_tuple(c: &OpenedCell) -> Vec<u8> {
+    const HEAD_WORDS: usize = 4;
+    const WORD: usize = 32;
+    let head_bytes: usize = HEAD_WORDS * WORD;
+
+    let pre_value_tail = encode_dynamic_bytes(&c.pre_value);
+    let mut out = Vec::with_capacity(head_bytes + pre_value_tail.len());
+    out.extend_from_slice(&u256_be(u128::from(c.cell_kind)));
+    out.extend_from_slice(&u256_be(c.key_a));
+    out.extend_from_slice(&u256_be(c.key_b));
+    out.extend_from_slice(&u256_be(head_bytes as u128));
+    out.extend_from_slice(&pre_value_tail);
     out
 }
 
@@ -721,83 +896,6 @@ fn encode_dynamic_bytes(payload: &[u8]) -> Vec<u8> {
     out.extend_from_slice(payload);
     // Zero padding.
     out.extend(std::iter::repeat_n(0u8, padded_len - len));
-    out
-}
-
-/// Encode a `CellProof[]` value: 32-byte length + each element
-/// encoded as a tuple `(uint8, uint256, uint256, bytes, bytes32)`.
-///
-/// Since the tuple contains a dynamic `bytes` field, each tuple
-/// is itself dynamic; the array encoding is:
-///   * length: uint256
-///   * for each element: offset:uint256 into the elements blob
-///   * elements blob: concatenation of per-element encodings.
-///
-/// Wait — that's the encoding for `T[]` where `T` is a dynamic
-/// type.  Each element of a dynamic-element array is encoded
-/// as a (offset, data) pair within the array's encoded region.
-///
-/// Let me follow the strict Solidity ABI:
-///   `T[]` where T is dynamic:
-///     - length (32 bytes)
-///     - N pointers (32 bytes each) into the per-element data
-///     - per-element data laid out in declaration order
-///
-/// The pointers are RELATIVE TO THE START OF THE ELEMENTS
-/// BLOB (i.e., after the length word).
-fn encode_cell_proof_array(proofs: &[CellProof]) -> Vec<u8> {
-    let n = proofs.len();
-    // Pre-encode each element so we know per-element lengths.
-    let per_element: Vec<Vec<u8>> = proofs.iter().map(encode_cell_proof_tuple).collect();
-    // Compute pointers: each element's offset within the
-    // pointers+data region.  Pointers come first (N×32 bytes),
-    // then the elements concatenated.
-    let mut pointers = Vec::with_capacity(n * 32);
-    let mut data_offset: u128 = (n as u128) * 32;
-    for elem in &per_element {
-        pointers.extend_from_slice(&u256_be(data_offset));
-        data_offset += elem.len() as u128;
-    }
-    let data: Vec<u8> = per_element.into_iter().flatten().collect();
-    // Top-level: length + pointers + data.
-    let mut out = Vec::with_capacity(32 + pointers.len() + data.len());
-    out.extend_from_slice(&u256_be(n as u128));
-    out.extend_from_slice(&pointers);
-    out.extend_from_slice(&data);
-    out
-}
-
-/// Encode a single `CellProof` tuple
-/// `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes cellValue, bytes32 witnessCommit)`.
-///
-/// The tuple contains a dynamic field (`bytes cellValue`), so
-/// the encoding uses the head/tail discipline:
-/// * Head (5 words = 160 bytes):
-///   word 0: cellKind          (uint8 left-padded)
-///   word 1: keyA              (uint256)
-///   word 2: keyB              (uint256)
-///   word 3: cellValue offset  (160 bytes, relative to tuple start)
-///   word 4: witnessCommit     (bytes32)
-/// * Tail: cellValue dynamic-bytes encoding.
-fn encode_cell_proof_tuple(p: &CellProof) -> Vec<u8> {
-    const HEAD_WORDS: usize = 5;
-    const WORD: usize = 32;
-    let head_bytes: usize = HEAD_WORDS * WORD;
-
-    let cell_value_tail = encode_dynamic_bytes(&p.cell_value);
-    let mut out = Vec::with_capacity(head_bytes + cell_value_tail.len());
-    // word 0: cellKind
-    out.extend_from_slice(&u256_be(u128::from(p.cell_kind)));
-    // word 1: keyA
-    out.extend_from_slice(&u256_be(p.key_a));
-    // word 2: keyB
-    out.extend_from_slice(&u256_be(p.key_b));
-    // word 3: cellValue offset (head_bytes = 160 bytes from tuple start)
-    out.extend_from_slice(&u256_be(head_bytes as u128));
-    // word 4: witnessCommit
-    out.extend_from_slice(&p.witness_commit);
-    // Tail.
-    out.extend_from_slice(&cell_value_tail);
     out
 }
 
@@ -1116,33 +1214,73 @@ mod tests {
     /// Solidity-side rename / signature change would silently
     /// produce wrong calldata on-chain; this test breaks the
     /// build instead.
+    /// Every production `MethodSelector` matches the COMPILED contract.
+    ///
+    /// The pin is loaded from `method_selectors.json`, which
+    /// `solidity/scripts/export_method_selectors.py` emits from
+    /// `solidity/out/**`.  That indirection is the whole point: an
+    /// earlier pin re-derived its expectation from the same signature
+    /// string the code under test returns, so a wrong signature changed
+    /// both sides together and the test could not fail.  It did not:
+    /// `terminateOnSingleStep` was spelled with a trailing
+    /// `bytes32 claimedPostCommit` the contract does not take, the
+    /// selector was `2f32c798` instead of `0a5836ef`, and every honest
+    /// terminate hit the fallback and reverted.
+    ///
+    /// Loading the compiled artifact means a signature change on the
+    /// Solidity side breaks this build.
     #[test]
     fn method_selectors_pinned_against_solidity_abi() {
-        // Verified via `forge inspect KnomosisFaultProofGame methods`
-        // (run in `solidity/`).  Per the audit pass: the
-        // `terminateOnSingleStep` MINIMUM-form is observer-
-        // internal-only (selector `e0e5c8ba`); production
-        // calldata uses the FULL-form selector below.
-        assert_eq!(
-            MethodSelector::SubmitMidpoint.selector(),
-            [0x11, 0xd9, 0x25, 0xb3],
-            "SubmitMidpoint selector drift",
-        );
-        assert_eq!(
-            MethodSelector::RespondToMidpoint.selector(),
-            [0x7e, 0x4d, 0x30, 0xfc],
-            "RespondToMidpoint selector drift",
-        );
-        assert_eq!(
-            MethodSelector::ClaimTimeout.selector(),
-            [0x86, 0xe7, 0x73, 0xf1],
-            "ClaimTimeout selector drift",
-        );
-        assert_eq!(
-            MethodSelector::TerminateOnSingleStepFull.selector(),
-            [0x2f, 0x32, 0xc7, 0x98],
-            "TerminateOnSingleStepFull selector drift; \
-             check Solidity signature in KnomosisFaultProofGame.sol line 383",
+        /// Find `"<signature>": "<selector>"` in the fixture and return
+        /// the selector bytes.  A missing signature means the contract
+        /// does not expose it — which is the drift this test exists to
+        /// catch, so it fails rather than skipping.
+        fn selector_of(section: &str, signature: &str) -> [u8; 4] {
+            let key = format!("\"{signature}\": \"");
+            let start = section
+                .find(&key)
+                .unwrap_or_else(|| panic!("contract does not expose `{signature}`"))
+                + key.len();
+            let hex = &section[start..start + 8];
+            let mut out = [0u8; 4];
+            for (i, byte) in out.iter_mut().enumerate() {
+                *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).expect("hex selector");
+            }
+            out
+        }
+
+        let raw = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../tests/cross-stack/method_selectors.json"),
+        )
+        .expect("method_selectors.json missing; run solidity/scripts/export_method_selectors.py");
+        let game = raw
+            .split("\"KnomosisFaultProofGame\": {")
+            .nth(1)
+            .expect("fixture has no KnomosisFaultProofGame section");
+
+        for variant in [
+            MethodSelector::SubmitMidpoint,
+            MethodSelector::RespondToMidpoint,
+            MethodSelector::ClaimTimeout,
+            MethodSelector::TerminateOnSingleStepFull,
+        ] {
+            assert_eq!(
+                variant.selector(),
+                selector_of(game, variant.signature()),
+                "selector drift for `{}`; the Rust table and the compiled \
+                 contract disagree",
+                variant.signature(),
+            );
+        }
+
+        // The MINIMUM form is observer-internal (no such contract
+        // entry point), so it must NOT appear in the compiled ABI.
+        // If it ever does, the two forms have collided.
+        assert!(
+            !game.contains(MethodSelector::TerminateOnSingleStep.signature()),
+            "the minimum-form terminate signature is now a real contract \
+             entry point; the observer's internal/production split is stale",
         );
     }
 
@@ -1214,7 +1352,7 @@ mod tests {
         let err = encode_calldata(
             42,
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: commit(7),
+                expected_post_commit: commit(7),
             },
         )
         .unwrap_err();
@@ -1247,50 +1385,82 @@ mod tests {
     }
 
     /// Full-form `terminateOnSingleStep` calldata layout
-    /// verification.  Encodes a tiny example with one
-    /// `CellProof` and verifies the head/tail boundaries and
-    /// pointer values.
+    /// verification.  Encodes a tiny example with one `OpenedCell` and
+    /// verifies the head size, the four dynamic offsets and their
+    /// targets — the numbers a hand-written ABI encoder gets wrong.
     #[test]
     fn encode_terminate_full_calldata_shape() {
-        use super::{encode_terminate_full_calldata, ActionKind, CellProof};
+        use super::{encode_terminate_full_calldata, ActionKind, OpenedCell};
 
-        let cell = CellProof {
+        let cell = OpenedCell {
             cell_kind: 0, // Balance
             key_a: 7,
             key_b: 11,
-            cell_value: vec![0xAA, 0xBB, 0xCC],
-            witness_commit: [0x42u8; 32],
+            pre_value: vec![0xAA, 0xBB, 0xCC],
         };
+        let gap_mask = vec![0u8; 33];
+        let siblings = vec![0xEEu8; 64];
         let bytes = encode_terminate_full_calldata(
             123_u128,
             ActionKind::Transfer as u8,
             &[1, 2, 3, 4],
             999_u64,
             std::slice::from_ref(&cell),
-            commit(0xAB),
+            &gap_mask,
+            &siblings,
         );
 
-        // Length sanity: 4-byte selector + 6×32-byte head + tails.
-        // actionFields tail: 32 (length) + 32 (4 bytes padded) = 64.
-        // cellProofs tail: 32 (length) + 32 (1 pointer) + per-cell tuple.
-        //   per-cell: 5×32 head + 32 (cellValue length) + 32 (padded 3 bytes) = 224.
-        // Total tail: 64 + 32 + 32 + 224 = 352.
-        // Total: 4 + 192 + 352 = 548.
-        assert_eq!(bytes.len(), 4 + 192 + 64 + 32 + 32 + 224);
+        // 4-byte selector + 7×32-byte head (224) + tails:
+        //   actionFields:  32 (length) + 32 (4 bytes padded)      =  64
+        //   opened:        32 (length) + 32 (1 pointer) + 192     = 256
+        //     per cell:    4×32 head + 32 (length) + 32 (padded)  = 192
+        //   gapMask:       32 (length) + 64 (33 bytes padded)     =  96
+        //   siblings:      32 (length) + 64                       =  96
+        assert_eq!(bytes.len(), 4 + 224 + 64 + 256 + 96 + 96);
 
-        // Selector matches the full-form signature's hash.
         assert_eq!(
             &bytes[0..4],
             &MethodSelector::TerminateOnSingleStepFull.selector()
         );
 
-        // Word 0 (offset 4..36): gameId = 123.
+        // Word 0: gameId = 123.
         let mut expected_gid = [0u8; 32];
         expected_gid[31] = 123;
         assert_eq!(&bytes[4..36], &expected_gid);
 
-        // Word 5 (offset 4+5*32 = 164..196): claimedPostCommit.
-        assert_eq!(&bytes[164..196], &commit(0xAB));
+        // The four dynamic offsets, each relative to the start of the
+        // args.  Read them and follow each to its length word — an
+        // off-by-one here produces calldata the L1 decodes into
+        // something else entirely rather than rejecting.
+        let word = |i: usize| -> usize {
+            let mut v = 0usize;
+            for b in &bytes[4 + i * 32..4 + (i + 1) * 32] {
+                v = (v << 8) | *b as usize;
+            }
+            v
+        };
+        let args = &bytes[4..];
+        assert_eq!(word(2), 224, "actionFields offset is the head size");
+        assert_eq!(word(4), 224 + 64, "opened offset follows actionFields");
+        assert_eq!(word(5), 224 + 64 + 256, "gapMask offset follows opened");
+        assert_eq!(
+            word(6),
+            224 + 64 + 256 + 96,
+            "siblings offset follows gapMask"
+        );
+        let len_at = |off: usize| -> usize {
+            let mut v = 0usize;
+            for b in &args[off..off + 32] {
+                v = (v << 8) | *b as usize;
+            }
+            v
+        };
+        assert_eq!(len_at(word(2)), 4, "actionFields length");
+        assert_eq!(len_at(word(4)), 1, "opened length");
+        assert_eq!(len_at(word(5)), 33, "gapMask length");
+        assert_eq!(len_at(word(6)), 64, "siblings length");
+        // ...and the sibling payload survives the round trip.
+        assert_eq!(&args[word(6) + 32..word(6) + 96], &siblings[..]);
     }
 
     /// `MethodSelector::TerminateOnSingleStepFull` produces a
@@ -1303,40 +1473,95 @@ mod tests {
         assert_ne!(minimum, full);
     }
 
-    /// `CellProof`-tuple encoding: head/tail boundary checked.
-    /// One cell with empty `cell_value` produces a tuple of
-    /// exactly 5×32 + 32 (length only, no payload) + 0 padding
-    /// = 192 bytes.
+    /// `OpenedCell`-tuple encoding: head/tail boundaries checked.
+    /// One cell with an empty `pre_value` produces a tuple of exactly
+    /// 4×32 head + 32 (length word only, no payload) = 160 bytes.
     #[test]
-    fn cell_proof_tuple_with_empty_cell_value() {
-        use super::{encode_cell_proof_tuple, CellProof};
-        let cell = CellProof {
+    fn opened_cell_tuple_with_empty_pre_value() {
+        use super::{encode_opened_cell_tuple, OpenedCell};
+        let cell = OpenedCell {
             cell_kind: 1,
             key_a: 0,
             key_b: 0,
-            cell_value: vec![],
-            witness_commit: [0u8; 32],
+            pre_value: vec![],
         };
-        let bytes = encode_cell_proof_tuple(&cell);
-        assert_eq!(bytes.len(), 5 * 32 + 32);
-        // The cellValue offset (word 3) is `5 * 32 = 160`.
+        let bytes = encode_opened_cell_tuple(&cell);
+        assert_eq!(bytes.len(), 4 * 32 + 32);
+        // The preValue offset (word 3) is `4 * 32 = 128`.
         let mut expected_offset = [0u8; 32];
-        expected_offset[31] = 160;
+        expected_offset[31] = 128;
         assert_eq!(&bytes[3 * 32..4 * 32], &expected_offset);
-        // The cellValue length (at offset 5*32 = 160) is 0.
-        let expected_len = [0u8; 32];
-        assert_eq!(&bytes[160..192], expected_len.as_slice());
+        // Following it lands on a zero length word.
+        assert_eq!(&bytes[128..160], [0u8; 32].as_slice());
     }
 
-    /// Empty `cell_proofs` array: encoded as length=0 + no
-    /// pointers + no data.  Total 32 bytes for the array.
+    /// A `pre_value` whose length is not a multiple of 32 is padded to
+    /// a word boundary, and the tuple's total length reflects the
+    /// PADDED tail — a decoder sizing the tuple from the raw length
+    /// would land mid-padding on the next element.
     #[test]
-    fn encode_cell_proof_array_empty() {
-        use super::encode_cell_proof_array;
-        let bytes = encode_cell_proof_array(&[]);
+    fn opened_cell_tuple_pads_the_value_to_a_word() {
+        use super::{encode_opened_cell_tuple, OpenedCell};
+        let cell = OpenedCell {
+            cell_kind: 0,
+            key_a: 1,
+            key_b: 2,
+            pre_value: vec![0xDE, 0xAD, 0xBE],
+        };
+        let bytes = encode_opened_cell_tuple(&cell);
+        // 128 head + 32 length + 32 padded payload.
+        assert_eq!(bytes.len(), 192);
+        let mut expected_len = [0u8; 32];
+        expected_len[31] = 3;
+        assert_eq!(&bytes[128..160], &expected_len);
+        assert_eq!(&bytes[160..163], &[0xDE, 0xAD, 0xBE]);
+        assert_eq!(&bytes[163..192], [0u8; 29].as_slice());
+    }
+
+    /// Empty `opened` array: length=0, no pointers, no data.
+    #[test]
+    fn encode_opened_cell_array_empty() {
+        use super::encode_opened_cell_array;
+        let bytes = encode_opened_cell_array(&[]);
         assert_eq!(bytes.len(), 32);
-        // Length word is all-zero.
         assert_eq!(bytes, vec![0u8; 32]);
+    }
+
+    /// **The array's element pointers are relative to the start of the
+    /// pointer region, and account for each element's PADDED size.**
+    /// Two cells whose values pad differently is the shape a
+    /// fixed-stride reader gets wrong.
+    #[test]
+    fn encode_opened_cell_array_pointers_follow_padded_elements() {
+        use super::{encode_opened_cell_array, OpenedCell};
+        let cells = [
+            OpenedCell {
+                cell_kind: 0,
+                key_a: 1,
+                key_b: 2,
+                pre_value: vec![0xAA; 3],
+            },
+            OpenedCell {
+                cell_kind: 1,
+                key_a: 3,
+                key_b: 0,
+                pre_value: vec![],
+            },
+        ];
+        let bytes = encode_opened_cell_array(&cells);
+        // length + 2 pointers + (192-byte element) + (160-byte element)
+        assert_eq!(bytes.len(), 32 + 64 + 192 + 160);
+        let mut want_len = [0u8; 32];
+        want_len[31] = 2;
+        assert_eq!(&bytes[0..32], &want_len);
+        // Pointer 0 = 64 (past both pointers).
+        let mut p0 = [0u8; 32];
+        p0[31] = 64;
+        assert_eq!(&bytes[32..64], &p0);
+        // Pointer 1 = 64 + 192 = 256.
+        let mut p1 = [0u8; 32];
+        p1[30] = 1;
+        assert_eq!(&bytes[64..96], &p1);
     }
 
     /// `ActionKind` byte values match the documented
@@ -1541,7 +1766,7 @@ mod tests {
             "key_a": "0000000000000007",
             "key_b": "0000000000000001",
             "cell_value": "",
-            "witness_commit": "abababababababababababababababababababababababababababababababab"
+            "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
         }"#;
         let parsed: CellProof = serde_json::from_str(lean_json)
             .expect("Lean cell-proof JSON must deserialize into Rust CellProof");
@@ -1549,7 +1774,7 @@ mod tests {
         assert_eq!(parsed.key_a, 7);
         assert_eq!(parsed.key_b, 1);
         assert_eq!(parsed.cell_value, Vec::<u8>::new());
-        assert_eq!(parsed.witness_commit, [0xABu8; 32]);
+        assert_eq!(parsed.proof_data, vec![0u8; 32]);
     }
 
     /// Audit-pass-4-round-3 CRITICAL regression: non-empty
@@ -1561,7 +1786,7 @@ mod tests {
             "key_a": "0000000000000005",
             "key_b": "0000000000000000",
             "cell_value": "deadbeef",
-            "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+            "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
         }"#;
         let parsed: CellProof = serde_json::from_str(lean_json).unwrap();
         assert_eq!(parsed.cell_value, vec![0xDE, 0xAD, 0xBE, 0xEF]);
@@ -1577,7 +1802,7 @@ mod tests {
             key_a: 0xABCD_EF01,
             key_b: 0x0011_2233,
             cell_value: vec![1, 2, 3, 4, 5],
-            witness_commit: [0xCC; 32],
+            proof_data: vec![0x11u8; 64],
         };
         let serialized = serde_json::to_string(&original).unwrap();
         let parsed: CellProof = serde_json::from_str(&serialized).unwrap();
@@ -1593,7 +1818,7 @@ mod tests {
             key_a: 7,
             key_b: 1,
             cell_value: vec![],
-            witness_commit: [0xABu8; 32],
+            proof_data: vec![0xCDu8; 32],
         };
         let json = serde_json::to_string(&cp).unwrap();
         // key_a / key_b are 16-hex-char zero-padded.
@@ -1607,9 +1832,9 @@ mod tests {
         );
         // cell_value is lowercase hex (empty here).
         assert!(json.contains("\"cell_value\":\"\""), "got: {json}");
-        // witness_commit is 64-hex-char lowercase.
+        // proof_data is a lowercase hex string.
         assert!(
-            json.contains("\"witness_commit\":\"abababababababababababababababababababababababababababababababab\""),
+            json.contains("\"proof_data\":\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\""),
             "got: {json}"
         );
     }
@@ -1622,7 +1847,7 @@ mod tests {
             "key_a": "notvalidhex",
             "key_b": "0000000000000001",
             "cell_value": "",
-            "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+            "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
         }"#;
         let err = serde_json::from_str::<CellProof>(bad).unwrap_err();
         assert!(
@@ -1644,7 +1869,7 @@ mod tests {
                 "key_a": "0000000000000007",
                 "key_b": "0000000000000001",
                 "cell_value": "{oversize_hex}",
-                "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+                "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
             }}"#
         );
         let err = serde_json::from_str::<CellProof>(&bad).unwrap_err();
@@ -1655,20 +1880,99 @@ mod tests {
         );
     }
 
-    /// Witness commit wrong length surfaces a typed serde error.
+    /// Build a Lean-shaped cell-proof JSON with a caller-chosen
+    /// `proof_data` hex, so the opening-shape tests below vary exactly
+    /// one field.
+    fn cell_proof_json_with_proof_data(proof_data_hex: &str) -> String {
+        format!(
+            r#"{{
+                "cell_kind": 0,
+                "key_a": "0000000000000007",
+                "key_b": "0000000000000001",
+                "cell_value": "",
+                "proof_data": "{proof_data_hex}"
+            }}"#
+        )
+    }
+
+    /// An EMPTY `proof_data` is rejected.  Every opening carries the
+    /// 32-byte bitmask, so zero length is a proof that was never built
+    /// — and `CellProof.proofData` defaults to empty on the Lean side,
+    /// which is exactly how one would silently ship.
     #[test]
-    fn cell_proof_deserialize_rejects_short_witness_commit() {
+    fn cell_proof_deserialize_rejects_empty_proof_data() {
+        let err =
+            serde_json::from_str::<CellProof>(&cell_proof_json_with_proof_data("")).unwrap_err();
+        assert!(
+            err.to_string().contains("proof_data"),
+            "expected a proof_data shape error, got: {err}"
+        );
+    }
+
+    /// A misaligned `proof_data` is rejected: the tail after the
+    /// bitmask must split into whole 32-byte siblings.
+    #[test]
+    fn cell_proof_deserialize_rejects_misaligned_proof_data() {
+        let hex = "00".repeat(48);
+        let err =
+            serde_json::from_str::<CellProof>(&cell_proof_json_with_proof_data(&hex)).unwrap_err();
+        assert!(
+            err.to_string().contains("proof_data") && err.to_string().contains("32"),
+            "expected a multiple-of-32 error, got: {err}"
+        );
+    }
+
+    /// A `proof_data` longer than the tree is deep is rejected before
+    /// it is decoded — the cap is checked against the hex length first,
+    /// so a pathological string never allocates.
+    #[test]
+    fn cell_proof_deserialize_rejects_oversize_proof_data() {
+        let hex = "00".repeat(super::MAX_PROOF_DATA_BYTES + 32);
+        let err =
+            serde_json::from_str::<CellProof>(&cell_proof_json_with_proof_data(&hex)).unwrap_err();
+        assert!(
+            err.to_string().contains("proof_data"),
+            "expected an oversize proof_data rejection, got: {err}"
+        );
+    }
+
+    /// The exact bound is ACCEPTED.  An off-by-one in the cap would
+    /// make the deepest legitimate opening unsubmittable, which is the
+    /// failure the observer would hit only against a full tree.
+    #[test]
+    fn cell_proof_deserialize_accepts_proof_data_at_the_cap() {
+        let hex = "00".repeat(super::MAX_PROOF_DATA_BYTES);
+        let parsed = serde_json::from_str::<CellProof>(&cell_proof_json_with_proof_data(&hex))
+            .expect("a cap-length opening must deserialize");
+        assert_eq!(parsed.proof_data.len(), super::MAX_PROOF_DATA_BYTES);
+    }
+
+    /// The Rust cap is the SMT's exact geometry and must equal the
+    /// Solidity constant `KnomosisStepVM.MAX_PROOF_DATA_BYTES`.
+    #[test]
+    fn proof_data_cap_matches_smt_geometry() {
+        assert_eq!(super::MAX_PROOF_DATA_BYTES, 32 * (1 + 256));
+    }
+
+    /// A misshapen opening surfaces a typed serde error.
+    ///
+    /// This used to check the `witness_commit` word's 32-byte length.
+    /// That word is gone — it was a claim only a holder of the whole
+    /// state could check — so the shape check that matters now is the
+    /// opening's: a bitmask plus whole 32-byte siblings.
+    #[test]
+    fn cell_proof_deserialize_rejects_misshapen_proof_data() {
         let bad = r#"{
             "cell_kind": 0,
             "key_a": "0000000000000007",
             "key_b": "0000000000000001",
             "cell_value": "",
-            "witness_commit": "deadbeef"
+            "proof_data": "deadbeef"
         }"#;
         let err = serde_json::from_str::<CellProof>(bad).unwrap_err();
         assert!(
-            err.to_string().contains("32 bytes"),
-            "expected 32-byte length error, got: {err}"
+            !err.to_string().is_empty(),
+            "a misshapen opening must be rejected"
         );
     }
 
@@ -1677,13 +1981,21 @@ mod tests {
     // -------------------------------------------------------------
 
     fn sample_bundle(commit_bytes: [u8; 32]) -> TerminateBundle {
+        use super::OpenedCell;
         TerminateBundle {
             fixture_id: "log[0]".to_string(),
             action_kind: 1,
             action_fields: vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
             signer: 5,
-            claimed_post_commit: commit_bytes,
-            cell_proofs: vec![],
+            expected_post_commit: commit_bytes,
+            opened_cells: vec![OpenedCell {
+                cell_kind: 14,
+                key_a: 0,
+                key_b: 0,
+                pre_value: vec![0u8; 36],
+            }],
+            gap_mask: vec![0u8; 32],
+            siblings: vec![],
         }
     }
 
@@ -1708,7 +2020,7 @@ mod tests {
         let result = crate::submitter::encode_calldata_with_bundle(
             10,
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: c,
+                expected_post_commit: c,
             },
             None,
         );
@@ -1724,7 +2036,7 @@ mod tests {
         let calldata = crate::submitter::encode_calldata_with_bundle(
             10,
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: c,
+                expected_post_commit: c,
             },
             Some(&bundle),
         )
@@ -1738,8 +2050,8 @@ mod tests {
     }
 
     /// `encode_calldata_with_bundle` refuses when the bundle's
-    /// `claimed_post_commit` disagrees with the strategy's
-    /// `claimed_post_commit` (defence-in-depth against oracle
+    /// `expected_post_commit` disagrees with the strategy's
+    /// `expected_post_commit` (defence-in-depth against oracle
     /// drift).
     #[test]
     fn encode_with_bundle_terminate_commit_mismatch_errors() {
@@ -1749,33 +2061,10 @@ mod tests {
         let result = crate::submitter::encode_calldata_with_bundle(
             10,
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: c2,
+                expected_post_commit: c2,
             },
             Some(&bundle),
         );
         assert!(matches!(result, Err(SubmitError::BundleCommitMismatch)));
-    }
-
-    /// Cross-stack regression: the full-form `terminateOnSingleStep`
-    /// selector matches the keccak256 of the canonical Solidity
-    /// signature.  Load-bearing pin against signature drift on
-    /// either side; if a renamed parameter changes the canonical
-    /// signature string, the selector changes and this test fails.
-    #[test]
-    fn full_form_terminate_selector_pinned() {
-        use sha3::{Digest as _, Keccak256};
-        let actual = MethodSelector::TerminateOnSingleStepFull.selector();
-        let mut h = Keccak256::new();
-        h.update(
-            b"terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32)[],bytes32)",
-        );
-        let digest = h.finalize();
-        let mut expected = [0u8; 4];
-        expected.copy_from_slice(&digest[0..4]);
-        assert_eq!(
-            actual, expected,
-            "terminateOnSingleStep full-form selector drift; \
-             actual={actual:02x?}, expected={expected:02x?}",
-        );
     }
 }

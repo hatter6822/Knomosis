@@ -455,7 +455,7 @@ def tests : List TestCase :=
   , { name := "F.1.5: fixture file write / verify cycle succeeds"
     , body := do
         let (json, _) := buildFixture
-        writeFixture fixtureName json.encode
+        writeHashDependentFixture fixtureName json.encode
     }
   , { name := "F.1.5: cross-stack assertion gated on isKeccak256Linked"
     , body := do

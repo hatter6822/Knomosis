@@ -3,7 +3,7 @@
 // Knomosis — proof-carrying state transition system.
 // Cross-stack consumer for the GP.11.3 embedded-AMM swap-math corpus.
 //
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {AmmMath} from "src/lib/AmmMath.sol";
@@ -53,11 +53,6 @@ contract AmmMathCrossCheck is CrossCheckFramework {
     // Fixture decoding
     // ------------------------------------------------------------------
 
-    /// @dev The corpus entry count, read from the nested `.header.count`.
-    function _count(string memory raw) internal pure returns (uint256) {
-        return vm.parseJsonUint(raw, ".header.count");
-    }
-
     /// @dev Load entry `i` from the raw JSON.
     function _loadEntry(string memory raw, uint256 i) internal pure returns (Entry memory e) {
         string memory base = string.concat(".entries[", vm.toString(i), "]");
@@ -82,7 +77,7 @@ contract AmmMathCrossCheck is CrossCheckFramework {
         }
         string memory raw = readFixture(FIXTURE_NAME);
 
-        assertGt(_count(raw), 0, "corpus is non-empty");
+        assertGt(headerCount(raw), 0, "corpus is non-empty");
         assertEq(
             vm.parseJsonUint(raw, ".header.bpsDenominator"),
             AmmMath.BPS_DENOMINATOR,
@@ -107,12 +102,19 @@ contract AmmMathCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            uint256 got = AmmMath.getAmountOut(e.amountIn, e.reserveIn, e.reserveOut, e.feeBps);
-            assertEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
+            try this.getAmountOutExternal(
+                e.amountIn, e.reserveIn, e.reserveOut, e.feeBps
+            ) returns (uint256 got) {
+                checkEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("getAmountOut reverted ", describeRevert(err)));
+            }
         }
     }
 
@@ -129,11 +131,12 @@ contract AmmMathCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertLt(e.expectedOut, e.reserveOut, "no-drain violated (output >= reserveOut)");
+            checkLt(e.expectedOut, e.reserveOut, "no-drain violated (output >= reserveOut)");
         }
     }
 
@@ -148,13 +151,14 @@ contract AmmMathCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             uint256 kBefore = e.reserveIn * e.reserveOut;
             uint256 kAfter = (e.reserveIn + e.amountIn) * (e.reserveOut - e.expectedOut);
-            assertLe(kBefore, kAfter, "k decreased across the swap");
+            checkLe(kBefore, kAfter, "k decreased across the swap");
         }
     }
 
@@ -171,4 +175,48 @@ contract AmmMathCrossCheck is CrossCheckFramework {
         assertEq(AmmMath.getAmountOut(1000, 1000, 1000, 0), 500, "no-fee half-pool");
         assertEq(AmmMath.getAmountOut(1000, 1000, 1000, 30), 499, "0.30%-fee half-pool");
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Revert tolerance                                                   */
+    /* ------------------------------------------------------------------ */
+
+    /// @dev `AmmMath.getAmountOut` behind an external boundary, so a
+    ///      corpus walk can catch a revert and name the entry that
+    ///      caused it.  A library call is internal, so without this a
+    ///      single reverting entry ends the walk and the rest of the
+    ///      corpus goes unexamined.
+    function getAmountOutExternal(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut,
+        uint256 feeBps
+    ) external pure returns (uint256) {
+        return AmmMath.getAmountOut(amountIn, reserveIn, reserveOut, feeBps);
+    }
+
+    /// @notice Name `AmmMath`'s own errors; defer the rest to the base.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        override
+        returns (string memory)
+    {
+        bytes4 s = revertSelector(err);
+        if (s == AmmMath.AmmMathInsufficientInput.selector) {
+            return "AmmMathInsufficientInput()";
+        }
+        if (s == AmmMath.AmmMathInsufficientLiquidity.selector) {
+            return "AmmMathInsufficientLiquidity()";
+        }
+        if (s == AmmMath.AmmMathFeeTooHigh.selector) return "AmmMathFeeTooHigh()";
+        return super.describeRevert(err);
+    }
+
+    /// @notice **Every error `AmmMath` declares has a name above.**
+    function test_every_declared_error_is_described() public {
+        string[] memory artifacts = new string[](1);
+        artifacts[0] = "out/AmmMath.sol/AmmMath.json";
+        assertEveryDeclaredErrorIsDescribed(artifacts);
+    }
+
 }

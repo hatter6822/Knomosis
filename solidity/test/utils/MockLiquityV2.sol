@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {ILiquityV2TroveManager} from "src/interfaces/ILiquityV2TroveManager.sol";
 

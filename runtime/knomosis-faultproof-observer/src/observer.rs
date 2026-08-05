@@ -71,6 +71,7 @@ use crate::game::{
 use crate::persistence::{
     GameRecord, PersistBatch, PersistedHeader, Persistence, ResponseRecord, ResponseStatus,
 };
+use crate::state_reader::GameStateReader;
 use crate::strategy::{
     compute_next_move, HonestMove, HonestMoveError, TerminateBundleError, TerminateBundleOracle,
     TruthOracle,
@@ -135,6 +136,15 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// bundle and constructs full-form calldata.  See
     /// [`Self::with_terminate_bundle_oracle`].
     terminate_bundle_oracle: Option<Box<dyn TerminateBundleOracle + Send + Sync>>,
+    /// Optional on-chain game-state reader.  A game adopted from an
+    /// L1 `GameOpened` event starts `state_known = false` (the event
+    /// payload does not carry the full state), and
+    /// [`Self::maybe_play_move`] refuses to act on such a game.
+    /// [`Self::hydrate_cold_start_games`] is the only path that flips
+    /// the flag, and it needs a reader — so without one attached the
+    /// observer adopts games and then never plays a single move.  See
+    /// [`Self::with_state_reader`].
+    state_reader: Option<Box<dyn GameStateReader + Send + Sync>>,
     games: HashMap<u128, GameRecord>,
     /// In-memory cache of `(game_id, pivot_idx)` pairs the
     /// observer has already submitted a response for.  Populated
@@ -261,6 +271,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             submitter,
             oracle,
             terminate_bundle_oracle: None,
+            state_reader: None,
             games,
             submitted_pivots,
             iteration_pivot_inserts: Vec::new(),
@@ -292,6 +303,36 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         bundle_oracle: Box<dyn TerminateBundleOracle + Send + Sync>,
     ) -> Self {
         self.terminate_bundle_oracle = Some(bundle_oracle);
+        self
+    }
+
+    /// Attach the on-chain game-state reader that hydrates
+    /// cold-start games.
+    ///
+    /// A game adopted from a `GameOpened` event is recorded with
+    /// `state_known = false`, because the event payload carries only
+    /// the game's identity, not its disputed range.  `maybe_play_move`
+    /// refuses to respond on such a game — correctly, since it would
+    /// otherwise be moving against a range it has not read.  The only
+    /// thing that clears the flag is
+    /// [`Self::hydrate_cold_start_games`], which requires a reader.
+    ///
+    /// Attaching one is therefore not optional in production: without
+    /// it the observer watches the chain, adopts every game, and never
+    /// responds to any of them — the sequencer wins by default at the
+    /// turn deadline.  It stays an `Option` only so the in-process test
+    /// and dev paths can run without an L1 endpoint.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let reader = OwnedContractGameReader::new(rpc, cfg.game_contract.to_bytes());
+    /// let observer = Observer::new(cfg, src, sub, oracle, persistence)?
+    ///     .with_state_reader(Box::new(reader));
+    /// ```
+    #[must_use]
+    pub fn with_state_reader(mut self, reader: Box<dyn GameStateReader + Send + Sync>) -> Self {
+        self.state_reader = Some(reader);
         self
     }
 
@@ -523,7 +564,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
     /// retry the next iteration).
     pub fn hydrate_cold_start_games(
         &mut self,
-        reader: &crate::state_reader::ContractGameReader<'_>,
+        reader: &(dyn GameStateReader + Send + Sync),
         block_number: u64,
     ) -> (usize, usize) {
         // Snapshot the cold-start game IDs.  We can't iterate
@@ -627,6 +668,32 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // most one such record per (game_id, pivot_idx) so the
         // recovery is bounded.
         self.recover_intent_records()?;
+
+        // Hydrate any game still carrying the cold-start
+        // `state_known = false` placeholder.  Adoption from a
+        // `GameOpened` event cannot fill in the disputed range (the
+        // event does not carry it), and `maybe_play_move` refuses to
+        // respond on an un-hydrated game — so without this call the
+        // observer adopts games and never moves on any of them.
+        //
+        // Placed after intent recovery (which may re-broadcast an
+        // already-signed tx and must not be delayed by RPC reads) and
+        // before the event loop, so a game hydrated this iteration can
+        // be responded to in the same iteration.  Per-game read errors
+        // are logged and skipped inside the call, so a flaky RPC
+        // degrades liveness for one game rather than halting the
+        // daemon.
+        if self.state_reader.is_some() && self.games.values().any(|rec| !rec.state_known) {
+            let block = self.watcher.last_confirmed_block().unwrap_or(0);
+            // Move the reader out for the call: `hydrate_cold_start_games`
+            // takes `&mut self`, so the borrow checker will not allow
+            // holding `&self.state_reader` across it.
+            let reader = self.state_reader.take();
+            if let Some(reader) = reader {
+                self.hydrate_cold_start_games(reader.as_ref(), block);
+                self.state_reader = Some(reader);
+            }
+        }
 
         let watch = self.watcher.run_iteration().map_err(|e| match e {
             crate::watcher::WatcherError::Source(s) => ObserverError::Source(s),
@@ -1092,8 +1159,23 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             return Ok(EventHandling::Recorded);
         }
         // Full state is known: drive the state machine.
-        let mp = Claim { idx, commit };
-        match apply_transition(&rec.state, GameTransition::SubmitMidpoint(mp)) {
+        //
+        // The event carries the index the contract derived; the
+        // transition derives it again from the range.  A mismatch
+        // means our view of the range has drifted from L1's, which is
+        // a resync condition, not a move to play on.
+        let derived_idx = rec.state.range.midpoint_idx();
+        if idx != derived_idx {
+            tracing::warn!(
+                game_id = %game_id,
+                event_idx = idx,
+                derived_idx = derived_idx,
+                "midpoint index disagrees with the derived midpoint; \
+                 local range is stale, not computing a move",
+            );
+            return Ok(EventHandling::Recorded);
+        }
+        match apply_transition(&rec.state, GameTransition::SubmitMidpoint(commit)) {
             Ok(new_state) => {
                 let mut new_rec = rec.clone();
                 new_rec.state = new_state;
@@ -1479,8 +1561,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 return None;
             }
         };
-        // Defence-in-depth: the bundle's `claimed_post_commit`
-        // MUST agree with the strategy's `claimed_post_commit`
+        // Defence-in-depth: the bundle's `expected_post_commit`
+        // MUST agree with the strategy's `expected_post_commit`
         // (the truth oracle's view of the L1 step VM hash at the
         // pivot).  `encode_calldata_with_bundle` enforces this
         // and surfaces `BundleCommitMismatch` on drift; if the
@@ -1942,6 +2024,165 @@ mod tests {
         obs.submitted_pivots.insert((42, Some(16)));
         assert!(obs.has_submitted_for_pivot(42, Some(16)));
         assert!(!obs.has_submitted_for_pivot(42, Some(32)));
+    }
+
+    /// A [`crate::state_reader::GameStateReader`] that answers from a
+    /// fixed map.  An unknown game id reads as an RPC failure, so a
+    /// test can exercise the skip-and-continue path.
+    struct MapStateReader {
+        states: HashMap<u128, GameState>,
+    }
+
+    impl MapStateReader {
+        fn new(states: HashMap<u128, GameState>) -> Self {
+            Self { states }
+        }
+    }
+
+    impl crate::state_reader::GameStateReader for MapStateReader {
+        fn read_and_validate(
+            &self,
+            game_id: u128,
+            expected_deployment_id: [u8; 32],
+        ) -> Result<GameState, crate::state_reader::GameStateReadError> {
+            match self.states.get(&game_id) {
+                Some(s) => Ok(GameState {
+                    deployment_id: expected_deployment_id,
+                    ..s.clone()
+                }),
+                None => Err(crate::state_reader::GameStateReadError::RpcTransport(
+                    "no such game".to_string(),
+                )),
+            }
+        }
+    }
+
+    /// Build a hydratable full state with a non-degenerate range.
+    fn hydratable_state() -> GameState {
+        GameState {
+            sequencer: 11,
+            challenger: 22,
+            range: DisputedRange {
+                low: Claim {
+                    idx: 0,
+                    commit: commit(7),
+                },
+                high: Claim {
+                    idx: 1024,
+                    commit: commit(8),
+                },
+            },
+            pending_midpoint: None,
+            depth: 0,
+            turn: TurnSide::Sequencer,
+            sequencer_bond: 100_000,
+            challenger_bond: 100_000,
+            status: GameStatus::InProgress,
+            deployment_id: [0u8; 32],
+        }
+    }
+
+    /// Inject a game in the cold-start shape an L1 `GameOpened`
+    /// event produces: identity known, disputed range not yet read.
+    fn insert_cold_start_game(
+        obs: &mut Observer<InMemoryL1Source, MockSubmitter, MemoryTruthOracle>,
+    ) {
+        obs.games.insert(
+            77,
+            GameRecord {
+                game_id: 77,
+                state: GameState {
+                    sequencer: 0,
+                    challenger: 0,
+                    range: DisputedRange {
+                        low: Claim {
+                            idx: 0,
+                            commit: [0u8; 32],
+                        },
+                        high: Claim {
+                            idx: 0,
+                            commit: commit(1),
+                        },
+                    },
+                    pending_midpoint: None,
+                    depth: 0,
+                    turn: TurnSide::Sequencer,
+                    sequencer_bond: 0,
+                    challenger_bond: 0,
+                    status: GameStatus::InProgress,
+                    deployment_id: [0u8; 32],
+                },
+                me: TurnSide::Challenger,
+                last_updated_block: 100,
+                state_known: false,
+            },
+        );
+    }
+
+    /// **Liveness regression.**  A full orchestrator iteration must
+    /// hydrate the cold-start games it is holding.
+    ///
+    /// Every game adopted from a `GameOpened` event starts
+    /// `state_known = false`, and `maybe_play_move` refuses to respond
+    /// on such a game.  `hydrate_cold_start_games` is the only path
+    /// that clears the flag — and it had no caller, so the production
+    /// observer adopted games and then never moved on any of them: the
+    /// sequencer won every dispute by running out the turn deadline.
+    ///
+    /// This asserts the orchestrator loop itself does the hydration,
+    /// not merely that the hydration method works when called by hand.
+    /// It fails against the pre-fix code, where `run_iteration` leaves
+    /// `state_known` false forever.
+    #[test]
+    fn run_iteration_hydrates_cold_start_games() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_cold_start_game(&mut obs);
+        assert!(
+            !obs.games[&77].state_known,
+            "precondition: the game starts un-hydrated"
+        );
+
+        let mut states = HashMap::new();
+        states.insert(77u128, hydratable_state());
+        obs = obs.with_state_reader(Box::new(MapStateReader::new(states)));
+
+        obs.run_iteration().expect("iteration succeeds");
+
+        assert!(
+            obs.games[&77].state_known,
+            "the orchestrator must hydrate cold-start games; without this the \
+             observer never plays a move"
+        );
+        // The hydrated range is the one the reader supplied, not the
+        // cold-start placeholder.
+        assert_eq!(obs.games[&77].state.range.high.idx, 1024);
+        assert_eq!(obs.games[&77].state.sequencer, 11);
+    }
+
+    /// With no reader attached the iteration still succeeds and leaves
+    /// the game un-hydrated — the reader is optional for the in-process
+    /// test and dev paths, and its absence must not wedge the loop.
+    #[test]
+    fn run_iteration_without_state_reader_is_a_noop_not_an_error() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_cold_start_game(&mut obs);
+        obs.run_iteration()
+            .expect("iteration succeeds without a reader");
+        assert!(!obs.games[&77].state_known);
+    }
+
+    /// A read failure for one game is logged and skipped, not
+    /// propagated: a flaky RPC must degrade liveness for that game
+    /// rather than halt the daemon.
+    #[test]
+    fn hydration_read_failure_does_not_halt_the_iteration() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_cold_start_game(&mut obs);
+        // Reader that knows about no games at all.
+        obs = obs.with_state_reader(Box::new(MapStateReader::new(HashMap::new())));
+        obs.run_iteration()
+            .expect("iteration survives a failed read");
+        assert!(!obs.games[&77].state_known);
     }
 
     /// `mark_state_known` updates a cold-start game's state and
@@ -2716,7 +2957,7 @@ mod tests {
             super::pivot_for_move(
                 &state,
                 HonestMove::TerminateOnSingleStep {
-                    claimed_post_commit: commit(7)
+                    expected_post_commit: commit(7)
                 },
             ),
             Some(64),
@@ -2756,8 +2997,15 @@ mod tests {
             action_kind: 1,
             action_fields: vec![0u8; 16],
             signer: 5,
-            claimed_post_commit: commit,
-            cell_proofs: vec![],
+            expected_post_commit: commit,
+            opened_cells: vec![crate::submitter::OpenedCell {
+                cell_kind: 14,
+                key_a: 0,
+                key_b: 0,
+                pre_value: vec![0u8; 36],
+            }],
+            gap_mask: vec![0u8; 32],
+            siblings: vec![],
         }
     }
 
@@ -2801,7 +3049,7 @@ mod tests {
             state_known: true,
         };
         let mv = HonestMove::TerminateOnSingleStep {
-            claimed_post_commit: [0xAB; 32],
+            expected_post_commit: [0xAB; 32],
         };
         let result = obs.build_terminate_calldata(&rec, mv);
         // Empty oracle ⇒ Missed ⇒ None.
@@ -2844,7 +3092,7 @@ mod tests {
             state_known: true,
         };
         let mv = HonestMove::TerminateOnSingleStep {
-            claimed_post_commit: [0xAB; 32],
+            expected_post_commit: [0xAB; 32],
         };
         let result = obs.build_terminate_calldata(&rec, mv);
         assert!(result.is_none(), "no bundle oracle ⇒ None (deferral)");
@@ -2886,7 +3134,7 @@ mod tests {
             state_known: true,
         };
         let mv = HonestMove::TerminateOnSingleStep {
-            claimed_post_commit: commit,
+            expected_post_commit: commit,
         };
         let result = obs.build_terminate_calldata(&rec, mv);
         let calldata = result.expect("bundle oracle hit ⇒ Some(calldata)");
@@ -2906,8 +3154,8 @@ mod tests {
         );
     }
 
-    /// When the bundle's `claimed_post_commit` disagrees with
-    /// the strategy's `claimed_post_commit`,
+    /// When the bundle's `expected_post_commit` disagrees with
+    /// the strategy's `expected_post_commit`,
     /// `build_terminate_calldata` refuses and returns `None`
     /// (logs `BundleCommitMismatch`).
     #[test]
@@ -2947,7 +3195,7 @@ mod tests {
             state_known: true,
         };
         let mv = HonestMove::TerminateOnSingleStep {
-            claimed_post_commit: strategy_commit,
+            expected_post_commit: strategy_commit,
         };
         let result = obs.build_terminate_calldata(&rec, mv);
         assert!(

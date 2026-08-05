@@ -70,24 +70,34 @@ def tests : List TestCase :=
           (actual := bundle.signer)
           "bundle's signer = entry's signer"
     }
-  , { name := "buildTerminateBundle: claimedPostCommit matches stepVMHashFromAction"
+  , { name := "buildTerminateBundle: expectedPostCommit is the fold's root"
     , body := do
+        -- It was `stepVMHashFromAction`, a bespoke per-variant hash
+        -- living outside state-root space, so the contract's terminal
+        -- comparison against `g.high.commit` could never succeed.
         let bundle := buildTerminateBundle exampleState exampleEntry
-        let expected := stepVMHashFromAction exampleState
-                          exampleEntry.signedAction.action
-                          exampleEntry.signedAction.signer
-        assertEq (expected := expected) (actual := bundle.claimedPostCommit)
-          "claimedPostCommit = stepVMHashFromAction"
+        -- Against the STATE rather than against another verifier: the
+        -- published root of the state the step produces, computed with
+        -- no reference to the fold.
+        let expected := commitExtendedState
+          (productionApplyBudget exampleState exampleEntry.signedAction 0)
+        assertEq (expected := some expected.toList)
+          (actual := some bundle.expectedPostCommit.toList)
+          "expectedPostCommit = the published post-root"
     }
-  , { name := "buildTerminateBundle: cellProofs matches observer's bundle"
+  , { name := "buildTerminateBundle: the frontier is the step's"
     , body := do
+        -- The written cells plus the read-only budget policy,
+        -- deduplicated.  Not `writeCellsAt`'s length: a self-transfer
+        -- writes one cell twice and opens it once, and the policy cell
+        -- is on the frontier rather than beside it.
         let bundle := buildTerminateBundle exampleState exampleEntry
-        let expected := Observer.buildObserverCellProofs exampleState
-                          exampleEntry.signedAction.action
-                          exampleEntry.signedAction.signer
-        assertEq (expected := expected.proofs.length)
-          (actual := bundle.cellProofs.proofs.length)
-          "bundle's cell-proof count matches observer's"
+        assertEq
+          (expected := (multiFrontierOf exampleEntry.signedAction.action
+             exampleEntry.signedAction.signer
+             exampleState.bridge.nextWdId).length)
+          (actual := bundle.openedCells.length)
+          "bundle opens exactly the frontier"
     }
     -- ## Determinism
   , { name := "buildTerminateBundle: deterministic on same input"
@@ -98,17 +108,25 @@ def tests : List TestCase :=
           "actionKind agrees"
         assertEq (expected := b1.actionFields) (actual := b2.actionFields)
           "actionFields agrees"
-        assertEq (expected := b1.claimedPostCommit)
-          (actual := b2.claimedPostCommit)
-          "claimedPostCommit agrees"
+        assertEq (expected := b1.expectedPostCommit)
+          (actual := b2.expectedPostCommit)
+          "expectedPostCommit agrees"
     }
-    -- ## Cell-proof bundle verification
-  , { name := "buildTerminateBundle: cell-proof bundle verifies against pre-state commit"
+    -- ## The wire verifies
+  , { name := "buildTerminateBundle: the wire folds to the pre-state root"
     , body := do
+        -- The check the L1 makes, made here: the bundle's own values
+        -- folded through its own wire must reproduce the root it
+        -- claims to open against.  `verifyCellProofs` was the chained
+        -- analogue and is not the property a multiproof has — there is
+        -- one aggregate check, not one per opening.
         let bundle := buildTerminateBundle exampleState exampleEntry
-        let commit := commitExtendedState exampleState
-        let result := verifyCellProofs commit bundle.cellProofs
-        assert result "cell-proof bundle verifies against pre-state commit"
+        let got := verifierPostRootMulti (commitExtendedState exampleState)
+          exampleEntry.signedAction.action exampleEntry.signedAction.signer 0
+          { cells := bundle.openedCells, proof := bundle.wire }
+        assertEq (expected := some bundle.expectedPostCommit.toList)
+          (actual := got.map ByteArray.toList)
+          "the bundle's own wire reaches the root it publishes"
     }
     -- ## Per-variant bundles: actionKind dispatch
   , { name := "buildTerminateBundle: actionKind for Mint is 1"
@@ -148,7 +166,7 @@ def tests : List TestCase :=
     -- ## GP.3.3: terminate-bundle coverage for the new variants.
     -- These verify the off-chain observer's terminate-move payload
     -- builder produces the right actionKind, the right L1 field
-    -- layout, a claimedPostCommit equal to the production
+    -- layout, a expectedPostCommit equal to the production
     -- `stepVMHashFromAction` path, and a cell-proof bundle that
     -- verifies against the pre-state commit — for the two
     -- Workstream-GP variants at indices 19 / 20.
@@ -168,17 +186,23 @@ def tests : List TestCase :=
         let bundle := buildTerminateBundle es entry
         assertEq (expected := (19 : UInt8)) (actual := bundle.actionKind)
           "depositWithFee's actionKind is 19"
-        -- 7 × uint64BE = 56-byte L1 field layout.
-        assertEq (expected := 56) (actual := bundle.actionFields.size)
-          "depositWithFee actionFields = 56 bytes"
-        -- claimedPostCommit matches the production dispatcher path.
-        let expected := stepVMHashFromAction es
-                          entry.signedAction.action entry.signedAction.signer
-        assertEq (expected := expected) (actual := bundle.claimedPostCommit)
-          "claimedPostCommit = stepVMHashFromAction for depositWithFee"
-        -- The cell-proof bundle verifies against the pre-state commit.
-        assert (verifyCellProofs (commitExtendedState es) bundle.cellProofs)
-          "depositWithFee cell-proof bundle verifies"
+        -- 5 × uint64BE + 2 × uint256BE = 104-byte L1 field layout
+        -- (userAmount and poolAmount are wei-denominated).
+        assertEq (expected := 104) (actual := bundle.actionFields.size)
+          "depositWithFee actionFields = 104 bytes"
+        let expected := commitExtendedState
+          (productionApplyBudget es entry.signedAction 0)
+        assertEq (expected := some expected.toList)
+          (actual := some bundle.expectedPostCommit.toList)
+          "expectedPostCommit = the published post-root for depositWithFee"
+        -- The bundle names exactly the cells the action writes --
+        -- deduplicated, since a pre-root multiproof opens each cell
+        -- once however many times the step writes it.
+        assertEq
+          (expected := (multiFrontierOf entry.signedAction.action
+             entry.signedAction.signer es.bridge.nextWdId).length)
+          (actual := bundle.openedCells.length)
+          "depositWithFee bundle opens exactly the frontier"
     }
   , { name := "buildTerminateBundle: actionKind for TopUpActionBudget is 20"
     , body := do
@@ -195,15 +219,21 @@ def tests : List TestCase :=
         let bundle := buildTerminateBundle es entry
         assertEq (expected := (20 : UInt8)) (actual := bundle.actionKind)
           "topUpActionBudget's actionKind is 20"
-        -- 4 × uint64BE = 32-byte L1 field layout.
-        assertEq (expected := 32) (actual := bundle.actionFields.size)
-          "topUpActionBudget actionFields = 32 bytes"
-        let expected := stepVMHashFromAction es
-                          entry.signedAction.action entry.signedAction.signer
-        assertEq (expected := expected) (actual := bundle.claimedPostCommit)
-          "claimedPostCommit = stepVMHashFromAction for topUpActionBudget"
-        assert (verifyCellProofs (commitExtendedState es) bundle.cellProofs)
-          "topUpActionBudget cell-proof bundle verifies"
+        -- 3 × uint64BE + 1 × uint256BE = 56-byte L1 field layout
+        -- (gasAmount is wei-denominated; budgetIncrement is a unit
+        -- count and stays 8 bytes).
+        assertEq (expected := 56) (actual := bundle.actionFields.size)
+          "topUpActionBudget actionFields = 56 bytes"
+        let expected := commitExtendedState
+          (productionApplyBudget es entry.signedAction 0)
+        assertEq (expected := some expected.toList)
+          (actual := some bundle.expectedPostCommit.toList)
+          "expectedPostCommit = the published post-root for topUpActionBudget"
+        assertEq
+          (expected := (multiFrontierOf entry.signedAction.action
+             entry.signedAction.signer es.bridge.nextWdId).length)
+          (actual := bundle.openedCells.length)
+          "topUpActionBudget bundle opens exactly the frontier"
     }
     -- ## JSON formatter
   , { name := "formatTerminateBundleJson: contains required snake_case fields"
@@ -220,10 +250,14 @@ def tests : List TestCase :=
           "JSON contains action_fields_hex field"
         assert (json.splitOn "\"signer\"" |>.length |> (· > 1))
           "JSON contains signer field"
-        assert (json.splitOn "\"claimed_post_commit_hex\"" |>.length |> (· > 1))
-          "JSON contains claimed_post_commit_hex field"
-        assert (json.splitOn "\"cell_proofs\"" |>.length |> (· > 1))
-          "JSON contains cell_proofs field"
+        assert (json.splitOn "\"expected_post_commit_hex\"" |>.length |> (· > 1))
+          "JSON contains expected_post_commit_hex field"
+        assert (json.splitOn "\"opened_cells\"" |>.length |> (· > 1))
+          "JSON contains opened_cells field"
+        assert (json.splitOn "\"gap_mask_hex\"" |>.length |> (· > 1))
+          "JSON contains gap_mask_hex field"
+        assert (json.splitOn "\"siblings_hex\"" |>.length |> (· > 1))
+          "JSON contains siblings_hex field"
     }
   , { name := "formatTerminateBundleJson: fixture_id is quoted in output"
     , body := do
@@ -241,29 +275,59 @@ def tests : List TestCase :=
           "action_kind:0 (no 0x prefix)"
     }
     -- ## API-stability
+    --
+    -- Ascribed, not merely named.  A `let _ := @thm` binding pins only
+    -- that the identifier exists; the guarantee CLAUDE.md promises is
+    -- that elaboration FAILS when a signature changes, which needs the
+    -- type written out.
   , { name := "buildTerminateBundle API stable"
     , body := do
-        let _ := @buildTerminateBundle
+        let _builder : ExtendedState → LogEntry → Nat → TerminateBundle :=
+          fun es entry idx => buildTerminateBundle es entry idx
         assert true "API exists"
     }
   , { name := "buildTerminateBundle_deterministic API stable"
     , body := do
-        let _ := @buildTerminateBundle_deterministic
+        let _proof : ∀ (es₁ es₂ : ExtendedState) (e₁ e₂ : LogEntry),
+            es₁ = es₂ → e₁ = e₂ →
+            buildTerminateBundle es₁ e₁ = buildTerminateBundle es₂ e₂ :=
+          fun es₁ es₂ e₁ e₂ h_es h_e =>
+            buildTerminateBundle_deterministic es₁ es₂ e₁ e₂ h_es h_e
         assert true "API exists"
     }
   , { name := "buildTerminateBundle_actionKind API stable"
     , body := do
-        let _ := @buildTerminateBundle_actionKind
+        let _proof : ∀ (es : ExtendedState) (entry : LogEntry),
+            (buildTerminateBundle es entry).actionKind
+              = actionKindByte entry.signedAction.action :=
+          fun es entry => buildTerminateBundle_actionKind es entry
         assert true "API exists"
     }
-  , { name := "buildTerminateBundle_cellProofs_verify API stable"
+  , { name := "buildTerminateBundle_openedCells_tags API stable"
     , body := do
-        let _ := @buildTerminateBundle_cellProofs_verify
+        -- The SHAPE the L1 re-derives and compares against: the
+        -- step's frontier, which is the written cells plus the
+        -- read-only budget policy, deduplicated and in path order.
+        -- Its chained predecessor stated `writeCellsAt`'s list, which
+        -- names a duplicated cell twice and the policy not at all.
+        let _proof : ∀ (es : ExtendedState) (entry : LogEntry) (idx : Nat),
+            (buildTerminateBundle es entry idx).openedCells.map Prod.fst
+              = multiFrontierOf entry.signedAction.action
+                  entry.signedAction.signer es.bridge.nextWdId :=
+          fun es entry idx => buildTerminateBundle_openedCells_tags es entry idx
+        assert true "API exists"
+    }
+  , { name := "buildTerminateBundle_wire API stable"
+    , body := do
+        let _proof : ∀ (es : ExtendedState) (entry : LogEntry) (idx : Nat),
+            (buildTerminateBundle es entry idx).wire
+              = (stepMultiBundle es entry.signedAction).proof :=
+          fun es entry idx => buildTerminateBundle_wire es entry idx
         assert true "API exists"
     }
   , { name := "formatTerminateBundleJson API stable"
     , body := do
-        let _ := @formatTerminateBundleJson
+        let _fmt : String → TerminateBundle → String := formatTerminateBundleJson
         assert true "API exists"
     }
   ]

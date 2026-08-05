@@ -34,7 +34,6 @@ import LegalKernel.Disputes.Evidence
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Coherence
 import LegalKernel.FaultProof.Commit
-import LegalKernel.FaultProof.Strategy
 import LegalKernel.FaultProof.Verify
 import LegalKernel.Runtime.LogFile
 
@@ -78,7 +77,7 @@ def buildObserverCellProofs
     (es : ExtendedState) (action : Action) (signer : ActorId) :
     CellProofBundle :=
   { proofs := (Action.requiredCells action signer).map
-                (fun t => buildCellProof es t) }
+                (fun t => buildCellProofWithOpening es t) }
 
 /-- The observer's bundle verifies against the state's commit
     by `verifyCellProofs_complete_for_canonical_bundle`. -/
@@ -87,33 +86,33 @@ theorem buildObserverCellProofs_verifies
     verifyCellProofs (commitExtendedState es)
       (buildObserverCellProofs es action signer) = true := by
   unfold buildObserverCellProofs
-  exact verifyCellProofs_complete_for_canonical_bundle es _
+  -- The opening-bearing builder differs from the plain one only in
+  -- `proofData`, which `verifyCellProof` does not read.
+  exact verifyCellProofs_complete_for_opening_bundle es _
 
-/-! ## Honest-strategy game player -/
+/-! ## Honest-strategy game player
 
-/-- Compute the next honest move in a game.  Wraps
-    `honestStrategy` (Strategy.lean) with deployment-config-
-    aware behaviour: uses the deployment's truth function +
-    the player's identity. -/
-def computeNextMove
-    (truth : LogIndex → StateCommit)
-    (gs : LegalKernel.FaultProof.GameState) (me : TurnSide) :
-    Option GameTransition :=
-  honestStrategy truth gs me
-
-/-- The computed move is the unique honest move (per
-    `honest_strategy_unique`). -/
-theorem computeNextMove_is_honest
-    (truth : LogIndex → StateCommit)
-    (gs : LegalKernel.FaultProof.GameState) (me : TurnSide) :
-    computeNextMove truth gs me = honestStrategy truth gs me := rfl
+`Observer.computeNextMove` — the third of the three tools this
+module specifies — lives in `Strategy.lean`, and the split is a
+layering constraint rather than a preference.  `kernelStepApply`
+(`Step.lean`) computes the post-state commitment through
+`StepVMCoherence.stepVMHash`, so `Step` imports
+`StepVMCoherence`, which imports THIS module for
+`buildObserverCellProofs`.  A `Game`-dependent wrapper here would
+close the cycle
+`Step → StepVMCoherence → Observer → Strategy → Game → Step`.
+The declaration keeps its `Observer` namespace, so its fully
+qualified name does not move. -/
 
 /-! ## Smoke checks -/
 
-/-- The observer's cell-proof bundle has the expected size for
-    a transfer action (4 cells: registry, balance×2, nonce). -/
+/-- The observer's cell-proof bundle has the expected size for a
+    transfer action (5 cells: registry, balance×2, nonce, epoch
+    budget).  The epoch-budget cell joined `Action.writeCells` once it
+    was established that the production advance rewrites it on every
+    admitted action. -/
 example (es : ExtendedState) (s rcv : ActorId) (a : Amount) :
-    (buildObserverCellProofs es (.transfer 1 s rcv a) s).proofs.length = 4 := by
+    (buildObserverCellProofs es (.transfer 1 s rcv a) s).proofs.length = 5 := by
   unfold buildObserverCellProofs
   simp [Action.requiredCells, Action.readOnlyCells, Action.writeCells]
 

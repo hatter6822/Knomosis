@@ -316,9 +316,23 @@ def tests : List TestCase :=
         let _t := @siblingsHaveMatchingSizes_of_all_32
         pure ()
     }
-  , { name := "CollisionFree: definition shape"
+  , { name := "CollisionFreeOn: definition shape"
     , body := do
-        let _t := @CollisionFree
+        let _t : List ByteArray → (ByteArray → ByteArray) → Prop :=
+          @CollisionFreeOn
+        pure ()
+    }
+  , { name := "CollisionFreeOn: the hypothesis set is inhabited"
+    , body := do
+        -- A vacuous hypothesis would make every theorem below it
+        -- trivially true, which is exactly the defect this predicate
+        -- replaced.  Exhibit a witness rather than assume one exists.
+        let _t : ∀ (S : List ByteArray), CollisionFreeOn S id :=
+          collisionFreeOn_id
+        let _t2 : ∀ {x y : ByteArray}, x ≠ y →
+            ∃ H : ByteArray → ByteArray,
+              (∀ b, (H b).size = 32) ∧ CollisionFreeOn [x, y] H :=
+          @exists_uniformOutputSize_collisionFreeOn_of_ne
         pure ()
     }
   , { name := "UniformOutputSize: definition shape"

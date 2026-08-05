@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -14,9 +15,8 @@ import {AmmTestBase} from "test/utils/AmmTestBase.sol";
 ///         never decreases across the call), and the running `lastK` /
 ///         `successfulSwaps` let the invariant runner confirm swaps actually
 ///         executed (not merely reverted) and that k grew overall.
-contract AmmSwapHandler {
+contract AmmSwapHandler is BoldTestSupport {
     Vm internal constant VM_CHEATS = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
 
     KnomosisBridge public immutable bridge;
     address public immutable actor;
@@ -63,10 +63,6 @@ contract AmmSwapHandler {
         } catch {}
     }
 
-    function _bound(uint256 x, uint256 lo, uint256 hi) internal pure returns (uint256) {
-        if (hi <= lo) return lo;
-        return lo + (x % (hi - lo + 1));
-    }
 }
 
 /// @title AmmInvariantsTest

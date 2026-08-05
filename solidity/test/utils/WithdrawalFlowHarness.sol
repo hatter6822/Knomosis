@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {Vm} from "forge-std/Vm.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
+
+import {CbeTestEncoder} from "./CbeTestEncoder.sol";
 
 /// @title WithdrawalFlowHarness
 /// @notice Shared CBE + EIP-712 withdrawal-flow helpers for every suite that
@@ -21,7 +23,7 @@ import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
 ///         helpers only); inheriting suites supply the bridge instance and
 ///         the attestor key, so suites with different staging keep their own
 ///         scenario state.
-abstract contract WithdrawalFlowHarness {
+abstract contract WithdrawalFlowHarness is CbeTestEncoder {
     /// @dev Cheatcode handle independent of forge-std's `Test`, so the
     ///      harness composes with any base-contract stack without a
     ///      diamond on `Test`.
@@ -64,63 +66,4 @@ abstract contract WithdrawalFlowHarness {
         return abi.encodePacked(r, s, v);
     }
 
-    // ------------------------------------------------------------------
-    // CBE primitives (mirror Lean's canonical byte encoding)
-    // ------------------------------------------------------------------
-
-    function _leBytes8(uint64 v) internal pure returns (bytes memory out) {
-        out = new bytes(8);
-        for (uint256 i = 0; i < 8; i++) {
-            // forge-lint: disable-next-line(unsafe-typecast)
-            out[i] = bytes1(uint8(v >> (8 * i)));
-        }
-    }
-
-    function _cbeUint(uint64 v) internal pure returns (bytes memory) {
-        return bytes.concat(hex"00", _leBytes8(v));
-    }
-
-    function _cbeBytes(bytes memory payload) internal pure returns (bytes memory) {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return bytes.concat(hex"02", _leBytes8(uint64(payload.length)), payload);
-    }
-
-    function _cbeArrayHead(uint64 count) internal pure returns (bytes memory) {
-        return bytes.concat(hex"04", _leBytes8(count));
-    }
-
-    // ------------------------------------------------------------------
-    // Withdrawal leaf + proof blobs
-    // ------------------------------------------------------------------
-
-    /// @notice The canonical 56-byte `PendingWithdrawal` leaf blob.
-    function _encodeWithdrawalLeaf(
-        uint64 resourceId,
-        address recipient,
-        uint64 amount,
-        uint64 l2LogIndex
-    ) internal pure returns (bytes memory) {
-        return bytes.concat(
-            _cbeUint(resourceId),
-            _cbeBytes(abi.encodePacked(recipient)),
-            _cbeUint(amount),
-            _cbeUint(l2LogIndex)
-        );
-    }
-
-    /// @notice The canonical `WithdrawalProof` blob: leaf + index + the
-    ///         64 root-to-leaf siblings.
-    function _encodeWithdrawalProof(bytes memory leaf, uint64 idx, bytes[] memory siblings)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        bytes memory out =
-            bytes.concat(_cbeBytes(leaf), _cbeUint(idx), _cbeArrayHead(uint64(siblings.length)));
-        for (uint256 i = 0; i < siblings.length; i++) {
-            out = bytes.concat(out, _cbeBytes(siblings[i]));
-        }
-        return out;
-    }
 }

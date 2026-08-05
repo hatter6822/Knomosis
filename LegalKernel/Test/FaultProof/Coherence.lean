@@ -84,9 +84,9 @@ def tests : List TestCase :=
     { name := "foldStepApplyOverLog on empty log is identity"
     , body := do
         let es := ExtendedState.empty
-        let result := foldStepApplyOverLog es []
+        let result := foldStepApplyOverLog es 0 []
         -- `result = es` definitionally (per `foldStepApplyOverLog_nil`).
-        let _ := foldStepApplyOverLog_nil es
+        let _ := foldStepApplyOverLog_nil es 0
         let _ := result
         assert true "empty log is identity by definition"
     }
@@ -97,17 +97,20 @@ def tests : List TestCase :=
         let rest : List LogEntry := []
         -- foldStepApplyOverLog es (e :: rest) =
         --   foldStepApplyOverLog (applyCellWrites_to_state es e.sa) rest
-        let _ := foldStepApplyOverLog_cons es e rest
+        let _ := foldStepApplyOverLog_cons es 0 e rest
         assert true "cons reduction holds by definition"
     }
   , -- ===== Per-step bridge =====
-    { name := "applyCellWrites_to_state agrees with kernelOnlyApply"
+    { name := "applyCellWrites_to_state advances the bridge sub-state"
     , body := do
+        -- The inverted statement.  This used to assert agreement with
+        -- `kernelOnlyApply`, which leaves the bridge ledger alone —
+        -- true of the analytical replay, and the exact reason the
+        -- per-step game could not adjudicate a deposit.  The
+        -- reference now records it.
         let es := ExtendedState.empty
         let entry := trivialLogEntry
-        -- The theorem says the two are equal.
-        let _ :=
-          applyCellWrites_to_state_eq_kernelOnlyApply es entry
+        let _ := applyCellWrites_to_state_bridge es entry.signedAction 0
         assert true "per-step bridge theorem provable"
     }
   , -- ===== Value-level chain coherence =====
@@ -117,8 +120,8 @@ def tests : List TestCase :=
         let log : List LogEntry := []
         -- foldStepApplyOverLog es [] = es = kernelOnlyReplay es []
         -- via foldStepApplyOverLog_eq_kernelOnlyReplay.
-        let lhs := foldStepApplyOverLog es log
-        let rhs := kernelOnlyReplay es log
+        let lhs := foldStepApplyOverLog es 0 log
+        let rhs := productionReplayBudget es 0 (log.map (·.signedAction))
         -- We can't BEq ExtendedState directly, but commits are
         -- canonical 32-byte arrays.  Compare via commits.
         assertEq (expected := commitExtendedState rhs)
@@ -129,8 +132,8 @@ def tests : List TestCase :=
     , body := do
         let es := ExtendedState.empty
         let log := [trivialLogEntry]
-        let lhs := foldStepApplyOverLog es log
-        let rhs := kernelOnlyReplay es log
+        let lhs := foldStepApplyOverLog es 0 log
+        let rhs := productionReplayBudget es 0 (log.map (·.signedAction))
         assertEq (expected := commitExtendedState rhs)
                  (actual := commitExtendedState lhs)
                  "singleton-log chain coherence at commit level"
@@ -139,22 +142,29 @@ def tests : List TestCase :=
     , body := do
         let es := ExtendedState.empty
         let log := [trivialLogEntry, trivialLogEntry, trivialLogEntry]
-        let lhs := foldStepApplyOverLog es log
-        let rhs := kernelOnlyReplay es log
+        let lhs := foldStepApplyOverLog es 0 log
+        let rhs := productionReplayBudget es 0 (log.map (·.signedAction))
         assertEq (expected := commitExtendedState rhs)
                  (actual := commitExtendedState lhs)
                  "3-element chain coherence at commit level"
     }
   , -- ===== Commit-level chain coherence theorem =====
-    { name := "recomputeCommitment_chain_coherent_with_kernelOnlyReplay API stable"
+    { name := "recomputeCommitment chain coherence API stable"
     , body := do
-        let _ := @recomputeCommitment_chain_coherent_with_kernelOnlyReplay
+        let _proof : ∀ (es : ExtendedState) (i : Nat) (log : List LogEntry),
+            commitExtendedState (foldStepApplyOverLog es i log) =
+            commitExtendedState
+              (productionReplayBudget es i (log.map (·.signedAction))) :=
+          recomputeCommitment_chain_coherent_with_productionReplayBudget
         pure ()
     }
   , -- ===== Per-step coherence theorem (#225) =====
-    { name := "recomputeCommitment_coherent_with_kernelOnlyApply API stable"
+    { name := "recomputeCommitment per-step coherence API stable"
     , body := do
-        let _ := @recomputeCommitment_coherent_with_kernelOnlyApply
+        let _proof : ∀ (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat),
+            recomputeCommitment es st l2LogIndex
+              = commitExtendedState (productionApplyBudget es st l2LogIndex) :=
+          recomputeCommitment_coherent_with_productionApplyBudget
         pure ()
     }
   , -- ===== `recomputeCommitment` is deterministic =====
@@ -162,8 +172,8 @@ def tests : List TestCase :=
     , body := do
         let es := ExtendedState.empty
         let st := trivialSignedAction
-        let r₁ := recomputeCommitment es st
-        let r₂ := recomputeCommitment es st
+        let r₁ := recomputeCommitment es st 0
+        let r₂ := recomputeCommitment es st 0
         assertEq (expected := r₁) (actual := r₂)
                  "recomputeCommitment is deterministic"
     }
@@ -171,7 +181,7 @@ def tests : List TestCase :=
     , body := do
         let es := ExtendedState.empty
         let st := trivialSignedAction
-        let r := recomputeCommitment es st
+        let r := recomputeCommitment es st 0
         assertEq (expected := 32) (actual := r.size)
                  "recomputeCommitment is 32 bytes"
     }
@@ -224,11 +234,18 @@ def tests : List TestCase :=
         let baseWithRecipient :=
           LegalKernel.setBalance es0.base 1 10 5
         let es : ExtendedState := { es0 with base := baseWithRecipient }
-        let lhs := recomputeCommitment es depositWithFeeSignedAction
+        let lhs := recomputeCommitment es depositWithFeeSignedAction 0
         let rhs := commitExtendedState
-                     (kernelOnlyApply es depositWithFeeLogEntry)
+                     (productionApplyBudget es depositWithFeeSignedAction 0)
         assertEq (expected := rhs) (actual := lhs)
                  "#225 universal lemma on depositWithFee"
+        -- And the divergence this repoint exists to close: the
+        -- analytical replay does NOT record the consumed deposit, so
+        -- the old form of this test asserted agreement with a state
+        -- the published root does not follow.
+        let stale := commitExtendedState (kernelOnlyApply es depositWithFeeLogEntry)
+        assert (stale.toList != lhs.toList)
+          "the analytical replay lands on a different root for a bridge action"
     }
   , { name := "GP.3.3: recomputeCommitment agrees with commitExtendedState ∘ kernelOnlyApply on topUpActionBudget"
     , body := do
@@ -236,9 +253,9 @@ def tests : List TestCase :=
         let baseWithSigner :=
           LegalKernel.setBalance es0.base 2 50 100
         let es : ExtendedState := { es0 with base := baseWithSigner }
-        let lhs := recomputeCommitment es topUpActionBudgetSignedAction
+        let lhs := recomputeCommitment es topUpActionBudgetSignedAction 0
         let rhs := commitExtendedState
-                     (kernelOnlyApply es topUpActionBudgetLogEntry)
+                     (productionApplyBudget es topUpActionBudgetSignedAction 0)
         assertEq (expected := rhs) (actual := lhs)
                  "#225 universal lemma on topUpActionBudget"
     }
@@ -356,11 +373,17 @@ def tests : List TestCase :=
           kernelOnlyReplay_preserves_bridge
         pure ()
     }
-  , { name := "applyCellWrites_to_state_preserves_bridge: term-level API"
+  , { name := "applyCellWrites_to_state_bridge: term-level API"
     , body := do
-        let _t : ∀ (es : ExtendedState) (st : SignedAction),
-                   (applyCellWrites_to_state es st).bridge = es.bridge :=
-          applyCellWrites_to_state_preserves_bridge
+        -- The INVERTED statement.  This used to pin
+        -- `(applyCellWrites_to_state es st).bridge = es.bridge` — the
+        -- fault-proof scope boundary that held the bridge ledger
+        -- constant across every adjudicated step, and therefore made
+        -- the game unable to settle a deposit.
+        let _t : ∀ (es : ExtendedState) (st : SignedAction) (i : Nat),
+                   (applyCellWrites_to_state es st i).bridge
+                     = LegalKernel.Bridge.applyActionToBridgeState es.bridge st.action i :=
+          applyCellWrites_to_state_bridge
         pure ()
     }
   ]

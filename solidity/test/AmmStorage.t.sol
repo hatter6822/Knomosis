@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -43,7 +44,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         `test_boldDeposit_seedsReserve`,
 ///         `test_ammSeedRatio_immutable_reservesGrowAcrossDeposits`) so the
 ///         storage-surface tests stay self-contained.
-contract AmmStorageTest is Test {
+contract AmmStorageTest is Test, BoldTestSupport {
     address private alice = address(0xA1);
 
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_NATIVE_ETH` (a contract
@@ -51,11 +52,6 @@ contract AmmStorageTest is Test {
     ///      contract).
     uint64 private constant NATIVE_ETH = 0;
 
-    /// @dev Mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.  A conformant
-    ///      `MockBold` is etched here before a BOLD-enabled bridge is
-    ///      deployed so the constructor's address pin + `symbol()`
-    ///      cross-check pass (see `test/utils/MockBold.sol`).
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
 
     /// @dev GP.5.5 BOLD safety roles.  A BOLD-enabled deployment requires
     ///      both non-zero and distinct; the AMM-storage tests do not
@@ -141,11 +137,6 @@ contract AmmStorageTest is Test {
     ///         pinned BOLD address (resets its storage).  `vm.etch` copies
     ///         runtime code only, so the mock's `pure` `symbol()` survives
     ///         while balances are seeded after the etch via `mint`.
-    function _etchBold() internal {
-        MockBold impl = new MockBold();
-        vm.etch(BOLD, address(impl).code);
-    }
-
     /// @notice Deploy a BOLD-ENABLED bridge with a chosen `ammSeedRatioBps`.
     ///         Requires a BOLD mock etched at the pinned address first
     ///         (`_etchBold`).  Used to prove the BOLD deposit leg also
@@ -183,12 +174,6 @@ contract AmmStorageTest is Test {
     }
 
     /// @notice Mint `amount` BOLD to `user` and approve `bridge` for it.
-    function _mintApprove(KnomosisBridge bridge, address user, uint256 amount) internal {
-        MockBold(BOLD).mint(user, amount);
-        vm.prank(user);
-        MockBold(BOLD).approve(address(bridge), amount);
-    }
-
     /// @notice `vm.expectEmit` setup asserting `bridge` emits a
     ///         `DepositWithFeeInitiated` carrying exactly the given split.
     ///         The per-bridge `receiptHash` is recomputed from the bridge's

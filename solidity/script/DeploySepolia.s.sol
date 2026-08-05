@@ -2,7 +2,7 @@
 //
 //  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {Script} from "forge-std/Script.sol";
 import {VmSafe} from "forge-std/Vm.sol";
@@ -14,7 +14,7 @@ import {KnomosisDisputeVerifier} from "src/contracts/KnomosisDisputeVerifier.sol
 import {KnomosisSequencerStake} from "src/contracts/KnomosisSequencerStake.sol";
 import {KnomosisAmmDisasterRecoveryMultisig} from
     "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
-import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
+import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
 import {KnomosisDisputeVerifierV2} from "src/contracts/KnomosisDisputeVerifierV2.sol";
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
@@ -115,6 +115,14 @@ contract DeploySepolia is Script {
         uint256 ammMultisigThreshold;
         // Sequencer stake.
         uint256 slashRatioBps;
+        /// @dev Wei a challenger posts to `KnomosisDisputeVerifier.fileDispute`,
+        ///      refunded on UPHELD and forfeited to the sequencer on
+        ///      REJECTED.  An open dispute locks the sequencer's whole
+        ///      stake, so this is what prices the griefing vector that
+        ///      permissionless filing would otherwise open.  Defaulted
+        ///      to the cluster-B `minChallengeBond` so both bonded
+        ///      entry points to the adjudication surface cost the same.
+        uint256 verifierChallengerBond;
         // Cluster-B fault-proof params.
         uint128 stateRootBond;
         uint64 srDisputeWindow;
@@ -296,6 +304,9 @@ contract DeploySepolia is Script {
             uint128(vm.envOr("KNOMOSIS_MIN_CHALLENGE_BOND", uint256(0.05 ether)));
         cfg.minBisectionStepInterval =
             uint64(vm.envOr("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL", uint256(5)));
+        cfg.verifierChallengerBond = vm.envOr(
+            "KNOMOSIS_VERIFIER_CHALLENGER_BOND", uint256(cfg.minChallengeBond)
+        );
 
         cfg.network = _networkName(block.chainid);
         cfg.outPath = vm.envOr(
@@ -682,7 +693,8 @@ contract DeploySepolia is Script {
                 identityRegistry: address(registry),
                 migration: address(0),
                 quorumThreshold: cfg.quorum,
-                approvedAdjudicators: cfg.adjudicators
+                approvedAdjudicators: cfg.adjudicators,
+                challengerBond: cfg.verifierChallengerBond
             })
         );
         require(address(verifier) == predV, "verifier prediction mismatch");
@@ -718,7 +730,7 @@ contract DeploySepolia is Script {
         require(deploymentId == bridge.deploymentId(), "deploymentId mismatch vs bridge");
 
         // ---------------- Cluster B (fault-proof stack) ----------------
-        KnomosisStepVM stepVM = new KnomosisStepVM();
+        KnomosisStepVMRoot stepVM = new KnomosisStepVMRoot();
 
         uint64 nB = vm.getNonce(deployer);
         address predSub = vm.computeCreateAddress(deployer, nB);
@@ -797,7 +809,7 @@ contract DeploySepolia is Script {
         console.log("KnomosisDisputeVerifier:   ", d.disputeVerifier);
         console.log("KnomosisSequencerStake:    ", d.sequencerStake);
         console.log("KnomosisAmmDisasterRecovery:", d.ammMultisig);
-        console.log("KnomosisStepVM:            ", d.stepVM);
+        console.log("KnomosisStepVMRoot:        ", d.stepVM);
         console.log("KnomosisStateRootSubmission:", d.stateRootSubmission);
         console.log("KnomosisDisputeVerifierV2: ", d.disputeVerifierV2);
         console.log("KnomosisFaultProofGame:    ", d.faultProofGame);
@@ -815,7 +827,7 @@ contract DeploySepolia is Script {
         vm.serializeAddress(c, "KnomosisBridge", d.bridge);
         vm.serializeAddress(c, "KnomosisDisputeVerifier", d.disputeVerifier);
         vm.serializeAddress(c, "KnomosisSequencerStake", d.sequencerStake);
-        vm.serializeAddress(c, "KnomosisStepVM", d.stepVM);
+        vm.serializeAddress(c, "KnomosisStepVMRoot", d.stepVM);
         vm.serializeAddress(c, "KnomosisStateRootSubmission", d.stateRootSubmission);
         vm.serializeAddress(c, "KnomosisDisputeVerifierV2", d.disputeVerifierV2);
         if (d.ammMultisig != address(0)) {

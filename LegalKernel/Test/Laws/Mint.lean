@@ -86,7 +86,7 @@ def tests : List TestCase :=
     , body := do
         -- Term-level API check that mint is not IsConservative.
         let _proof : ¬ IsConservative (mint 1 10 50) :=
-          mint_not_conservative 1 10 50 (by decide)
+          mint_not_conservative 1 10 50 (by decide) (by decide)
         pure ()
     }
   -- Cross-resource independence: mint at r doesn't touch r' ≠ r.

@@ -30,6 +30,7 @@ imported by `LegalKernel.lean` for re-export to deployments and by
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
 import Lex.DSL.Law
 
 namespace LegalKernel
@@ -37,16 +38,21 @@ namespace Laws
 
 /-- Mint `amount` units of resource `r` into actor `to`'s balance.
 
-    * Precondition: `amount > 0`.  Mint of zero is a no-op and
-      excluded by policy (mirroring the `transfer` precondition shape;
-      relaxing this clause is safe but not currently useful).
+    * Precondition: `amount > 0`, and the credited balance stays under
+      `Laws.maxAmount`.  Mint of zero is a no-op and excluded by
+      policy (mirroring the `transfer` precondition shape; relaxing
+      this clause is safe but not currently useful).  The ceiling
+      clause is *not* policy: above it `encodeAmount` truncates and
+      the credited cell reads canonically absent, so the state root
+      would stop seeing the balance at all (finding C-3 — see
+      `Laws/AmountBound.lean`).
     * Effect: increases `to`'s balance under `r` by `amount`, leaving
       every other balance untouched.
 
-    `decPre` is inferred: the precondition is a single decidable
-    arithmetic comparison over `Nat`. -/
+    `decPre` is inferred: the precondition is a conjunction of two
+    decidable arithmetic comparisons over `Nat`. -/
 def mint (r : ResourceId) (to : ActorId) (amount : Amount) : Transition where
-  pre        := fun _ => amount > 0
+  pre        := fun s => amount > 0 ∧ AmountBounded s r to amount
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     setBalance s r to (getBalance s r to + amount)
@@ -74,7 +80,8 @@ lexlaw legalkernel_mint where
   lex_signed_by       to
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (to : ActorId) (amount : Amount)
-  lex_pre             := fun _ => amount > 0
+  lex_pre             := fun s => amount > 0 ∧
+                                LegalKernel.Laws.AmountBounded s r to amount
   lex_impl            :=
     fun s => setBalance s r to (getBalance s r to + amount)
   -- Per plan §19.4 LX.23: `mint` claims `monotonic` (succeeds via
@@ -183,11 +190,16 @@ theorem mint_conserves_other_resource
     `0 + amount = 0` contradiction without typeclass machinery. -/
 theorem mint_not_conservative
     (r : ResourceId) (to : ActorId) (amount : Amount)
-    (hpos : amount > 0) :
+    (hpos : amount > 0) (hbound : amount < maxAmount) :
     ¬ IsConservative (mint r to amount) := by
   intro hcons
   -- Apply mint to the genesis state and read off the conservation contradiction.
-  have hpre : (mint r to amount).pre genesisState := hpos
+  -- The ceiling conjunct is discharged at genesis, where every balance
+  -- reads `0`, so the credited value is `amount` itself.
+  have hpre : (mint r to amount).pre genesisState := by
+    refine ⟨hpos, ?_⟩
+    show getBalance genesisState r to + amount < maxAmount
+    simpa [getBalance, genesisState] using hbound
   have hcons_r := hcons.conserves r genesisState hpre
   -- Rewrite the LHS via `totalSupply_after_mint` (post-mint = pre + amount)
   -- and the RHS via `totalSupply_genesis_eq_zero` (pre = 0).

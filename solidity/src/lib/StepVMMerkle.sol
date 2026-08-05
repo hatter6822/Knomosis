@@ -2,10 +2,9 @@
 //
 //  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {SmtCellVerifier} from "./SmtCellVerifier.sol";
-import {SmtVerifier} from "./SmtVerifier.sol";
 
 /// @title StepVMMerkle
 /// @notice Per-cell Merkle proof verification for the L1 step VM
@@ -35,36 +34,48 @@ library StepVMMerkle {
     /* Cell-level proof verification (witness-state form)         */
     /* ---------------------------------------------------------- */
 
-    /// @notice Verify a single cell proof against the committed
-    ///         state root, given the cell tag, value, and Merkle
-    ///         path siblings.
+    /* ---------------------------------------------------------- */
+    /* Canonical cell-key derivation                              */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Derive the canonical SMT key for a cell from its
+    ///         logical identity.  Mirrors Lean's
+    ///         `LegalKernel.FaultProof.smtCellKey`.
     ///
-    /// Witness-state form: the witness-commit field of `cellProof`
-    /// must equal `commit`, and the cell value must match the
-    /// per-cell-tag canonical encoding (which the L1 contract
-    /// verifies against the action's expected reads).
-    function verifyCellProofWitness(bytes32 commit, bytes32 witnessCommit)
+    /// @dev    **Callers must DERIVE the key, never accept one.**
+    ///         An SMT cell proof opens one leaf, and which leaf is
+    ///         determined by the key.  If a caller supplies the key,
+    ///         a proof opening cell X can be presented as a proof
+    ///         about cell Y — the responder opens whichever balance
+    ///         cell it likes and offers the value as, say, the AMM
+    ///         kill switch.  `verifyCellSmtProof` below takes the key
+    ///         as calldata precisely so that the ONE place deriving
+    ///         it is this function.
+    ///
+    ///         The pre-image is `abi.encodePacked(uint8, uint256,
+    ///         uint256)` — 65 bytes, fixed-width, no length prefixes
+    ///         — which is byte-identical to Lean's
+    ///         `cellKeyPreimageOf`:
+    ///
+    ///             [kind : 1 byte] ++ [keyA : 32 BE] ++ [keyB : 32 BE]
+    ///
+    ///         Hashing rather than packing into 32 bytes directly is
+    ///         forced by the key types: Lean's `DepositId` /
+    ///         `WithdrawalId` are unbounded naturals, so a packed
+    ///         `1 + 8 + 8` key would alias ids agreeing mod 2^64.
+    ///
+    /// @param cellKind the cell-kind discriminator (0..14).
+    /// @param keyA     the first key component (resource / actor /
+    ///                 deposit id / withdrawal id; 0 for singletons).
+    /// @param keyB     the second key component (actor for balance
+    ///                 cells; 0 otherwise).
+    /// @return the 32-byte SMT key.
+    function deriveCellSmtKey(uint8 cellKind, uint256 keyA, uint256 keyB)
         internal
         pure
-        returns (bool)
+        returns (bytes32)
     {
-        return commit == witnessCommit;
-    }
-
-    /// @notice Verify a Merkle-path-based withdrawal proof.  Calls
-    ///         the existing Workstream-D `SmtVerifier`
-    ///         infrastructure with the per-cell leaf bytes.  This
-    ///         is the **withdrawal-tree** path (depth 64); the
-    ///         **state-cell** path (depth 256) is
-    ///         `verifyCellSmtProof` below.
-    function verifyCellMerkleProof(
-        bytes32 expectedRoot,
-        bytes memory leaf,
-        uint64 pathIndex,
-        bytes[] memory siblings
-    ) internal pure returns (bool) {
-        bytes32 computedRoot = SmtVerifier.recomputeRoot(uint256(pathIndex), leaf, siblings);
-        return computedRoot == expectedRoot;
+        return keccak256(abi.encodePacked(cellKind, keyA, keyB));
     }
 
     /* ---------------------------------------------------------- */
@@ -80,12 +91,12 @@ library StepVMMerkle {
     /// `proofData`) from canonical-empty siblings (`SmtCellVerifier`'s
     /// per-depth `H_d` table).
     ///
-    /// Cost: ≈ 35-50k gas per cell when invoked directly from
-    /// another Solidity contract (within the SC.2 50k budget).
-    /// The verifier performs 511 keccak256 operations total
-    /// (256 for the walk + up to 255 to advance the canonical
-    /// empty-subtree chain) without any 8 KiB memory
-    /// allocations.
+    /// Cost: one 256-level walk plus the canonical empty-subtree
+    /// table, which this entry point builds for itself because it
+    /// verifies a single opening.  The step VM opens many cells at
+    /// once and does not come through here at all — it folds a
+    /// MULTIPROOF via `SmtMultiVerifier.multiWalkPair`, building the
+    /// table once and threading it in.
     ///
     /// Cross-stack soundness: under collision-resistance of
     /// `keccak256`, two verifying proofs for the same `(root,
@@ -105,41 +116,95 @@ library StepVMMerkle {
     ///                       `expectedRoot`.
     function verifyCellSmtProof(
         bytes32 expectedRoot,
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
+        bytes memory smtKey,
+        bytes memory leafPreimage,
         bytes calldata proofData
     ) internal pure returns (bool ok) {
         ok = SmtCellVerifier.verifyCellProof(expectedRoot, smtKey, leafPreimage, proofData);
     }
 
     /* ---------------------------------------------------------- */
-    /* Cell-update commitment recomputation                       */
+    /* Cell-update root recomputation                             */
     /* ---------------------------------------------------------- */
 
-    /// @notice Compute the new sub-state root after writing one
-    ///         cell.  Mirrors Lean's `updateCommitment`.
+    /// @notice The new state root after writing one cell: the SAME
+    ///         opening, re-walked from the new leaf.  Mirrors Lean's
+    ///         `updateStateCellRoot`.
     ///
-    /// First-pass: under the witness-state-bearing form, the
-    /// new commitment is computed by re-hashing the witness
-    /// state with the cell write applied.  The L1 contract
-    /// drives this via the per-variant `_step<Variant>`
-    /// functions in `KnomosisStepVM`.
-    function updateCommitment(
-        bytes32 _oldCommit, // unused in witness-state form
-        bytes memory _leaf,
-        uint64 _pathIndex,
-        bytes[] memory _siblings,
-        bytes memory newValue
-    ) internal pure returns (bytes32) {
-        // First-pass placeholder: just hash the new value.
-        // SMT-form updates compose the per-cell proof's siblings via
-        // `SmtCellVerifier.recomputeRoot` after substituting the new
-        // leaf bytes; that integration lives in the per-variant
-        // `_step<Variant>` functions, not this generic helper.
-        _oldCommit;
-        _leaf;
-        _pathIndex;
-        _siblings;
-        return keccak256(newValue);
+    /// @dev    Replaces a placeholder that discarded its root and
+    ///         siblings and returned `keccak256(newValue)` — a value
+    ///         in no root space at all.  It had zero callers, which is
+    ///         why nothing caught it; the flip is what gives it one.
+    ///
+    ///         Correct because the canonical path never reads the
+    ///         key's own entry, so two states agreeing away from this
+    ///         cell share it and the whole difference is the leaf.
+    ///         Lean's `updateStateCellRoot_eq_commit_of_canonical`
+    ///         proves the result is `commitExtendedState` of the
+    ///         post-state — not merely some well-formed hash.
+    ///
+    ///         Single-cell, and deliberately so.  A multi-write step
+    ///         does NOT fold through here — it opens every cell against
+    ///         the pre-root in one merged walk
+    ///         (`SmtMultiVerifier.multiWalkPair`), which needs no
+    ///         ordering and opens a twice-written cell once.  What
+    ///         survives here is the `m = 1` primitive and the theorem
+    ///         about it.
+    ///
+    /// @param smtKey    the SMT key, DERIVED via `deriveCellSmtKey`.
+    ///                  Taken as `bytes32`: every caller derives one,
+    ///                  and the walk reads a word.
+    /// @param newLeaf   the post-write leaf, from `cellLeafHash`.
+    /// @param proofData the opening that verified against the pre-root.
+    /// @return the post-write root.
+    function updateCellRoot(bytes32 smtKey, bytes32 newLeaf, bytes calldata proofData)
+        internal
+        pure
+        returns (bytes32)
+    {
+        (bytes32 root,) = SmtCellVerifier.recomputeRootPairFromLeaves(
+            uint256(smtKey),
+            newLeaf,
+            newLeaf,
+            proofData,
+            SmtCellVerifier.precomputeEmptySubtreeHashes()
+        );
+        return root;
     }
+
+    /// @notice The leaf a cell occupies: its leaf hash when present,
+    ///         the canonical empty leaf when canonically absent.
+    ///         Mirrors Lean's `cellLeaf`.
+    ///
+    /// @dev    The branch is not an optimisation.  `stateCellEntries`
+    ///         drops canonically-absent cells, so a cell with no entry
+    ///         has an EMPTY sub-tree beneath its key rather than a
+    ///         leaf holding the absent value — and an opening built
+    ///         the present way reconstructs a root the tree does not
+    ///         have.  Crediting a receiver who holds no balance yet
+    ///         hits this on the first line of the first handler, so it
+    ///         is the common case, not an edge case.
+    ///
+    ///         `isAbsent` is supplied by the caller rather than
+    ///         recomputed here: deciding it means comparing the value
+    ///         against the kind's canonical absent encoding, which is
+    ///         the step VM's business and is pinned cross-stack
+    ///         against Lean's `canonicalAbsentValue`.
+    ///
+    /// @param isAbsent      whether the value equals the kind's
+    ///                      canonical absent encoding.
+    /// @param leafPreimage  `cbe(smtKey) || cbe(value)`, ignored when
+    ///                      `isAbsent`.
+    /// @return the leaf to walk from.
+    function cellLeafHash(bool isAbsent, bytes memory leafPreimage)
+        internal
+        pure
+        returns (bytes32)
+    {
+        if (isAbsent) {
+            return SmtCellVerifier.emptyLeafHash();
+        }
+        return keccak256(leafPreimage);
+    }
+
 }

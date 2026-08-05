@@ -66,7 +66,7 @@ solidity/
                                     MockBoldOz.sol, MockLiquityV2.sol
 ```
 
-Total: **~867 forge tests passing across 58 suites** (`forge test`;
+Total: **~894 forge tests passing across 59 suites** (`forge test`;
 fuzz and property tests additionally report per-test run counts). A
 subset is conditionally skipped when the production keccak256 binding
 is not linked (the cross-check suites probe `isKeccak256Linked` on
@@ -81,8 +81,8 @@ curl -sSfL https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundr
 tar xzf /tmp/foundry.tar.gz -C /usr/local/foundry/bin
 export PATH="/usr/local/foundry/bin:$PATH"
 
-# Install solc 0.8.20 (one-time):
-curl -sSfL https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux \
+# Install solc 0.8.36 (one-time):
+curl -sSfL https://github.com/ethereum/solidity/releases/download/v0.8.36/solc-static-linux \
   -o /usr/local/bin/solc
 chmod +x /usr/local/bin/solc
 
@@ -103,7 +103,7 @@ make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 
 `foundry.toml` pins:
 
-* `solc_version = "0.8.20"` with `evm_version = "shanghai"`.
+* `solc_version = "0.8.36"` with `evm_version = "shanghai"`.
 * `via_ir = true` — required because `KnomosisBridge.withdrawWithProof`
   and a few other functions are stack-too-deep without it.
 * `optimizer_runs = 200`.
@@ -701,7 +701,9 @@ landed, it will require:
      (`MAX_CLAUSES_PER_POLICY = 64`,
      `MAX_TAGS_PER_DENY = 64`,
      `MAX_RECIPIENTS_PER_REQUIRE = 64`,
-     `MAX_POLICY_ENCODE_BYTES = 16_384`).
+     `MAX_DELEGATES_PER_ALLOW = 64`,
+     `MAX_POLICY_ENCODE_BYTES = 38_601` — the proven bound, see
+     `Encoding.LocalPolicy.encode_size_bound`).
   2. An admissibility-check call in
      `KnomosisBridge.depositETH` / `depositERC20` that consults the
      depositor's L2 `localPolicies` lookup before crediting

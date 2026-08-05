@@ -53,6 +53,14 @@ runtime/**/target/
 # Editor noise from rust-analyzer / clippy invocations.
 **/*.rs.bk
 
+# proptest's failing-seed persistence.  proptest recommends committing
+# these, but every property suite here is a deterministic pin over an
+# exhaustive-by-construction input space, so a recorded seed says
+# "someone ran the suite against stale code", not "this input is
+# interesting".  Committing one would re-run a case the pin already
+# covers and outlive the defect that produced it.
+**/*.proptest-regressions
+
 # A future operator-locally-generated `.cargo/config.toml` (e.g. for
 # vendoring) is host-specific and never committed.
 runtime/.cargo/config.toml

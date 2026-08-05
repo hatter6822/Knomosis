@@ -273,16 +273,40 @@ theorem refundAmount_le_max
 
 /-! ## Pool solvency (the kernel-leg precondition) -/
 
-/-- The refund kernel leg's precondition IS exactly the pool-solvency
-    check: the pool must hold at least `refundAmount`.  A refund
-    against an under-funded pool is rejected (a no-op via `step_impl`),
-    so the pool can never be over-drawn. -/
+/-- The refund kernel leg's precondition, characterised.
+
+    Pool solvency is the FIRST conjunct: the pool must hold at least
+    `refundAmount`, so a refund against an under-funded pool is
+    rejected (a no-op via `step_impl`) and the pool can never be
+    over-drawn.  The second is the C-3 ceiling on the credited
+    claimant (`Laws/AmountBound.lean`), read from the post-debit
+    state exactly as the law's own credit is.
+
+    Stated as the full characterisation rather than as solvency
+    alone: the precondition is what `step_impl` branches on, so a
+    theorem claiming it *is* solvency would be false the moment a
+    second conjunct exists — which it now does. -/
 theorem refund_pre_iff_pool_solvent
     (claimant poolActor : ActorId) (gasResource : ResourceId)
     (refundAmt : Amount) (s : State) :
     (Laws.claimBudgetRefund claimant poolActor gasResource refundAmt).pre s ↔
-      refundAmt ≤ getBalance s gasResource poolActor :=
+      (refundAmt ≤ getBalance s gasResource poolActor ∧
+       Laws.AmountBounded
+         (setBalance s gasResource poolActor
+           (getBalance s gasResource poolActor - refundAmt))
+         gasResource claimant refundAmt) :=
   Iff.rfl
+
+/-- ...hence an admitted refund never over-draws the pool.
+
+    The direction every consumer actually needs, named separately so
+    that adding a further precondition conjunct cannot silently
+    change what they are relying on. -/
+theorem refund_pre_implies_pool_solvent
+    (claimant poolActor : ActorId) (gasResource : ResourceId)
+    (refundAmt : Amount) (s : State)
+    (h : (Laws.claimBudgetRefund claimant poolActor gasResource refundAmt).pre s) :
+    refundAmt ≤ getBalance s gasResource poolActor := h.left
 
 /-! ## Law ↔ ledger composite (the headline GP.9.1 safety theorems)
 

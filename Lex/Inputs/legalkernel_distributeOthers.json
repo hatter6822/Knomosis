@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 77, "column": 0},
+ {"position": {"line": 86, "column": 0},
   "file": "LegalKernel/Laws/DistributeOthers.lean"},
  "signed_by": {"name": "deployer", "kind": "actorRef"},
  "schema_version": 1,
@@ -12,7 +12,8 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr": "fun _ => amount > 0\n  ",
+ "pre_expr":
+ "fun s => amount > 0 ∧\n                                LegalKernel.Laws.BulkBounded s r excluded ∧\n                                LegalKernel.Laws.AmountBoundedAll s r\n                                  (LegalKernel.Laws.bulkRecipients s r excluded)\n                                  (fun _ => amount)\n  ",
  "params":
  [{"type": "ResourceId", "name": "r", "kind": "explicit"},
   {"type": "ActorId", "name": "excluded", "kind": "explicit"},
@@ -20,7 +21,7 @@
  "intent":
  "Distribute `amount` to every actor in `r`'s `BalanceMap` except `excluded`.  Substitute for 'fining excluded by amount * k' without removing tokens.  Classified `IsMonotonic` (positive-incentive tier).",
  "impl_block":
- "fun s =>\n      let bm := s.balances[r]?.getD ∅\n      let toReward := bm.toList.filter (fun kv => kv.1 != excluded)\n      toReward.foldl\n        (fun s' kv => setBalance s' r kv.1 (getBalance s' r kv.1 + amount))\n        s\n  -- Per plan §19.4 LX.29: `distributeOthers` claims `monotonic`\n  -- (positive-incentive tier — every actor's balance can only\n  -- increase via the foldl-of-setBalance pattern), `local`,\n  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.\n  -- NOT `conservative` (additive — distributes new tokens).\n  -- The plan calls for `proof monotonic := by exact\n  -- distributeOthers_isMonotonic ...` override since the\n  -- synthesizer would fail on the for-loop impl shape; in M2\n  -- the synthesizer skeleton emits placeholder bodies (M3\n  -- integration), so the override is metadata-only.\n  ",
+ "fun s =>\n      (LegalKernel.Laws.bulkRecipients s r excluded).foldl\n        (fun s' kv => setBalance s' r kv.1 (getBalance s' r kv.1 + amount))\n        s\n  -- Per plan §19.4 LX.29: `distributeOthers` claims `monotonic`\n  -- (positive-incentive tier — every actor's balance can only\n  -- increase via the foldl-of-setBalance pattern), `local`,\n  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.\n  -- NOT `conservative` (additive — distributes new tokens).\n  -- The plan calls for `proof monotonic := by exact\n  -- distributeOthers_isMonotonic ...` override since the\n  -- synthesizer would fail on the for-loop impl shape; in M2\n  -- the synthesizer skeleton emits placeholder bodies (M3\n  -- integration), so the override is metadata-only.\n  ",
  "identifier": "legalkernel.distributeOthers",
  "events_block": "[]\n\n",
  "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},

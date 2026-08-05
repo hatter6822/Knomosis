@@ -46,6 +46,11 @@ pub struct RequestPayload<'a> {
     pub body: &'a [u8],
     /// The request `Idempotency-Key` header value, if present (G2.4).
     pub idempotency_key: Option<&'a str>,
+    /// The presenting credential's [`crate::auth::credential_key`], if the
+    /// request carried a bearer token.  Namespaces the idempotency cache
+    /// so one client's cached verdict is never replayed to another that
+    /// happened to choose the same `Idempotency-Key`.
+    pub credential: Option<u64>,
 }
 
 impl RequestPayload<'_> {
@@ -55,6 +60,7 @@ impl RequestPayload<'_> {
         content_type: None,
         body: &[],
         idempotency_key: None,
+        credential: None,
     };
 }
 

@@ -47,6 +47,14 @@ covers ~80% of cases — including the actual historical incident
 
 import Tools.Common
 
+namespace LegalKernel.Tools.StubAudit
+
+-- Namespaced like the sibling `NamingAudit` / `DeferralAudit`
+-- audit libraries.  Without it this module's helpers sat in the
+-- root namespace, so `searchRoots` here and in the other
+-- root-namespace tool collided and no single module could import
+-- both — which is why neither had a test suite.
+
 open LegalKernel.Tools (readFileSafe)
 
 /-- Files-and-directories search root.  Covers the kernel
@@ -161,7 +169,14 @@ def blockHasRedFlag (block : String) : Bool :=
     the opening `/--` and closing `-/`, with a small margin for
     multi-paragraph rationales).  Stubs documented by ≥ 13-line
     docstrings will not match — review `redFlagTokens` and bump this
-    default if the typical docstring length grows. -/
+    default if the typical docstring length grows.
+
+    The docstring's opening delimiter is matched against the
+    whitespace-stripped line, not against column 0.  Requiring column 0
+    meant a stub documented by an INDENTED docstring — i.e. every stub
+    inside a `namespace`, `section`, or `structure`, which is nearly
+    all of them — carried a docstring the gate could not see, so it
+    could never be flagged. -/
 def docstringAbove (lines : Array String) (lineIdx : Nat)
     (lookback : Nat := 12) : String := Id.run do
   let startIdx :=
@@ -172,10 +187,17 @@ def docstringAbove (lines : Array String) (lineIdx : Nat)
   let mut anyOpened := false
   for i in [startIdx:endIdx] do
     let line := if h : i < lines.size then lines[i] else ""
-    if line.startsWith "/--" then
+    let stripped := stripWhitespace line
+    if stripped.startsWith "/--" then
       inDoc := true
       anyOpened := true
       block := block ++ "\n" ++ line
+      -- A single-line docstring closes on its own opening line.
+      -- Without this the block ran on to the declaration, absorbing
+      -- unrelated lines whose red-flag tokens then produced false
+      -- positives.
+      if containsSubstr (stripped.drop 3).toString "-/" then
+        inDoc := false
     else if inDoc then
       block := block ++ "\n" ++ line
       if containsSubstr line "-/" then
@@ -212,20 +234,36 @@ def readAllowlist (path : String) : IO (List String) := do
     pure (text.splitOn "\n" |>.filter nonEmpty |>.map stripWhitespace)
 
 /-- Per-file violation scan.  Returns every line whose code matches
-    a stub pattern AND has a red-flag docstring above it. -/
+    a stub pattern AND has a red-flag docstring above it.
+
+    The stub PATTERN is matched against the comment-masked source
+    (`Tools.Common.maskNonCode`), while the docstring scan and the
+    allowlist key read the ORIGINAL lines.  Both halves need what they
+    get: a placeholder expression is only a stub when it is code, and
+    the red-flag tokens that qualify it live precisely in the comments
+    the mask blanks out.
+
+    Matching the raw line made the gate fire on prose.  Documenting a
+    removed default as `:= ByteArray.empty` inside the field's own
+    docstring — an explanation of why the field has no default — read
+    to the unmasked scanner as a field WITH that default, so writing
+    down the fix tripped the check for the thing that was fixed.  The
+    only escapes were to allowlist a docstring or to not write it. -/
 def scanFile (path : String) : IO (List Violation) := do
   match (← readFileSafe path) with
   | none      => pure []
   | some text =>
     let lines := text.splitOn "\n" |>.toArray
+    let maskedLines :=
+      (String.ofList (maskNonCode text.toList)).splitOn "\n" |>.toArray
     let mut acc : List Violation := []
-    let mut i := 0
-    for line in lines do
-      i := i + 1
-      if lineHasStubPattern line then
-        let block := docstringAbove lines i
+    for i in [0 : lines.size] do
+      let masked := if h : i < maskedLines.size then maskedLines[i] else ""
+      if lineHasStubPattern masked then
+        let block := docstringAbove lines (i + 1)
         if blockHasRedFlag block then
-          acc := { path := path, lineNo := i, rawLine := line } :: acc
+          let raw := if h : i < lines.size then lines[i] else ""
+          acc := { path := path, lineNo := i + 1, rawLine := raw } :: acc
     pure acc.reverse
 
 /-- Aggregate violations across every `.lean` file under the
@@ -247,18 +285,4 @@ def aggregate : IO (List Violation) := do
         result := v :: result
   pure result.reverse
 
-/-- Entry point.  Reports any stub matches with red-flag docstrings.
-    Exits 1 if any unallowlisted match exists. -/
-def main : IO UInt32 := do
-  let violations ← aggregate
-  if violations.isEmpty then
-    IO.println "stub_audit: PASS — no unallowlisted stub matches found."
-    pure 0
-  else
-    IO.eprintln s!"stub_audit: FAIL — {violations.length} unallowlisted stub match(es):"
-    for v in violations do
-      IO.eprintln s!"  {v.path}:{v.lineNo}: {stripWhitespace v.rawLine}"
-      IO.eprintln s!"    allowlist key: {v.canonicalKey}"
-    IO.eprintln "Add the canonical key (path:line|raw-line) to tools/stub_allowlist.txt"
-    IO.eprintln "after reviewer sign-off, OR remove the stub."
-    pure 1
+end LegalKernel.Tools.StubAudit

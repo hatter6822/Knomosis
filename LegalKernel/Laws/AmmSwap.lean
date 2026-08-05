@@ -9,6 +9,7 @@
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
 import Lex.DSL.Law
 
 /-!
@@ -76,7 +77,8 @@ def ammSwap (fromResource toResource : ResourceId)
   pre := fun s =>
     getBalance s toResource ammReserveActor ≥ amountOut ∧
     fromResource ≠ toResource ∧
-    amountIn > 0
+    amountIn > 0 ∧
+    AmountBounded s fromResource ammReserveActor amountIn
   decPre := fun _ => inferInstance
   apply_impl := fun s =>
     let s1 := setBalance s fromResource ammReserveActor
@@ -423,7 +425,8 @@ lexlaw reserved_gp_ammSwap where
   lex_pre             :=
     fun s => getBalance s toResource ammReserveActor ≥ amountOut ∧
              fromResource ≠ toResource ∧
-             amountIn > 0
+             amountIn > 0 ∧
+             LegalKernel.Laws.AmountBounded s fromResource ammReserveActor amountIn
   lex_impl            :=
     fun s =>
       let s1 := setBalance s fromResource ammReserveActor

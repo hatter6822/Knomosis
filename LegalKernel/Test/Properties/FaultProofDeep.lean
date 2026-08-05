@@ -85,9 +85,10 @@ def simulateRound (gs : LegalKernel.FaultProof.GameState) :
   if gs.range.high.idx ≤ gs.range.low.idx + 1 then
     none  -- range too narrow; can't continue
   else
-    let mpIdx := (gs.range.low.idx + gs.range.high.idx) / 2
-    let mp : Claim := { idx := mpIdx, commit := ByteArray.mk #[0x99] }  -- forged
-    match applyTransition gs (.submitMidpoint mp) with
+    -- Only the commit is submitted; `applyTransition` derives the
+    -- index as `(low + high) / 2` — the same value this test used
+    -- to compute by hand.  The commit is forged.
+    match applyTransition gs (.submitMidpoint (ByteArray.mk #[0x99])) with
     | .error _ => none
     | .ok gs' =>
       -- The midpoint commit is forged (≠ truthful); challenger

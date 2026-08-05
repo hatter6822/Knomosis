@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {IKnomosisBridge} from "src/interfaces/IKnomosisBridge.sol";
 import {IKnomosisMigration} from "src/interfaces/IKnomosisMigration.sol";
@@ -1410,12 +1410,20 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         freePoolAmount` (the GP.11.2 internal-accounting split),
     ///         hence `userAmount + ammSeedAmount + freePoolAmount ==
     ///         deposit` — every wei is accounted for; nothing is minted.
-    ///         The `receiptHash` binds the FULL `poolAmount` (not the
-    ///         split), which together with the immutable `ammSeedRatioBps`
-    ///         fully determines `ammSeedAmount` — so the L2 reconstructs
-    ///         the split deterministically and a replay with a modified
-    ///         split is impossible (the bound `poolAmount` is the only
-    ///         free variable, and the split is a pure function of it).
+    ///         The `receiptHash` binds `poolAmount` and `ammSeedAmount`
+    ///         as INDEPENDENT fields, and that independence is
+    ///         load-bearing: `ammSeedAmount` is **not** a pure function
+    ///         of `poolAmount` and `ammSeedRatioBps`.  `_seedAmmReserves`
+    ///         also returns zero when `boldEnabled` is false (an
+    ///         ETH<->BOLD pair that can never swap must not accrue
+    ///         reserves) and when the mutable GP.11.3 `ammDisabled` kill
+    ///         switch has fired.  An L2 ingestor that recomputed the
+    ///         split from `(poolAmount, ammSeedRatioBps)` alone would
+    ///         therefore diverge from the chain on every deposit made
+    ///         after an emergency disable.  Read `ammSeedAmount` from
+    ///         the emitted event; the receipt hash is what makes that
+    ///         read trustworthy, and a replay with a modified split is
+    ///         impossible because every field is bound.
     function _registerDepositWithFee(
         uint64 resourceId,
         address token,
@@ -1942,12 +1950,15 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
     /// @notice Decoded leaf shape — must mirror Lean's
     ///         `Bridge.PendingWithdrawal.encode`.  Layout:
-    ///           CBE uint   resourceId   (9 bytes)
-    ///           CBE bytes  recipientL1  (29 bytes; 1 tag + 8 length + 20 payload)
-    ///           CBE uint   amount       (9 bytes)
-    ///           CBE uint   l2LogIndex   (9 bytes)
-    ///         Total: 56 bytes per the audit-2 lossless 20-byte
-    ///         address encoding.
+    ///           CBE uint    resourceId   (9 bytes)
+    ///           CBE bytes   recipientL1  (29 bytes; 1 tag + 8 length + 20 payload)
+    ///           CBE amount  amount       (17 bytes; 1 tag + 16 LE)
+    ///           CBE uint    l2LogIndex   (9 bytes)
+    ///         Total: 64 bytes — the audit-2 lossless 20-byte address
+    ///         encoding, plus the amount on the wide head.  `amount` is
+    ///         wei-denominated and this is the EXIT path, so a narrow
+    ///         head would have capped what a withdrawal could redeem
+    ///         (and silently truncated anything above it).
     struct PendingWithdrawal {
         uint64 resourceId;
         address recipientL1;
@@ -2063,9 +2074,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         uint256 off = 0;
         (wd.resourceId, off) = CBEDecode.readUint(leafBlob, off);
         (wd.recipientL1, off) = CBEDecode.readAddressExact(leafBlob, off);
-        uint64 amount64;
-        (amount64, off) = CBEDecode.readUint(leafBlob, off);
-        wd.amount = uint256(amount64);
+        (wd.amount, off) = CBEDecode.readAmount(leafBlob, off);
         (wd.l2LogIndex, off) = CBEDecode.readUint(leafBlob, off);
         CBEDecode.assertFullyConsumed(leafBlob, off);
     }

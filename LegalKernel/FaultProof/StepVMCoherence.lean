@@ -13,13 +13,14 @@ the L1 step-VM cross-stack coherence chain.
 
 This module ships three load-bearing pieces:
 
-  1. `actionKindByte : Action → UInt8` — the 0..21 dispatcher byte
+  1. `actionKindByte : Action → UInt8` — the 0..24 dispatcher byte
      that the Solidity `executeStep(actionKind, ...)` consumes.
      Mirrors the `Encoding.Action.encode`'s leading-tag table and
      the `KnomosisStepVM.sol::ActionKind` enum.  (Workstream GP widened
      the range from 0..18 to 0..20 with `depositWithFee` = 19 and
      `topUpActionBudget` = 20; GP.5.3 added `topUpActionBudgetFor` =
-     21.)
+     21; GP.9.1 `claimBudgetRefund` = 22; GP.11.4 `ammSwap` = 23; and
+     GP.11.10 `reclaimAmmReserves` = 24.)
 
   2. `actionFieldsForL1 : Action → ByteArray` — the canonical byte
      layout the Solidity `_stepXX` decoders expect.  For structured
@@ -29,7 +30,7 @@ This module ships three load-bearing pieces:
      simply hashes via `keccak256(actionFields)` without inspecting
      internal structure).
 
-  3. `stepVMHash` — the unified dispatcher over the 22 per-variant
+  3. `stepVMHash` — the unified dispatcher over the 25 per-variant
      `stepCommitXX` functions.  Given `(preCommit, kind, fields,
      signer, bundle)` it produces the same 32-byte output Solidity's
      `KnomosisStepVM.executeStep` would.  This is the load-bearing
@@ -41,7 +42,7 @@ The headline theorem `step_vm_dispatch_coherent_<variant>` for each
 variant establishes that, when the inputs are constructed from a
 canonical `(ExtendedState, Action, ActorId)` triple via
 `actionFieldsForL1` + `buildObserverCellProofs`, the dispatcher's
-output equals the per-variant `SolidityStepVMCommit.stepCommit<variant>`
+output equalled the per-variant `SolidityStepVMCommit.stepCommit<variant>`
 invocation with the appropriate pre/post-cell values.
 
 ## Architectural decision (Workstream SVC OQ-SVC-1)
@@ -109,7 +110,7 @@ per-variant choice).**  A bisection-game terminate step catches a
 sequencer who lies about a *balance* write, but NOT one who lies about
 a nonce advance or an epoch-budget credit, because the honest
 re-execution produces the same step-VM hash regardless of those
-effects.  This boundary is uniform across all 22 variants; kind 21's
+effects.  This boundary is uniform across all 25 variants; kind 21's
 exclusion of `recipient` / `budgetIncrement` is the same posture kinds
 19 / 20 take for their budget fields.  Binding `epochBudgets` would
 require (1) an `epochBudgets` `CellTag` + cell-proof construction and
@@ -134,8 +135,8 @@ import LegalKernel.Encoding.Encodable
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.Observer
-import LegalKernel.FaultProof.SolidityStepVMCommit
 import LegalKernel.FaultProof.StepVariants
+import LegalKernel.FaultProof.SubStep
 import LegalKernel.FaultProof.Verify
 import LegalKernel.Runtime.Hash
 
@@ -148,17 +149,102 @@ open LegalKernel.Bridge
 open LegalKernel.Disputes
 open LegalKernel.Encoding
 open LegalKernel.FaultProof
-open LegalKernel.FaultProof.SolidityStepVMCommit
 open LegalKernel.Runtime
 
 /-! ## `actionKindByte` — the constructor-index dispatcher byte
 
 Mirrors `Encoding.Action.encode`'s leading-tag table (which uses
 `Encodable.encode (T := Nat) <idx>`).  The Solidity-side
-`KnomosisStepVM.ActionKind` enum has the same indices.  Kinds `0..21`
+`KnomosisStepVM.ActionKind` enum has the same indices.  Kinds `0..24`
 have a real `stepVMHash` execution arm with a cross-stack Solidity
 counterpart (GP.5.3 closed the index-`21` `topUpActionBudgetFor` arm
-that GP.3.4 had staged). -/
+that GP.3.4 had staged; GP.9.1 / GP.11.4 / GP.11.10 added kinds 22 /
+23 / 24). -/
+
+/-! ## Endian-encoding helpers
+
+These match the byte layout `abi.encodePacked` produces in Solidity
+0.8.x: each integer is big-endian, fixed-width per its declared type.
+
+They lived in `SolidityStepVMCommit.lean` alongside the retired
+per-variant hash, and moved here when that module was deleted: they
+are the L1 FIELD LAYOUT, which `actionFieldsForL1` below is built
+from, and were never bound to the hash recipe. -/
+
+/-- Encode a `Nat` (assumed `< 2^64`) as 8 big-endian bytes.
+    Matches Solidity's `abi.encodePacked(uint64)`. -/
+def uint64BE (n : Nat) : ByteArray :=
+  ByteArray.mk
+    #[((n >>> 56) &&& 0xFF).toUInt8,
+      ((n >>> 48) &&& 0xFF).toUInt8,
+      ((n >>> 40) &&& 0xFF).toUInt8,
+      ((n >>> 32) &&& 0xFF).toUInt8,
+      ((n >>> 24) &&& 0xFF).toUInt8,
+      ((n >>> 16) &&& 0xFF).toUInt8,
+      ((n >>>  8) &&& 0xFF).toUInt8,
+      ( n         &&& 0xFF).toUInt8]
+
+/-- Encode a `Nat` (assumed `< 2^256`) as 32 big-endian bytes.
+    Matches Solidity's `abi.encodePacked(uint256)`.  Inlined as
+    a 32-element array literal so `rfl` can decide its size.
+
+    The width for *value-carrying* fields in the L1 step-VM calldata
+    layout.  `uint64BE` remains correct for identifiers, log indices,
+    deposit ids and unit counts, which are `UInt64`-typed at the
+    source and cannot exceed the narrower range; an amount can, and
+    this layout is a *separate* encoding from the CBE codec with its
+    own truncation boundary.  Widening one without the other would
+    leave the fault proof unable to adjudicate a large-amount action,
+    which is why the two move together.
+
+    A 16-byte `uint256BE` sat here through the previous widening and
+    is gone: nothing should be able to reach for a too-narrow amount
+    encoder by accident, and `Laws.maxAmount` is `2^256` exactly so
+    that this field and the CBE head have the same ceiling. -/
+def uint256BE (n : Nat) : ByteArray :=
+  ByteArray.mk
+    #[((n >>> 248) &&& 0xFF).toUInt8,
+      ((n >>> 240) &&& 0xFF).toUInt8,
+      ((n >>> 232) &&& 0xFF).toUInt8,
+      ((n >>> 224) &&& 0xFF).toUInt8,
+      ((n >>> 216) &&& 0xFF).toUInt8,
+      ((n >>> 208) &&& 0xFF).toUInt8,
+      ((n >>> 200) &&& 0xFF).toUInt8,
+      ((n >>> 192) &&& 0xFF).toUInt8,
+      ((n >>> 184) &&& 0xFF).toUInt8,
+      ((n >>> 176) &&& 0xFF).toUInt8,
+      ((n >>> 168) &&& 0xFF).toUInt8,
+      ((n >>> 160) &&& 0xFF).toUInt8,
+      ((n >>> 152) &&& 0xFF).toUInt8,
+      ((n >>> 144) &&& 0xFF).toUInt8,
+      ((n >>> 136) &&& 0xFF).toUInt8,
+      ((n >>> 128) &&& 0xFF).toUInt8,
+      ((n >>> 120) &&& 0xFF).toUInt8,
+      ((n >>> 112) &&& 0xFF).toUInt8,
+      ((n >>> 104) &&& 0xFF).toUInt8,
+      ((n >>>  96) &&& 0xFF).toUInt8,
+      ((n >>>  88) &&& 0xFF).toUInt8,
+      ((n >>>  80) &&& 0xFF).toUInt8,
+      ((n >>>  72) &&& 0xFF).toUInt8,
+      ((n >>>  64) &&& 0xFF).toUInt8,
+      ((n >>>  56) &&& 0xFF).toUInt8,
+      ((n >>>  48) &&& 0xFF).toUInt8,
+      ((n >>>  40) &&& 0xFF).toUInt8,
+      ((n >>>  32) &&& 0xFF).toUInt8,
+      ((n >>>  24) &&& 0xFF).toUInt8,
+      ((n >>>  16) &&& 0xFF).toUInt8,
+      ((n >>>   8) &&& 0xFF).toUInt8,
+      ( n          &&& 0xFF).toUInt8]
+
+/-- Size of `uint64BE` is exactly 8. -/
+theorem uint64BE_size (n : Nat) : (uint64BE n).size = 8 := by
+  unfold uint64BE
+  rfl
+
+/-- Size of `uint256BE` is exactly 32. -/
+theorem uint256BE_size (n : Nat) : (uint256BE n).size = 32 := by
+  unfold uint256BE
+  rfl
 
 /-- The constructor-index dispatcher byte for an `Action`.  Mirrors
     the Solidity `ActionKind` enum and `Encoding.Action.encode`'s
@@ -237,9 +323,19 @@ def actionKindByteCases : List UInt8 :=
 For STRUCTURED variants (Transfer, Mint, Burn, FreezeResource,
 ReplaceKey, Reward, DistributeOthers, ProportionalDilute,
 RegisterIdentity, Deposit, Withdraw): the layout is a sequence of
-fixed-width big-endian fields (`uint64BE` per primitive numeric)
-followed by any variable-length trailing payload.  This matches
-the Solidity `_stepXX::_decodeUint64BE` reads byte-for-byte.
+fixed-width big-endian fields followed by any variable-length
+trailing payload.  Field width is set by what the field *is*:
+identifiers, log indices, deposit ids and budget-unit counts are
+`uint64BE` (8 bytes); value-carrying amounts are `uint256BE`
+(32 bytes).  This matches the Solidity `_stepXX` decoder's
+`readFieldUint` reads byte-for-byte.
+
+The amount width is not the CBE codec's.  `actionFieldsForL1` is a
+*separate* encoding — untagged, big-endian, fixed-width — read only
+by the L1 step VM, so it carried its own independent `2^64`
+truncation boundary.  Widening the CBE head alone would have left
+the fault proof unable to adjudicate an action whose amount the L2
+can represent.
 
 For OPAQUE variants (Dispute, DisputeWithdraw, Verdict, Rollback,
 DeclareLocalPolicy, RevokeLocalPolicy, FaultProofChallenge,
@@ -249,8 +345,9 @@ use the Lean-side `Encodable.encode` payload directly, which is
 the most natural cross-stack convention.
 
 **Width discipline.**  Each `uint64BE` produces exactly 8 bytes;
-each `uint256BE` produces exactly 32 bytes; variable-length
-trailers (newKey, pk, recipientL1) are appended as-is. -/
+each `uint256BE` exactly 32;
+variable-length trailers (newKey, pk, recipientL1) are appended
+as-is. -/
 
 /-- The canonical byte layout the L1 step VM's `_stepXX` decoder
     consumes.  For structured variants this is a sequence of
@@ -258,33 +355,34 @@ trailers (newKey, pk, recipientL1) are appended as-is. -/
     payload; for opaque variants this is the Lean-side
     `Encodable.encode` payload (the L1 step VM only hashes it). -/
 def actionFieldsForL1 : Action → ByteArray
-  -- Structured variants: `uint64BE r || uint64BE sender || ...`
+  -- Structured variants: identifiers on `uint64BE`, amounts on
+  -- `uint256BE`, e.g. `uint64BE r || uint64BE sender || ...`
   | .transfer r sender receiver amount =>
       uint64BE r.toNat ++ uint64BE sender.toNat ++
-      uint64BE receiver.toNat ++ uint64BE amount
+      uint64BE receiver.toNat ++ uint256BE amount
   | .mint r to amount =>
-      uint64BE r.toNat ++ uint64BE to.toNat ++ uint64BE amount
+      uint64BE r.toNat ++ uint64BE to.toNat ++ uint256BE amount
   | .burn r fromActor amount =>
-      uint64BE r.toNat ++ uint64BE fromActor.toNat ++ uint64BE amount
+      uint64BE r.toNat ++ uint64BE fromActor.toNat ++ uint256BE amount
   | .freezeResource r =>
       uint64BE r.toNat
   | .replaceKey actor newKey =>
       -- `uint64BE actor || newKey-bytes` (variable trailer).
       uint64BE actor.toNat ++ newKey
   | .reward r to amount =>
-      uint64BE r.toNat ++ uint64BE to.toNat ++ uint64BE amount
+      uint64BE r.toNat ++ uint64BE to.toNat ++ uint256BE amount
   | .distributeOthers r excluded amount =>
-      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint64BE amount
+      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint256BE amount
   | .proportionalDilute r excluded totalReward =>
-      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint64BE totalReward
+      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint256BE totalReward
   | .registerIdentity actor pk =>
       uint64BE actor.toNat ++ pk
   | .deposit r recipient amount depositId =>
       uint64BE r.toNat ++ uint64BE recipient.toNat ++
-      uint64BE amount ++ uint64BE depositId
+      uint256BE amount ++ uint64BE depositId
   | .withdraw r sender amount recipientL1 =>
       uint64BE r.toNat ++ uint64BE sender.toNat ++
-      uint64BE amount ++ Bridge.EthAddress.toBytes recipientL1
+      uint256BE amount ++ Bridge.EthAddress.toBytes recipientL1
   -- Opaque variants: use Lean's CBE encoding (the L1 step VM only
   -- hashes the bytes; structure is internal to both sides).
   | .dispute d =>
@@ -311,23 +409,26 @@ def actionFieldsForL1 : Action → ByteArray
       ByteArray.mk (Encodable.encode (T := Nat) revertFromIdx).toArray
   -- Workstream GP (v1.0): depositWithFee is a structured variant:
   -- `uint64BE resource || uint64BE recipient || uint64BE poolActor ||
-  -- uint64BE userAmount || uint64BE poolAmount || uint64BE budgetGrant
+  -- uint256BE userAmount || uint256BE poolAmount || uint64BE budgetGrant
   -- || uint64BE depositId`.  Mirrors the Solidity `_step19` decoder's
-  -- byte-for-byte field reads.
+  -- byte-for-byte field reads.  `budgetGrant` is a budget UNIT count
+  -- and `depositId` an identifier, so both stay 8 bytes.
   | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
       uint64BE r.toNat ++ uint64BE recipient.toNat ++ uint64BE poolActor.toNat ++
-      uint64BE userAmount ++ uint64BE poolAmount ++ uint64BE budgetGrant ++
+      uint256BE userAmount ++ uint256BE poolAmount ++ uint64BE budgetGrant ++
       uint64BE depositId
   -- topUpActionBudget is a structured variant:
-  -- `uint64BE gasResource || uint64BE gasAmount || uint64BE budgetIncrement ||
-  -- uint64BE poolActor`.  The signer is provided separately to the L1 step VM
-  -- via the SignedAction payload, not encoded in the action fields.
+  -- `uint64BE gasResource || uint256BE gasAmount || uint64BE budgetIncrement ||
+  -- uint64BE poolActor`.  `gasAmount` is wei-denominated and so rides the
+  -- wide field; `budgetIncrement` is a UNIT count and stays 8 bytes.  The
+  -- signer is provided separately to the L1 step VM via the SignedAction
+  -- payload, not encoded in the action fields.
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
-      uint64BE gasResource.toNat ++ uint64BE gasAmount ++
+      uint64BE gasResource.toNat ++ uint256BE gasAmount ++
       uint64BE budgetIncrement ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.3.4 / GP.5.3): delegated top-up is a structured
   -- variant: `uint64BE recipient || uint64BE gasResource ||
-  -- uint64BE gasAmount || uint64BE budgetIncrement || uint64BE
+  -- uint256BE gasAmount || uint64BE budgetIncrement || uint64BE
   -- poolActor`.  The kernel-state effect mirrors `topUpActionBudget`
   -- (debit signer at gasResource, credit poolActor); `recipient` and
   -- `budgetIncrement` are admission-layer fields (recipient consent +
@@ -337,10 +438,10 @@ def actionFieldsForL1 : Action → ByteArray
   -- execution arm.
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       uint64BE recipient.toNat ++ uint64BE gasResource.toNat ++
-      uint64BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
+      uint256BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.9.1): claimBudgetRefund is a structured variant:
   -- `uint64BE gasResource || uint64BE budgetUnits ||
-  -- uint64BE weiPerBudgetUnit || uint64BE poolActor`.  The kernel-state
+  -- uint256BE weiPerBudgetUnit || uint64BE poolActor`.  The kernel-state
   -- effect (debit poolActor at gasResource by `budgetUnits ×
   -- weiPerBudgetUnit`, credit the signer/claimant) is the MIRROR of
   -- `topUpActionBudget`; `weiPerBudgetUnit` is decoded for layout
@@ -348,57 +449,91 @@ def actionFieldsForL1 : Action → ByteArray
   -- (claimant) is provided to the L1 step VM via the SignedAction
   -- payload, not encoded in the action fields.  This frozen layout is
   -- what the GP.9.1 `stepVMHash`/Solidity `_step22` follow-on consumes.
-  -- OVERFLOW NOTE for that follow-on: `budgetUnits` and
-  -- `weiPerBudgetUnit` are each `fieldsBounded` to < 2^64, so each fits a
-  -- `uint64`, but their PRODUCT (the payout) can reach ~2^128 — the
+  -- OVERFLOW NOTE for that follow-on: `budgetUnits` is `fieldsBounded`
+  -- to < 2^64 and `weiPerBudgetUnit` (a wei-denominated rate) to
+  -- < 2^128, so their PRODUCT (the payout) can reach ~2^192 — the
   -- Solidity `_step22` MUST compute `budgetUnits * weiPerBudgetUnit` in
-  -- `uint256`, never `uint64` (as `_stepTopUpActionBudget` handles its
-  -- own gas-transfer amount).
+  -- `uint256`, never a narrower type (as `_stepTopUpActionBudget`
+  -- handles its own gas-transfer amount).
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       uint64BE gasResource.toNat ++ uint64BE budgetUnits ++
-      uint64BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
+      uint256BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.11.4): ammSwap is a structured variant:
-  -- `uint64BE fromResource || uint64BE toResource || uint64BE amountIn
-  -- || uint64BE amountOut || uint64BE ammReserveActor`.  The kernel-
+  -- `uint64BE fromResource || uint64BE toResource || uint256BE amountIn
+  -- || uint256BE amountOut || uint64BE ammReserveActor`.  The kernel-
   -- state effect (credit ammReserveActor at fromResource by amountIn,
   -- debit ammReserveActor at toResource by amountOut) is mirrored
   -- byte-for-byte by the Solidity `_stepAmmSwap`.
   | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
       uint64BE fromResource.toNat ++ uint64BE toResource.toNat ++
-      uint64BE amountIn ++ uint64BE amountOut ++ uint64BE ammReserveActor.toNat
+      uint256BE amountIn ++ uint256BE amountOut ++ uint64BE ammReserveActor.toNat
   -- Workstream GP (GP.11.10): reclaimAmmReserves is a structured
-  -- variant: `uint64BE r || uint64BE amount || uint64BE reserveActor
+  -- variant: `uint64BE r || uint256BE amount || uint64BE reserveActor
   -- || uint64BE poolActor`.  The kernel-state effect (debit
   -- reserveActor at r by amount — its entire balance under the
   -- exact-sweep precondition — and credit poolActor the same amount)
   -- is mirrored byte-for-byte by the Solidity
   -- `_stepReclaimAmmReserves`.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
-      uint64BE r.toNat ++ uint64BE amount ++
+      uint64BE r.toNat ++ uint256BE amount ++
       uint64BE reserveActor.toNat ++ uint64BE poolActor.toNat
 
-/-! ## Helpers for reading cell values from cell-proof bundles
+/-! ## The L1 log-entry chain
 
-The Solidity-side `_stepXX` functions read cell values via
-`_findBalanceCellProof` / `_findCellProof`.  The Lean-side mirror
-walks the bundle's `proofs` list looking for matching `cellTag`.
-Returns `none` if the cell is absent. -/
+The L1 mirror of `Runtime.LogFile.LogEntry.hash`.  Both chain a log
+entry to its predecessor, and both commit to the ACTION that produced
+the entry — but over different encodings, because the L1 never sees a
+CBE-encoded `SignedAction`.  It sees the
+`(actionKindByte, signer, actionFieldsForL1)` triple, so that is what
+it commits to.
 
-/-- Find the cell-proof in the bundle with the given tag.  Returns
-    `none` if the bundle has no matching entry. -/
-def findCellProof (bundle : CellProofBundle) (tag : CellTag) :
-    Option CellProof :=
-  bundle.proofs.find? (fun p => decide (p.cellTag = tag))
+Mirrored byte-for-byte by `solidity/src/lib/LogChain.sol`, which is
+where the encoding's design constraints are recorded, and pinned
+per-entry by the `step_vm.json` cross-stack corpus. -/
 
-/-- Read a cell's value from a bundle, defaulting to
-    `canonicalAbsentValue tag` if missing.  Mirrors the Solidity-
-    side semantic where an absent cell encodes as canonical
-    absent bytes. -/
-def readCellValue (bundle : CellProofBundle) (tag : CellTag) :
+/-- The L1 commitment to a signed action's step-VM form:
+    `hash(actionKindByte ‖ uint64BE signer ‖ actionFieldsForL1)`.
+
+    The variable-length field goes LAST.  The concatenation carries no
+    length prefixes, so a leading variable-length component would make
+    the encoding ambiguous; with the fields last, the first nine bytes
+    are fixed-width and the remainder is exactly the fields, which
+    makes the encoding injective on the triple.
+
+    This is what `KnomosisStateRootSubmission.submitStateRoot` binds
+    into the chain and what
+    `KnomosisFaultProofGame.terminateOnSingleStep` re-derives from the
+    action it is handed. -/
+def l1ActionCommitBytes (kind : UInt8) (signer : Nat) (fields : ByteArray) :
     ByteArray :=
-  match findCellProof bundle tag with
-  | some p => p.cellValue
-  | none   => canonicalAbsentValue tag
+  LegalKernel.Runtime.hashBytes
+    (ByteArray.mk #[kind] ++ uint64BE signer ++ fields)
+
+/-- The same commitment over an `Action`, projecting the triple. -/
+def l1ActionCommit (action : Action) (signer : ActorId) : ByteArray :=
+  l1ActionCommitBytes (actionKindByte action) signer.toNat
+    (actionFieldsForL1 action)
+
+/-- Extend the L1 log-entry chain by one entry:
+    `hash(prevLogEntryHash ‖ stateCommit ‖ actionCommit)`.
+
+    Solidity spells this `keccak256(abi.encode(a, b, c))`, which for
+    three `bytes32` values is their plain 96-byte concatenation — no
+    offsets, no padding — so the mirror is a concatenation. -/
+def l1NextEntryHash
+    (prevLogEntryHash stateCommit actionCommit : ByteArray) : ByteArray :=
+  LegalKernel.Runtime.hashBytes (prevLogEntryHash ++ stateCommit ++ actionCommit)
+
+/-- The action commitment is 32 bytes, as every `hashBytes` output is
+    — so it fits the `bytes32` the L1 chain stores it in. -/
+theorem l1ActionCommit_size (action : Action) (signer : ActorId) :
+    (l1ActionCommit action signer).size = 32 :=
+  LegalKernel.Runtime.hashBytes_size _
+
+/-- ...and so is the chain value it feeds. -/
+theorem l1NextEntryHash_size (p s a : ByteArray) :
+    (l1NextEntryHash p s a).size = 32 :=
+  LegalKernel.Runtime.hashBytes_size _
 
 /-- Decode a cell value as a `Nat` per Solidity's `_decodeNat`
     semantics: byte-for-byte mirror.
@@ -418,42 +553,46 @@ def readCellValue (bundle : CellProofBundle) (tag : CellTag) :
     revert leaves the game in-progress until the responsible
     party times out).
 
-    **Concrete decoder.**
+    **Concrete decoder — exact-width, tag-dispatched.**  The payload
+    width is derived from the leading CBE type byte, and the slice
+    must match it exactly.  This mirrors Solidity's `_decodeNat`
+    arm-for-arm:
       * `bytes.size == 0` → return 0.  Matches Solidity's
         `if (data.length == 0) return 0` early-out.  This is the
         canonical-absent path: when a balance cell is absent from
         the bundle, `readCellValue` returns
         `canonicalAbsentValue` (= empty bytes), and both sides
         treat the absent cell as a 0 pre-balance.
-      * `1 ≤ bytes.size < 9` → return 0.  Solidity reverts here;
-        see the section above on why this returns 0 rather than
-        attempting to model a revert in a pure `Nat`-valued
-        function.  In practice this case never arises on canonical
-        cell bytes (which are always exactly 9 bytes:
-        `[tag(1) ++ payload(8)]`).
-      * `bytes.size ≥ 9` → read `bytes[1..9]` little-endian as a
-        `Nat`, **ignoring the tag byte at offset 0**.  This is
-        the byte-for-byte mirror of Solidity's
-        `result |= uint256(uint8(data[1 + i])) << (8 * i)` loop.
-        Excess bytes after offset 9 are silently ignored,
-        matching Solidity's slice-only semantics. -/
+      * tag `cbeTagUint` with exactly 9 bytes → read the 8-byte
+        little-endian payload.  Identifier-width cells (nonces, the
+        next-withdrawal id).
+      * tag `cbeTagAmount` with exactly 33 bytes → read the 32-byte
+        little-endian payload.  Balance cells, which are
+        wei-denominated and therefore cross `2^64`.
+      * anything else — unknown tag, or a length that does not match
+        its tag → return 0.  Solidity reverts here; see the section
+        above on why this returns 0 rather than modelling a revert in
+        a pure `Nat`-valued function.  Both outcomes mean "the
+        dispatcher cannot produce the responsible party's claim".
+
+    Deriving the width from the tag rather than assuming 8 bytes is
+    load-bearing.  A fixed 8-byte read against a 33-byte amount cell
+    returns the low 64 bits — a *wrong balance*, silently, on exactly
+    the values a bisection game settles against. -/
 def decodeCellNat (bytes : ByteArray) : Nat :=
   if bytes.size = 0 then 0
-  else if bytes.size < 9 then 0
   else
-    -- Read `bytes[1..9]` as a little-endian `Nat`, ignoring the
-    -- tag byte at offset 0.  Mirrors Solidity's `_decodeNat`'s
-    -- inner loop byte-for-byte (offset 1, 8 bytes, LE order).
-    let b1 := bytes.data[1]!.toNat
-    let b2 := bytes.data[2]!.toNat
-    let b3 := bytes.data[3]!.toNat
-    let b4 := bytes.data[4]!.toNat
-    let b5 := bytes.data[5]!.toNat
-    let b6 := bytes.data[6]!.toNat
-    let b7 := bytes.data[7]!.toNat
-    let b8 := bytes.data[8]!.toNat
-    b1 ||| (b2 <<< 8) ||| (b3 <<< 16) ||| (b4 <<< 24) |||
-    (b5 <<< 32) ||| (b6 <<< 40) ||| (b7 <<< 48) ||| (b8 <<< 56)
+    let tag := bytes.data[0]!
+    let width :=
+      if tag = Encoding.cbeTagUint then 8
+      else if tag = Encoding.cbeTagAmount then 32
+      else 0
+    if width = 0 ∨ bytes.size ≠ 1 + width then 0
+    else
+      -- Read `bytes[1 .. 1+width]` little-endian.  Mirrors Solidity's
+      -- `result |= uint256(uint8(data[1 + i])) << (8 * i)` loop.
+      (List.range width).foldl
+        (fun acc i => acc ||| (bytes.data[1 + i]!.toNat <<< (8 * i))) 0
 
 /-! ## `stepVMHash` — unified dispatcher
 
@@ -496,1059 +635,56 @@ def readUint64BE (bytes : ByteArray) (offset : Nat) : Nat :=
     (b0 <<< 56) ||| (b1 <<< 48) ||| (b2 <<< 40) ||| (b3 <<< 32) |||
     (b4 <<< 24) ||| (b5 <<< 16) ||| (b6 <<< 8) ||| b7
 
+/-- Read a big-endian `uint256` (32 bytes) from `bytes` at offset `o`.
+
+    **Cross-stack contract.**  The 32-byte counterpart of
+    `readUint64BE`, mirroring Solidity's
+    `StepWrites.readFieldUint(fields, offset, 32)`, with the same
+    out-of-bounds convention (Lean returns 0; Solidity reverts — both
+    map to "dispatcher cannot produce the responsible party's claim",
+    so the success domains still match byte-for-byte).
+
+    Used for every value-carrying amount field.  Identifiers, log
+    indices, deposit ids and budget-unit counts keep `readUint64BE`.
+
+    The 16-byte `readUint128BE` that sat here is gone along with its
+    encoder: a too-narrow amount reader is the same footgun on the
+    decode side, and it would silently return a truncated value
+    rather than fail. -/
+def readUint256BE (bytes : ByteArray) (offset : Nat) : Nat :=
+  if offset + 32 > bytes.size then 0
+  else
+    (readUint64BE bytes offset) <<< 192 |||
+    (readUint64BE bytes (offset + 8)) <<< 128 |||
+    (readUint64BE bytes (offset + 16)) <<< 64 |||
+    (readUint64BE bytes (offset + 24))
+
 /-- Slice a byte array from `offset` to its end.  Mirrors
     Solidity's `actionFields[offset:]` slice expression. -/
 def sliceFrom (bytes : ByteArray) (offset : Nat) : ByteArray :=
   bytes.extract offset bytes.size
 
-/-- Cap on the number of cell proofs Solidity's bulk-action loop
-    iterates per `executeStep` invocation.  Matches Solidity's
-    `KnomosisStepVM.MAX_RECIPIENTS_PER_BULK_ACTION = 256`.  The Lean
-    dispatcher honors this cap for bulk variants (kinds 6 + 7) so
-    that for any bundle the Lean output byte-equals Solidity's
-    `executeStep` output, including the edge case where a caller
-    supplies more than 256 cells. -/
-def maxRecipientsPerBulkAction : Nat := 256
-
-/-- The unified Lean-side dispatcher mirroring Solidity's
-    `KnomosisStepVM.executeStep`.  Returns the 32-byte step-VM hash
-    that the L1 contract emits.
-
-    **Cross-stack discipline.**  Under the production keccak256
-    binding, this function's output byte-equals
-    `KnomosisStepVM.executeStep(preCommit, kind, fields, signer, bundle)`.
-    Verified at the cross-stack fixture corpus level (WU H.10.1,
-    SVC.5.e).
-
-    **Unknown-kind handling.**  Kinds ≥ 22 return an empty hash
-    (which cannot equal any L1 output).  Production callers must
-    construct `kind` from `actionKindByte`, which is in 0..21. -/
-def stepVMHash
-    (preCommit : ByteArray) (kind : UInt8) (fields : ByteArray)
-    (signer : Nat) (bundle : CellProofBundle) : ByteArray :=
-  match kind with
-  -- 0: Transfer
-  | 0 =>
-    let r        := readUint64BE fields 0
-    let sender   := readUint64BE fields 8
-    let receiver := readUint64BE fields 16
-    let amount   := readUint64BE fields 24
-    let senderBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 sender.toUInt64))
-    -- Self-transfer mirrors Lean's §4.11 read-after-debit pattern:
-    -- both balances stay at the pre-balance.
-    let newSenderBalance : Nat :=
-      if sender = receiver then senderBalance
-      else senderBalance - amount
-    let newReceiverBalance : Nat :=
-      if sender = receiver then senderBalance
-      else
-        let receiverBalance :=
-          decodeCellNat (readCellValue bundle
-                          (.balance r.toUInt64 receiver.toUInt64))
-        receiverBalance + amount
-    stepCommitTransfer preCommit r sender receiver signer
-      newSenderBalance newReceiverBalance
-  -- 1: Mint
-  | 1 =>
-    let r      := readUint64BE fields 0
-    let to     := readUint64BE fields 8
-    let amount := readUint64BE fields 16
-    let toBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 to.toUInt64))
-    stepCommitMint preCommit r to signer (toBalance + amount)
-  -- 2: Burn
-  | 2 =>
-    let r         := readUint64BE fields 0
-    let fromActor := readUint64BE fields 8
-    let amount    := readUint64BE fields 16
-    let fromBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 fromActor.toUInt64))
-    stepCommitBurn preCommit r fromActor signer (fromBalance - amount)
-  -- 3: FreezeResource
-  | 3 =>
-    let r := readUint64BE fields 0
-    stepCommitFreezeResource preCommit r signer
-  -- 4: ReplaceKey
-  | 4 =>
-    let actor  := readUint64BE fields 0
-    let newKey := sliceFrom fields 8
-    stepCommitReplaceKey preCommit actor signer newKey
-  -- 5: Reward
-  | 5 =>
-    let r      := readUint64BE fields 0
-    let to     := readUint64BE fields 8
-    let amount := readUint64BE fields 16
-    let toBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 to.toUInt64))
-    stepCommitReward preCommit r to signer (toBalance + amount)
-  -- 6: DistributeOthers (bulk).  Mirrors Solidity's `_stepDistributeOthers`
-  -- byte-for-byte: head hash plus per-recipient fold over the
-  -- bundle's balance cells matching `(r, ≠ excluded)`.  Iteration
-  -- order is the bundle's `cellProofs[0..min(n, MAX_RECIPIENTS)]`
-  -- — matches Solidity's `for (i = 0; i < cellProofs.length &&
-  -- i < MAX_RECIPIENTS_PER_BULK_ACTION; i++)` loop, including the
-  -- `MAX_RECIPIENTS_PER_BULK_ACTION = 256` DoS-protection cap.
-  | 6 =>
-    let r        := readUint64BE fields 0
-    let excluded := readUint64BE fields 8
-    let amount   := readUint64BE fields 16
-    let head :=
-      stepCommitDistributeOthersHead preCommit r excluded signer amount
-    (bundle.proofs.take maxRecipientsPerBulkAction).foldl
-      (fun acc p =>
-        match p.cellTag with
-        | .balance pr pa =>
-          if pr.toNat = r ∧ pa.toNat ≠ excluded then
-            let preBal := decodeCellNat p.cellValue
-            let newBal := preBal + amount
-            stepCommitDistributeOthersFold acc pa.toNat newBal
-          else acc
-        | _ => acc)
-      head
-  -- 7: ProportionalDilute (bulk; two-pass).  Mirrors Solidity's
-  -- `_stepProportionalDilute` byte-for-byte:
-  --   * Pass 1: walk bundle (up to MAX_RECIPIENTS_PER_BULK_ACTION),
-  --     sum balance-cell values into `sumOthers` (matching
-  --     `keyA == r && keyB != excluded`).
-  --   * Pass 2: walk bundle again (same cap), per-recipient
-  --     `credit := totalReward * v / sumOthers`,
-  --     `newBal := v + credit`, fold into hash.
-  -- Both passes use the SAME filter and the SAME cap; both produce
-  -- the same balance-cell iteration order Solidity sees.
-  | 7 =>
-    let r           := readUint64BE fields 0
-    let excluded    := readUint64BE fields 8
-    let totalReward := readUint64BE fields 16
-    let capped := bundle.proofs.take maxRecipientsPerBulkAction
-    let sumOthers : Nat :=
-      capped.foldl
-        (fun acc p =>
-          match p.cellTag with
-          | .balance pr pa =>
-            if pr.toNat = r ∧ pa.toNat ≠ excluded then
-              acc + decodeCellNat p.cellValue
-            else acc
-          | _ => acc)
-        0
-    let head :=
-      stepCommitProportionalDiluteHead preCommit r excluded signer
-        totalReward sumOthers
-    capped.foldl
-      (fun acc p =>
-        match p.cellTag with
-        | .balance pr pa =>
-          if pr.toNat = r ∧ pa.toNat ≠ excluded then
-            let preBal := decodeCellNat p.cellValue
-            let credit :=
-              if sumOthers = 0 then 0
-              else totalReward * preBal / sumOthers
-            let newBal := preBal + credit
-            stepCommitProportionalDiluteFold acc pa.toNat newBal
-          else acc
-        | _ => acc)
-      head
-  -- 8: Dispute (opaque)
-  | 8 =>
-    stepCommitDispute preCommit fields signer
-  -- 9: DisputeWithdraw (opaque)
-  | 9 =>
-    stepCommitDisputeWithdraw preCommit fields signer
-  -- 10: Verdict (opaque)
-  | 10 =>
-    stepCommitVerdict preCommit fields signer
-  -- 11: Rollback (opaque)
-  | 11 =>
-    stepCommitRollback preCommit fields signer
-  -- 12: RegisterIdentity
-  | 12 =>
-    let actor := readUint64BE fields 0
-    let pk    := sliceFrom fields 8
-    stepCommitRegisterIdentity preCommit actor signer pk
-  -- 13: Deposit
-  | 13 =>
-    let r         := readUint64BE fields 0
-    let recipient := readUint64BE fields 8
-    let amount    := readUint64BE fields 16
-    let depositId := readUint64BE fields 24
-    let recipientBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 recipient.toUInt64))
-    stepCommitDeposit preCommit r recipient signer
-      (recipientBalance + amount) depositId
-  -- 14: Withdraw
-  | 14 =>
-    let r           := readUint64BE fields 0
-    let sender      := readUint64BE fields 8
-    let amount      := readUint64BE fields 16
-    let recipientL1 := sliceFrom fields 24
-    let senderBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 sender.toUInt64))
-    stepCommitWithdraw preCommit r sender signer
-      (senderBalance - amount) recipientL1
-  -- 15: DeclareLocalPolicy (opaque)
-  | 15 =>
-    stepCommitDeclareLocalPolicy preCommit fields signer
-  -- 16: RevokeLocalPolicy (opaque)
-  | 16 =>
-    stepCommitRevokeLocalPolicy preCommit fields signer
-  -- 17: FaultProofChallenge (opaque)
-  | 17 =>
-    stepCommitFaultProofChallenge preCommit fields signer
-  -- 18: FaultProofResolution (opaque)
-  | 18 =>
-    stepCommitFaultProofResolution preCommit fields signer
-  -- 19: DepositWithFee (Workstream GP; structured).  Layout:
-  -- `uint64BE r || uint64BE recipient || uint64BE poolActor ||
-  --  uint64BE userAmount || uint64BE poolAmount ||
-  --  uint64BE budgetGrant || uint64BE depositId`.
-  -- Reads recipient + poolActor pre-balances from the cell-proof
-  -- bundle; emits new balances under the Laws.depositWithFee
-  -- two-step pattern (recipient += userAmount, then poolActor +=
-  -- poolAmount).  When recipient = poolActor, both writes target
-  -- the same cell, so the new balance is pre + userAmount +
-  -- poolAmount (matching the kernel's sequential setBalance chain
-  -- via `Laws.depositWithFee.apply_impl`).  `budgetGrant` is an
-  -- admission-layer effect on the recipient's epochBudgets slot,
-  -- NOT a kernel-state write — it is excluded from the step-VM
-  -- hash by design.
-  | 19 =>
-    let r          := readUint64BE fields 0
-    let recipient  := readUint64BE fields 8
-    let poolActor  := readUint64BE fields 16
-    let userAmount := readUint64BE fields 24
-    let poolAmount := readUint64BE fields 32
-    -- fields 40..48 = budgetGrant (admission-layer; not hashed)
-    let depositId  := readUint64BE fields 48
-    let recipientBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 recipient.toUInt64))
-    let newRecipientBalance : Nat :=
-      if recipient = poolActor then
-        recipientBalance + userAmount + poolAmount
-      else
-        recipientBalance + userAmount
-    let newPoolBalance : Nat :=
-      if recipient = poolActor then
-        recipientBalance + userAmount + poolAmount
-      else
-        let poolBalance :=
-          decodeCellNat (readCellValue bundle
-                          (.balance r.toUInt64 poolActor.toUInt64))
-        poolBalance + poolAmount
-    stepCommitDepositWithFee preCommit r recipient poolActor signer
-      newRecipientBalance newPoolBalance depositId
-  -- 20: TopUpActionBudget (Workstream GP; structured).  Layout:
-  -- `uint64BE gasResource || uint64BE gasAmount ||
-  --  uint64BE budgetIncrement || uint64BE poolActor`.
-  -- Reads signer + poolActor pre-gas balances; emits new balances
-  -- under the Laws.topUpActionBudget pattern (signer's gas balance
-  -- -= gasAmount, poolActor's gas balance += gasAmount).  The
-  -- admission gate's `topUpActionBudget_gasCheck` upstream rejects
-  -- signer = poolActor (round-4 self-pool defense), so the
-  -- if-signer-equals-poolActor branch below is unreachable on the
-  -- canonical path; the explicit handling defends against a
-  -- malformed bundle reaching this dispatcher with that shape.
-  -- `budgetIncrement` is an admission-layer effect on signer's
-  -- epochBudgets slot, NOT a kernel-state write — excluded from
-  -- the step-VM hash by design.
-  | 20 =>
-    let gasResource := readUint64BE fields 0
-    let gasAmount   := readUint64BE fields 8
-    -- fields 16..24 = budgetIncrement (admission-layer; not hashed)
-    let poolActor   := readUint64BE fields 24
-    let signerBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance gasResource.toUInt64 signer.toUInt64))
-    let newSignerBalance : Nat :=
-      if signer = poolActor then signerBalance  -- net zero (defended at admission)
-      else signerBalance - gasAmount
-    let newPoolBalance : Nat :=
-      if signer = poolActor then signerBalance
-      else
-        let poolBalance :=
-          decodeCellNat (readCellValue bundle
-                          (.balance gasResource.toUInt64 poolActor.toUInt64))
-        poolBalance + gasAmount
-    stepCommitTopUpActionBudget preCommit gasResource signer poolActor
-      newSignerBalance newPoolBalance
-  -- 21: TopUpActionBudgetFor (Workstream GP GP.3.4; structured).
-  -- Layout: `uint64BE recipient || uint64BE gasResource ||
-  --  uint64BE gasAmount || uint64BE budgetIncrement ||
-  --  uint64BE poolActor`.  The kernel-state effect is identical in
-  -- shape to kind 20 (`topUpActionBudget`): debit the signer's gas
-  -- balance by `gasAmount`, credit `poolActor` by `gasAmount`,
-  -- reading the pool balance from the post-debit intermediate state
-  -- (so the `signer = poolActor` corner conserves supply).  The
-  -- delegated variant differs ONLY in (a) the leading `recipient`
-  -- field, which shifts the gas-transfer fields right by 8 bytes, and
-  -- (b) the distinct commit tag.  `recipient` and `budgetIncrement`
-  -- are admission-layer effects (recipient consent + budget grant to
-  -- the RECIPIENT's epochBudgets slot), NOT kernel-state cell writes —
-  -- both are excluded from the step-VM hash by design (mirroring how
-  -- kinds 19 / 20 exclude their `budgetGrant` / `budgetIncrement`
-  -- fields).  The admission gate (`topUpActionBudgetFor_gate`)
-  -- upstream rejects `signer = poolActor` (round-4 self-pool defense)
-  -- and `recipient = signer`, so the if-self branch is unreachable on
-  -- the canonical path; the explicit handling defends against a
-  -- malformed bundle reaching this dispatcher with that shape.
-  | 21 =>
-    -- fields 0..8 = recipient (admission-layer; not hashed)
-    let gasResource := readUint64BE fields 8
-    let gasAmount   := readUint64BE fields 16
-    -- fields 24..32 = budgetIncrement (admission-layer; not hashed)
-    let poolActor   := readUint64BE fields 32
-    let signerBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance gasResource.toUInt64 signer.toUInt64))
-    let newSignerBalance : Nat :=
-      if signer = poolActor then signerBalance  -- net zero (defended at admission)
-      else signerBalance - gasAmount
-    let newPoolBalance : Nat :=
-      if signer = poolActor then signerBalance
-      else
-        let poolBalance :=
-          decodeCellNat (readCellValue bundle
-                          (.balance gasResource.toUInt64 poolActor.toUInt64))
-        poolBalance + gasAmount
-    stepCommitTopUpActionBudgetFor preCommit gasResource signer poolActor
-      newSignerBalance newPoolBalance
-  -- GP.9.1 refund-on-exit (action-index 22).  Layout
-  -- `gasResource ‖ budgetUnits ‖ weiPerBudgetUnit ‖ poolActor`
-  -- (4 × uint64BE).  The claimant (signer) is CREDITED `budgetUnits ×
-  -- weiPerBudgetUnit` OUT OF the pool — the MIRROR of
-  -- `topUpActionBudget` with the debit/credit direction REVERSED.  The
-  -- product is a `Nat` (≤ ~2^128 since each factor is `fieldsBounded`
-  -- < 2^64); the Solidity `_step22` computes it in `uint256`.
-  -- `budgetUnits` / `weiPerBudgetUnit` drive the amount, but the
-  -- claimant's epoch-budget consume is an admission-layer effect (not a
-  -- cell write), so they do not separately appear in the hash — exactly
-  -- as kinds 19 / 20 / 21 exclude their budget fields.  The
-  -- `signer = poolActor` net-zero branch is defended at admission
-  -- (`claimBudgetRefund_gate` requires `signer ≠ poolActor`); the
-  -- explicit handling defends against a malformed bundle reaching here.
-  | 22 =>
-    let gasResource      := readUint64BE fields 0
-    let budgetUnits      := readUint64BE fields 8
-    let weiPerBudgetUnit := readUint64BE fields 16
-    let poolActor        := readUint64BE fields 24
-    let refundAmount     := budgetUnits * weiPerBudgetUnit
-    let signerBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance gasResource.toUInt64 signer.toUInt64))
-    let newSignerBalance : Nat :=
-      if signer = poolActor then signerBalance  -- net zero (defended at admission)
-      else signerBalance + refundAmount         -- claimant CREDITED
-    let newPoolBalance : Nat :=
-      if signer = poolActor then signerBalance
-      else
-        let poolBalance :=
-          decodeCellNat (readCellValue bundle
-                          (.balance gasResource.toUInt64 poolActor.toUInt64))
-        poolBalance - refundAmount               -- pool DEBITED (Nat sub; unreachable for admitted)
-    stepCommitClaimBudgetRefund preCommit gasResource signer poolActor
-      newSignerBalance newPoolBalance
-  -- GP.11.4 L2 AMM swap (action-index 23).  Layout
-  -- `fromResource ‖ toResource ‖ amountIn ‖ amountOut ‖ ammReserveActor`
-  -- (5 × uint64BE).  The kernel-state effect credits the reserve actor at
-  -- `fromResource` by `amountIn` and debits at `toResource` by `amountOut`.
-  | 23 =>
-    let fromResource     := readUint64BE fields 0
-    let toResource       := readUint64BE fields 8
-    let amountIn         := readUint64BE fields 16
-    let amountOut        := readUint64BE fields 24
-    let ammReserveActor  := readUint64BE fields 32
-    let fromBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance fromResource.toUInt64 ammReserveActor.toUInt64))
-    let toBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance toResource.toUInt64 ammReserveActor.toUInt64))
-    let newFromBalance := fromBalance + amountIn
-    let newToBalance   := toBalance - amountOut
-    stepCommitAmmSwap preCommit fromResource toResource ammReserveActor signer
-      newFromBalance newToBalance
-  -- GP.11.10 post-disable reserve sweep (action-index 24).  Layout
-  -- `r ‖ amount ‖ reserveActor ‖ poolActor` (4 × uint64BE).  The
-  -- kernel-state effect debits the reserve actor at `r` by `amount`
-  -- (its entire balance, by the exact-sweep precondition the
-  -- admission layer enforces) and credits the pool actor the same
-  -- amount.
-  | 24 =>
-    let r            := readUint64BE fields 0
-    let amount       := readUint64BE fields 8
-    let reserveActor := readUint64BE fields 16
-    let poolActor    := readUint64BE fields 24
-    let reserveBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 reserveActor.toUInt64))
-    let poolBalance :=
-      decodeCellNat (readCellValue bundle
-                      (.balance r.toUInt64 poolActor.toUInt64))
-    let newReserveBalance := reserveBalance - amount
-    let newPoolBalance    := poolBalance + amount
-    stepCommitReclaimAmmReserves preCommit r reserveActor poolActor signer
-      newReserveBalance newPoolBalance
-  -- Unknown kind (≥ 25): return empty bytes (won't match any L1 output).
-  -- With kinds 19 / 20 / 21 / 22 / 23 / 24 above, the dispatcher now
-  -- covers the full 0..24 range that `actionKindByte` produces.  Any
-  -- future Action constructor addition MUST extend this match before
-  -- merging — enforced by the `actionKindByteCases` coverage
-  -- regression test.
-  | _ => ByteArray.empty
-
-/-! ## Determinism + output-size properties -/
-
-/-- `stepVMHash` is deterministic: equal inputs ⇒ equal outputs. -/
-theorem stepVMHash_deterministic
-    (pc₁ pc₂ : ByteArray) (k₁ k₂ : UInt8) (f₁ f₂ : ByteArray)
-    (s₁ s₂ : Nat) (b₁ b₂ : CellProofBundle)
-    (h_pc : pc₁ = pc₂) (h_k : k₁ = k₂) (h_f : f₁ = f₂)
-    (h_s : s₁ = s₂) (h_b : b₁ = b₂) :
-    stepVMHash pc₁ k₁ f₁ s₁ b₁ = stepVMHash pc₂ k₂ f₂ s₂ b₂ := by
-  rw [h_pc, h_k, h_f, h_s, h_b]
-
-/-- `actionKindByte` is deterministic: equal actions ⇒ equal kind
-    bytes. -/
-theorem actionKindByte_deterministic
-    (a₁ a₂ : Action) (h : a₁ = a₂) :
-    actionKindByte a₁ = actionKindByte a₂ := by rw [h]
-
-/-- `actionFieldsForL1` is deterministic: equal actions ⇒ equal
-    field bytes. -/
-theorem actionFieldsForL1_deterministic
-    (a₁ a₂ : Action) (h : a₁ = a₂) :
-    actionFieldsForL1 a₁ = actionFieldsForL1 a₂ := by rw [h]
-
-/-! ## Per-variant dispatch coherence theorems
-
-For each of the 22 variants (0..18 from SVC.5.e plus Workstream-GP's
-`depositWithFee` = 19, `topUpActionBudget` = 20, and
-`topUpActionBudgetFor` = 21), the dispatcher's output equals the
-canonical `stepCommitXX` invocation with the decoded fields.  Each
-proof is a structural reduction: `stepVMHash` unfolds to the
-appropriate `stepCommitXX` branch when `kind = <variant>`. -/
-
-/-- Dispatch coherence for the `Transfer` variant.
-
-    When `kind = 0`, `stepVMHash` reduces to `stepCommitTransfer`
-    with the fields decoded from `actionFieldsForL1`. -/
-theorem stepVMHash_transfer_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 0 fields signer bundle =
-    (let r        := readUint64BE fields 0
-     let sender   := readUint64BE fields 8
-     let receiver := readUint64BE fields 16
-     let amount   := readUint64BE fields 24
-     let senderBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 sender.toUInt64))
-     let newSenderBalance : Nat :=
-       if sender = receiver then senderBalance
-       else senderBalance - amount
-     let newReceiverBalance : Nat :=
-       if sender = receiver then senderBalance
-       else
-         let receiverBalance :=
-           decodeCellNat (readCellValue bundle
-                           (.balance r.toUInt64 receiver.toUInt64))
-         receiverBalance + amount
-     stepCommitTransfer preCommit r sender receiver signer
-       newSenderBalance newReceiverBalance) := rfl
-
-/-- Dispatch coherence for the `Mint` variant. -/
-theorem stepVMHash_mint_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 1 fields signer bundle =
-    (let r      := readUint64BE fields 0
-     let to     := readUint64BE fields 8
-     let amount := readUint64BE fields 16
-     let toBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 to.toUInt64))
-     stepCommitMint preCommit r to signer (toBalance + amount)) := rfl
-
-/-- Dispatch coherence for the `Burn` variant. -/
-theorem stepVMHash_burn_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 2 fields signer bundle =
-    (let r         := readUint64BE fields 0
-     let fromActor := readUint64BE fields 8
-     let amount    := readUint64BE fields 16
-     let fromBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 fromActor.toUInt64))
-     stepCommitBurn preCommit r fromActor signer (fromBalance - amount)) := rfl
-
-/-- Dispatch coherence for the `FreezeResource` variant. -/
-theorem stepVMHash_freezeResource_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 3 fields signer bundle =
-    stepCommitFreezeResource preCommit (readUint64BE fields 0) signer := rfl
-
-/-- Dispatch coherence for the `ReplaceKey` variant. -/
-theorem stepVMHash_replaceKey_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 4 fields signer bundle =
-    stepCommitReplaceKey preCommit (readUint64BE fields 0) signer
-      (sliceFrom fields 8) := rfl
-
-/-- Dispatch coherence for the `Reward` variant. -/
-theorem stepVMHash_reward_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 5 fields signer bundle =
-    (let r      := readUint64BE fields 0
-     let to     := readUint64BE fields 8
-     let amount := readUint64BE fields 16
-     let toBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 to.toUInt64))
-     stepCommitReward preCommit r to signer (toBalance + amount)) := rfl
-
-/-- Dispatch coherence for the `DistributeOthers` variant (bulk).
-
-    When `kind = 6`, `stepVMHash` reduces to head + per-recipient
-    fold over the bundle's first `maxRecipientsPerBulkAction`
-    balance cells.  This mirrors Solidity's `_stepDistributeOthers`
-    byte-for-byte (including the 256-cap DoS bound). -/
-theorem stepVMHash_distributeOthers_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 6 fields signer bundle =
-    (let r        := readUint64BE fields 0
-     let excluded := readUint64BE fields 8
-     let amount   := readUint64BE fields 16
-     let head :=
-       stepCommitDistributeOthersHead preCommit r excluded signer amount
-     (bundle.proofs.take maxRecipientsPerBulkAction).foldl
-       (fun acc p =>
-         match p.cellTag with
-         | .balance pr pa =>
-           if pr.toNat = r ∧ pa.toNat ≠ excluded then
-             let preBal := decodeCellNat p.cellValue
-             let newBal := preBal + amount
-             stepCommitDistributeOthersFold acc pa.toNat newBal
-           else acc
-         | _ => acc)
-       head) := rfl
-
-/-- Dispatch coherence for the `ProportionalDilute` variant (bulk
-    two-pass).  When `kind = 7`, `stepVMHash` computes `sumOthers`
-    in pass 1 over the first `maxRecipientsPerBulkAction` cells,
-    then folds head + per-recipient credits in pass 2 over the
-    same prefix.  Mirrors Solidity's `_stepProportionalDilute`
-    (including the 256-cap DoS bound applied to both passes). -/
-theorem stepVMHash_proportionalDilute_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 7 fields signer bundle =
-    (let r           := readUint64BE fields 0
-     let excluded    := readUint64BE fields 8
-     let totalReward := readUint64BE fields 16
-     let capped := bundle.proofs.take maxRecipientsPerBulkAction
-     let sumOthers : Nat :=
-       capped.foldl
-         (fun acc p =>
-           match p.cellTag with
-           | .balance pr pa =>
-             if pr.toNat = r ∧ pa.toNat ≠ excluded then
-               acc + decodeCellNat p.cellValue
-             else acc
-           | _ => acc)
-         0
-     let head :=
-       stepCommitProportionalDiluteHead preCommit r excluded signer
-         totalReward sumOthers
-     capped.foldl
-       (fun acc p =>
-         match p.cellTag with
-         | .balance pr pa =>
-           if pr.toNat = r ∧ pa.toNat ≠ excluded then
-             let preBal := decodeCellNat p.cellValue
-             let credit :=
-               if sumOthers = 0 then 0
-               else totalReward * preBal / sumOthers
-             let newBal := preBal + credit
-             stepCommitProportionalDiluteFold acc pa.toNat newBal
-           else acc
-         | _ => acc)
-       head) := rfl
-
-/-- Dispatch coherence for the `Dispute` variant (opaque). -/
-theorem stepVMHash_dispute_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 8 fields signer bundle =
-    stepCommitDispute preCommit fields signer := rfl
-
-/-- Dispatch coherence for the `DisputeWithdraw` variant (opaque). -/
-theorem stepVMHash_disputeWithdraw_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 9 fields signer bundle =
-    stepCommitDisputeWithdraw preCommit fields signer := rfl
-
-/-- Dispatch coherence for the `Verdict` variant (opaque). -/
-theorem stepVMHash_verdict_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 10 fields signer bundle =
-    stepCommitVerdict preCommit fields signer := rfl
-
-/-- Dispatch coherence for the `Rollback` variant (opaque). -/
-theorem stepVMHash_rollback_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 11 fields signer bundle =
-    stepCommitRollback preCommit fields signer := rfl
-
-/-- Dispatch coherence for the `RegisterIdentity` variant. -/
-theorem stepVMHash_registerIdentity_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 12 fields signer bundle =
-    stepCommitRegisterIdentity preCommit (readUint64BE fields 0) signer
-      (sliceFrom fields 8) := rfl
-
-/-- Dispatch coherence for the `Deposit` variant. -/
-theorem stepVMHash_deposit_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 13 fields signer bundle =
-    (let r         := readUint64BE fields 0
-     let recipient := readUint64BE fields 8
-     let amount    := readUint64BE fields 16
-     let depositId := readUint64BE fields 24
-     let recipientBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 recipient.toUInt64))
-     stepCommitDeposit preCommit r recipient signer
-       (recipientBalance + amount) depositId) := rfl
-
-/-- Dispatch coherence for the `Withdraw` variant. -/
-theorem stepVMHash_withdraw_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 14 fields signer bundle =
-    (let r           := readUint64BE fields 0
-     let sender      := readUint64BE fields 8
-     let amount      := readUint64BE fields 16
-     let recipientL1 := sliceFrom fields 24
-     let senderBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 sender.toUInt64))
-     stepCommitWithdraw preCommit r sender signer
-       (senderBalance - amount) recipientL1) := rfl
-
-/-- Dispatch coherence for the `DeclareLocalPolicy` variant (opaque). -/
-theorem stepVMHash_declareLocalPolicy_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 15 fields signer bundle =
-    stepCommitDeclareLocalPolicy preCommit fields signer := rfl
-
-/-- Dispatch coherence for the `RevokeLocalPolicy` variant (opaque). -/
-theorem stepVMHash_revokeLocalPolicy_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 16 fields signer bundle =
-    stepCommitRevokeLocalPolicy preCommit fields signer := rfl
-
-/-- Dispatch coherence for the `FaultProofChallenge` variant (opaque). -/
-theorem stepVMHash_faultProofChallenge_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 17 fields signer bundle =
-    stepCommitFaultProofChallenge preCommit fields signer := rfl
-
-/-- Dispatch coherence for the `FaultProofResolution` variant (opaque). -/
-theorem stepVMHash_faultProofResolution_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 18 fields signer bundle =
-    stepCommitFaultProofResolution preCommit fields signer := rfl
-
-/-- Dispatch coherence for the `DepositWithFee` variant (Workstream
-    GP, action-index 19; structured per-field read).  Mirrors the
-    Lean-side `Laws.depositWithFee.apply_impl` two-step sequence:
-    first `setBalance` credits `recipient`, then a second
-    `setBalance` reads the intermediate state's `poolActor`
-    balance and credits it.  The self-credit case (`recipient =
-    poolActor`) collapses both into a single accumulated credit
-    of `userAmount + poolAmount`, matching the kernel's
-    sequential-update semantics. -/
-theorem stepVMHash_depositWithFee_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 19 fields signer bundle =
-    (let r          := readUint64BE fields 0
-     let recipient  := readUint64BE fields 8
-     let poolActor  := readUint64BE fields 16
-     let userAmount := readUint64BE fields 24
-     let poolAmount := readUint64BE fields 32
-     let depositId  := readUint64BE fields 48
-     let recipientBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 recipient.toUInt64))
-     let newRecipientBalance : Nat :=
-       if recipient = poolActor then
-         recipientBalance + userAmount + poolAmount
-       else
-         recipientBalance + userAmount
-     let newPoolBalance : Nat :=
-       if recipient = poolActor then
-         recipientBalance + userAmount + poolAmount
-       else
-         let poolBalance :=
-           decodeCellNat (readCellValue bundle
-                           (.balance r.toUInt64 poolActor.toUInt64))
-         poolBalance + poolAmount
-     stepCommitDepositWithFee preCommit r recipient poolActor signer
-       newRecipientBalance newPoolBalance depositId) := rfl
-
-/-- Dispatch coherence for the `TopUpActionBudget` variant
-    (Workstream GP, action-index 20; structured per-field read).
-    Mirrors `Laws.topUpActionBudget.apply_impl`'s
-    setBalance / setBalance two-step:
-    debit signer's gas balance by `gasAmount`, credit `poolActor`
-    by `gasAmount`.  The admission gate rejects `signer =
-    poolActor` upstream (round-4 self-pool defense), so the
-    no-op `signer = poolActor` branch is unreachable on the
-    canonical path. -/
-theorem stepVMHash_topUpActionBudget_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 20 fields signer bundle =
-    (let gasResource := readUint64BE fields 0
-     let gasAmount   := readUint64BE fields 8
-     let poolActor   := readUint64BE fields 24
-     let signerBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance gasResource.toUInt64 signer.toUInt64))
-     let newSignerBalance : Nat :=
-       if signer = poolActor then signerBalance
-       else signerBalance - gasAmount
-     let newPoolBalance : Nat :=
-       if signer = poolActor then signerBalance
-       else
-         let poolBalance :=
-           decodeCellNat (readCellValue bundle
-                           (.balance gasResource.toUInt64 poolActor.toUInt64))
-         poolBalance + gasAmount
-     stepCommitTopUpActionBudget preCommit gasResource signer poolActor
-       newSignerBalance newPoolBalance) := rfl
-
-/-- Dispatch coherence for the `TopUpActionBudgetFor` variant
-    (Workstream GP GP.3.4 / GP.5.3, action-index 21; structured
-    per-field read).  The kernel-state effect mirrors
-    `Laws.topUpActionBudgetFor.apply_impl`'s setBalance / setBalance
-    two-step — which is byte-identical to `topUpActionBudget`'s: debit
-    the signer's gas balance by `gasAmount`, credit `poolActor` by
-    `gasAmount`.  The leading `recipient` field shifts every gas-
-    transfer field right by 8 bytes relative to kind 20 (gasResource at
-    offset 8, gasAmount at 16, poolActor at 32); `recipient` (offset 0)
-    and `budgetIncrement` (offset 24) are admission-layer fields, read
-    for layout symmetry but excluded from the hash.  The admission gate
-    rejects `signer = poolActor` upstream (round-4 self-pool defense),
-    so the no-op `signer = poolActor` branch is unreachable on the
-    canonical path. -/
-theorem stepVMHash_topUpActionBudgetFor_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 21 fields signer bundle =
-    (let gasResource := readUint64BE fields 8
-     let gasAmount   := readUint64BE fields 16
-     let poolActor   := readUint64BE fields 32
-     let signerBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance gasResource.toUInt64 signer.toUInt64))
-     let newSignerBalance : Nat :=
-       if signer = poolActor then signerBalance
-       else signerBalance - gasAmount
-     let newPoolBalance : Nat :=
-       if signer = poolActor then signerBalance
-       else
-         let poolBalance :=
-           decodeCellNat (readCellValue bundle
-                           (.balance gasResource.toUInt64 poolActor.toUInt64))
-         poolBalance + gasAmount
-     stepCommitTopUpActionBudgetFor preCommit gasResource signer poolActor
-       newSignerBalance newPoolBalance) := rfl
-
-/-- Dispatch reduction for kind 22 (`claimBudgetRefund`, GP.9.1).  The
-    refund layout is `gasResource ‖ budgetUnits ‖ weiPerBudgetUnit ‖
-    poolActor` (offsets 0 / 8 / 16 / 24); the claimant (signer) is
-    CREDITED `budgetUnits × weiPerBudgetUnit` out of the pool (the
-    debit/credit MIRROR of `topUpActionBudget`).  `budgetUnits` /
-    `weiPerBudgetUnit` drive the amount but the budget consume is an
-    admission-layer effect, excluded from the hash.  The admission gate
-    rejects `signer = poolActor` upstream, so the no-op branch is
-    unreachable on the canonical path. -/
-theorem stepVMHash_claimBudgetRefund_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 22 fields signer bundle =
-    (let gasResource      := readUint64BE fields 0
-     let budgetUnits      := readUint64BE fields 8
-     let weiPerBudgetUnit := readUint64BE fields 16
-     let poolActor        := readUint64BE fields 24
-     let refundAmount     := budgetUnits * weiPerBudgetUnit
-     let signerBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance gasResource.toUInt64 signer.toUInt64))
-     let newSignerBalance : Nat :=
-       if signer = poolActor then signerBalance
-       else signerBalance + refundAmount
-     let newPoolBalance : Nat :=
-       if signer = poolActor then signerBalance
-       else
-         let poolBalance :=
-           decodeCellNat (readCellValue bundle
-                           (.balance gasResource.toUInt64 poolActor.toUInt64))
-         poolBalance - refundAmount
-     stepCommitClaimBudgetRefund preCommit gasResource signer poolActor
-       newSignerBalance newPoolBalance) := rfl
-
-/-- GP.11.4: the `stepVMHash` kind-23 arm reduces to `stepCommitAmmSwap`
-    with the reserve actor's from/to-resource balance reads from the
-    cell-proof bundle.  The kernel-state effect credits the reserve
-    actor at `fromResource` by `amountIn` and debits at `toResource`
-    by `amountOut`. -/
-theorem stepVMHash_ammSwap_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 23 fields signer bundle =
-    (let fromResource    := readUint64BE fields 0
-     let toResource      := readUint64BE fields 8
-     let amountIn        := readUint64BE fields 16
-     let amountOut       := readUint64BE fields 24
-     let ammReserveActor := readUint64BE fields 32
-     let fromBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance fromResource.toUInt64 ammReserveActor.toUInt64))
-     let toBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance toResource.toUInt64 ammReserveActor.toUInt64))
-     let newFromBalance := fromBalance + amountIn
-     let newToBalance   := toBalance - amountOut
-     stepCommitAmmSwap preCommit fromResource toResource ammReserveActor signer
-       newFromBalance newToBalance) := rfl
-
-/-- GP.11.10: the `stepVMHash` kind-24 arm reduces to
-    `stepCommitReclaimAmmReserves` with both actors' balance reads at
-    the swept resource from the cell-proof bundle.  The kernel-state
-    effect debits the reserve actor at `r` by `amount` (its entire
-    balance under the exact-sweep precondition) and credits the pool
-    actor the same amount. -/
-theorem stepVMHash_reclaimAmmReserves_kind
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 24 fields signer bundle =
-    (let r            := readUint64BE fields 0
-     let amount       := readUint64BE fields 8
-     let reserveActor := readUint64BE fields 16
-     let poolActor    := readUint64BE fields 24
-     let reserveBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 reserveActor.toUInt64))
-     let poolBalance :=
-       decodeCellNat (readCellValue bundle
-                       (.balance r.toUInt64 poolActor.toUInt64))
-     let newReserveBalance := reserveBalance - amount
-     let newPoolBalance    := poolBalance + amount
-     stepCommitReclaimAmmReserves preCommit r reserveActor poolActor signer
-       newReserveBalance newPoolBalance) := rfl
-
-/-- For unknown kinds (≥ 25), `stepVMHash` returns empty bytes.
-
-    Note: `actionKindByte` is provably in `0..24` after the
-    Workstream-GP extension (kinds 19 / 20 / 21 / 22 / 23 / 24 for
-    `.depositWithFee` / `.topUpActionBudget` / `.topUpActionBudgetFor` /
-    `.claimBudgetRefund` / `.ammSwap` / `.reclaimAmmReserves`), so the
-    catch-all path is unreachable from `stepVMHashFromAction`; this
-    property is only relevant for caller-supplied raw `UInt8` inputs
-    ≥ 25. -/
-theorem stepVMHash_unknown_kind_empty
-    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
-    (bundle : CellProofBundle) :
-    stepVMHash preCommit 25 fields signer bundle = ByteArray.empty := rfl
-
-/-! ## `stepVMHashFromAction` — the action-driven convenience form
-
-This is the entry point a production caller (the off-chain
-observer's terminate-bundle builder) uses: given a canonical
-`(ExtendedState, Action, ActorId)` triple, compute the step-VM
-hash that the L1 contract will emit for this step.
-
-The function is the composition of the canonical inputs:
-  * `preCommit := commitExtendedState es`
-  * `kind     := actionKindByte action`
-  * `fields   := actionFieldsForL1 action`
-  * `bundle   := buildObserverCellProofs es action signer`
-
-Under the production keccak256 binding, the output byte-equals
-`KnomosisStepVM.executeStep(commitExtendedState es, actionKindByte
-action, actionFieldsForL1 action, signer, bundle.proofs)`.  This
-is the cross-stack contract the SVC workstream closes. -/
-
-/-- Compute the step-VM hash for a canonical `(state, action,
-    signer)` triple.  This is the value the responding party
-    must claim in `terminateOnSingleStep`'s `claimedPostCommit`
-    argument; under the production keccak256 binding it
-    byte-equals what the L1 step VM computes. -/
-def stepVMHashFromAction
-    (es : ExtendedState) (action : Action) (signer : ActorId) :
-    ByteArray :=
-  stepVMHash (commitExtendedState es) (actionKindByte action)
-    (actionFieldsForL1 action) signer.toNat
-    (Observer.buildObserverCellProofs es action signer)
-
-/-- `stepVMHashFromAction` is deterministic. -/
-theorem stepVMHashFromAction_deterministic
-    (es₁ es₂ : ExtendedState) (a₁ a₂ : Action) (s₁ s₂ : ActorId)
-    (h_es : es₁ = es₂) (h_a : a₁ = a₂) (h_s : s₁ = s₂) :
-    stepVMHashFromAction es₁ a₁ s₁ = stepVMHashFromAction es₂ a₂ s₂ := by
-  rw [h_es, h_a, h_s]
-
-/-! ## Per-variant `stepVMHashFromAction` reductions
-
-For each variant, `stepVMHashFromAction` unfolds to the canonical
-`stepCommitXX` invocation with the right inputs.  These are
-`rfl`-proofs (or near-`rfl`) since the chain
-`stepVMHashFromAction → stepVMHash → stepCommitXX` is by definition.
-
-For STRUCTURED variants we provide the explicit reduction so a
-caller can rewrite at the per-variant boundary; for OPAQUE variants
-the reduction is straightforward via the opaque-arm lemmas above. -/
-
-/-- For the `Dispute` variant, `stepVMHashFromAction` reduces to
-    the opaque `stepCommitDispute` form.  Direct from
-    `stepVMHash_dispute_kind`. -/
-theorem stepVMHashFromAction_dispute
-    (es : ExtendedState) (d : Dispute) (signer : ActorId) :
-    stepVMHashFromAction es (.dispute d) signer =
-    stepCommitDispute (commitExtendedState es)
-      (actionFieldsForL1 (.dispute d)) signer.toNat := rfl
-
-/-- For the `DisputeWithdraw` variant, `stepVMHashFromAction`
-    reduces to the opaque `stepCommitDisputeWithdraw` form. -/
-theorem stepVMHashFromAction_disputeWithdraw
-    (es : ExtendedState) (idx : Disputes.LogIndex) (signer : ActorId) :
-    stepVMHashFromAction es (.disputeWithdraw idx) signer =
-    stepCommitDisputeWithdraw (commitExtendedState es)
-      (actionFieldsForL1 (.disputeWithdraw idx)) signer.toNat := rfl
-
-/-- For the `Verdict` variant, `stepVMHashFromAction` reduces to
-    the opaque `stepCommitVerdict` form. -/
-theorem stepVMHashFromAction_verdict
-    (es : ExtendedState) (v : Verdict) (signer : ActorId) :
-    stepVMHashFromAction es (.verdict v) signer =
-    stepCommitVerdict (commitExtendedState es)
-      (actionFieldsForL1 (.verdict v)) signer.toNat := rfl
-
-/-- For the `Rollback` variant. -/
-theorem stepVMHashFromAction_rollback
-    (es : ExtendedState) (idx : Disputes.LogIndex) (signer : ActorId) :
-    stepVMHashFromAction es (.rollback idx) signer =
-    stepCommitRollback (commitExtendedState es)
-      (actionFieldsForL1 (.rollback idx)) signer.toNat := rfl
-
-/-- For the `DeclareLocalPolicy` variant. -/
-theorem stepVMHashFromAction_declareLocalPolicy
-    (es : ExtendedState) (p : LocalPolicy) (signer : ActorId) :
-    stepVMHashFromAction es (.declareLocalPolicy p) signer =
-    stepCommitDeclareLocalPolicy (commitExtendedState es)
-      (actionFieldsForL1 (.declareLocalPolicy p)) signer.toNat := rfl
-
-/-- For the `RevokeLocalPolicy` variant. -/
-theorem stepVMHashFromAction_revokeLocalPolicy
-    (es : ExtendedState) (signer : ActorId) :
-    stepVMHashFromAction es .revokeLocalPolicy signer =
-    stepCommitRevokeLocalPolicy (commitExtendedState es)
-      (actionFieldsForL1 .revokeLocalPolicy) signer.toNat := rfl
-
-/-- For the `FaultProofChallenge` variant. -/
-theorem stepVMHashFromAction_faultProofChallenge
-    (es : ExtendedState) (bh : ByteArray)
-    (sIdx eIdx : Disputes.LogIndex) (cc : ByteArray) (signer : ActorId) :
-    stepVMHashFromAction es (.faultProofChallenge bh sIdx eIdx cc) signer =
-    stepCommitFaultProofChallenge (commitExtendedState es)
-      (actionFieldsForL1 (.faultProofChallenge bh sIdx eIdx cc))
-      signer.toNat := rfl
-
-/-- For the `FaultProofResolution` variant. -/
-theorem stepVMHashFromAction_faultProofResolution
-    (es : ExtendedState) (bh : ByteArray) (gid : Nat)
-    (winner : ActorId) (rfi : Disputes.LogIndex) (signer : ActorId) :
-    stepVMHashFromAction es (.faultProofResolution bh gid winner rfi) signer =
-    stepCommitFaultProofResolution (commitExtendedState es)
-      (actionFieldsForL1 (.faultProofResolution bh gid winner rfi))
-      signer.toNat := rfl
-
-/-- For the `FreezeResource` variant. -/
-theorem stepVMHashFromAction_freezeResource
-    (es : ExtendedState) (r : ResourceId) (signer : ActorId)
-    (h_r : r.toNat < 256 ^ 8) :
-    stepVMHashFromAction es (.freezeResource r) signer =
-    stepCommitFreezeResource (commitExtendedState es)
-      (readUint64BE (actionFieldsForL1 (.freezeResource r)) 0)
-      signer.toNat := by
-  let _ := h_r
-  rfl
-
-/-! ## `step_vm_coherent_with_kernel_apply` — the headline theorem
-
-The plan §SVC.1 calls for a coherence statement of the form
-
-```
-stepVMHash preCommit kind fields signer bundle =
-  commitExtendedState (kernelOnlyApply es entry)
-```
-
-As discussed in the module docstring, this equation is **NOT
-universal** — for opaque variants, the L1 step VM's output is
-NOT equal to `commitExtendedState(postState)`.  Per the
-architectural decision (Option B), the bisection-game's chain of
-commits uses step-VM hashes throughout, not state commits.
-
-The honest statement of the coherence claim is therefore:
-
-> For the production deployment, the off-chain observer's claimed
-> post-commit at terminate-time IS `stepVMHashFromAction es action
-> signer`.  Under the production keccak256 binding, this equals
-> `KnomosisStepVM.executeStep(commitExtendedState es, ...)`
-> byte-for-byte.
-
-This is what `stepVMHashFromAction` is defined to compute; the
-per-variant reductions above expose its body for inspection.  The
-**byte-for-byte equality with Solidity's executeStep** is verified
-at the cross-stack fixture corpus level (WU H.10.1 + SVC.5.e
-widening), not as a Lean theorem (since `KnomosisStepVM.executeStep`
-is Solidity bytecode, not a Lean function).
-
-The `step_vm_dispatch_dispatch_well_typed` property below records
-this discipline as a value-level claim. -/
-
-/-- `step_vm_dispatch_well_typed` — for every Action, the
-    dispatcher's output through `stepVMHashFromAction` is reached
-    via the per-variant dispatch arm matching `actionKindByte`. -/
-theorem step_vm_dispatch_well_typed
-    (es : ExtendedState) (action : Action) (signer : ActorId) :
-    stepVMHashFromAction es action signer =
-    stepVMHash (commitExtendedState es) (actionKindByte action)
-      (actionFieldsForL1 action) signer.toNat
-      (Observer.buildObserverCellProofs es action signer) := rfl
+/-! ## The retired step-VM hash
+
+`stepVMHash` lived here: a 25-arm dispatcher returning a bespoke
+per-variant hash, mirrored by `KnomosisStepVM.executeStep`, with 37
+theorems pinning each arm to its `actionKindByte`.  Both stacks
+computed it identically, on all 278 corpus entries — and their
+agreement said nothing about whether either equalled a published state
+root, which is the only property the fault-proof game needs.  The
+terminal comparison was between two different constructions, so an
+honest sequencer lost every game it correctly defended.
+
+`KnomosisStepVMRoot.executeStepToRoot` and
+`FaultProof.verifierPostRoot` replaced it: they DERIVE a step's cell
+writes from proven pre-values and fold them onto the pre-state root,
+so the value they return IS a state root.  Nothing referenced the old
+recipe when it was removed.
+
+What survives from this module is the L1 FIELD LAYOUT —
+`actionKindByte`, `actionFieldsForL1`, the big-endian readers, and the
+log-entry chain's `l1ActionCommit`.  Those were never recipe-bound.
+`docs/planning/state_root_merkleisation_plan.md` §5's S7. -/
 
 /-! ## Smoke checks -/
 

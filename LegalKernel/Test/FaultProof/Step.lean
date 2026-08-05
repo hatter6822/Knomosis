@@ -10,6 +10,15 @@
 /-
 LegalKernel.Test.FaultProof.Step — value-level tests for the
 `KernelStep` type and `kernelStepApply` semantics.
+
+These used to run on a hand-built step with an EMPTY opening bundle,
+which the old `kernelStepApply` accepted (`verifyCellProofs` is
+`List.all`, vacuously true on `[]`).  The verifier re-derives the cell
+list and every one of the twenty-five variants writes the signer's
+nonce and epoch budget, so an empty bundle now fails the shape check —
+and a step has to be a REAL one, over a real state, to be applied at
+all.  That is what makes the chain tests below thread genuine roots
+rather than values the test put there itself.
 -/
 
 import LegalKernel.FaultProof.Step
@@ -22,120 +31,138 @@ open LegalKernel.Test
 
 namespace LegalKernel.Test.FaultProof.Step
 
-private def emptyCommit : StateCommit := commitExtendedState ExtendedState.empty
+/-- A populated state with a policy whose free tier admits a consume. -/
+private def base : ExtendedState :=
+  let st : LegalKernel.State :=
+    { balances := (∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+                    ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25) }
+  { base          := st
+  , nonces        := { next := (∅ : Std.TreeMap ActorId Nonce compare).insert 7 3 }
+  , registry      := (∅ : KeyRegistry).insert 7 (ByteArray.mk #[1, 2, 3])
+  , bridge        := { LegalKernel.Bridge.BridgeState.empty with nextWdId := 5 }
+  , epochBudgets  := (∅ : EpochBudgetState).insert 7
+                       { lastSeenEpoch := 2, budgetBalance := 50 }
+  , budgetPolicy  := .bounded 100 1 2 }
 
-private def someAction : Authority.Action :=
-  .transfer 1 2 3 0  -- deliberately invalid (amount = 0); used only for shape
+private def someSignedAction : SignedAction :=
+  { action := .transfer 1 7 8 30, signer := 7, nonce := 3, sig := ByteArray.empty }
 
-private def someSignedAction : SignedAction := {
-  action := someAction,
-  signer := 2,
-  nonce  := 0,
-  sig    := ByteArray.empty
-}
+/-- The canonical step from `base`, and the state it advances to. -/
+private def firstStep : KernelStep := buildKernelStep base someSignedAction 0
+
+private def afterFirst : ExtendedState :=
+  productionApplyBudget base someSignedAction 0
+
+/-- ...and the step that follows it, from the state the first reaches. -/
+private def secondStep : KernelStep :=
+  buildKernelStep afterFirst
+    { someSignedAction with nonce := 4 } 1
 
 /-- Tests for the `KernelStep` data type and `kernelStepApply`. -/
 def tests : List TestCase :=
   [ { name := "chainKernelStepApply on empty list returns initial commit"
     , body := do
-        let c := emptyCommit
+        let c := commitExtendedState base
         match chainKernelStepApply c [] with
-        | some c' => assertEq (expected := c) (actual := c') "empty chain"
+        | some c' => assertEq (expected := c.toList) (actual := c'.toList) "empty chain"
         | none    => assert false "empty chain returned none"
     }
-  , { name := "kernelStepApply rejects bundle with bad cell proof"
+  , { name := "kernelStepApply computes the canonical step's post-root"
     , body := do
-        -- Construct a step with empty cell-proof bundle (no proofs).
-        -- The bundle's verifyCellProofs returns true on empty (all []
-        -- in `List.all`); but we'll test the deterministic shape.
-        let bundle : CellProofBundle := { proofs := [] }
-        let step : KernelStep := {
-          preStateCommit := emptyCommit,
-          signedAction := someSignedAction,
-          postStateCommit := emptyCommit,
-          cellProofs := bundle
-        }
-        match kernelStepApply step with
-        | some _ => pure ()  -- empty bundle => trivially verifies
-        | none   => assert false "empty bundle should verify"
+        -- The step VM's whole job, on a real step.  It is `some`, and
+        -- it is the root the honest sequencer publishes.
+        match kernelStepApply firstStep with
+        | none   => assert false "the canonical step must apply"
+        | some c =>
+          assertEq (expected := (commitExtendedState afterFirst).toList)
+            (actual := c.toList)
+            "kernelStepApply lands on the published post-root"
+    }
+  , { name := "kernelStepApply does NOT return the claim"
+    , body := do
+        -- The regression for the original vacuity: the body used to
+        -- return `step.postStateCommit` verbatim, so a responder could
+        -- carry any claim and win.  Feed it a step whose claim is
+        -- nonsense and check the output ignores it.
+        let lying : KernelStep := { firstStep with
+          postStateCommit := ByteArray.mk (Array.replicate 32 (0xEE : UInt8)) }
+        assertEq (expected := kernelStepApply firstStep |>.map ByteArray.toList)
+          (actual := kernelStepApply lying |>.map ByteArray.toList)
+          "the claim must not influence the computed root"
+    }
+  , { name := "an empty opening bundle is REFUSED"
+    , body := do
+        -- It used to verify vacuously.  The multiproof frontier always
+        -- leads with the read-only budget-policy cell, so it is never
+        -- empty and an empty submission fails the shape check before a
+        -- byte of the wire is read.
+        let empty : KernelStep := { firstStep with
+          bundle := { firstStep.bundle with cells := [] } }
+        assertEq (expected := true) (actual := (kernelStepApply empty).isNone)
+          "an empty bundle must not apply"
     }
   , { name := "kernelStepApply is deterministic"
     , body := do
-        let step : KernelStep := {
-          preStateCommit := emptyCommit,
-          signedAction := someSignedAction,
-          postStateCommit := emptyCommit,
-          cellProofs := { proofs := [] }
-        }
-        let r1 := kernelStepApply step
-        let r2 := kernelStepApply step
-        assertEq (expected := r1) (actual := r2) "determinism"
+        assertEq (expected := (kernelStepApply firstStep).map ByteArray.toList)
+          (actual := (kernelStepApply firstStep).map ByteArray.toList)
+          "determinism"
     }
   , { name := "chainKernelStepApply rejects mismatched preStateCommit"
     , body := do
-        let dummyCommit : StateCommit := ByteArray.empty
-        let step : KernelStep := {
-          preStateCommit := dummyCommit,  -- distinct from emptyCommit
-          signedAction := someSignedAction,
-          postStateCommit := emptyCommit,
-          cellProofs := { proofs := [] }
-        }
-        -- chainKernelStepApply emptyCommit [step] should fail because
-        -- step's preStateCommit ≠ initialCommit (emptyCommit).
-        let r := chainKernelStepApply emptyCommit [step]
-        match r with
+        let mismatched : KernelStep := { firstStep with
+          preStateCommit := ByteArray.mk (Array.replicate 32 (0x11 : UInt8)) }
+        match chainKernelStepApply (commitExtendedState base) [mismatched] with
         | some _ => assert false "should reject mismatched preCommit"
         | none   => pure ()
     }
-  , { name := "chainKernelStepApply accepts matching preStateCommit"
+  , { name := "chainKernelStepApply threads the computed commit"
     , body := do
-        let step : KernelStep := {
-          preStateCommit := emptyCommit,
-          signedAction := someSignedAction,
-          postStateCommit := emptyCommit,
-          cellProofs := { proofs := [] }
-        }
-        match chainKernelStepApply emptyCommit [step] with
-        | some c => assertEq (expected := emptyCommit) (actual := c) "single-step chain"
-        | none   => assert false "single-step should succeed"
-    }
-  , { name := "chainKernelStepApply two-step chain threads commits"
-    , body := do
-        let step : KernelStep := {
-          preStateCommit := emptyCommit,
-          signedAction := someSignedAction,
-          postStateCommit := emptyCommit,
-          cellProofs := { proofs := [] }
-        }
-        match chainKernelStepApply emptyCommit [step, step] with
-        | some c => assertEq (expected := emptyCommit) (actual := c) "two-step chain"
-        | none   => assert false "two-step should succeed"
+        -- Threading is real: the second step's `preStateCommit` must
+        -- equal what the FIRST computed, not a value both steps happen
+        -- to declare.  A chain of two identical steps does not verify
+        -- — that is the point.
+        match chainKernelStepApply (commitExtendedState base)
+                [firstStep, secondStep] with
+        | some c =>
+          assertEq
+            (expected := (commitExtendedState
+              (productionApplyBudget afterFirst
+                { someSignedAction with nonce := 4 } 1)).toList)
+            (actual := c.toList)
+            "two-step chain lands on the second advance's root"
+        | none   => assert false "the honest two-step chain must verify"
+        match chainKernelStepApply (commitExtendedState base)
+                [firstStep, firstStep] with
+        | some _ => assert false "a broken chain must not verify"
+        | none   => pure ()
     }
   , { name := "chainKernelStepApply_split (concrete)"
     , body := do
-        let step : KernelStep := {
-          preStateCommit := emptyCommit,
-          signedAction := someSignedAction,
-          postStateCommit := emptyCommit,
-          cellProofs := { proofs := [] }
-        }
-        let lhs := chainKernelStepApply emptyCommit ([step] ++ [step])
+        -- The split equation must hold on the SUCCEEDING path, which
+        -- it could not be checked on while every step was a no-op.
+        let steps := [firstStep, secondStep]
+        let lhs := chainKernelStepApply (commitExtendedState base) steps
         let rhs :=
-          (chainKernelStepApply emptyCommit [step]).bind
-            (fun c' => chainKernelStepApply c' [step])
-        assertEq (expected := lhs) (actual := rhs) "split equation holds"
+          (chainKernelStepApply (commitExtendedState base) [firstStep]).bind
+            (fun c' => chainKernelStepApply c' [secondStep])
+        assertEq (expected := lhs.map ByteArray.toList)
+          (actual := rhs.map ByteArray.toList) "split equation holds"
     }
   , { name := "chainKernelStepApply_singleton_match (concrete)"
     , body := do
-        let step : KernelStep := {
-          preStateCommit := emptyCommit,
-          signedAction := someSignedAction,
-          postStateCommit := emptyCommit,
-          cellProofs := { proofs := [] }
-        }
-        let lhs := chainKernelStepApply emptyCommit [step]
-        let rhs := kernelStepApply step
-        assertEq (expected := lhs) (actual := rhs) "singleton match"
+        let lhs := chainKernelStepApply (commitExtendedState base) [firstStep]
+        let rhs := kernelStepApply firstStep
+        assertEq (expected := lhs.map ByteArray.toList)
+          (actual := rhs.map ByteArray.toList) "singleton match"
+    }
+  , { name := "API stability: kernelStepApply is the verifier"
+    , body := do
+        let _proof : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
+            kernelStepApply (buildKernelStep es st idx)
+              = verifierPostRootMulti (commitExtendedState es) st.action
+                  st.signer idx (stepMultiBundle es st) :=
+          fun es st idx => kernelStepApply_canonical es st idx
+        pure ()
     }
   ]
 

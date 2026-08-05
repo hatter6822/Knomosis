@@ -119,8 +119,8 @@ def bisectionDisagreeNarrowsProp (input : PropInput) : Bool :=
 /-- Property: `submitMidpoint` is deterministic across two fresh
     runs on the same input. -/
 def gameDeterminismProp (input : PropInput) : Bool :=
-  let r1 := applyTransition input.gs (.submitMidpoint input.mp)
-  let r2 := applyTransition input.gs (.submitMidpoint input.mp)
+  let r1 := applyTransition input.gs (.submitMidpoint input.mp.commit)
+  let r2 := applyTransition input.gs (.submitMidpoint input.mp.commit)
   match r1, r2 with
   | .ok g1, .ok g2 =>
     decide (g1.depth = g2.depth ∧

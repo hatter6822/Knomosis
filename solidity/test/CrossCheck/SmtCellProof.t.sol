@@ -1,39 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
+import {SmtCellVerifierProxy} from "test/utils/SmtCellVerifierProxy.sol";
 
-/// @title SmtCellProofCrossCheckProxy
-/// @notice Thin external proxy exposing `SmtCellVerifier`'s internal
-///         library functions through a `calldata`-bearing surface
-///         so the cross-check tests can pass `bytes memory` data
-///         decoded from JSON.  Mirrors the proxy pattern used by
-///         `solidity/test/SmtCellVerifier.t.sol`; defined locally
-///         here under a distinct name to avoid ABI-name collisions
-///         when running the full forge-test suite.
-contract SmtCellProofCrossCheckProxy {
-    /// @notice External-pure proxy for `SmtCellVerifier.verifyCellProof`.
-    function verifyCellProof(
-        bytes32 root,
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bool) {
-        return SmtCellVerifier.verifyCellProof(root, smtKey, leafPreimage, proofData);
-    }
-
-    /// @notice External-pure proxy for `SmtCellVerifier.recomputeRoot`.
-    ///         Used by tests that want the raw walked root without
-    ///         the verifier's bool dispatch.
-    function recomputeRoot(
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
-        bytes calldata proofData
-    ) external pure returns (bytes32) {
-        return SmtCellVerifier.recomputeRoot(smtKey, leafPreimage, proofData);
-    }
-}
 
 /// @title SmtCellProofCrossCheck
 /// @notice Workstream SC.3 — Solidity-side consumer of the
@@ -76,10 +47,10 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
 
     /// @notice Proxy contract instantiated per-test by the harness.
     ///         Stateless; deployed in `setUp`.
-    SmtCellProofCrossCheckProxy internal proxy;
+    SmtCellVerifierProxy internal proxy;
 
     function setUp() public {
-        proxy = new SmtCellProofCrossCheckProxy();
+        proxy = new SmtCellVerifierProxy();
     }
 
     /// @notice Helper that calls the proxy.  Wraps the external
@@ -128,19 +99,21 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
     /// @notice Honest entries (first 50) have `shouldVerify=true`
     ///         and `tamper=null`.  Adversarial entries (next 50)
     ///         have `shouldVerify=false` and a non-null `tamper`.
-    function test_per_entry_shouldVerify_matches_position() public view {
+    function test_per_entry_shouldVerify_matches_position() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         for (uint256 i = 0; i < 50; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
-            assertTrue(
+            beginEntry(base);
+            checkTrue(
                 vm.parseJsonBool(raw, string.concat(base, ".shouldVerify")),
                 "honest entry must have shouldVerify=true"
             );
         }
         for (uint256 i = 50; i < 100; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
-            assertFalse(
+            beginEntry(base);
+            checkFalse(
                 vm.parseJsonBool(raw, string.concat(base, ".shouldVerify")),
                 "adversarial entry must have shouldVerify=false"
             );
@@ -150,54 +123,58 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
     /// @notice Every honest entry's `smtKey` is exactly 8 bytes
     ///         (UInt64 big-endian; matches Lean's
     ///         `uint64ToBytesBE` and Solidity's MSB-first reading).
-    function test_all_honest_smtKeys_are_8_bytes() public view {
+    function test_all_honest_smtKeys_are_8_bytes() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         for (uint256 i = 0; i < 50; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes memory smtKey = vm.parseJsonBytes(raw, string.concat(base, ".smtKeyHex"));
-            assertEq(smtKey.length, 8, "honest smtKey must be 8 bytes (UInt64 BE)");
+            checkEq(smtKey.length, 8, "honest smtKey must be 8 bytes (UInt64 BE)");
         }
     }
 
     /// @notice Every honest entry's `leafPreimage` is exactly 16
     ///         bytes (UInt64 key + UInt64 value, both big-endian).
-    function test_all_honest_leafPreimages_are_16_bytes() public view {
+    function test_all_honest_leafPreimages_are_16_bytes() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         for (uint256 i = 0; i < 50; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes memory leafPreimage =
                 vm.parseJsonBytes(raw, string.concat(base, ".leafPreimageHex"));
-            assertEq(leafPreimage.length, 16, "honest leafPreimage must be 16 bytes");
+            checkEq(leafPreimage.length, 16, "honest leafPreimage must be 16 bytes");
         }
     }
 
     /// @notice Every entry's `proofData` has the canonical wire
     ///         layout: 32-byte bitmask plus an integer number of
     ///         32-byte siblings.
-    function test_all_proofData_well_formed_wire_layout() public view {
+    function test_all_proofData_well_formed_wire_layout() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes memory proofData = vm.parseJsonBytes(raw, string.concat(base, ".proofDataHex"));
-            assertGe(proofData.length, 32, "proofData must be at least 32 bytes (bitmask)");
-            assertEq((proofData.length - 32) % 32, 0, "siblings region must be 32-byte-aligned");
+            checkGe(proofData.length, 32, "proofData must be at least 32 bytes (bitmask)");
+            checkEq((proofData.length - 32) % 32, 0, "siblings region must be 32-byte-aligned");
         }
     }
 
     /// @notice Every entry's `root` is exactly 32 bytes (one hash
     ///         output).
-    function test_all_roots_are_32_bytes() public view {
+    function test_all_roots_are_32_bytes() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes memory root = vm.parseJsonBytes(raw, string.concat(base, ".rootHex"));
-            assertEq(root.length, 32, "root must be 32 bytes");
+            checkEq(root.length, 32, "root must be 32 bytes");
         }
     }
 
@@ -217,14 +194,11 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".header.isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("keccak256 fallback (FNV-1a-64); cross-stack assert skipped");
-            return;
-        }
+        _requireKeccakLinked(raw, ".header.isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes32 root = vm.parseJsonBytes32(raw, string.concat(base, ".rootHex"));
             bytes memory smtKey = vm.parseJsonBytes(raw, string.concat(base, ".smtKeyHex"));
             bytes memory leafPreimage =
@@ -235,9 +209,9 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
 
             bool actual = _verify(root, smtKey, leafPreimage, proofData);
             if (shouldVerify) {
-                assertTrue(actual, string.concat("honest entry rejected: ", category));
+                checkTrue(actual, string.concat("honest entry rejected: ", category));
             } else {
-                assertFalse(actual, string.concat("adversarial entry accepted: ", category));
+                checkFalse(actual, string.concat("adversarial entry accepted: ", category));
             }
         }
     }
@@ -252,13 +226,10 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".header.isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("keccak256 fallback; cross-stack assert skipped");
-            return;
-        }
+        _requireKeccakLinked(raw, ".header.isKeccak256Linked");
         for (uint256 i = 0; i < 50; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes32 root = vm.parseJsonBytes32(raw, string.concat(base, ".rootHex"));
             bytes memory smtKey = vm.parseJsonBytes(raw, string.concat(base, ".smtKeyHex"));
             bytes memory leafPreimage =
@@ -266,8 +237,18 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
             bytes memory proofData = vm.parseJsonBytes(raw, string.concat(base, ".proofDataHex"));
             string memory category = vm.parseJsonString(raw, string.concat(base, ".category"));
 
-            bytes32 reconstructed = proxy.recomputeRoot(smtKey, leafPreimage, proofData);
-            assertEq(reconstructed, root, string.concat("recomputeRoot mismatch for ", category));
+            try proxy.recomputeRoot(smtKey, leafPreimage, proofData) returns (
+                bytes32 reconstructed
+            ) {
+                checkEq(
+                    reconstructed, root,
+                    string.concat("recomputeRoot mismatch for ", category));
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat(
+                        "recomputeRoot reverted for ", category, ": ",
+                        describeRevert(err)));
+            }
         }
     }
 
@@ -307,7 +288,7 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
     ///         an empty string in Foundry; we use that semantics
     ///         here.  If the fixture format changes to encode null
     ///         differently, this test will need updating.
-    function test_per_entry_tamper_string_in_valid_set() public view {
+    function test_per_entry_tamper_string_in_valid_set() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
 
@@ -321,11 +302,12 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
 
         for (uint256 i = 50; i < 100; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory t = vm.parseJsonString(raw, string.concat(base, ".tamper"));
             bytes32 h = keccak256(bytes(t));
             bool valid = h == hValueSubst || h == hSiblingTamper || h == hBitmaskTamper
                 || h == hRootTamper || h == hKeyMismatch || h == hAbsentKey;
-            assertTrue(
+            checkTrue(
                 valid,
                 string.concat(
                     "adversarial entry[", vm.toString(i), "] has unrecognised tamper string: ", t
@@ -340,11 +322,12 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
     ///         corruption bugs where the category and tamper fields
     ///         drift out of sync (e.g., a refactor that renames one
     ///         but not the other).
-    function test_per_entry_category_consistent_with_tamper() public view {
+    function test_per_entry_category_consistent_with_tamper() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         for (uint256 i = 50; i < 100; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory category = vm.parseJsonString(raw, string.concat(base, ".category"));
             string memory tamper = vm.parseJsonString(raw, string.concat(base, ".tamper"));
             // The category contains "::tampered:<tamper>" as a
@@ -354,7 +337,7 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
             // substring — implemented as a manual scan since
             // Solidity does not provide a built-in substring check.
             string memory needle = string.concat("::tampered:", tamper);
-            assertTrue(
+            checkTrue(
                 _containsSubstring(category, needle),
                 string.concat(
                     "adversarial entry[",
@@ -396,4 +379,42 @@ contract SmtCellProofCrossCheck is CrossCheckFramework {
         }
         return false;
     }
+
+    /* ---------------------------------------------------------- */
+    /* Revert tolerance                                           */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Name `SmtCellVerifier`'s errors; defer the rest to the
+    ///         base.
+    ///
+    /// @dev    These are the shape refusals a malformed `proofData`
+    ///         reaches, and this corpus deliberately carries malformed
+    ///         entries — so a walk that ended on the first one would
+    ///         stop exactly where the adversarial half begins.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        override
+        returns (string memory)
+    {
+        bytes4 s = revertSelector(err);
+        if (s == SmtCellVerifier.SmtCellProofTooShort.selector) {
+            return "SmtCellProofTooShort";
+        }
+        if (s == SmtCellVerifier.SmtCellSiblingsMisaligned.selector) {
+            return "SmtCellSiblingsMisaligned";
+        }
+        if (s == SmtCellVerifier.SmtCellDepthOutOfRange.selector) {
+            return "SmtCellDepthOutOfRange";
+        }
+        return super.describeRevert(err);
+    }
+
+    /// @notice **Every error `SmtCellVerifier` declares has a name above.**
+    function test_every_declared_error_is_described() public {
+        string[] memory artifacts = new string[](1);
+        artifacts[0] = "out/SmtCellVerifier.sol/SmtCellVerifier.json";
+        assertEveryDeclaredErrorIsDescribed(artifacts);
+    }
+
 }

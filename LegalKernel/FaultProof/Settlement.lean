@@ -59,121 +59,124 @@ claim and the contract awards the challenger.  This is the
 /-- Settlement-time win for an honest challenger response.
 
     Hypotheses:
-      * The game is `inProgress`.
-      * It's the challenger's turn (they are the responding party).
-      * The challenger's submitted `KernelStep` is truthful — its
-        kernel-side `kernelStepApply` returns the same commit the
-        challenger claims as `claimedPostCommit`.
-      * The transition applies legally (range is single-step).
+      * The game is `inProgress` with no bisection round open.
+      * The range has narrowed to a single step.
+      * The submitted step starts from the COMMITTED pre-state
+        (`gs.range.low.commit`) — not one of the responder's
+        choosing.
+      * The step VM reproduces the COMMITTED disputed endpoint
+        (`gs.range.high.commit`).
 
-    Conclusion: the resulting game state has `status = challengerWon`.
+    Conclusion: the responding party wins.
 
-    This is the positive branch of theorem #232 and the load-bearing
-    upgrade over the Phase-6 trust assumption: there is no
-    adjudicator quorum dependency, no off-chain coordination — the
-    challenger's single move + the L1 step VM's deterministic check
-    settles the game in their favour. -/
-theorem honest_challenger_responds_truthfully_wins
+    Note what is *not* a hypothesis: there is no
+    `claimedPostCommit`.  Both sides of the comparison the
+    settlement turns on are already fixed in the game state, so the
+    responder cannot supply either.  The previous statement took
+    the claim as a parameter and compared it against
+    `kernelStepApply step`, which returned `step.postStateCommit` —
+    the responder's own field.  Both sides came from the responder,
+    so the theorem held for every responder, honest or not. -/
+theorem terminate_responder_wins_when_step_reproduces_high
     (gs gs' : GameState) (step : KernelStep)
-    (claimedPostCommit : StateCommit)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
-    (h_turn : gs.turn = .challenger)
-    (h_kernel_matches_claim :
-        kernelStepApply step = some claimedPostCommit)
-    (h_apply : applyTransition gs
-                  (.terminateOnSingleStep step claimedPostCommit) = .ok gs') :
-    gs'.status = .challengerWon := by
+    (h_no_pending : gs.pendingMidpoint = none)
+    (h_prestate : step.preStateCommit = gs.range.low.commit)
+    (h_reproduces : kernelStepApply step = some gs.range.high.commit)
+    (h_apply : applyTransition gs (.terminateOnSingleStep step) = .ok gs') :
+    gs'.status =
+      (match gs.turn with
+       | .sequencer  => GameStatus.sequencerWon
+       | .challenger => GameStatus.challengerWon) := by
   unfold applyTransition at h_apply
-  -- The transition is .terminateOnSingleStep; status = inProgress,
-  -- range = singleStep, kernelStepApply = some claimed; match → win.
-  simp [h_status, h_single_step, h_kernel_matches_claim, h_turn] at h_apply
-  -- gs' = { gs with status := challengerWon }
+  simp [h_status, h_single_step, h_no_pending, h_prestate, h_reproduces] at h_apply
   rw [← h_apply]
+  rfl
 
-/-! ## Single-step settlement under sequencer disagreement
+/-- The responder LOSES when the step VM does not reproduce the
+    committed endpoint.
 
-When the sequencer is the responding party at single-step
-termination and they claim their original `range.high.commit`
-(which differs from the kernel's truthful computation by
-disagreement), the L1 step VM detects the mismatch and the
-contract awards the challenger.  This is the "challenger wins
-by sequencer's-own-claim refutation" branch. -/
-
-/-- Settlement-time win when the sequencer responds with the
-    disputed upper-bound commit.
-
-    Hypotheses:
-      * The game is `inProgress`.
-      * It's the sequencer's turn (they are the responding party).
-      * The sequencer's claimed post-commit equals
-        `gs.range.high.commit` (the disputed claim being defended).
-      * The kernel computes a different post-commit (the truthful
-        one), so the step's `kernelStepApply` result does NOT match
-        the sequencer's claim.
-      * The transition applies legally.
-
-    Conclusion: the resulting game state has `status = challengerWon`.
-
-    This is the negative branch of theorem #232: even if the
-    sequencer submits a valid step, if its claim doesn't match
-    the kernel's deterministic output, they lose. -/
-theorem sequencer_responding_with_disputed_high_loses
-    (gs gs' : GameState) (step : KernelStep)
-    (computedPostCommit claimedPostCommit : StateCommit)
+    This is the branch that carries the whole trust model: a
+    sequencer defending a state root it fabricated cannot make the
+    step VM agree with it, so it loses without any adjudicator
+    participating. -/
+theorem terminate_responder_loses_when_step_differs
+    (gs gs' : GameState) (step : KernelStep) (computed : StateCommit)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
-    (h_turn : gs.turn = .sequencer)
-    (h_kernel_computes : kernelStepApply step = some computedPostCommit)
-    (h_mismatch : computedPostCommit ≠ claimedPostCommit)
-    (h_apply : applyTransition gs
-                  (.terminateOnSingleStep step claimedPostCommit) = .ok gs') :
-    gs'.status = .challengerWon := by
+    (h_no_pending : gs.pendingMidpoint = none)
+    (h_prestate : step.preStateCommit = gs.range.low.commit)
+    (h_computes : kernelStepApply step = some computed)
+    (h_mismatch : computed ≠ gs.range.high.commit)
+    (h_apply : applyTransition gs (.terminateOnSingleStep step) = .ok gs') :
+    gs'.status =
+      (match gs.turn with
+       | .sequencer  => GameStatus.challengerWon
+       | .challenger => GameStatus.sequencerWon) := by
   unfold applyTransition at h_apply
-  simp [h_status, h_single_step, h_kernel_computes, h_turn, h_mismatch]
+  simp [h_status, h_single_step, h_no_pending, h_prestate, h_computes, h_mismatch]
     at h_apply
   rw [← h_apply]
+  rfl
 
-/-- Settlement-time win when the sequencer's submitted step has
-    invalid cell proofs at the L1 step VM (i.e. `kernelStepApply`
-    returns `none`).  An honest challenger always wins this branch
-    because the responding party — the sequencer — is the one
-    whose `kernelStepApply` failed.
-
-    This handles the case where the sequencer cannot construct a
-    cell-proof bundle whose `witnessCommit` matches the pre-state
-    commit at the single disputed step; the L1 step VM rejects
-    the submission and the bonds redistribute to the challenger. -/
-theorem sequencer_responding_with_invalid_proofs_loses
+/-- The responder loses when its cell proofs fail to verify
+    against the committed pre-state. -/
+theorem terminate_responder_with_invalid_proofs_loses
     (gs gs' : GameState) (step : KernelStep)
-    (claimedPostCommit : StateCommit)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
-    (h_turn : gs.turn = .sequencer)
+    (h_no_pending : gs.pendingMidpoint = none)
+    (h_prestate : step.preStateCommit = gs.range.low.commit)
     (h_kernel_fails : kernelStepApply step = none)
-    (h_apply : applyTransition gs
-                  (.terminateOnSingleStep step claimedPostCommit) = .ok gs') :
-    gs'.status = .challengerWon := by
+    (h_apply : applyTransition gs (.terminateOnSingleStep step) = .ok gs') :
+    gs'.status =
+      (match gs.turn with
+       | .sequencer  => GameStatus.challengerWon
+       | .challenger => GameStatus.sequencerWon) := by
   unfold applyTransition at h_apply
-  simp [h_status, h_single_step, h_kernel_fails, h_turn] at h_apply
+  simp [h_status, h_single_step, h_no_pending, h_prestate, h_kernel_fails] at h_apply
   rw [← h_apply]
+  rfl
+
+/-- The responder loses when it re-executes from a pre-state that
+    is not the committed `gs.range.low.commit`.
+
+    On L1 this branch is unreachable — the contract passes
+    `g.low.commit` to the step VM itself — but in the Lean model the
+    pre-state travels inside the `KernelStep`, so it has to be
+    rejected explicitly.  Without this, a responder could run the
+    disputed step from a fabricated pre-state and manufacture
+    whatever post-commit it needed. -/
+theorem terminate_responder_with_wrong_prestate_loses
+    (gs gs' : GameState) (step : KernelStep)
+    (h_status : gs.status = .inProgress)
+    (h_single_step : gs.range.isSingleStep)
+    (h_no_pending : gs.pendingMidpoint = none)
+    (h_prestate : step.preStateCommit ≠ gs.range.low.commit)
+    (h_apply : applyTransition gs (.terminateOnSingleStep step) = .ok gs') :
+    gs'.status =
+      (match gs.turn with
+       | .sequencer  => GameStatus.challengerWon
+       | .challenger => GameStatus.sequencerWon) := by
+  unfold applyTransition at h_apply
+  simp [h_status, h_single_step, h_no_pending, h_prestate] at h_apply
+  rw [← h_apply]
+  rfl
 
 /-! ## #232 — Composite trust-model upgrade theorem
 
-The composite theorem unifies the three settlement branches
-into a single proposition: **regardless of which party is
-responding at single-step termination, an honest challenger
-secures a `challengerWon` settlement whenever the kernel's
-deterministic output refutes the sequencer's original claim.**
+The composite unifies the branches above into the proposition the
+workstream exists to establish: **an honest challenger secures a
+`challengerWon` settlement against a fabricated state root without
+any adjudicator quorum.**
 
-This is the formal expression of the trust-model upgrade from
-"M-of-N adjudicators honest" (Phase 6) to "1 honest challenger"
-(this workstream).  No adjudicator-quorum participation is
-required; the L1 step VM is the single source of truth at
-settlement, and its determinism (via the coherence theorem #225
-between `kernelStepApply` and `kernelOnlyApply`) ensures that
-any party with access to the canonical log can construct the
-winning move. -/
+The shape changed with the adjudication.  It used to be a
+disjunction over which party supplied the winning *claim*.  There
+are no claims now — the settlement compares the step VM's output
+against the committed endpoint — so the composite is simply: under
+disagreement at the upper bound, a truthful step cannot reproduce
+`gs.range.high.commit`, hence the responding sequencer loses. -/
 
 /-- A predicate describing the bisection invariant maintained
     by honest challenger play, lifted to single-step termination
@@ -196,51 +199,36 @@ instance instDecidableSettlementDisagreement
 /-- #232 — Composite trust-model upgrade theorem.
 
     At single-step termination, under the bisection invariant
-    (disagreement at the upper bound) plus a kernel-truthful step:
+    (disagreement at the upper bound) plus a kernel-truthful step,
+    the sequencer defending its own disputed endpoint loses.
 
-      * If the challenger responds with `claimedPostCommit = truth`,
-        the kernel computes the same value and the challenger wins.
-      * If the sequencer responds with `claimedPostCommit =
-        gs.range.high.commit` (their disputed original), the kernel
-        computes the truthful value which differs from the claim
-        (by `settlementDisagreement`) and the challenger wins.
-
-    Either way, the final status is `challengerWon`.
-
-    The hypothesis `h_response_branch` is the disjunction that the
-    honest strategy supplies: the challenger always picks the
-    truthful claim; the sequencer (under the bisection invariant)
-    is forced to defend its disputed claim. -/
+    The chain is short because the adjudication is now direct: the
+    step VM computes `truth gs.range.high.idx`, the committed
+    endpoint is something else (that is what
+    `settlementDisagreement` says), so the comparison fails and the
+    responder — the sequencer — loses.  No adjudicator quorum
+    participates; the challenger's only obligation was to bisect
+    honestly so that the sequencer owes the terminate. -/
 theorem honest_challenger_wins_against_invalid_state_root
     (truth : LogIndex → StateCommit)
     (gs gs' : GameState) (step : KernelStep)
-    (claimedPostCommit computedPostCommit : StateCommit)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
+    (h_no_pending : gs.pendingMidpoint = none)
+    (h_prestate : step.preStateCommit = gs.range.low.commit)
+    (h_turn : gs.turn = .sequencer)
     (h_disagree : settlementDisagreement truth gs)
     (h_kernel_truthful :
-        kernelStepApply step = some computedPostCommit)
-    (h_computed_eq_truth :
-        computedPostCommit = truth gs.range.high.idx)
-    (h_response_branch :
-        (gs.turn = .challenger ∧ claimedPostCommit = computedPostCommit)
-        ∨ (gs.turn = .sequencer ∧ claimedPostCommit = gs.range.high.commit))
-    (h_apply : applyTransition gs
-                  (.terminateOnSingleStep step claimedPostCommit) = .ok gs') :
+        kernelStepApply step = some (truth gs.range.high.idx))
+    (h_apply : applyTransition gs (.terminateOnSingleStep step) = .ok gs') :
     gs'.status = .challengerWon := by
-  rcases h_response_branch with ⟨h_turn, h_chal_claim⟩ | ⟨h_turn, h_seq_claim⟩
-  · -- Challenger responds truthfully.
-    rw [h_chal_claim] at h_apply
-    exact honest_challenger_responds_truthfully_wins
-            gs gs' step computedPostCommit h_status h_single_step h_turn
-            h_kernel_truthful h_apply
-  · -- Sequencer responds with disputed-high.commit; kernel disagrees.
-    have h_mismatch : computedPostCommit ≠ claimedPostCommit := by
-      rw [h_seq_claim, h_computed_eq_truth]
-      exact Ne.symm h_disagree
-    exact sequencer_responding_with_disputed_high_loses
-            gs gs' step computedPostCommit claimedPostCommit
-            h_status h_single_step h_turn h_kernel_truthful h_mismatch h_apply
+  have h_mismatch : truth gs.range.high.idx ≠ gs.range.high.commit :=
+    Ne.symm h_disagree
+  have h := terminate_responder_loses_when_step_differs
+              gs gs' step (truth gs.range.high.idx)
+              h_status h_single_step h_no_pending h_prestate
+              h_kernel_truthful h_mismatch h_apply
+  rw [h, h_turn]
 
 /-! ## Trace-level composition with `disagreement_persists_along_trace`
 

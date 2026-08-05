@@ -3,8 +3,9 @@
 // Knomosis — proof-carrying state transition system.
 // Cross-stack consumer for the GP.11.7 embedded-AMM swap corpus.
 //
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {AmmMath} from "src/lib/AmmMath.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -25,7 +26,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///
 ///         The swap-math corpus runs UNCONDITIONALLY in every hash-binding
 ///         mode since it involves no hashing.
-contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
+contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
     /// @dev Fixture file name under `test/CrossCheck/fixtures/`.
     string internal constant FIXTURE_NAME = "amm_swap.json";
 
@@ -55,10 +56,6 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
     // ------------------------------------------------------------------
     // Fixture decoding
     // ------------------------------------------------------------------
-
-    function _count(string memory raw) internal pure returns (uint256) {
-        return vm.parseJsonUint(raw, ".header.count");
-    }
 
     function _gridCount(string memory raw) internal pure returns (uint256) {
         return vm.parseJsonUint(raw, ".header.gridCount");
@@ -99,10 +96,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         }
         string memory raw = readFixture(FIXTURE_NAME);
 
-        assertGt(_count(raw), 0, "corpus is non-empty");
+        assertGt(headerCount(raw), 0, "corpus is non-empty");
         assertEq(
             _gridCount(raw) + _cornerCount(raw),
-            _count(raw),
+            headerCount(raw),
             "grid + corner == total"
         );
         assertEq(
@@ -142,15 +139,22 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             if (e.reserveIn == 0 || e.reserveOut == 0 || e.amountIn == 0 || e.feeBps >= 10000) {
                 continue;
             }
-            uint256 got = AmmMath.getAmountOut(e.amountIn, e.reserveIn, e.reserveOut, e.feeBps);
-            assertEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
+            try this.getAmountOutExternal(
+                e.amountIn, e.reserveIn, e.reserveOut, e.feeBps
+            ) returns (uint256 got) {
+                checkEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
+            } catch (bytes memory err) {
+                recordFailure(
+                    string.concat("getAmountOut reverted ", describeRevert(err)));
+            }
         }
     }
 
@@ -164,14 +168,15 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             if (e.reserveIn == 0 || e.reserveOut == 0 || e.amountIn == 0 || e.feeBps >= 10000) {
                 continue;
             }
-            assertLt(e.expectedOut, e.reserveOut, "no-drain violated");
+            checkLt(e.expectedOut, e.reserveOut, "no-drain violated");
         }
     }
 
@@ -185,11 +190,12 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertLe(e.kBefore, e.kAfter, "k decreased across the swap");
+            checkLe(e.kBefore, e.kAfter, "k decreased across the swap");
         }
     }
 
@@ -203,12 +209,13 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
             bool expected = e.expectedOut >= e.minAmountOut;
-            assertEq(e.slippageSatisfied, expected, "slippage flag mismatch");
+            checkEq(e.slippageSatisfied, expected, "slippage flag mismatch");
         }
     }
 
@@ -225,20 +232,29 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
     // CBE byte-length pin
     // ------------------------------------------------------------------
 
-    /// @notice Every entry's `expectedCbe` is exactly 54 bytes (110 hex chars + 0x prefix).
+    /// @notice Every entry's `expectedCbe` is exactly 70 bytes (140 hex
+    ///         chars + 0x prefix): the array tag plus five field heads —
+    ///         three 9-byte uint heads (`fromResource`, `toResource`,
+    ///         `ammReserveActor`) and two 17-byte amount heads
+    ///         (`amountIn`, `amountOut`, widened by C-1).
     function test_perEntry_cbeByteLength() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("amm_swap.json not generated (run `lake test`)");
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory cbeHex = vm.parseJsonString(raw, string.concat(base, ".expectedCbe"));
             bytes memory cbeBytes = vm.parseBytes(cbeHex);
-            assertEq(cbeBytes.length, 54, "CBE must be 54 bytes (tag + 5 x 9-byte heads)");
+            checkEq(
+                cbeBytes.length,
+                102,
+                "CBE must be 102 bytes (tag + 3 x 9-byte uint heads + 2 x 33-byte amount heads)"
+            );
         }
     }
 
@@ -253,12 +269,13 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertEq(e.newReserveIn, e.reserveIn + e.amountIn, "newReserveIn mismatch");
-            assertEq(e.newReserveOut, e.reserveOut - e.expectedOut, "newReserveOut mismatch");
+            checkEq(e.newReserveIn, e.reserveIn + e.amountIn, "newReserveIn mismatch");
+            checkEq(e.newReserveOut, e.reserveOut - e.expectedOut, "newReserveOut mismatch");
         }
     }
 
@@ -273,12 +290,13 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
+            beginEntry(string.concat("#", vm.toString(i)));
             Entry memory e = _loadEntry(raw, i);
-            assertEq(e.reserveActorCreditFrom, e.amountIn, "reserveActorCreditFrom != amountIn");
-            assertEq(e.reserveActorDebitTo, e.expectedOut, "reserveActorDebitTo != expectedOut");
+            checkEq(e.reserveActorCreditFrom, e.amountIn, "reserveActorCreditFrom != amountIn");
+            checkEq(e.reserveActorDebitTo, e.expectedOut, "reserveActorDebitTo != expectedOut");
         }
     }
 
@@ -295,14 +313,15 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = _count(raw);
+        uint256 n = headerCount(raw);
 
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             string memory cbeHex = vm.parseJsonString(raw, string.concat(base, ".expectedCbe"));
             bytes memory cbeBytes = vm.parseBytes(cbeHex);
-            assertEq(uint8(cbeBytes[0]), 0x00, "first byte must be 0x00 (CBE Nat type)");
-            assertEq(uint8(cbeBytes[1]), 0x17, "second byte must be 0x17 (= 23, ammSwap tag LE)");
+            checkEq(uint8(cbeBytes[0]), 0x00, "first byte must be 0x00 (CBE Nat type)");
+            checkEq(uint8(cbeBytes[1]), 0x17, "second byte must be 0x17 (= 23, ammSwap tag LE)");
         }
     }
 
@@ -315,7 +334,6 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
     ///         verifying that the live contract's output matches
     ///         `AmmMath.getAmountOut`.
     function test_liveContract_ammSwapMatchesFormula() public {
-        address constant_BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
         address BOLD_BREAKER = address(0xB12E6B6E);
         address BOLD_ADMIN = address(0xAD814);
         address AMM_DR = address(0xA33D6);
@@ -326,7 +344,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
 
         // Etch MockBold at the pinned address
         MockBold impl = new MockBold();
-        vm.etch(constant_BOLD, address(impl).code);
+        vm.etch(BOLD, address(impl).code);
 
         // Deploy BOLD-enabled, AMM-enabled bridge (80% seed ratio)
         uint64[] memory rids = new uint64[](0);
@@ -347,7 +365,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
                 maxFeeBps: 5000,
                 weiPerBudgetUnitEth: 1_000_000_000,
                 weiPerBudgetUnitBold: 1_000_000_000,
-                boldTokenAddress: constant_BOLD,
+                boldTokenAddress: BOLD,
                 boldTvlCap: type(uint256).max,
                 boldCircuitBreaker: BOLD_BREAKER,
                 boldAdmin: BOLD_ADMIN,
@@ -365,9 +383,9 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
 
         // Seed BOLD reserve via depositBoldWithFee
         uint256 boldDeposit = 300_000 ether;
-        MockBold(constant_BOLD).mint(lp, boldDeposit);
+        MockBold(BOLD).mint(lp, boldDeposit);
         vm.prank(lp);
-        MockBold(constant_BOLD).approve(address(bridge), boldDeposit);
+        MockBold(BOLD).approve(address(bridge), boldDeposit);
         vm.prank(lp);
         bridge.depositBoldWithFee(boldDeposit, 5000);
 
@@ -394,13 +412,57 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         uint256 boldIn = 3000 ether;
         uint256 expectedEthOut = AmmMath.getAmountOut(boldIn, rBold, rEth, AMM_SWAP_FEE_BPS);
         assertGt(expectedEthOut, 0, "non-trivial BOLD->ETH output");
-        MockBold(constant_BOLD).mint(swp, boldIn);
+        MockBold(BOLD).mint(swp, boldIn);
         vm.prank(swp);
-        MockBold(constant_BOLD).approve(address(bridge), boldIn);
+        MockBold(BOLD).approve(address(bridge), boldIn);
         vm.prank(swp);
         uint256 actualEthOut = bridge.ammSwap(
             1, boldIn, 0, block.timestamp + 1 hours
         );
         assertEq(actualEthOut, expectedEthOut, "live BOLD->ETH == AmmMath.getAmountOut");
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Revert tolerance                                                   */
+    /* ------------------------------------------------------------------ */
+
+    /// @dev `AmmMath.getAmountOut` behind an external boundary, so a
+    ///      corpus walk can catch a revert and name the entry that
+    ///      caused it.  A library call is internal, so without this a
+    ///      single reverting entry ends the walk and the rest of the
+    ///      corpus goes unexamined.
+    function getAmountOutExternal(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut,
+        uint256 feeBps
+    ) external pure returns (uint256) {
+        return AmmMath.getAmountOut(amountIn, reserveIn, reserveOut, feeBps);
+    }
+
+    /// @notice Name `AmmMath`'s own errors; defer the rest to the base.
+    function describeRevert(bytes memory err)
+        internal
+        pure
+        override
+        returns (string memory)
+    {
+        bytes4 s = revertSelector(err);
+        if (s == AmmMath.AmmMathInsufficientInput.selector) {
+            return "AmmMathInsufficientInput()";
+        }
+        if (s == AmmMath.AmmMathInsufficientLiquidity.selector) {
+            return "AmmMathInsufficientLiquidity()";
+        }
+        if (s == AmmMath.AmmMathFeeTooHigh.selector) return "AmmMathFeeTooHigh()";
+        return super.describeRevert(err);
+    }
+
+    /// @notice **Every error `AmmMath` declares has a name above.**
+    function test_every_declared_error_is_described() public {
+        string[] memory artifacts = new string[](1);
+        artifacts[0] = "out/AmmMath.sol/AmmMath.json";
+        assertEveryDeclaredErrorIsDescribed(artifacts);
+    }
+
 }

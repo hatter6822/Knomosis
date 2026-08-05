@@ -50,8 +50,8 @@ This module is **not** part of the trusted computing base.
 import LegalKernel.Disputes.Evidence
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Commit
-import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.StepVariants
+import LegalKernel.FaultProof.ProductionApply
 import LegalKernel.FaultProof.Verify
 import LegalKernel.Runtime.LogFile
 
@@ -68,22 +68,26 @@ The semantic core is the existing `kernelOnlyApply` — which
 already takes a `(es, entry)` pair and produces a post-state.
 We expose it under a fault-proof-namespace name. -/
 
-/-- The semantic core of one kernel step: the post-state
-    produced by applying the signed action to the pre-state.
+/-- The semantic core of one kernel step: the post-state the
+    RUNTIME produces.
 
-    By construction, this is the dispute-pipeline's
-    `kernelOnlyApply` (defined in `Disputes/Evidence.lean`).
-    Wrapping a `SignedAction` into a `LogEntry` for compatibility
-    with `kernelOnlyApply`'s signature is via
-    `signedActionToLogEntry` below. -/
+    This is `productionApplyBudget` — the total form of
+    `apply_bridge_admissible_with_budget`, which is what
+    `Runtime/Loop.lean` advances state through.  It used to be
+    `kernelOnlyApply`, the dispute pipeline's analytical replay, which
+    models neither bridge nor budget effects; for a deposit the two
+    produce different states with different roots, and the published
+    root follows the runtime.  Anchoring the fault proof to the
+    analytical replay was therefore an adjudication error waiting for
+    the state-root swap to make it visible.
+
+    The `l2LogIndex` is the step's own position in the log.  The
+    guarded entry point needs it for the bridge leg (a withdrawal
+    records the index it was requested at), so the reference cannot
+    avoid carrying it. -/
 def applyCellWrites_to_state
-    (es : ExtendedState) (st : SignedAction) : ExtendedState :=
-  let entry : LogEntry := {
-    prevHash := ByteArray.empty,
-    signedAction := st,
-    postStateHash := ByteArray.empty  -- not consumed by kernelOnlyApply
-  }
-  kernelOnlyApply es entry
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) : ExtendedState :=
+  productionApplyBudget es st l2LogIndex
 
 /-! ## `recomputeCommitment` (Merkle bookkeeping)
 
@@ -95,17 +99,28 @@ semantic-core's output. -/
     By construction, this is `commitExtendedState` of the
     semantic-core output. -/
 def recomputeCommitment
-    (es : ExtendedState) (st : SignedAction) : StateCommit :=
-  commitExtendedState (applyCellWrites_to_state es st)
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) : StateCommit :=
+  commitExtendedState (applyCellWrites_to_state es st l2LogIndex)
 
 /-! ## Determinism + reduction lemmas -/
 
+/-- `recomputeCommitment`'s defining equation, as a rewrite rule.
+
+    Stated because `rfl` between it and its unfolding is not cheap:
+    both sides mention `commitExtendedState`, whose body is the
+    depth-256 SMT recursion, and the elaborator will try to evaluate
+    that before noticing the two sides share a head. -/
+theorem recomputeCommitment_def
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    recomputeCommitment es st l2LogIndex
+      = commitExtendedState (applyCellWrites_to_state es st l2LogIndex) := rfl
+
 /-- `applyCellWrites_to_state` is deterministic. -/
 theorem applyCellWrites_to_state_deterministic
-    (es₁ es₂ : ExtendedState) (st₁ st₂ : SignedAction)
-    (h_es : es₁ = es₂) (h_st : st₁ = st₂) :
-    applyCellWrites_to_state es₁ st₁ = applyCellWrites_to_state es₂ st₂ := by
-  rw [h_es, h_st]
+    (es₁ es₂ : ExtendedState) (st₁ st₂ : SignedAction) (i₁ i₂ : Nat)
+    (h_es : es₁ = es₂) (h_st : st₁ = st₂) (h_i : i₁ = i₂) :
+    applyCellWrites_to_state es₁ st₁ i₁ = applyCellWrites_to_state es₂ st₂ i₂ := by
+  rw [h_es, h_st, h_i]
 
 /-- #249 — `applyCellWrites_to_state` is type-level total.  By
     virtue of being a total Lean function returning
@@ -114,242 +129,161 @@ theorem applyCellWrites_to_state_deterministic
     "admissibility-conditioned" form follows directly: every
     admissible input has a result (because every input does). -/
 theorem applyCellWrites_to_state_total
-    (es : ExtendedState) (st : SignedAction) :
-    ∃ es', applyCellWrites_to_state es st = es' :=
-  ⟨applyCellWrites_to_state es st, rfl⟩
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    ∃ es', applyCellWrites_to_state es st l2LogIndex = es' :=
+  ⟨applyCellWrites_to_state es st l2LogIndex, rfl⟩
 
 /-- `recomputeCommitment` is deterministic. -/
 theorem recomputeCommitment_deterministic
-    (es₁ es₂ : ExtendedState) (st₁ st₂ : SignedAction)
-    (h_es : es₁ = es₂) (h_st : st₁ = st₂) :
-    recomputeCommitment es₁ st₁ = recomputeCommitment es₂ st₂ := by
-  rw [h_es, h_st]
+    (es₁ es₂ : ExtendedState) (st₁ st₂ : SignedAction) (i₁ i₂ : Nat)
+    (h_es : es₁ = es₂) (h_st : st₁ = st₂) (h_i : i₁ = i₂) :
+    recomputeCommitment es₁ st₁ i₁ = recomputeCommitment es₂ st₂ i₂ := by
+  rw [h_es, h_st, h_i]
 
 /-- `recomputeCommitment` is extensional: equal post-states ⇒
     equal recommitted hashes. -/
 theorem recomputeCommitment_extensional
-    (es₁ es₂ : ExtendedState) (st : SignedAction)
-    (h : applyCellWrites_to_state es₁ st = applyCellWrites_to_state es₂ st) :
-    recomputeCommitment es₁ st = recomputeCommitment es₂ st := by
+    (es₁ es₂ : ExtendedState) (st : SignedAction) (l2LogIndex : Nat)
+    (h : applyCellWrites_to_state es₁ st l2LogIndex
+       = applyCellWrites_to_state es₂ st l2LogIndex) :
+    recomputeCommitment es₁ st l2LogIndex = recomputeCommitment es₂ st l2LogIndex := by
   unfold recomputeCommitment
   rw [h]
 
-/-! ## #225 — Coherence with `kernelOnlyApply` -/
+/-! ## #225 — Coherence with the production advance -/
 
-/-- #225 — `recomputeCommitment` agrees with `commitExtendedState
-    ∘ kernelOnlyApply`.  By construction (rfl).
+/-- #225 — `recomputeCommitment` agrees with
+    `commitExtendedState ∘ productionApplyBudget`.  By construction
+    (rfl).
 
-    This is the headline coherence theorem of Workstream H: the
-    L1 step VM (whose Lean reference is `recomputeCommitment`)
-    produces exactly the same post-commit as the L2 kernel
-    (whose semantics is `kernelOnlyApply`).
+    This is the headline coherence theorem of Workstream H, restated.
+    It used to name `kernelOnlyApply`, and that statement is now
+    FALSE: `productionApplyBudget` records the consumed deposit on a
+    bridge action and rewrites the signer's epoch budget on every
+    admitted action, neither of which the analytical replay models.
+    The old form was not merely weaker — it asserted agreement with a
+    function the published root does not follow.
 
-    **Scope.**  `kernelOnlyApply` is the kernel-EXECUTION semantics
-    — `base` balances, `nonces`, `registry`, and `localPolicies`.
-    It leaves the bridge ledger (`consumed` / `pending` / `nextWdId`)
-    invariant (`applyCellWrites_to_state_preserves_bridge` below), so
-    the bisection-adjudicated state-commitment chain holds the bridge
-    sub-state CONSTANT across every adjudicated step.  The bridge
-    ledger's own evolution — deposit-replay protection and withdrawal
-    tracking — is verified by the dedicated bridge machinery
-    (`BridgeAdmissibleWith`'s deposit-id-freshness conjuncts at
-    admission and the §13 withdrawal-proof + finalisation chain on
-    L1), NOT by the per-step bisection game.
+    Agreement with the guarded entry point the runtime actually calls
+    is `apply_bridge_admissible_with_budget_eq`
+    (`FaultProof/ProductionApply.lean`): wherever it admits, it
+    returns exactly this state.  The two together are what let the L1
+    step VM compare its output to a published state root.
 
-    Cross-stack equivalence with the Solidity-side implementation
-    is established by the WU H.10.1 fixture corpus; the
-    Solidity-side step VM is required to produce the same bytes
-    as `recomputeCommitment` for every cross-check fixture. -/
-theorem recomputeCommitment_coherent_with_kernelOnlyApply
-    (es : ExtendedState) (st : SignedAction)
-    (entry : LogEntry)
-    (h_entry : entry.signedAction = st) :
-    recomputeCommitment es st =
-    commitExtendedState (kernelOnlyApply es entry) := by
-  unfold recomputeCommitment applyCellWrites_to_state
-  -- The two `kernelOnlyApply` calls receive the same signed action
-  -- (h_entry) and the same pre-state.  The `prevHash` and
-  -- `postStateHash` fields of `LogEntry` aren't consumed by
-  -- `kernelOnlyApply`, so the result depends only on signedAction
-  -- and pre-state.
-  congr 1
-  -- We need to show kernelOnlyApply is invariant in the unused
-  -- LogEntry fields.  This follows from the definition's match on
-  -- entry.signedAction.action.
-  rcases entry with ⟨prevHash, signedAction, postStateHash⟩
-  simp only at h_entry
-  -- entry = { prevHash := prevHash, signedAction := signedAction := st,
-  --           postStateHash := postStateHash }
-  unfold kernelOnlyApply
-  rw [h_entry]
+    Cross-stack equivalence with the Solidity step VM is established
+    by the WU H.10.1 fixture corpus. -/
+theorem recomputeCommitment_coherent_with_productionApplyBudget
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    recomputeCommitment es st l2LogIndex
+      = commitExtendedState (productionApplyBudget es st l2LogIndex) := rfl
 
-/-- **Fault-proof scope invariant (bridge sub-state).**  The fault
-    proof's per-step reference transition `applyCellWrites_to_state`
-    (= `kernelOnlyApply`) leaves the bridge sub-state unchanged.
-    Consequently the L1 step VM re-derives only the kernel-execution
-    sub-state; the `consumed` / `pending` / `nextWdId` bridge ledger is
-    held constant across every step the bisection game adjudicates.
+/-- **The bridge sub-state now advances.**
 
-    This is the type-level statement of the Workstream-H scope
-    boundary.  The bridge ledger's own evolution is verified by the
-    dedicated bridge machinery (deposit-id freshness at
-    `BridgeAdmissibleWith` admission and the §13 withdrawal-proof +
-    finalisation chain on L1), not by the per-step game.  See
-    `Disputes.kernelOnlyApply_preserves_bridge`. -/
-theorem applyCellWrites_to_state_preserves_bridge
-    (es : ExtendedState) (st : SignedAction) :
-    (applyCellWrites_to_state es st).bridge = es.bridge := by
-  unfold applyCellWrites_to_state
-  exact kernelOnlyApply_preserves_bridge es _
+    `applyCellWrites_to_state_preserves_bridge` used to assert the
+    opposite — that the fault proof's reference left the bridge ledger
+    constant across every adjudicated step — and it was true of
+    `kernelOnlyApply`.  It was also the scope boundary that made the
+    per-step game unable to adjudicate a deposit at all.  The
+    reference now records the deposit, so the statement inverts. -/
+theorem applyCellWrites_to_state_bridge
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    (applyCellWrites_to_state es st l2LogIndex).bridge
+      = LegalKernel.Bridge.applyActionToBridgeState es.bridge st.action l2LogIndex :=
+  productionApplyBudget_bridge es st l2LogIndex
 
-/-! ## #253 — Multi-step coherence with `kernelOnlyReplay`
+/-! ## #253 — Multi-step coherence with the production replay
 
-The multi-step generalisation: a chain of per-step semantic-core
-applications threaded through a log agrees with `kernelOnlyReplay`
-on the same log.  Concretely, we define a `foldOverLog` function
-that maps each log entry through `applyCellWrites_to_state` and
-threads the state, then prove it equals `kernelOnlyReplay`. -/
+The per-step reference threads an `l2LogIndex`, so the fold has to
+count.  `kernelOnlyReplay` is a plain `foldl` with no index — it does
+not need one, having no bridge leg — so the multi-step statement
+retargets at `productionReplayBudget` rather than losing its
+counterpart. -/
 
-/-- The fold-over-log form of the multi-step kernel-step chain.
-    Threads `applyCellWrites_to_state` through the entire log,
-    starting from `es`.  Equivalent to `kernelOnlyReplay` by
-    definition of `applyCellWrites_to_state`. -/
+/-- The fold-over-log form of the multi-step chain, threading the L2
+    log index from `startIdx`. -/
 def foldStepApplyOverLog
-    (es : ExtendedState) : List LogEntry → ExtendedState
+    (es : ExtendedState) (startIdx : Nat) : List LogEntry → ExtendedState
   | []       => es
   | e :: rest =>
     foldStepApplyOverLog
-      (applyCellWrites_to_state es e.signedAction) rest
+      (applyCellWrites_to_state es e.signedAction startIdx) (startIdx + 1) rest
 
 /-- The empty-log reduction of `foldStepApplyOverLog`. -/
-theorem foldStepApplyOverLog_nil (es : ExtendedState) :
-    foldStepApplyOverLog es [] = es := rfl
+theorem foldStepApplyOverLog_nil (es : ExtendedState) (i : Nat) :
+    foldStepApplyOverLog es i [] = es := rfl
 
-/-- The cons-step reduction of `foldStepApplyOverLog`: one step of
-    semantic application + the rest of the chain. -/
+/-- The cons-step reduction: one semantic application at `i`, then the
+    rest of the chain from `i + 1`. -/
 theorem foldStepApplyOverLog_cons
-    (es : ExtendedState) (e : LogEntry) (rest : List LogEntry) :
-    foldStepApplyOverLog es (e :: rest) =
+    (es : ExtendedState) (i : Nat) (e : LogEntry) (rest : List LogEntry) :
+    foldStepApplyOverLog es i (e :: rest) =
     foldStepApplyOverLog
-      (applyCellWrites_to_state es e.signedAction) rest := rfl
+      (applyCellWrites_to_state es e.signedAction i) (i + 1) rest := rfl
 
-/-- **Per-step bridge**: `applyCellWrites_to_state es st` equals
-    `kernelOnlyApply` applied to a `LogEntry` whose
-    `signedAction = st`.  This follows from
-    `applyCellWrites_to_state`'s definition (which wraps `st` into
-    a synthetic entry) plus the fact that `kernelOnlyApply` only
-    consumes `entry.signedAction`. -/
-theorem applyCellWrites_to_state_eq_kernelOnlyApply
-    (es : ExtendedState) (entry : LogEntry) :
-    applyCellWrites_to_state es entry.signedAction =
-    kernelOnlyApply es entry := by
-  unfold applyCellWrites_to_state
-  -- The synthetic entry's `signedAction` equals `entry.signedAction`
-  -- by construction; `kernelOnlyApply` ignores `prevHash` and
-  -- `postStateHash` (it only matches on `entry.signedAction.action`
-  -- and reads `entry.signedAction.signer`).
-  rcases entry with ⟨_prevHash, signedAction, _postStateHash⟩
-  unfold kernelOnlyApply
-  simp only
+/-- #253 — Multi-step coherence: folding the per-step reference
+    through a log agrees with the production replay over the same
+    signed actions.
 
-/-- #253 — Multi-step coherence: the fold-over-log application of
-    `applyCellWrites_to_state` agrees with `kernelOnlyReplay` on
-    the same log.
-
-    This is the multi-step generalisation of theorem #225 (the
-    per-step coherence).  Proof: structural induction on `log`,
-    using the per-step bridge at each cons. -/
-theorem foldStepApplyOverLog_eq_kernelOnlyReplay
-    (es : ExtendedState) (log : List LogEntry) :
-    foldStepApplyOverLog es log = kernelOnlyReplay es log := by
-  induction log generalizing es with
-  | nil =>
-    -- foldStepApplyOverLog es [] = es;
-    -- kernelOnlyReplay es [] = es.
-    rfl
+    Proof: structural induction on `log`; each cons is `rfl` at the
+    step level because both sides advance by `productionApplyBudget`
+    at the same index. -/
+theorem foldStepApplyOverLog_eq_productionReplayBudget
+    (es : ExtendedState) (i : Nat) (log : List LogEntry) :
+    foldStepApplyOverLog es i log
+      = productionReplayBudget es i (log.map (·.signedAction)) := by
+  induction log generalizing es i with
+  | nil => rfl
   | cons e rest ih =>
-    -- foldStepApplyOverLog es (e :: rest) =
-    --   foldStepApplyOverLog (applyCellWrites_to_state es e.signedAction) rest
-    -- by IH = kernelOnlyReplay (applyCellWrites_to_state es e.signedAction) rest
-    -- by per-step bridge = kernelOnlyReplay (kernelOnlyApply es e) rest
-    -- = kernelOnlyReplay es (e :: rest)   (by definition of kernelOnlyReplay)
-    unfold foldStepApplyOverLog
-    rw [applyCellWrites_to_state_eq_kernelOnlyApply es e]
-    rw [ih (kernelOnlyApply es e)]
-    -- Goal: kernelOnlyReplay (kernelOnlyApply es e) rest =
-    --       kernelOnlyReplay es (e :: rest)
-    unfold kernelOnlyReplay
-    simp [List.foldl_cons]
+    show foldStepApplyOverLog
+           (applyCellWrites_to_state es e.signedAction i) (i + 1) rest = _
+    rw [ih]
+    rfl
 
-/-- #253 (commit-level form) — Multi-step coherence at the commit
-    level: folding the per-step recomputed commit through the log
-    yields the same value as `commitExtendedState (kernelOnlyReplay
-    es log)`.  Direct corollary of the state-level form. -/
-theorem recomputeCommitment_chain_coherent_with_kernelOnlyReplay
-    (es : ExtendedState) (log : List LogEntry) :
-    commitExtendedState (foldStepApplyOverLog es log) =
-    commitExtendedState (kernelOnlyReplay es log) := by
-  rw [foldStepApplyOverLog_eq_kernelOnlyReplay]
+/-- #253 (commit-level form) — the same statement at the commit
+    level.  Direct corollary. -/
+theorem recomputeCommitment_chain_coherent_with_productionReplayBudget
+    (es : ExtendedState) (i : Nat) (log : List LogEntry) :
+    commitExtendedState (foldStepApplyOverLog es i log) =
+    commitExtendedState (productionReplayBudget es i (log.map (·.signedAction))) := by
+  rw [foldStepApplyOverLog_eq_productionReplayBudget]
 
-/-! ## Reduction theorem for `kernelStepApply` (interface coherence)
+/-! ## The canonical cell-proof bundle
 
-The `kernelStepApply` function (defined in `Step.lean`) verifies
-the cell proofs and returns the claimed `postStateCommit` if
-verification succeeds.  Coherence with the semantic core
-(`recomputeCommitment`) requires that the claimed
-`postStateCommit` actually equals `recomputeCommitment` — i.e.
-the responding party must compute it correctly to win the game.
+`buildCellProofsForAction` is the full canonical bundle for a
+state + action: one cell proof per required cell tag, every
+witness state equal to the pre-state.
 
-The L1 game contract enforces this *operationally*: in
-`terminateOnSingleStep`, the L1 step VM computes
-`recomputeCommitment` itself and compares against the responding
-party's claim.  The `kernelStepApply` function in Lean is the
-*verifier-side* form; the comparison happens in the
-`terminateOnSingleStep` transition (see `Game.lean`).
-
-The theorem below establishes the reduction: under the
-canonical `buildCellProofs` (where every proof's witnessState is
-the full pre-state) plus a correctly-claimed post-commit,
-`kernelStepApply` returns `some (recomputeCommitment es st)`. -/
+The `KernelStep` layer built on top of it — `buildKernelStep`,
+`buildKernelStep_verifies`, and the `kernelStepApply` reduction —
+lives in `Step.lean`, not here.  `kernelStepApply` computes its
+result through `StepVMCoherence.stepVMHash`, so `Step` imports
+`StepVMCoherence`, which imports `Observer`, which imports this
+module.  Keeping `KernelStep`-shaped declarations here would
+require `Coherence` to import `Step` and close the cycle. -/
 
 /-- Build the full canonical cell-proof bundle for a state +
     action: one cell proof per required cell tag, all witness
-    states equal to the pre-state. -/
+    states equal to the pre-state.
+
+    Each proof carries its **SMT opening** in `proofData`
+    (`buildCellProofWithOpening`), not just the witness state.  The
+    witness state is what the Lean-side `verifyCellProof` checks
+    against; the opening is what an L1 verifier — which cannot hold an
+    `ExtendedState` — needs in order to check the same cell against the
+    published root.  Emitting both keeps the two verifiers checking one
+    bundle rather than two shapes. -/
 def buildCellProofsForAction
     (es : ExtendedState) (st : SignedAction) : CellProofBundle :=
   { proofs := (Authority.Action.requiredCells st.action st.signer).map
-                (fun t => buildCellProof es t) }
+                (fun t => buildCellProofWithOpening es t) }
 
-/-- The canonical `KernelStep` derived from a pre-state + signed
-    action.  Used by the responding party in
-    `terminateOnSingleStep`. -/
-def buildKernelStep
-    (es : ExtendedState) (st : SignedAction) : KernelStep where
-  preStateCommit  := commitExtendedState es
-  signedAction    := st
-  postStateCommit := recomputeCommitment es st
-  cellProofs      := buildCellProofsForAction es st
-
-/-- The canonical KernelStep verifies (cell proofs all verify
-    against the pre-state commit). -/
-theorem buildKernelStep_verifies (es : ExtendedState) (st : SignedAction) :
+/-- The canonical bundle verifies against the pre-state commit. -/
+theorem buildCellProofsForAction_verifies
+    (es : ExtendedState) (st : SignedAction) :
     verifyCellProofs (commitExtendedState es)
       (buildCellProofsForAction es st) = true := by
   unfold buildCellProofsForAction
-  exact verifyCellProofs_complete_for_canonical_bundle es _
-
-/-- The canonical KernelStep's `kernelStepApply` returns
-    `some (recomputeCommitment es st)`.  By construction. -/
-theorem kernelStepApply_canonical
-    (es : ExtendedState) (st : SignedAction) :
-    kernelStepApply (buildKernelStep es st) =
-    some (recomputeCommitment es st) := by
-  unfold kernelStepApply buildKernelStep
-  -- The verify check passes by `buildKernelStep_verifies`; the
-  -- function returns `some step.postStateCommit` =
-  -- `some (recomputeCommitment es st)`.
-  have h := buildKernelStep_verifies es st
-  simp [h]
+  exact verifyCellProofs_complete_for_opening_bundle es _
 
 end FaultProof
 end LegalKernel

@@ -104,16 +104,28 @@ adaptor (Phase 5) hashes them via BLAKE3 before passing to `Verify`. -/
 def signInput
     (action : Action) (signer : ActorId) (nonce : Nonce)
     (deploymentId : ByteArray) : ByteArray :=
-  let domainBytes : Stream :=
-    -- Encode domain string as CBE bytestring (length-prefixed).
-    cborHeadEncode cbeTagBytes signedActionDomain.toUTF8.size ++
-      signedActionDomain.toUTF8.data.toList
-  ByteArray.mk
-    (domainBytes ++
-     Encodable.encode (T := ByteArray) deploymentId ++
-     Encodable.encode (T := Action) action ++
-     Encodable.encode (T := Nat) signer.toNat ++
-     Encodable.encode (T := Nat) nonce).toArray
+  -- Forwards to `Authority.signingInput`, which is the SAME
+  -- construction.  The two were byte-identical, independently
+  -- maintained copies of the signature pre-image with no theorem
+  -- tying them together: a change to one would have silently
+  -- produced two incompatible signing domains, and nothing in the
+  -- build would have noticed.  The forwarding direction is forced —
+  -- `Authority.SignedAction` cannot import this module without a
+  -- cycle, while `Encoding.SignedAction` (this module's own import)
+  -- already imports `Authority.SignedAction`.
+  Authority.signingInput action signer nonce deploymentId
+
+/-- The two spellings of the signature pre-image agree, definitionally.
+
+    States the collapse above as a theorem so a future change that
+    re-inlines the construction here fails the build rather than
+    forking the signing domain. -/
+theorem signInput_eq_signingInput
+    (action : Action) (signer : ActorId) (nonce : Nonce)
+    (deploymentId : ByteArray) :
+    signInput action signer nonce deploymentId =
+      Authority.signingInput action signer nonce deploymentId :=
+  rfl
 
 /-! ## Determinism + value-level tests
 

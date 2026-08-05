@@ -68,6 +68,71 @@ use knomosis_l1_ingest::source::json_rpc::JsonRpcL1Source;
 use serde_json::{json, Value};
 use sha3::{Digest, Keccak256};
 
+/// Read a game's full on-chain state, as the observer's
+/// orchestrator needs it.
+///
+/// The orchestrator holds a `Box<dyn GameStateReader>` rather than a
+/// [`ContractGameReader`] directly: the latter borrows its RPC
+/// source, and an `Observer` cannot hold a value that borrows from
+/// something it also owns.  [`OwnedContractGameReader`] is the
+/// production implementation; tests supply their own.
+pub trait GameStateReader {
+    /// Read the game's state and check its deployment id against
+    /// `expected_deployment_id` before returning it.
+    ///
+    /// # Errors
+    ///
+    /// See [`GameStateReadError`].
+    fn read_and_validate(
+        &self,
+        game_id: u128,
+        expected_deployment_id: [u8; 32],
+    ) -> Result<GameState, GameStateReadError>;
+}
+
+/// A [`GameStateReader`] that OWNS its JSON-RPC source, so it can
+/// live inside the `Observer` for the daemon's whole lifetime.
+///
+/// [`ContractGameReader`] carries a `&'a JsonRpcL1Source`, which
+/// makes it a borrow the orchestrator cannot store.  This wrapper
+/// owns the source and constructs the borrowing reader per call —
+/// the construction is two field moves, so the cost is nil against
+/// the `eth_call` round-trip it wraps.
+pub struct OwnedContractGameReader {
+    rpc: JsonRpcL1Source,
+    game_contract: [u8; 20],
+}
+
+impl OwnedContractGameReader {
+    /// Construct an owning reader from an RPC source and the game
+    /// contract's L1 address.
+    #[must_use]
+    pub fn new(rpc: JsonRpcL1Source, game_contract: [u8; 20]) -> Self {
+        Self { rpc, game_contract }
+    }
+}
+
+impl GameStateReader for OwnedContractGameReader {
+    fn read_and_validate(
+        &self,
+        game_id: u128,
+        expected_deployment_id: [u8; 32],
+    ) -> Result<GameState, GameStateReadError> {
+        ContractGameReader::new(&self.rpc, self.game_contract)
+            .read_and_validate(game_id, expected_deployment_id)
+    }
+}
+
+impl GameStateReader for ContractGameReader<'_> {
+    fn read_and_validate(
+        &self,
+        game_id: u128,
+        expected_deployment_id: [u8; 32],
+    ) -> Result<GameState, GameStateReadError> {
+        ContractGameReader::read_and_validate(self, game_id, expected_deployment_id)
+    }
+}
+
 /// Number of 32-byte ABI slots in the `games(uint256)` response.
 pub const GAMES_RESPONSE_SLOTS: usize = 18;
 

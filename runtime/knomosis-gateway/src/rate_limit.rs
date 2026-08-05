@@ -85,13 +85,23 @@ impl RateLimiter {
         if self.rps == 0 {
             return Ok(()); // disabled
         }
-        let now = Instant::now();
         // A poisoned lock means a handler panicked mid-update; recover the
         // guard rather than propagate (the bucket state is still usable).
         let mut buckets = self
             .buckets
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Sample the clock INSIDE the critical section.  Sampling it before
+        // the lock makes the refill a torn read-modify-write: a thread that
+        // loses the lock race would compute `elapsed` against a
+        // `last_refill` written by the winner (saturating to zero, since
+        // `Instant::duration_since` has saturated rather than panicked since
+        // Rust 1.60) and then store its OWN older instant — regressing
+        // `last_refill` so the winner's interval is credited a second time,
+        // letting a credential sustain more than `rps`.  The gateway runs one
+        // thread per connection, so concurrent `check` on a single credential
+        // is the ordinary case, not a rare interleaving.
+        let now = Instant::now();
         let bucket = buckets.entry(key).or_insert(TokenBucket {
             tokens: self.burst,
             last_refill: now,

@@ -38,6 +38,7 @@ intermediate state), not from `s` (the original).
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.AmountBound
 import Lex.DSL.Law
 
 namespace LegalKernel
@@ -46,21 +47,39 @@ namespace Laws
 /-- Transfer `amount` units of resource `r` from `sender` to
     `receiver`.
 
-    * Precondition: the sender holds at least `amount`, and `amount`
-      is strictly positive.  The positivity clause excludes vacuous
+    * Precondition: the sender holds at least `amount`, `amount` is
+      strictly positive, and the credited receiver stays under
+      `Laws.maxAmount`.  The positivity clause excludes vacuous
       transfers; it is policy, not correctness, and can be relaxed
-      without breaking any kernel proof.
+      without breaking any kernel proof.  The ceiling clause is
+      neither — above it the credited cell encodes as the
+      canonically-absent value and the state root stops seeing the
+      balance (finding C-3, `Laws/AmountBound.lean`).
     * Effect: a debit at `sender` followed by a credit at `receiver`,
       reading the receiver's pre-credit balance from the post-debit
       intermediate state.  This sequencing is what makes
       self-transfers conserve total supply (see §4.11 for the proof
       sketch).
 
-    `decPre` is inferred: the precondition is a conjunction of two
+    **The ceiling conjunct reads the same intermediate state the
+    credit does.**  Stating it over `s` would be wrong in the
+    self-transfer case: there the receiver's pre-credit balance is
+    `bal - amount`, so the post-credit value is `bal`, and a
+    conjunct over `s` would demand `bal + amount < maxAmount` and
+    reject a self-transfer the law leaves the state's supply — and
+    every cell — unchanged by.  Reading from the post-debit state
+    makes the bound exactly the value the credit will write, which
+    is also what the L1 mirror computes
+    (`StepWrites.deriveTransferBalances`).
+
+    `decPre` is inferred: the precondition is a conjunction of three
     decidable arithmetic comparisons over `Nat`. -/
 def transfer (r : ResourceId)
     (sender receiver : ActorId) (amount : Amount) : Transition where
-  pre        := fun s => getBalance s r sender ≥ amount ∧ amount > 0
+  pre        := fun s =>
+    getBalance s r sender ≥ amount ∧ amount > 0 ∧
+    AmountBounded (setBalance s r sender (getBalance s r sender - amount))
+      r receiver amount
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     let fromBal := getBalance s r sender
@@ -103,7 +122,10 @@ lexlaw legalkernel_transfer where
                       (sender receiver : ActorId)
                       (amount : Amount)
   lex_pre             :=
-    fun s => getBalance s r sender ≥ amount ∧ amount > 0
+    fun s => getBalance s r sender ≥ amount ∧ amount > 0 ∧
+             LegalKernel.Laws.AmountBounded
+               (setBalance s r sender (getBalance s r sender - amount))
+               r receiver amount
   lex_impl            :=
     fun s =>
       let fromBal := getBalance s r sender

@@ -155,8 +155,8 @@ layer.
 | `burn`               | `LegalKernel/Laws/Burn.lean`                | `getBalance s r fromActor ≥ amount ∧ amount > 0`                       |
 | `freezeResource`     | `LegalKernel/Laws/Freeze.lean`              | `True`                                                                 |
 | `reward`             | `LegalKernel/Laws/Reward.lean`              | `amount > 0`                                                           |
-| `distributeOthers`   | `LegalKernel/Laws/DistributeOthers.lean`    | `amount > 0`                                                           |
-| `proportionalDilute` | `LegalKernel/Laws/ProportionalDilute.lean`  | `totalReward > 0 ∧ sumOthers s r excluded > 0`                         |
+| `distributeOthers`   | `LegalKernel/Laws/DistributeOthers.lean`    | `amount > 0 ∧ BulkBounded s r excluded`                                |
+| `proportionalDilute` | `LegalKernel/Laws/ProportionalDilute.lean`  | `totalReward > 0 ∧ sumOthers s r excluded > 0 ∧ BulkBounded s r excluded` |
 | `deposit`            | `LegalKernel/Laws/Deposit.lean`             | `True` (deposit-id uniqueness lives at the bridge admissibility layer) |
 | `withdraw`           | `LegalKernel/Laws/Withdraw.lean`            | `getBalance s r sender ≥ amount`                                       |
 | `replaceKey`         | `LegalKernel/Laws/ReplaceKey.lean`          | `True` (kernel-identity; registry mutation in `applyActionToRegistry`) |

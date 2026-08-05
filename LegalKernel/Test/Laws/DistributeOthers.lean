@@ -115,16 +115,27 @@ def tests : List TestCase :=
     }
   , { name := "totalSupply_after_distributeOthers API stability"
     , body := do
+        -- **Quantified on purpose.**  This pin used to ascribe the type
+        -- at the concrete `fixtureF1`, and there the recipient list is
+        -- a CLOSED term: the retired `(·.1 != excluded)` spelling and
+        -- the current `bulkRecipients` one reduce to the same list on a
+        -- fixture with no zero balances, so the ascription typechecked
+        -- by defeq.  The theorem's statement changed underneath it and
+        -- the pin did not notice — which is exactly the failure the
+        -- term-level pattern exists to prevent.  Under a binder `s` is
+        -- rigid, nothing reduces, and the ascription is a real
+        -- signature check again.
+        let _proof : ∀ (r : ResourceId) (excluded : ActorId) (amount : Amount)
+            (s : State), (distributeOthers r excluded amount).pre s →
+            TotalSupply (step_impl s (distributeOthers r excluded amount)) r =
+              TotalSupply s r + amount * (bulkRecipients s r excluded).length :=
+          totalSupply_after_distributeOthers
+        -- The value-level companion the type-level pin cannot give.
         let s := fixtureF1
         let t := distributeOthers 1 2 50
-        have hpre : t.pre s := by decide
-        let _proof :
-            TotalSupply (step_impl s t) 1 =
-            TotalSupply s 1 +
-              50 * ((s.balances[(1 : ResourceId)]?.getD ∅).toList.filter
-                      (fun kv => kv.1 != 2)).length :=
-          totalSupply_after_distributeOthers 1 2 50 s hpre
-        pure ()
+        assertEq (expected := TotalSupply s 1 + 50 * (bulkRecipients s 1 2).length)
+                 (actual   := TotalSupply (step_impl s t) 1)
+                 "the supply equation holds numerically on F1"
     }
   , { name := "distributeOthers_isMonotonic instance resolves"
     , body := do
@@ -133,17 +144,21 @@ def tests : List TestCase :=
     }
   , { name := "distributeOthers_not_conservative API stability"
     , body := do
-        let _proof : ¬ IsConservative (distributeOthers 1 2 50) :=
-          distributeOthers_not_conservative 1 2 50 (by decide)
+        let _proof : ∀ (r : ResourceId) (excluded : ActorId) (amount : Amount),
+            amount > 0 → amount + amount < maxAmount →
+            ¬ IsConservative (distributeOthers r excluded amount) :=
+          distributeOthers_not_conservative
         pure ()
     }
   , { name := "distributeOthers_excluded_unchanged API check"
     , body := do
+        let _proof : ∀ (r : ResourceId) (excluded : ActorId) (amount : Amount)
+            (s : State), (distributeOthers r excluded amount).pre s →
+            getBalance (step_impl s (distributeOthers r excluded amount)) r excluded =
+              getBalance s r excluded :=
+          distributeOthers_excluded_unchanged
         let s := fixtureF1
         let t := distributeOthers 1 2 50
-        have hpre : t.pre s := by decide
-        let _proof : getBalance (step_impl s t) 1 2 = getBalance s 1 2 :=
-          distributeOthers_excluded_unchanged 1 2 50 s hpre
         assertEq (expected := getBalance s 1 2)
                  (actual   := getBalance (step_impl s t) 1 2)
                  "value-level: excluded actor's balance preserved"

@@ -228,8 +228,10 @@ proptest! {
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
         prop_assert_eq!(&e1, &e2);
-        // Layout invariant: 8 × 9-byte CBE uint heads.
-        prop_assert_eq!(e1.len(), 72);
+        // Layout invariant: 6 × 9-byte CBE uint heads (tag, r,
+        // recipient, poolActor, budgetGrant, depositId) + 2 × 33-byte
+        // amount heads (userAmount, poolAmount).
+        prop_assert_eq!(e1.len(), 120);
     }
 }
 
@@ -290,12 +292,13 @@ proptest! {
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
         prop_assert_eq!(&e1, &e2);
-        prop_assert_eq!(e1.len(), 45);
+        // 4 × 9-byte uint heads + 1 × 33-byte amount head (gasAmount).
+        prop_assert_eq!(e1.len(), 69);
     }
 }
 
 // `encode_action` is deterministic over random
-// `TopUpActionBudgetFor` fields, with the 6-head (54-byte) layout.
+// `TopUpActionBudgetFor` fields, with the six-head (78-byte) layout.
 proptest! {
     #[test]
     fn encode_top_up_action_budget_for_deterministic(
@@ -315,7 +318,8 @@ proptest! {
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
         prop_assert_eq!(&e1, &e2);
-        prop_assert_eq!(e1.len(), 54);
+        // 5 × 9-byte uint heads + 1 × 33-byte amount head (gasAmount).
+        prop_assert_eq!(e1.len(), 78);
     }
 }
 

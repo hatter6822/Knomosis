@@ -76,6 +76,13 @@ pub const CBE_TAG_UINT: u8 = 0x00;
 /// `Encoding.CBOR.cbeTagBytes`.
 pub const CBE_TAG_BYTES: u8 = 0x02;
 
+/// CBE tag byte for a value-carrying amount.  Matches Lean's
+/// `Encoding.CBOR.cbeTagAmount`.
+pub const CBE_TAG_AMOUNT: u8 = 0x06;
+
+/// Length of a CBE amount head (1-byte tag + 32-byte LE body).
+pub const AMOUNT_HEAD_LEN: usize = 33;
+
 /// The signing-input domain prefix.  Mirrors Lean's
 /// `Authority.Crypto.signedActionDomain`.  Bytes here MUST equal
 /// the Lean constant byte-for-byte (verified by the unit tests).
@@ -104,6 +111,31 @@ fn write_u64_le(out: &mut Vec<u8>, n: u64) {
 fn write_head(out: &mut Vec<u8>, tag: u8, n: u64) {
     out.push(tag);
     write_u64_le(out, n);
+}
+
+/// Encode a CBE amount head: `CBE_TAG_AMOUNT` + 32-byte LE value.
+/// Mirrors Lean's `Encoding.CBOR.cborAmountHeadEncode`.
+fn write_amount_head(out: &mut Vec<u8>, n: u128) {
+    out.push(CBE_TAG_AMOUNT);
+    out.extend_from_slice(&n.to_le_bytes());
+    // The high 16 bytes of the 32-byte little-endian body.  `n` is a
+    // `u128`, so they are always zero here; the head is 32 bytes wide
+    // because Lean's is, and Lean's is because the state root must be
+    // able to see any balance the L1 can hold (finding C-3).
+    out.extend_from_slice(&[0u8; 16]);
+}
+
+/// Encode a `u128` as a CBE amount (tag 0x06 + 32-byte LE).  Mirrors
+/// Lean's `Encoding.Encodable.encodeAmount`.
+///
+/// Total, unlike [`encode_u128_checked`]: the 32-byte head covers the
+/// whole `u128` range with 16 bytes to spare, which is why
+/// value-carrying fields ride it.
+#[must_use]
+pub fn encode_amount_u128(value: u128) -> Vec<u8> {
+    let mut out = Vec::with_capacity(AMOUNT_HEAD_LEN);
+    write_amount_head(&mut out, value);
+    out
 }
 
 /// Encode a `u64` as a CBE uint.  Mirrors Lean's
@@ -205,12 +237,12 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*sender));
             out.extend_from_slice(&encode_u64(*receiver));
-            out.extend_from_slice(&encode_amount(*amount)?);
+            out.extend_from_slice(&encode_amount(*amount));
         }
         Action::Mint { r, to, amount } | Action::Reward { r, to, amount } => {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*to));
-            out.extend_from_slice(&encode_amount(*amount)?);
+            out.extend_from_slice(&encode_amount(*amount));
         }
         Action::Burn {
             r,
@@ -219,7 +251,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
         } => {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*from_actor));
-            out.extend_from_slice(&encode_amount(*amount)?);
+            out.extend_from_slice(&encode_amount(*amount));
         }
         Action::FreezeResource { r } => {
             out.extend_from_slice(&encode_u64(*r));
@@ -235,7 +267,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
         } => {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*excluded));
-            out.extend_from_slice(&encode_amount(*amount)?);
+            out.extend_from_slice(&encode_amount(*amount));
         }
         Action::ProportionalDilute {
             r,
@@ -244,7 +276,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
         } => {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*excluded));
-            out.extend_from_slice(&encode_amount(*total_reward)?);
+            out.extend_from_slice(&encode_amount(*total_reward));
         }
         Action::DisputeWithdraw { idx } => {
             out.extend_from_slice(&encode_u64(*idx));
@@ -264,7 +296,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
         } => {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*recipient));
-            out.extend_from_slice(&encode_amount(*amount)?);
+            out.extend_from_slice(&encode_amount(*amount));
             out.extend_from_slice(&encode_u64(*deposit_id));
         }
         Action::Withdraw {
@@ -275,7 +307,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
         } => {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*sender));
-            out.extend_from_slice(&encode_amount(*amount)?);
+            out.extend_from_slice(&encode_amount(*amount));
             // The L1 recipient is encoded as a 20-byte byte
             // string (lossless), per Audit-2's amendment of
             // `Encoding/Action.lean`.
@@ -326,8 +358,8 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*recipient));
             out.extend_from_slice(&encode_u64(*pool_actor));
-            out.extend_from_slice(&encode_amount(*user_amount)?);
-            out.extend_from_slice(&encode_amount(*pool_amount)?);
+            out.extend_from_slice(&encode_amount(*user_amount));
+            out.extend_from_slice(&encode_amount(*pool_amount));
             out.extend_from_slice(&encode_u64(*budget_grant));
             out.extend_from_slice(&encode_u64(*deposit_id));
         }
@@ -341,7 +373,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             // `.topUpActionBudget` arm:
             //   gasResource ‖ gasAmount ‖ budgetIncrement ‖ poolActor.
             out.extend_from_slice(&encode_u64(*gas_resource));
-            out.extend_from_slice(&encode_amount(*gas_amount)?);
+            out.extend_from_slice(&encode_amount(*gas_amount));
             out.extend_from_slice(&encode_u64(*budget_increment));
             out.extend_from_slice(&encode_u64(*pool_actor));
         }
@@ -358,7 +390,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             //     ‖ poolActor.
             out.extend_from_slice(&encode_u64(*recipient));
             out.extend_from_slice(&encode_u64(*gas_resource));
-            out.extend_from_slice(&encode_amount(*gas_amount)?);
+            out.extend_from_slice(&encode_amount(*gas_amount));
             out.extend_from_slice(&encode_u64(*budget_increment));
             out.extend_from_slice(&encode_u64(*pool_actor));
         }
@@ -371,13 +403,13 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             // Field order matches `Encoding/Action.lean::Action.encode`'s
             // `.claimBudgetRefund` arm:
             //   gasResource ‖ budgetUnits ‖ weiPerBudgetUnit ‖ poolActor.
-            // All four are CBE uints (9-byte heads), matching Lean's
-            // `Encodable.encode (T := Nat)` of each field (budgetUnits /
-            // weiPerBudgetUnit are `Nat`, bounded < 2^64, like tag-20's
-            // budgetIncrement).
+            // `weiPerBudgetUnit` is a wei-denominated RATE, so it rides
+            // the 33-byte amount head; `budgetUnits` is a unit COUNT and
+            // stays on the 9-byte uint head, as does tag-20's
+            // budgetIncrement.
             out.extend_from_slice(&encode_u64(*gas_resource));
             out.extend_from_slice(&encode_u64(*budget_units));
-            out.extend_from_slice(&encode_u64(*wei_per_budget_unit));
+            out.extend_from_slice(&encode_amount(*wei_per_budget_unit));
             out.extend_from_slice(&encode_u64(*pool_actor));
         }
         Action::AmmSwap {
@@ -396,8 +428,8 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             // at the encoding level via `Action.fieldsBounded`.
             out.extend_from_slice(&encode_u64(*from_resource));
             out.extend_from_slice(&encode_u64(*to_resource));
-            out.extend_from_slice(&encode_amount(*amount_in)?);
-            out.extend_from_slice(&encode_amount(*amount_out)?);
+            out.extend_from_slice(&encode_amount(*amount_in));
+            out.extend_from_slice(&encode_amount(*amount_out));
             out.extend_from_slice(&encode_u64(*amm_reserve_actor));
         }
         Action::ReclaimAmmReserves {
@@ -413,7 +445,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             // `Nat` on the Lean side, bounded < 2^64 at the encoding
             // level via `Action.fieldsBounded`.
             out.extend_from_slice(&encode_u64(*r));
-            out.extend_from_slice(&encode_amount(*amount)?);
+            out.extend_from_slice(&encode_amount(*amount));
             out.extend_from_slice(&encode_u64(*reserve_actor));
             out.extend_from_slice(&encode_u64(*pool_actor));
         }
@@ -421,11 +453,29 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
     Ok(out)
 }
 
-/// Encode an `Amount` (`u128` on the Rust side) as a CBE uint.
-/// Wrapping helper that reports `EncodeError::FieldExceedsBound`
-/// for out-of-range inputs.
-fn encode_amount(amount: u128) -> Result<Vec<u8>, EncodeError> {
-    encode_u128_checked(amount).ok_or(EncodeError::FieldExceedsBound { value: amount })
+/// Encode an `Amount` (`u128` on the Rust side) as a CBE amount head.
+///
+/// Infallible: the 32-byte amount body represents every `u128`.  The
+/// earlier form routed through [`encode_u128_checked`] and rejected
+/// anything `>= 2^64` — a bound a wei-denominated amount crosses at
+/// ~18.45 ETH, so the runtime could not express an amount the kernel
+/// can hold.
+fn encode_amount(amount: u128) -> Vec<u8> {
+    encode_amount_u128(amount)
+}
+
+/// Encode a `Nonce` as a CBE uint on the 8-byte head.
+///
+/// A nonce is a per-actor COUNTER, not a value: it must stay on the
+/// 8-byte `CBE_TAG_UINT` head even as amounts move to the 32-byte
+/// `CBE_TAG_AMOUNT` head.  Previously the nonce went through
+/// [`encode_amount`], which would have widened it in lockstep with
+/// real amounts and desynchronised the SIGNING INPUT from Lean's
+/// `Encoding/SignInput.lean` (which encodes the nonce as a plain
+/// `Nat`) — a consensus break, since every signature is taken over
+/// exactly these bytes.
+fn encode_nonce(nonce: u128) -> Result<Vec<u8>, EncodeError> {
+    encode_u128_checked(nonce).ok_or(EncodeError::FieldExceedsBound { value: nonce })
 }
 
 /// Encode a byte slice as a CBE byte string, reporting
@@ -476,7 +526,7 @@ pub fn signing_input(
     out.extend_from_slice(&encode_byte_string(deployment_id)?);
     out.extend_from_slice(&encode_action(action)?);
     out.extend_from_slice(&encode_u64(signer));
-    out.extend_from_slice(&encode_amount(nonce)?);
+    out.extend_from_slice(&encode_nonce(nonce)?);
     Ok(out)
 }
 
@@ -501,7 +551,7 @@ pub fn encode_signed_action(
     let mut out = Vec::new();
     out.extend_from_slice(&encode_action(action)?);
     out.extend_from_slice(&encode_u64(signer));
-    out.extend_from_slice(&encode_amount(nonce)?);
+    out.extend_from_slice(&encode_nonce(nonce)?);
     out.extend_from_slice(&encode_byte_string(sig)?);
     Ok(out)
 }
@@ -518,8 +568,8 @@ pub fn encode_eth_address(addr: &EthAddress) -> Vec<u8> {
 mod tests {
     use super::{
         encode_action, encode_bytes_checked, encode_eth_address, encode_signed_action,
-        encode_u128_checked, encode_u64, signing_input, write_u64_le, CBE_TAG_BYTES, CBE_TAG_UINT,
-        HEAD_LEN, SIGNED_ACTION_DOMAIN,
+        encode_u128_checked, encode_u64, signing_input, write_u64_le, AMOUNT_HEAD_LEN,
+        CBE_TAG_AMOUNT, CBE_TAG_BYTES, CBE_TAG_UINT, HEAD_LEN, SIGNED_ACTION_DOMAIN,
     };
     use crate::action::{Action, EthAddress, PublicKey};
 
@@ -603,8 +653,10 @@ mod tests {
         };
         let encoded = encode_action(&action).unwrap();
         // Layout: tag(0) ++ r(0) ++ sender(1) ++ receiver(2) ++ amount(100).
-        // Each component is a 9-byte CBE uint head.
-        assert_eq!(encoded.len(), HEAD_LEN * 5);
+        // The four identifier-shaped components are 9-byte CBE uint
+        // heads; `amount` is value-carrying and rides the 33-byte
+        // amount head.
+        assert_eq!(encoded.len(), HEAD_LEN * 4 + AMOUNT_HEAD_LEN);
         // tag is at offset 0.
         assert_eq!(encoded[0], CBE_TAG_UINT);
         assert_eq!(&encoded[1..9], &0u64.to_le_bytes());
@@ -617,9 +669,9 @@ mod tests {
         // receiver at offset 27.
         assert_eq!(encoded[27], CBE_TAG_UINT);
         assert_eq!(&encoded[28..36], &2u64.to_le_bytes());
-        // amount at offset 36.
-        assert_eq!(encoded[36], CBE_TAG_UINT);
-        assert_eq!(&encoded[37..45], &100u64.to_le_bytes());
+        // amount at offset 36, on the amount head.
+        assert_eq!(encoded[36], CBE_TAG_AMOUNT);
+        assert_eq!(&encoded[37..53], &100u128.to_le_bytes());
     }
 
     /// `encode_action` for `RegisterIdentity` — the primary
@@ -676,8 +728,10 @@ mod tests {
             recipient_l1: recipient,
         };
         let encoded = encode_action(&action).unwrap();
-        // tag(14) + r(5) + sender(9) + amount(1000) + recipient_l1(20 byte string).
-        assert_eq!(encoded.len(), HEAD_LEN * 5 + 20);
+        // tag(14) + r(5) + sender(9) on the uint head, amount(1000) on
+        // the amount head, then recipient_l1 as a 20-byte string
+        // (9-byte bytes head + 20 payload).
+        assert_eq!(encoded.len(), HEAD_LEN * 4 + AMOUNT_HEAD_LEN + 20);
         assert_eq!(encoded[0], CBE_TAG_UINT);
         assert_eq!(&encoded[1..9], &14u64.to_le_bytes());
     }
@@ -815,13 +869,10 @@ mod tests {
         };
         let actual = encode_action(&a).unwrap();
         let expected: Vec<u8> = vec![
-            // Tag 12 (CBE uint head)
-            0x00, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // actor 1 (CBE uint head)
-            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // pk byte-string head (CBE bytes, length=2)
-            0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pk payload
-            0x02, 0xab,
+            // uint 12
+            0x00, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 1
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // bytes
+            0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xab,
         ];
         assert_eq!(actual, expected);
     }
@@ -883,7 +934,9 @@ mod tests {
             deposit_id: 42,
         };
         let encoded = encode_action(&action).unwrap();
-        assert_eq!(encoded.len(), HEAD_LEN * 8);
+        // 6 narrow heads (tag, r, recipient, pool_actor, budget_grant,
+        // deposit_id) + 2 amount heads (user_amount, pool_amount).
+        assert_eq!(encoded.len(), HEAD_LEN * 6 + AMOUNT_HEAD_LEN * 2);
         // Tag is 19 (0x13).
         assert_eq!(encoded[0], CBE_TAG_UINT);
         assert_eq!(&encoded[1..9], &19u64.to_le_bytes());
@@ -896,18 +949,21 @@ mod tests {
         // pool_actor (2) at offset 27.
         assert_eq!(encoded[27], CBE_TAG_UINT);
         assert_eq!(&encoded[28..36], &2u64.to_le_bytes());
-        // user_amount (1000) at offset 36.
-        assert_eq!(encoded[36], CBE_TAG_UINT);
-        assert_eq!(&encoded[37..45], &1000u64.to_le_bytes());
-        // pool_amount (500) at offset 45.
-        assert_eq!(encoded[45], CBE_TAG_UINT);
-        assert_eq!(&encoded[46..54], &500u64.to_le_bytes());
-        // budget_grant (10) at offset 54.
-        assert_eq!(encoded[54], CBE_TAG_UINT);
-        assert_eq!(&encoded[55..63], &10u64.to_le_bytes());
-        // deposit_id (42) at offset 63.
-        assert_eq!(encoded[63], CBE_TAG_UINT);
-        assert_eq!(&encoded[64..72], &42u64.to_le_bytes());
+        // user_amount (1000) at offset 36, on the 33-byte amount head.
+        // The `u128` occupies the LOW 16 body bytes; the high 16 are
+        // zero, which is what an over-wide value would disturb.
+        assert_eq!(encoded[36], CBE_TAG_AMOUNT);
+        assert_eq!(&encoded[37..53], &1000u128.to_le_bytes());
+        assert_eq!(&encoded[53..69], &[0u8; 16], "amount high half is zero");
+        // pool_amount (500) at offset 69, on the amount head.
+        assert_eq!(encoded[69], CBE_TAG_AMOUNT);
+        assert_eq!(&encoded[70..86], &500u128.to_le_bytes());
+        // budget_grant (10) at offset 102 — a UNIT count, narrow head.
+        assert_eq!(encoded[102], CBE_TAG_UINT);
+        assert_eq!(&encoded[103..111], &10u64.to_le_bytes());
+        // deposit_id (42) at offset 111.
+        assert_eq!(encoded[111], CBE_TAG_UINT);
+        assert_eq!(&encoded[112..120], &42u64.to_le_bytes());
     }
 
     /// `encode_action` for `TopUpActionBudget` (Workstream GP).
@@ -922,22 +978,23 @@ mod tests {
             pool_actor: 2,
         };
         let encoded = encode_action(&action).unwrap();
-        assert_eq!(encoded.len(), HEAD_LEN * 5);
+        // 4 narrow heads + 1 amount head (gas_amount).
+        assert_eq!(encoded.len(), HEAD_LEN * 4 + AMOUNT_HEAD_LEN);
         // Tag is 20 (0x14).
         assert_eq!(encoded[0], CBE_TAG_UINT);
         assert_eq!(&encoded[1..9], &20u64.to_le_bytes());
         // gas_resource (0).
         assert_eq!(encoded[9], CBE_TAG_UINT);
         assert_eq!(&encoded[10..18], &0u64.to_le_bytes());
-        // gas_amount (100).
-        assert_eq!(encoded[18], CBE_TAG_UINT);
-        assert_eq!(&encoded[19..27], &100u64.to_le_bytes());
-        // budget_increment (5).
-        assert_eq!(encoded[27], CBE_TAG_UINT);
-        assert_eq!(&encoded[28..36], &5u64.to_le_bytes());
-        // pool_actor (2).
-        assert_eq!(encoded[36], CBE_TAG_UINT);
-        assert_eq!(&encoded[37..45], &2u64.to_le_bytes());
+        // gas_amount (100) on the 33-byte amount head at offset 18.
+        assert_eq!(encoded[18], CBE_TAG_AMOUNT);
+        assert_eq!(&encoded[19..35], &100u128.to_le_bytes());
+        // budget_increment (5) — a UNIT count, narrow head at 51.
+        assert_eq!(encoded[51], CBE_TAG_UINT);
+        assert_eq!(&encoded[52..60], &5u64.to_le_bytes());
+        // pool_actor (2) at offset 60.
+        assert_eq!(encoded[60], CBE_TAG_UINT);
+        assert_eq!(&encoded[61..69], &2u64.to_le_bytes());
     }
 
     /// `encode_action` for `TopUpActionBudgetFor` (Workstream GP.3.4).
@@ -953,7 +1010,8 @@ mod tests {
             pool_actor: 2,
         };
         let encoded = encode_action(&action).unwrap();
-        assert_eq!(encoded.len(), HEAD_LEN * 6);
+        // 5 narrow heads + 1 amount head (gas_amount).
+        assert_eq!(encoded.len(), HEAD_LEN * 5 + AMOUNT_HEAD_LEN);
         // Tag is 21 (0x15).
         assert_eq!(encoded[0], CBE_TAG_UINT);
         assert_eq!(&encoded[1..9], &21u64.to_le_bytes());
@@ -963,15 +1021,15 @@ mod tests {
         // gas_resource (0).
         assert_eq!(encoded[18], CBE_TAG_UINT);
         assert_eq!(&encoded[19..27], &0u64.to_le_bytes());
-        // gas_amount (100).
-        assert_eq!(encoded[27], CBE_TAG_UINT);
-        assert_eq!(&encoded[28..36], &100u64.to_le_bytes());
-        // budget_increment (5).
-        assert_eq!(encoded[36], CBE_TAG_UINT);
-        assert_eq!(&encoded[37..45], &5u64.to_le_bytes());
-        // pool_actor (2).
-        assert_eq!(encoded[45], CBE_TAG_UINT);
-        assert_eq!(&encoded[46..54], &2u64.to_le_bytes());
+        // gas_amount (100) on the 33-byte amount head at offset 27.
+        assert_eq!(encoded[27], CBE_TAG_AMOUNT);
+        assert_eq!(&encoded[28..44], &100u128.to_le_bytes());
+        // budget_increment (5) — a UNIT count, narrow head at 60.
+        assert_eq!(encoded[60], CBE_TAG_UINT);
+        assert_eq!(&encoded[61..69], &5u64.to_le_bytes());
+        // pool_actor (2) at offset 69.
+        assert_eq!(encoded[69], CBE_TAG_UINT);
+        assert_eq!(&encoded[70..78], &2u64.to_le_bytes());
     }
 
     /// Known-vector test for `DepositWithFee` — pinned against the
@@ -1005,18 +1063,19 @@ mod tests {
         };
         let actual = encode_action(&action).unwrap();
         let expected: Vec<u8> = vec![
-            // Tag 19 (CBE uint head, value 19 = 0x13).
-            0x00, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // r 0.
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // recipient 1.
-            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
+            // uint 19
+            0x00, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 1
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 2
             0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // user_amount 1000 = 0x03e8 (LE: e8, 03).
-            0x00, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // pool_amount 500 = 0x01f4 (LE: f4, 01).
-            0x00, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // budget_grant 10 = 0x0a.
-            0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // deposit_id 42 = 0x2a.
+            // amount 1000 — 33-byte head: tag + 32 LE
+            0x06, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // amount 500 — 33-byte head: tag + 32 LE
+            0x06, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // uint 10
+            0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 42
             0x00, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(actual, expected);
@@ -1077,12 +1136,14 @@ mod tests {
         };
         let actual = encode_action(&action).unwrap();
         let expected: Vec<u8> = vec![
-            // Tag 20 (CBE uint head, value 20 = 0x14).
-            0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // gas_resource 0.
+            // uint 20
+            0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // gas_amount 100 = 0x64.
-            0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // budget_increment 5.
-            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
+            // amount 100 — 33-byte head: tag + 32 LE
+            0x06, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // uint 5
+            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 2
             0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(actual, expected);
@@ -1102,13 +1163,15 @@ mod tests {
         };
         let actual = encode_action(&action).unwrap();
         let expected: Vec<u8> = vec![
-            // Tag 21 (CBE uint head, value 21 = 0x15).
-            0x00, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // recipient 7.
-            0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // gas_resource 0.
+            // uint 21
+            0x00, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 7
+            0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // gas_amount 100 = 0x64.
-            0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // budget_increment 5.
-            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
+            // amount 100 — 33-byte head: tag + 32 LE
+            0x06, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // uint 5
+            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 2
             0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(actual, expected);
@@ -1127,13 +1190,14 @@ mod tests {
         };
         let actual = encode_action(&action).unwrap();
         let expected: Vec<u8> = vec![
-            // Tag 22 (CBE uint head, value 22 = 0x16).
-            0x00, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // gas_resource 0.
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // budget_units 50 = 0x32.
+            // uint 22
+            0x00, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 50
             0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // wei_per_budget_unit 5.
-            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
+            // amount 5 — 33-byte head: tag + 32 LE
+            0x06, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // uint 2
             0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(actual, expected);
@@ -1156,14 +1220,17 @@ mod tests {
         // amountIn 1000 (0xe803 LE) | amountOut 500 (0xf401 LE)
         // ammReserveActor 3
         let expected: Vec<u8> = vec![
-            // tag 23 = 0x17
-            0x00, 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // fromResource 0
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // toResource 1
+            // uint 23
+            0x00, 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 1
             0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // amountIn 1000 = 0x03e8
-            0x00, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // amountOut 500 = 0x01f4
-            0x00, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ammReserveActor 3
+            // amount 1000 — 33-byte head: tag + 32 LE
+            0x06, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // amount 500 — 33-byte head: tag + 32 LE
+            0x06, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // uint 3
             0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(actual, expected);
@@ -1182,104 +1249,114 @@ mod tests {
         };
         let actual = encode_action(&action).unwrap();
         let expected: Vec<u8> = vec![
-            // tag 24 = 0x18
-            0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // r 0
+            // uint 24
+            0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // amount 5000 = 0x1388 (LE: 88 13)
-            0x00, 0x88, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // reserveActor 3
-            0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // poolActor 1
+            // amount 5000 — 33-byte head: tag + 32 LE
+            0x06, 0x88, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // uint 3
+            0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 1
             0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(actual, expected);
     }
 
-    /// `ReclaimAmmReserves` encoding rejects `amount` ≥ 2^64
-    /// (`Action.fieldsBounded` requires `amount < 2^64`).
+    /// Every value-carrying field encodes at full `u128` width.
+    ///
+    /// These five fields used to be REJECTED above `2^64` — the
+    /// encoder returned `FieldExceedsBound`, because the CBE uint head
+    /// could not represent them.  A wei-denominated amount crosses
+    /// that bound at ~18.45 ETH, so the rejection was reachable on
+    /// ordinary traffic: the runtime could not express an amount the
+    /// kernel can hold.  On the 33-byte amount head they encode
+    /// exactly, and the assertion is that the emitted payload carries
+    /// the value verbatim rather than a truncation of it.
     #[test]
-    fn encode_reclaim_amm_reserves_rejects_oversized_amount() {
-        let action = Action::ReclaimAmmReserves {
+    fn value_fields_encode_at_full_width() {
+        /// Assert `bytes` contains `value` as a 33-byte amount head at
+        /// `offset`: the tag, the 16-byte LE payload, then the high
+        /// half.  The high half is checked to be ZERO rather than
+        /// skipped — it is the half an over-wide value would occupy,
+        /// and `read_amount` rejects on exactly that, so a writer that
+        /// started spilling into it would break its own decoder.
+        fn assert_amount_at(bytes: &[u8], offset: usize, value: u128, what: &str) {
+            assert_eq!(bytes[offset], CBE_TAG_AMOUNT, "{what}: amount tag");
+            assert_eq!(
+                &bytes[offset + 1..offset + 17],
+                &value.to_le_bytes(),
+                "{what}: full-width payload"
+            );
+            assert_eq!(
+                &bytes[offset + 17..offset + AMOUNT_HEAD_LEN],
+                &[0u8; 16],
+                "{what}: high half is zero"
+            );
+        }
+
+        let big = 1u128 << 64; // the old rejection boundary
+        let huge = u128::MAX;
+
+        // reclaimAmmReserves: tag, r, amount.
+        let bytes = encode_action(&Action::ReclaimAmmReserves {
             r: 0,
-            amount: 1u128 << 64,
+            amount: big,
             reserve_actor: 3,
             pool_actor: 1,
-        };
-        match encode_action(&action) {
-            Err(super::EncodeError::FieldExceedsBound { value }) => {
-                assert_eq!(value, 1u128 << 64);
-            }
-            other => panic!("expected FieldExceedsBound, got {other:?}"),
-        }
-    }
+        })
+        .expect("2^64 amount must encode");
+        assert_amount_at(&bytes, HEAD_LEN * 2, big, "reclaimAmmReserves.amount");
 
-    /// `DepositWithFee` encoding rejects `user_amount` ≥ 2^64
-    /// (`Action.fieldsBounded` requires `userAmount < 2^64`).
-    #[test]
-    fn encode_deposit_with_fee_rejects_oversized_user_amount() {
-        let action = Action::DepositWithFee {
+        // depositWithFee: tag, r, recipient, pool_actor, userAmount,
+        // poolAmount.
+        let bytes = encode_action(&Action::DepositWithFee {
             r: 0,
             recipient: 1,
             pool_actor: 2,
-            user_amount: 1u128 << 64,
-            pool_amount: 0,
+            user_amount: big,
+            pool_amount: huge,
             budget_grant: 0,
             deposit_id: 0,
-        };
-        match encode_action(&action) {
-            Err(super::EncodeError::FieldExceedsBound { value }) => {
-                assert_eq!(value, 1u128 << 64);
-            }
-            other => panic!("expected FieldExceedsBound, got {other:?}"),
-        }
-    }
+        })
+        .expect("full-width deposit amounts must encode");
+        assert_amount_at(&bytes, HEAD_LEN * 4, big, "depositWithFee.userAmount");
+        assert_amount_at(
+            &bytes,
+            HEAD_LEN * 4 + AMOUNT_HEAD_LEN,
+            huge,
+            "depositWithFee.poolAmount",
+        );
 
-    /// `DepositWithFee` encoding rejects `pool_amount` ≥ 2^64.
-    #[test]
-    fn encode_deposit_with_fee_rejects_oversized_pool_amount() {
-        let action = Action::DepositWithFee {
-            r: 0,
-            recipient: 1,
-            pool_actor: 2,
-            user_amount: 0,
-            pool_amount: u128::MAX,
-            budget_grant: 0,
-            deposit_id: 0,
-        };
-        match encode_action(&action) {
-            Err(super::EncodeError::FieldExceedsBound { value }) => {
-                assert_eq!(value, u128::MAX);
-            }
-            other => panic!("expected FieldExceedsBound, got {other:?}"),
-        }
-    }
-
-    /// `TopUpActionBudget` encoding rejects `gas_amount` ≥ 2^64.
-    #[test]
-    fn encode_top_up_action_budget_rejects_oversized_gas_amount() {
-        let action = Action::TopUpActionBudget {
+        // topUpActionBudget: tag, gasResource, gasAmount.
+        let bytes = encode_action(&Action::TopUpActionBudget {
             gas_resource: 0,
-            gas_amount: 1u128 << 64,
+            gas_amount: big,
             budget_increment: 0,
             pool_actor: 0,
-        };
-        match encode_action(&action) {
-            Err(super::EncodeError::FieldExceedsBound { value }) => {
-                assert_eq!(value, 1u128 << 64);
-            }
-            other => panic!("expected FieldExceedsBound, got {other:?}"),
-        }
-    }
+        })
+        .expect("2^64 gas amount must encode");
+        assert_amount_at(&bytes, HEAD_LEN * 2, big, "topUpActionBudget.gasAmount");
 
-    /// `TopUpActionBudgetFor` encoding rejects `gas_amount` ≥ 2^64.
-    #[test]
-    fn encode_top_up_action_budget_for_rejects_oversized_gas_amount() {
-        let action = Action::TopUpActionBudgetFor {
+        // topUpActionBudgetFor: tag, recipient, gasResource, gasAmount.
+        let bytes = encode_action(&Action::TopUpActionBudgetFor {
             recipient: 0,
             gas_resource: 0,
-            gas_amount: 1u128 << 64,
+            gas_amount: big,
             budget_increment: 0,
             pool_actor: 0,
-        };
-        match encode_action(&action) {
+        })
+        .expect("2^64 delegated gas amount must encode");
+        assert_amount_at(&bytes, HEAD_LEN * 3, big, "topUpActionBudgetFor.gasAmount");
+    }
+
+    /// The `FieldExceedsBound` guard is still live — it now protects
+    /// the fields that genuinely stayed narrow.  A nonce at or above
+    /// `2^64` is rejected rather than truncated, which matters because
+    /// the signature is taken over exactly these bytes.
+    #[test]
+    fn narrow_fields_still_reject_out_of_range_values() {
+        let action = Action::FreezeResource { r: 1 };
+        match encode_signed_action(&action, 1, 1u128 << 64, &[0xAA; 64]) {
             Err(super::EncodeError::FieldExceedsBound { value }) => {
                 assert_eq!(value, 1u128 << 64);
             }
@@ -1310,9 +1387,10 @@ mod tests {
         let delegated_bytes = encode_action(&delegated).unwrap();
         // The tag bytes are distinct.
         assert_ne!(self_bytes[1], delegated_bytes[1]);
-        // The full encodings have different lengths (5 × 9 vs 6 × 9).
-        assert_eq!(self_bytes.len(), HEAD_LEN * 5);
-        assert_eq!(delegated_bytes.len(), HEAD_LEN * 6);
+        // The full encodings have different lengths: the delegated
+        // variant carries one extra narrow field (`recipient`).
+        assert_eq!(self_bytes.len(), HEAD_LEN * 4 + AMOUNT_HEAD_LEN);
+        assert_eq!(delegated_bytes.len(), HEAD_LEN * 5 + AMOUNT_HEAD_LEN);
         // And are byte-distinct.
         assert_ne!(self_bytes, delegated_bytes);
     }
@@ -1343,9 +1421,14 @@ mod tests {
         // Action follows; tag 19 starts at offset 60.
         assert_eq!(signing_bytes[60], CBE_TAG_UINT);
         assert_eq!(&signing_bytes[61..69], &19u64.to_le_bytes());
-        // Total length: 36 (domain) + 24 (deployment) + 72 (action)
-        // + 9 (signer) + 9 (nonce) = 150.
-        assert_eq!(signing_bytes.len(), 36 + 24 + 72 + 9 + 9);
+        // Total length: 36 (domain) + 24 (deployment) + 88 (action:
+        // 6 narrow heads + 2 amount heads) + 9 (signer) + 9 (nonce).
+        // The nonce stays narrow — it is a counter, and widening it
+        // would change the SIGNING INPUT, which is a consensus break.
+        assert_eq!(
+            signing_bytes.len(),
+            36 + 24 + (HEAD_LEN * 6 + AMOUNT_HEAD_LEN * 2) + 9 + 9
+        );
     }
 
     /// Encoder produces byte-identical output across two calls

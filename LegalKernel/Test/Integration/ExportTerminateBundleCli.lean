@@ -90,22 +90,30 @@ def signer_matches_entry : IO Unit := do
     throw (IO.userError
       s!"signer mismatch: expected {exampleEntry.signedAction.signer}, got {bundle.signer}")
 
-/-- The bundle's `claimedPostCommit` matches `stepVMHashFromAction`. -/
-def claimedPostCommit_matches_stepVMHashFromAction : IO Unit := do
-  let bundle := buildTerminateBundle exampleState exampleEntry
-  let expected := stepVMHashFromAction exampleState
-                    exampleEntry.signedAction.action
-                    exampleEntry.signedAction.signer
-  unless bundle.claimedPostCommit = expected do
-    throw (IO.userError "claimedPostCommit does not match stepVMHashFromAction")
+/-- The bundle's `expectedPostCommit` is the fold's root.
 
-/-- The bundle's cell-proof bundle verifies against the
-    pre-state's commit. -/
-def cellProofs_verify_against_preCommit : IO Unit := do
+    It was `stepVMHashFromAction`, a bespoke per-variant hash living
+    outside state-root space, so the contract's terminal comparison
+    against `g.high.commit` could never succeed. -/
+def expectedPostCommit_matches_stepPostRoot : IO Unit := do
   let bundle := buildTerminateBundle exampleState exampleEntry
-  let preCommit := commitExtendedState exampleState
-  unless verifyCellProofs preCommit bundle.cellProofs = true do
-    throw (IO.userError "cellProofs failed to verify against preCommit")
+  let expected := stepMultiPostRoot exampleState exampleEntry.signedAction 0
+  unless some bundle.expectedPostCommit = expected do
+    throw (IO.userError "expectedPostCommit does not match stepMultiPostRoot")
+
+/-- The bundle's own wire folds to the root it publishes.
+
+    The multiproof analogue of the chained `verifyCellProofs` check.
+    There is no per-opening verdict to collect: the fold's PRE side is
+    compared to the pre-state root once, in aggregate, which is what
+    `verifierPostRootMulti` returning `some` says happened. -/
+def wire_folds_to_the_published_root : IO Unit := do
+  let bundle := buildTerminateBundle exampleState exampleEntry
+  let got := verifierPostRootMulti (commitExtendedState exampleState)
+    exampleEntry.signedAction.action exampleEntry.signedAction.signer 0
+    { cells := bundle.openedCells, proof := bundle.wire }
+  unless got = some bundle.expectedPostCommit do
+    throw (IO.userError "the bundle's wire does not reach its published root")
 
 /-- The bundle is deterministic in its inputs.  Two calls with
     the same inputs produce JSON-equivalent outputs. -/
@@ -137,8 +145,10 @@ def json_has_snake_case_fields : IO Unit := do
     "\"action_kind\"",
     "\"action_fields_hex\"",
     "\"signer\"",
-    "\"claimed_post_commit_hex\"",
-    "\"cell_proofs\""
+    "\"expected_post_commit_hex\"",
+    "\"opened_cells\"",
+    "\"gap_mask_hex\"",
+    "\"siblings_hex\""
   ]
   for field in requiredFields do
     let parts := json.splitOn field
@@ -150,8 +160,12 @@ def json_has_snake_case_fields : IO Unit := do
     "\"actionKind\"",
     "\"actionFields\"",
     "\"actionFieldsHex\"",
-    "\"claimedPostCommit\"",
-    "\"claimedPostCommitHex\"",
+    "\"expectedPostCommit\"",
+    "\"expectedPostCommitHex\"",
+    "\"openedCells\"",
+    "\"gapMask\"",
+    "\"gapMaskHex\"",
+    "\"siblingsHex\"",
     "\"cellProofs\""
   ]
   for field in forbiddenFields do
@@ -196,18 +210,20 @@ def actionKind_dispatch_for_all_variants : IO Unit := do
 /-- Byte-pinning for a minimal transfer entry's JSON output
     PREFIX.  Pin only the deterministic parts (fixture_id +
     action_kind + action_fields_hex + signer); the
-    claimed_post_commit_hex and witness_commit fields are
+    expected_post_commit_hex and witness_commit fields are
     hash-dependent. -/
 def json_byte_pinning_transfer_minimal : IO Unit := do
   let bundle := buildTerminateBundle exampleState exampleEntry
   let json := formatTerminateBundleJson "log[0]" bundle
-  -- Transfer 0→0 amount 0 ⇒ actionFields = 32 zero bytes;
-  -- hex = "0000000000000000000000000000000000000000000000000000000000000000".
+  -- Transfer 0→0 amount 0 ⇒ actionFields = 3 × uint64BE (r, sender,
+  -- receiver) + 1 × uint256BE (amount) = 56 zero bytes, i.e. 112 hex
+  -- characters.  Spelled out rather than computed so a layout change
+  -- has to be re-typed here deliberately.
   let expectedPrefix :=
     "{\"fixture_id\":\"log[0]\"," ++
     "\"action_kind\":0," ++
     "\"action_fields_hex\":" ++
-    "\"0000000000000000000000000000000000000000000000000000000000000000\"," ++
+    "\"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"," ++
     "\"signer\":0,"
   unless json.startsWith expectedPrefix do
     throw (IO.userError
@@ -231,16 +247,15 @@ def json_byte_pinning_revoke_local_policy : IO Unit := do
 
 /-- The JSON envelope has exactly the 6 documented top-level
     fields (fixture_id, action_kind, action_fields_hex,
-    signer, claimed_post_commit_hex, cell_proofs).  Counting
+    signer, expected_post_commit_hex, cell_proofs).  Counting
     the `":` separators (where `"` is a field-name terminator)
     in the TOP-LEVEL object excluding nested cell-proof
     objects.  A maintainer adding a 7th field would silently
     slip into production wire traffic otherwise. -/
-def json_exactly_six_top_level_fields : IO Unit := do
-  -- Use an empty bundle (revokeLocalPolicy ⇒ no balance-cell
-  -- proofs ⇒ shorter cell_proofs array).  Even then the
-  -- registry+nonce cells are emitted; we count fields by
-  -- splitting at top-level separators.
+def json_exactly_eight_top_level_fields : IO Unit := do
+  -- `revokeLocalPolicy` gives the narrowest frontier this suite can
+  -- build; even then the policy, registry and nonce cells are opened,
+  -- so the count is of KEYS rather than of the object's size.
   let entry : LogEntry := { exampleEntry with
     signedAction := { exampleEntry.signedAction with
       action := .revokeLocalPolicy } }
@@ -256,8 +271,10 @@ def json_exactly_six_top_level_fields : IO Unit := do
     "\"action_kind\":",
     "\"action_fields_hex\":",
     "\"signer\":",
-    "\"claimed_post_commit_hex\":",
-    "\"cell_proofs\":"
+    "\"expected_post_commit_hex\":",
+    "\"opened_cells\":",
+    "\"gap_mask_hex\":",
+    "\"siblings_hex\":"
   ]
   for key in topLevelKeys do
     let parts := json.splitOn key
@@ -285,10 +302,10 @@ def tests : List TestCase := [
     actionFields_matches_encoder⟩,
   ⟨"export-terminate-bundle: signer matches entry",
     signer_matches_entry⟩,
-  ⟨"export-terminate-bundle: claimedPostCommit matches stepVMHashFromAction",
-    claimedPostCommit_matches_stepVMHashFromAction⟩,
+  ⟨"export-terminate-bundle: expectedPostCommit is the fold's root",
+    expectedPostCommit_matches_stepPostRoot⟩,
   ⟨"export-terminate-bundle: cellProofs verify against preCommit",
-    cellProofs_verify_against_preCommit⟩,
+    wire_folds_to_the_published_root⟩,
   ⟨"export-terminate-bundle: bundle is deterministic",
     bundle_is_deterministic⟩,
   ⟨"export-terminate-bundle: JSON envelope well-formed",
@@ -303,8 +320,8 @@ def tests : List TestCase := [
     json_byte_pinning_transfer_minimal⟩,
   ⟨"export-terminate-bundle: JSON byte-pinning (revokeLocalPolicy)",
     json_byte_pinning_revoke_local_policy⟩,
-  ⟨"export-terminate-bundle: JSON has exactly 6 top-level fields",
-    json_exactly_six_top_level_fields⟩,
+  ⟨"export-terminate-bundle: JSON has exactly 8 top-level fields",
+    json_exactly_eight_top_level_fields⟩,
   ⟨"export-terminate-bundle: buildTerminateBundle API stable",
     build_terminate_bundle_api_stable⟩,
   ⟨"export-terminate-bundle: formatTerminateBundleJson API stable",

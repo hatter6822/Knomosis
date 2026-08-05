@@ -166,7 +166,7 @@ def topUpActionBudgetNetChange : TestCase := {
     -- Actor 10 has 100 gas (resource 1).  topUpActionBudget converts
     -- 5 gas to 100 budget; actor 10 also pays 1 budget for the action itself.
     let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
-    let st := mkSignedAction (.topUpActionBudget 1 5 100 99) 10 es
+    let st := mkSignedAction (.topUpActionBudget 1 5 100 Bridge.gasPoolActor) 10 es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | some es' =>
@@ -360,7 +360,7 @@ def selfTopupChain : TestCase := {
   body := do
     let es := mkExtendedState (freeTier := 1) (actionCost := 1) (currentEpoch := 1)
     -- Step 1: actor 10 tops up budget by +5 (paying 5 gas).
-    let st1 := mkSignedAction (.topUpActionBudget 1 5 5 99) 10 es
+    let st1 := mkSignedAction (.topUpActionBudget 1 5 5 Bridge.gasPoolActor) 10 es
     if h1 : AdmissibleWith mockVerify policy testDeploymentId es st1 then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st1 h1 with
       | some es1 =>
@@ -509,6 +509,112 @@ def topupSelfPoolRejected : TestCase := {
           "BUG: topUp with signer=poolActor admitted (would grant free budget)"
     else
       throw <| IO.userError "AdmissibleWith mockVerify rejected the should-be-admissible topup"
+}
+
+/-- The critical regression: an actor holding ONE unit of gas cannot
+    mint an unbounded action budget.
+
+    Before the ceiling, `topUpActionBudget 1 1 (2^64) gasPoolActor`
+    was admitted on every production path.  The only bound in place was
+    the GP.9.1 round-trip seal `budgetIncrement × refundRate ≤
+    gasAmount`, and `refundRate` defaults to `fun _ => 0` everywhere —
+    so the seal read `0 ≤ 1` and held for any `budgetIncrement`.  The
+    signer walked away with `2^64` admissible actions for 1 wei, which
+    is the entire per-actor spam control bypassed.
+
+    The gate now rejects on the rate-INDEPENDENT ceiling, so this holds
+    whatever a deployment configures. -/
+def topupUnboundedMintRejected : TestCase := {
+  name := "GP.3.2: topUpActionBudget cannot mint budget past the per-action ceiling"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Actor 10 pays 1 gas and asks for 2^64 budget units.
+    let st := mkSignedAction
+      (.topUpActionBudget 1 1 (2 ^ 64) Bridge.gasPoolActor) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected: the ceiling rejects.
+      | some _ =>
+        throw <| IO.userError
+          "BUG: unbounded budget mint admitted (1 gas bought 2^64 budget units)"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the topup"
+}
+
+/-- The boundary of the ceiling: exactly `MAX_TOPUP_BUDGET_PER_ACTION`
+    is admitted, one more is not.  Pins that the constant is the actual
+    cut-off rather than an approximate one. -/
+def topupCeilingBoundary : TestCase := {
+  name := "GP.3.2: the per-action budget ceiling is exact"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    let atCeiling := mkSignedAction
+      (.topUpActionBudget 1 100 MAX_TOPUP_BUDGET_PER_ACTION Bridge.gasPoolActor) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es atCeiling then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es atCeiling h with
+      | some _ => pure ()  -- expected: exactly at the ceiling is fine.
+      | none =>
+        throw <| IO.userError "BUG: a top-up exactly at the ceiling was rejected"
+    else
+      throw <| IO.userError "AdmissibleWith rejected the at-ceiling topup"
+    let overCeiling := mkSignedAction
+      (.topUpActionBudget 1 100 (MAX_TOPUP_BUDGET_PER_ACTION + 1) Bridge.gasPoolActor) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es overCeiling then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es overCeiling h with
+      | none => pure ()  -- expected: one past the ceiling is rejected.
+      | some _ =>
+        throw <| IO.userError "BUG: a top-up one past the ceiling was admitted"
+    else
+      throw <| IO.userError "AdmissibleWith rejected the over-ceiling topup"
+}
+
+/-- Gas must be paid to the CANONICAL gas pool, not to an actor the
+    signer controls.
+
+    Without the `poolActor = gasPoolActor` pin, two colluding actors (or
+    one sybil owner) could ping-pong the same gas between themselves and
+    mint budget on every hop: the kernel step moves gas from A to B, the
+    admission arm credits A's budget, and B repeats in the other
+    direction.  The pair's total gas is conserved while their combined
+    budget grows without bound.  Pinning the destination makes every
+    mint cost gas that leaves the pair permanently. -/
+def topupNonPoolActorRejected : TestCase := {
+  name := "GP.3.2: topUpActionBudget to a non-pool actor is rejected (ping-pong attack)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Actor 10 routes payment to actor 99 (a colluding peer), not the pool.
+    let st := mkSignedAction (.topUpActionBudget 1 50 100 99) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected: the pool pin rejects.
+      | some _ =>
+        throw <| IO.userError
+          "BUG: topUp to a non-pool actor admitted (gas never leaves the colluding pair)"
+    else
+      throw <| IO.userError "AdmissibleWith rejected the topup"
+}
+
+/-- Budget may only be bought with a canonical gas resource.
+
+    Without the resource pin, one unit of an ARBITRARY resource — a
+    token the signer mints freely, say — buys budget, because
+    `getBalance es.base gasResource signer ≥ gasAmount` is satisfiable
+    at any resource.  `claimBudgetRefund_gate` already carried this pin;
+    the top-up legs did not. -/
+def topupNonCanonicalResourceRejected : TestCase := {
+  name := "GP.3.2: topUpActionBudget at a non-canonical resource is rejected"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Resource 7 is neither ETH (0) nor BOLD (1).
+    let st := mkSignedAction (.topUpActionBudget 7 1 100 Bridge.gasPoolActor) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected: the resource pin rejects.
+      | some _ =>
+        throw <| IO.userError
+          "BUG: topUp at a non-canonical gas resource admitted"
+    else
+      throw <| IO.userError "AdmissibleWith rejected the topup"
 }
 
 /-- Bridge-aware mirror of `topupSelfPoolRejected`. -/
@@ -671,13 +777,14 @@ def topupWithSufficientGasAdmitted : TestCase := {
     let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
     -- Actor 10 has 100 gas; spend exactly 100 → admitted; signer's
     -- balance is debited to 0, pool's balance credited to 100.
-    let st := mkSignedAction (.topUpActionBudget 1 100 50 99) 10 es
+    let st := mkSignedAction (.topUpActionBudget 1 100 50 Bridge.gasPoolActor) 10 es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | some es' =>
         assertEq (expected := 0) (actual := getBalance es'.base 1 10)
           "signer's gas balance debited to 0"
-        assertEq (expected := 100) (actual := getBalance es'.base 1 99)
+        assertEq (expected := 100)
+          (actual := getBalance es'.base 1 Bridge.gasPoolActor)
           "pool's gas balance credited to 100"
         let cb := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
         assertEq (expected := 5 - 1 + 50) (actual := cb)
@@ -943,7 +1050,7 @@ def topUpActionBudgetZeroIncrement : TestCase := {
     let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
     let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
     -- 5 gas to credit 0 budget; the action itself costs 1 budget.
-    let st := mkSignedAction (.topUpActionBudget 1 5 0 99) 10 es
+    let st := mkSignedAction (.topUpActionBudget 1 5 0 Bridge.gasPoolActor) 10 es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | some es' =>
@@ -1065,6 +1172,11 @@ def tests : List TestCase :=
   , topupZeroGasRejected
   , topupAllZerosRejected
   , topupSelfPoolRejected
+    -- The unbounded-mint critical and the pins that close it:
+  , topupUnboundedMintRejected
+  , topupCeilingBoundary
+  , topupNonPoolActorRejected
+  , topupNonCanonicalResourceRejected
   , topupByBridgeActorRejected
   , depositWithFeeNonBridgeSignerRejected
   , topupWithSufficientGasAdmitted

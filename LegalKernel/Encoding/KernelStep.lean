@@ -16,18 +16,26 @@ The L1 fault-proof game contract consumes the encoded form of a
 `terminateOnSingleStep`.  The encoded form is a CBE byte string:
 
 ```
-preStateCommit  : 32 bytes (CBE bstr; uniform-output ByteArray)
+preStateCommit  : 9 + 32   (CBE bstr: 9-byte head + 32-byte payload)
 signedAction    : variable, CBE-encoded (per Phase-4)
-postStateCommit : 32 bytes (CBE bstr)
-cellProofs      : length-prefixed list of CellProof encodings
+postStateCommit : 9 + 32
+cellProofs      : CBE array head (9 bytes, the count) followed by
+                  that many CellProof encodings
 ```
 
 Each `CellProof` encodes as:
 ```
-cellTag      : variable (variant-tag uint + per-variant fields)
-cellValue    : CBE bstr
+cellTag      : 9 (variant tag) + 9 per key field
+               (balance: 2 keys; nonce / registry / localPolicy /
+                bridgeConsumed / bridgePending: 1; bridgeNextWdId: 0)
+cellValue    : 9 + len   (CBE bstr)
 witnessState : CBE-encoded ExtendedState (Phase-4)
 ```
+
+The commits are 32-byte payloads behind a 9-byte CBE bytestring
+head, not bare 32-byte fields; the previous header omitted every
+head.  Likewise the cell-proof bundle carries a CBE array head, not
+a bare length prefix.
 
 This module is **not** part of the trusted computing base.
 Bugs here would produce incorrect serialisations, but cannot
@@ -49,7 +57,8 @@ open LegalKernel.Authority
 /-! ## `CellTag` codec
 
 Encoded as `<kindIndex uint> ++ <key fields>`.  The `kindIndex`
-is the frozen tag (0..6); the key fields depend on the variant.
+is the frozen tag (0..16); the key fields depend on the
+variant.  Singleton cells encode the tag alone.
 -/
 
 /-- Encode a `CellTag` to its CBE byte sequence. -/
@@ -75,6 +84,16 @@ def CellTag.encode : FaultProof.CellTag → Stream
     Encodable.encode (T := Nat) wd
   | .bridgeNextWdId =>
     Encodable.encode (T := Nat) 6
+  | .bridgeAmmReserveEth        => Encodable.encode (T := Nat) 7
+  | .bridgeAmmReserveBold       => Encodable.encode (T := Nat) 8
+  | .bridgeBoldCircuitClosed    => Encodable.encode (T := Nat) 9
+  | .bridgeBoldTvlCap           => Encodable.encode (T := Nat) 10
+  | .bridgeBoldTotalLockedValue => Encodable.encode (T := Nat) 11
+  | .bridgeAmmDisabled          => Encodable.encode (T := Nat) 12
+  | .epochBudget a =>
+    Encodable.encode (T := Nat) 13 ++
+    Encodable.encode (T := Nat) a.toNat
+  | .budgetPolicy               => Encodable.encode (T := Nat) 14
 
 /-- Decode a `CellTag` from a stream.  Returns the tag and
     residual stream.  Rejects unknown variant indices. -/
@@ -152,7 +171,8 @@ instance : Encodable FaultProof.CellTag where
 def CellProof.encode (p : FaultProof.CellProof) : Stream :=
   Encodable.encode (T := FaultProof.CellTag) p.cellTag ++
   Encodable.encode (T := ByteArray) p.cellValue ++
-  Encodable.encode (T := ExtendedState) p.witnessState
+  Encodable.encode (T := ExtendedState) p.witnessState ++
+  Encodable.encode (T := ByteArray) p.proofData
 
 /-- Decode a `CellProof`. -/
 def CellProof.decode (s : Stream) :
@@ -163,7 +183,11 @@ def CellProof.decode (s : Stream) :
     | .ok (val, s₂) =>
       match Encodable.decode (T := ExtendedState) s₂ with
       | .ok (es, s₃) =>
-        .ok ({ cellTag := tag, cellValue := val, witnessState := es }, s₃)
+        match Encodable.decode (T := ByteArray) s₃ with
+        | .ok (pd, s₄) =>
+          .ok ({ cellTag := tag, cellValue := val, witnessState := es,
+                 proofData := pd }, s₄)
+        | .error e => .error e
       | .error e => .error e
     | .error e => .error e
   | .error e => .error e
@@ -190,16 +214,137 @@ instance : Encodable FaultProof.CellProofBundle where
   encode := CellProofBundle.encode
   decode := CellProofBundle.decode
 
+/-! ## `SmtCellProof` and `CellOpening` codecs
+
+The `KernelStep` a fault-proof game carries is a bundle of OPENINGS,
+not of witness-state-bearing cell proofs, so its codec needs these
+two.  An `SmtCellProof` is its sibling array and its bitmask; a
+`CellOpening` is a cell identity, the cell's value in the state the
+opening is against, and the path. -/
+
+/-- Encode an `SmtCellProof`: the siblings as a length-prefixed list,
+    then the bitmask. -/
+def SmtCellProof.encode (p : FaultProof.SmtCellProof) : Stream :=
+  Encodable.encode (T := List ByteArray) p.siblings.toList ++
+  Encodable.encode (T := ByteArray) p.bitmask
+
+/-- Decode an `SmtCellProof`. -/
+def SmtCellProof.decode (s : Stream) :
+    Except DecodeError (FaultProof.SmtCellProof × Stream) :=
+  match Encodable.decode (T := List ByteArray) s with
+  | .ok (sibs, s₁) =>
+    match Encodable.decode (T := ByteArray) s₁ with
+    | .ok (bm, s₂) => .ok ({ siblings := sibs.toArray, bitmask := bm }, s₂)
+    | .error e     => .error e
+  | .error e => .error e
+
+instance : Encodable FaultProof.SmtCellProof where
+  encode := SmtCellProof.encode
+  decode := SmtCellProof.decode
+
+/-- Encode a `CellOpening`. -/
+def CellOpening.encode (o : FaultProof.CellOpening) : Stream :=
+  Encodable.encode (T := FaultProof.CellTag) o.cellTag ++
+  Encodable.encode (T := ByteArray) o.preValue ++
+  Encodable.encode (T := FaultProof.SmtCellProof) o.proof
+
+/-- Decode a `CellOpening`. -/
+def CellOpening.decode (s : Stream) :
+    Except DecodeError (FaultProof.CellOpening × Stream) :=
+  match Encodable.decode (T := FaultProof.CellTag) s with
+  | .ok (tag, s₁) =>
+    match Encodable.decode (T := ByteArray) s₁ with
+    | .ok (val, s₂) =>
+      match Encodable.decode (T := FaultProof.SmtCellProof) s₂ with
+      | .ok (pf, s₃) =>
+        .ok ({ cellTag := tag, preValue := val, proof := pf }, s₃)
+      | .error e => .error e
+    | .error e => .error e
+  | .error e => .error e
+
+instance : Encodable FaultProof.CellOpening where
+  encode := CellOpening.encode
+  decode := CellOpening.decode
+
+/-! ## `SmtMultiProof` + `MultiBundle` codecs
+
+The multiproof wire, in the same shape as `SmtCellProof`'s: the
+sibling list then the mask.  One structural difference is worth
+naming — an `SmtCellProof`'s mask is always 32 bytes, while a
+multiproof's is `ceil(G/8)` for a gap count the KEY SET determines, so
+the decoder cannot check the length and the verifier does
+(`SmtMultiProof.isWellFormedFor`, against levels it derives). -/
+
+/-- Encode an `SmtMultiProof`. -/
+def SmtMultiProof.encode (p : FaultProof.SmtMultiProof) : Stream :=
+  Encodable.encode (T := List ByteArray) p.siblings.toList ++
+  Encodable.encode (T := ByteArray) p.gapMask
+
+/-- Decode an `SmtMultiProof`. -/
+def SmtMultiProof.decode (s : Stream) :
+    Except DecodeError (FaultProof.SmtMultiProof × Stream) :=
+  match Encodable.decode (T := List ByteArray) s with
+  | .ok (sibs, s₁) =>
+    match Encodable.decode (T := ByteArray) s₁ with
+    | .ok (gm, s₂) => .ok ({ siblings := sibs.toArray, gapMask := gm }, s₂)
+    | .error e     => .error e
+  | .error e => .error e
+
+instance : Encodable FaultProof.SmtMultiProof where
+  encode := SmtMultiProof.encode
+  decode := SmtMultiProof.decode
+
+/-- Encode one opened cell: its tag and its proven PRE-value.  No
+    proof of its own — under a multiproof every cell is opened against
+    the same root and they share one sibling list. -/
+def OpenedCell.encode (c : FaultProof.CellTag × ByteArray) : Stream :=
+  Encodable.encode (T := FaultProof.CellTag) c.1 ++
+  Encodable.encode (T := ByteArray) c.2
+
+/-- Decode one opened cell. -/
+def OpenedCell.decode (s : Stream) :
+    Except DecodeError ((FaultProof.CellTag × ByteArray) × Stream) :=
+  match Encodable.decode (T := FaultProof.CellTag) s with
+  | .ok (tag, s₁) =>
+    match Encodable.decode (T := ByteArray) s₁ with
+    | .ok (val, s₂) => .ok ((tag, val), s₂)
+    | .error e      => .error e
+  | .error e => .error e
+
+instance : Encodable (FaultProof.CellTag × ByteArray) where
+  encode := OpenedCell.encode
+  decode := OpenedCell.decode
+
+/-- Encode a `MultiBundle`: the opened cells, then the shared wire. -/
+def MultiBundle.encode (b : FaultProof.MultiBundle) : Stream :=
+  Encodable.encode (T := List (FaultProof.CellTag × ByteArray)) b.cells ++
+  Encodable.encode (T := FaultProof.SmtMultiProof) b.proof
+
+/-- Decode a `MultiBundle`. -/
+def MultiBundle.decode (s : Stream) :
+    Except DecodeError (FaultProof.MultiBundle × Stream) :=
+  match Encodable.decode (T := List (FaultProof.CellTag × ByteArray)) s with
+  | .ok (cells, s₁) =>
+    match Encodable.decode (T := FaultProof.SmtMultiProof) s₁ with
+    | .ok (pf, s₂) => .ok ({ cells := cells, proof := pf }, s₂)
+    | .error e     => .error e
+  | .error e => .error e
+
+instance : Encodable FaultProof.MultiBundle where
+  encode := MultiBundle.encode
+  decode := MultiBundle.decode
+
 /-! ## `KernelStep` codec -/
 
 /-- Encode a `KernelStep` to its CBE byte sequence.  Layout:
     `preStateCommit ++ signedAction ++ postStateCommit ++
-     cellProofs`. -/
+     l2LogIndex ++ bundle`. -/
 def KernelStep.encode (step : FaultProof.KernelStep) : Stream :=
   Encodable.encode (T := ByteArray) step.preStateCommit ++
   Encodable.encode (T := SignedAction) step.signedAction ++
   Encodable.encode (T := ByteArray) step.postStateCommit ++
-  Encodable.encode (T := FaultProof.CellProofBundle) step.cellProofs
+  Encodable.encode (T := Nat) step.l2LogIndex ++
+  Encodable.encode (T := FaultProof.MultiBundle) step.bundle
 
 /-- Decode a `KernelStep` from a stream. -/
 def KernelStep.decode (s : Stream) :
@@ -210,12 +355,16 @@ def KernelStep.decode (s : Stream) :
     | .ok (sa, s₂) =>
       match Encodable.decode (T := ByteArray) s₂ with
       | .ok (post, s₃) =>
-        match Encodable.decode (T := FaultProof.CellProofBundle) s₃ with
-        | .ok (cb, s₄) =>
-          .ok ({ preStateCommit := pre,
-                 signedAction := sa,
-                 postStateCommit := post,
-                 cellProofs := cb }, s₄)
+        match Encodable.decode (T := Nat) s₃ with
+        | .ok (idx, s₄) =>
+          match Encodable.decode (T := FaultProof.MultiBundle) s₄ with
+          | .ok (b, s₅) =>
+            .ok ({ preStateCommit := pre,
+                   signedAction := sa,
+                   postStateCommit := post,
+                   l2LogIndex := idx,
+                   bundle := b }, s₅)
+          | .error e => .error e
         | .error e => .error e
       | .error e => .error e
     | .error e => .error e

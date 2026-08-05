@@ -30,6 +30,73 @@ the cited Lean / Solidity / Rust code; this document tracks it.
 > bootstrap fresh"; for research-stage software this is acceptable
 > and was the explicit choice in the audit-3 plan.
 
+> **256-bit amount ABI break (finding C-3).**  Value-carrying fields
+> — balances, transfer / mint / burn / reward amounts, deposit and
+> withdrawal amounts, fee splits, gas amounts and the budget→gas rate
+> — ride a 33-byte CBE **amount** head (`0x06` + 32 LE).  The
+> `actionFieldsForL1` layout the L1 step VM reads made the same move,
+> `uint64BE → uint256BE`, and so did the fault-proof balance *cell
+> values*.
+>
+> **This is the SECOND widening of these fields.**  They went `0x00`
+> + 8 LE → `0x01` + 16 LE first, then `0x01` + 16 LE → `0x06` + 32 LE.
+> The tag moved with the width the second time so a stale peer fails
+> closed on an unexpected tag rather than reading 17 of 33 bytes and
+> mis-parsing the rest of the stream; the first widening reused
+> `0x01` and had no such guard.
+>
+> **Why twice.**  The first widening moved the ceiling without
+> establishing it, so the same defect recurred one modulus up: a
+> balance at a nonzero multiple of the head's range encodes exactly
+> as `encodeAmount 0`, which IS the canonically-absent cell value, so
+> the state root cannot see the balance at all.  Two states differing
+> only there share a root and reach different post-roots — the
+> pre-state root stops being a sufficient statistic for the
+> transition.
+>
+> **Why this is the last one.**  `2^256` is the EVM word, so no
+> mirrored L1 surface can hold a value the head cannot carry, and the
+> ceiling is now *enforced* (`Laws.AmountBounded`, a precondition
+> conjunct on every crediting law) and *proved unreachable*
+> (`FaultProof.canonicalBounds_base_amt_of_reachable`) rather than
+> assumed.  On the Solidity side the conjunct is exactly "the
+> `uint256` sum does not wrap", which is why no `MAX_AMOUNT` constant
+> appears — it would not be representable.
+>
+> **Rust decoders narrow deliberately.**  `knomosis-indexer`,
+> `knomosis-host` and `knomosis-l1-ingest` represent an `Amount` as
+> `u128`, so they REJECT a wire value whose high 16 bytes are
+> non-zero (`AmountTooWide`) rather than truncating.  Truncation is
+> the defect being removed; a read view that says it cannot read a
+> balance is strictly better than one that silently halves it.
+>
+> **Why.**  The 8-byte head truncates modulo `2^64`, which a
+> wei-denominated balance crosses at ~18.45 ETH — and balances
+> accumulate, so bounding individual action amounts could not keep a
+> stored balance in range.  `State.encode` was therefore
+> non-injective on ordinary reachable states: two states whose
+> balances differed by exactly `2^64` produced byte-identical
+> encodings, and `commitState` hashes exactly those bytes, so they
+> shared one L1 state root.  The commitment stopped binding the
+> balance ledger — the assumption the bisection game rests on.
+>
+> **What did NOT move.**  Identifiers (`ActorId`, `ResourceId`,
+> `DepositId`, `WithdrawalId`), log indices, epoch numbers, nonces,
+> constructor tags, length prefixes, and budget **unit counts**
+> (`budgetGrant`, `budgetIncrement`, `budgetUnits`,
+> `ActorBudget.budgetBalance`, `BudgetPolicy.{freeTier,actionCost}`).
+> These are counters or `UInt64`-typed at the source and cannot
+> exceed the narrow range.
+>
+> Every decoder is exact-width and tag-dispatched: a value on the
+> narrow head, or an amount head of the wrong length, is REJECTED
+> rather than truncated.  Accepting either width would give one
+> logical value two byte forms and reintroduce the collision.
+>
+> The migration path is the same as Audit-3.1's — throw away the old
+> log file and bootstrap fresh.  Every cross-stack fixture corpus was
+> regenerated.
+
 ## 1. Scope
 
 The Phase-5 ABI covers three boundaries:
@@ -209,11 +276,12 @@ example:
 ```
 Action.transfer r sender receiver amount  →
   CBE-uint(0) ++ CBE-uint(r) ++ CBE-uint(sender) ++
-  CBE-uint(receiver) ++ CBE-uint(amount)
+  CBE-uint(receiver) ++ CBE-amount(amount)
 ```
 
-(All five fields are 9-byte CBE uints; total transfer encoding is
-`9 * 5 = 45` bytes.)
+(The tag and the three identifier fields are 9-byte CBE uints; the
+value-carrying `amount` is a 17-byte CBE amount, so the total
+transfer encoding is `9 * 4 + 17 = 53` bytes.)
 
 The full per-constructor table is in
 `LegalKernel/Encoding/Action.lean`.
@@ -282,7 +350,7 @@ Action.ammSwap fromResource toResource amountIn amountOut ammReserveActor  →
   CBE-uint(amountIn) ++ CBE-uint(amountOut) ++ CBE-uint(ammReserveActor)
 
 Action.reclaimAmmReserves r amount reserveActor poolActor  →
-  CBE-uint(24) ++ CBE-uint(r) ++ CBE-uint(amount) ++
+  CBE-uint(24) ++ CBE-uint(r) ++ CBE-amount(amount) ++
   CBE-uint(reserveActor) ++ CBE-uint(poolActor)
 ```
 
@@ -550,7 +618,8 @@ re-snapshotting under the post-LP build (see Workstream-LP plan
 MAX_CLAUSES_PER_POLICY      := 64
 MAX_TAGS_PER_DENY           := 64
 MAX_RECIPIENTS_PER_REQUIRE  := 64
-MAX_POLICY_ENCODE_BYTES     := 16_384
+MAX_DELEGATES_PER_ALLOW     := 64
+MAX_POLICY_ENCODE_BYTES     := 38_601   -- 9 + 64 * 603, PROVEN
 ```
 
 These are part of the on-wire ABI contract; the canonical
@@ -559,6 +628,22 @@ decoder rejects oversize policies as
 `LocalPolicy.fieldsBounded` decidability check at the encoder
 level).  Loosening any bound requires the §13.6 two-reviewer
 gate.
+
+> **`MAX_POLICY_ENCODE_BYTES` correction.**  This was documented
+> and defined as `16_384`, a value no conforming policy was
+> obliged to respect: `Encoding/LocalPolicy.lean`'s own comment
+> computed a ~38 KB worst case and described the smaller number
+> as holding "for any *practical* policy".  A DoS bound a
+> conforming input can exceed is not a bound.  It is now the
+> value `Encoding.LocalPolicy.encode_size_bound` **proves** —
+> `9` for the clause-list CBE head plus
+> `MAX_CLAUSES_PER_POLICY (64) x MAX_CLAUSE_ENCODE_BYTES (603)`,
+> where a clause is at most a 9-byte variant tag, a 9-byte
+> resource id, a 9-byte list head, and 64 nine-byte elements.
+> Raising the constant is a widening, so no previously-accepted
+> policy is rejected; the constant and the encoder can no longer
+> drift apart, because the constant is what the theorem
+> concludes.
 
 #### 5.4.2 Admissibility extension (LP.7)
 
@@ -1950,11 +2035,24 @@ global flags before `extract-events` (so the spawned argv is
 deployment forwards nothing (the invocation is unchanged).
 
 **Response size.**  A single log frame's event list is bounded by
-`HARD_MAX_EVENT_COUNT` (2^20); the multi-actor laws
-(`distributeOthers` / `proportionalDilute`) emit one `balanceChanged`
-per affected actor, so the cap is a generous DoS ceiling, not a
-per-action bound.  A count above it is a subprocess protocol
+`HARD_MAX_EVENT_COUNT` (2^20).  The multi-actor laws
+(`distributeOthers` / `proportionalDilute`) emit at most one
+`balanceChanged` per recipient, and `Laws.BulkBounded` — a conjunct of
+both preconditions — caps the recipients at
+`maxRecipientsPerBulkAction` (256), so a single bulk action contributes
+at most 256 balance events plus the uniform nonce / budget pair.
+`HARD_MAX_EVENT_COUNT` is therefore a DoS ceiling several orders above
+the real per-action bound; a count above it is a subprocess protocol
 violation.
+
+A **recipient** is an actor holding a *positive* balance of the
+resource other than the excluded one (`Laws.bulkRecipients`).  Actors
+with no entry, and actors whose entry is present but zero, are not
+credited and so produce no event — the latter because a zero-valued
+balance cell is canonically absent from the state commitment, so
+crediting it would make a bulk step's post-root depend on something the
+pre-root does not observe (finding C-2 in
+`docs/audits/19-findings-and-followups.md`).
 
 **`Event` payload field layout.**  Each emitted event is
 `Event.encode` (`LegalKernel/Encoding/Event.lean`): the constructor
@@ -2479,24 +2577,25 @@ The `KnomosisBridge.withdrawWithProof(uint64 atLogIndexHigh,
 bytes proofBlob, bytes leafBlob)` function expects:
 
   * `leafBlob` — CBE-encoded `PendingWithdrawal`:
-      uint  resourceId    (CBE: 9 bytes)
-      bytes recipientL1   (CBE: 1 tag + 8 length + 20 payload = 29 bytes)
-      uint  amount        (9 bytes)
-      uint  l2LogIndex    (9 bytes)
-      → total: 56 bytes (audit-2 lossless 20-byte address encoding).
+      uint   resourceId   (CBE: 9 bytes)
+      bytes  recipientL1  (CBE: 1 tag + 8 length + 20 payload = 29 bytes)
+      amount amount       (CBE: 1 tag + 32 LE = 33 bytes)
+      uint   l2LogIndex   (9 bytes)
+      → total: 80 bytes (the audit-2 lossless 20-byte address
+        encoding, plus the amount on the 33-byte head).
   * `proofBlob` — CBE encoding of the `WithdrawalProof`
     (post-audit-2; mirrors Lean's `WithdrawalProof` shape
     with variable-size leaf and siblings):
       bytes leaf          (CBE bytes; mirrors Lean's
                             `WithdrawalProof.leaf : ByteArray` —
-                            ≈ 56 bytes for populated, 32 for
+                            ≈ 64 bytes for populated, 32 for
                             sentinel; equals leafBlob byte-for-byte
                             for canonical proofs)
       uint  index         (9 bytes)
       array siblings[64]  (CBE array head + 64 × CBE bytes; each
                             sibling is variable-size — typically
                             32 bytes for the 32-byte default-hash
-                            values, but can be ~56 bytes for the
+                            values, but can be ~64 bytes for the
                             leaf-adjacent sibling in the
                             dense-pair case).
       → typical sparse total: ≈ 2700 bytes; dense-pair total:
@@ -2756,7 +2855,21 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `KnomosisStateRootSubmission`:
 
-  * `submitStateRoot(uint64 logIndex, bytes32 stateCommit, bytes32 prevLogEntryHash)` payable
+  * `submitStateRoot(uint64 logIndex, bytes32 stateCommit, bytes32 prevLogEntryHash, bytes32 actionCommit)` payable
+    — `actionCommit` is `LogChain.actionCommit(actionKind, signer,
+    actionFields)`, i.e.
+    `keccak256(abi.encodePacked(uint8 actionKind, uint64 signer, bytes actionFields))`,
+    over the action that carried `logIndex - 1` to `logIndex`.  The
+    stored chain value becomes
+    `keccak256(abi.encode(prevLogEntryHash, stateCommit, actionCommit))`.
+    Binding the action here is what lets
+    `terminateOnSingleStep` authenticate the step it is asked to
+    adjudicate; the state-roots-only chain it replaced recorded no
+    action at all, so the terminal step executed whatever the
+    responding party supplied.  Lean mirror:
+    `LegalKernel.FaultProof.StepVMCoherence.l1ActionCommit` /
+    `l1NextEntryHash`; pinned per-entry by `step_vm.json`'s
+    `expectedActionCommitHex`.
   * `finaliseStateRoot(uint64 logIndex)`
   * `revertStateRootsFrom(uint64 fromIdx)` (called by game)
   * `isStateRootReverted(uint64 logIndex) view returns (bool)`
@@ -2766,12 +2879,94 @@ All contracts immutable per Workstream-E §20 discipline.
   * `initiateChallenge(...) payable returns (uint256 gameId)`
   * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)`
   * `respondToMidpoint(uint256 gameId, bool agree)`
-  * `terminateOnSingleStep(uint256 gameId, bytes signedActionBytes, CellProof[] cellProofs, bytes32 claimedPostCommit)`
+  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, OpenedCell[] opened, bytes gapMask, bytes siblings)`
+    — no `claimedPostCommit` argument: the contract computes the
+    post-state ROOT from the step and compares it against the on-chain
+    `g.high.commit`, so the claim is not the caller's to make.  It
+    also takes no `l2LogIndex`: the contract reads `g.high.idx`, which
+    is the index the disputed action produced.  (An
+    earlier draft of this line documented a third, non-existent form;
+    the Rust observer had been built against it and its calldata could
+    not be dispatched.)  The `(actionKind, actionFields, signer)`
+    triple is authenticated against the log-entry chain at
+    `g.high.idx` before dispatch — reverts `ActionNotInLogChain` if it
+    is not the action the sequencer bound when it published that root.
   * `claimTimeout(uint256 gameId)`
 
-`KnomosisStepVM`:
+`KnomosisStepVMRoot`:
 
-  * `executeStep(bytes32 preStateCommit, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs) pure returns (bytes32 postStateCommit)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`.
+  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
+  * `widestFrontier(bytes probeFields) pure returns (uint256)` — the
+    largest frontier any adjudicable action produces, derived from
+    `StepWrites.deriveWriteSet` rather than restated.  `assertConsistent`
+    requires the opening cap to exceed it, and
+    `KnomosisFaultProofGame.assertConsistent` calls it through the
+    game's own `stepVM` reference so a game wired to a stale step VM
+    fails at deploy rather than at the first terminate.
+
+  **The bundle is a DEDUPLICATING PRE-ROOT MULTIPROOF.**  `opened` is
+  the step's FRONTIER — every cell it touches, opened ONCE against
+  `preStateRoot` — and `gapMask` + `siblings` are the single sibling
+  list all of them share.
+
+  `OpenedCell` is the ABI tuple
+  `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes preValue)`.
+
+  * `preValue` — the cell's CBE-encoded PRE-state value.  Not trusted:
+    it enters the verifier's PRE-side fold, whose aggregate must
+    reproduce `preStateRoot`, so a lie moves the aggregate off it.
+    There is no per-opening verdict to fail; that single aggregate
+    check is the point.
+
+  The frontier includes the READ-ONLY budget-policy cell `(14, 0, 0)`
+  — under a multiproof a read is a write of the same value, so it
+  needs no separate opening and no separate walk.  It is not optional:
+  the policy selects the branch every epoch-budget write takes, and a
+  frontier without it fails the shape check.
+
+  **Order carries no information.**  Every cell is opened against the
+  same root, so the verifier SORTS the frontier by path index
+  (`pathIndex(key) = bitreverse(key)`, which makes the tree's
+  root-first reading order a plain unsigned compare).  Any permutation
+  of a valid bundle yields the identical post-root.  Two consequences,
+  both accepted deliberately: a bundle cannot lose on a formatting
+  question, and two calldata encodings are valid for one step —
+  harmless, since nothing signs the bundle and the game stores only
+  the resulting root.
+
+  **A duplicate is not representable.**  Strict ascent after the sort
+  is the distinctness check, so a bundle naming one cell twice fails
+  before any hashing.
+
+  `gapMask` — one bit per gap, LSB-first within each byte, set iff
+  that gap's sibling is drawn from `siblings` rather than being the
+  canonical empty sub-tree at its level.  Its length is EXACTLY
+  `ceil(G/8)` for the gap count `G = (256 + 1) − m + Σ divs` the KEY
+  SET implies, and `siblings` is exactly `32 * popcount(gapMask)`
+  bytes.  Both are derived before a byte of the wire is read, so a
+  truncated proof reverts (`MultiProofMaskLength`,
+  `MultiProofSiblingCount`) rather than being padded out with a
+  placeholder hash and walked to some other root.  A set bit past the
+  last gap reverts too (`MultiProofPadding`), closing a malleability
+  slot.
+
+  The JSON wire form (`knomosis export-terminate-bundle`, the Rust
+  observer's `TerminateBundle`) spells these `opened_cells` /
+  `gap_mask_hex` / `siblings_hex`, lowercase hex without the `0x`
+  prefix; the cross-stack corpus spells them `cells` / `gapMaskHex` /
+  `siblingsHex`, `0x`-prefixed.
+
+  **There is no `witnessCommit` word.**  It carried
+  `commitExtendedState` of the state the value was read from — a claim
+  only a party holding the whole `ExtendedState` could check, and one
+  a responder could set freely.  The fold is the binding now, and it
+  is one an L1 holding nothing but a 32-byte root can verify.
+
+  **A CHAINED arrangement shipped first** — one opening per WRITE,
+  each against the running root, with a separate `policyOpening` — and
+  is retired.  It cost a full second walk for a cell written twice (a
+  self-transfer, which anyone can submit), made bundle order part of
+  consensus, and padded a short proof rather than refusing it.
 
 `KnomosisDisputeVerifierV2`:
 

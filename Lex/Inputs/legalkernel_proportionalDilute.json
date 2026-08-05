@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 100, "column": 0},
+ {"position": {"line": 111, "column": 0},
   "file": "LegalKernel/Laws/ProportionalDilute.lean"},
  "signed_by": {"name": "deployer", "kind": "actorRef"},
  "schema_version": 1,
@@ -12,7 +12,8 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr": "fun s => totalReward > 0 ∧ sumOthers s r excluded > 0\n  ",
+ "pre_expr":
+ "fun s => totalReward > 0 ∧ sumOthers s r excluded > 0 ∧\n                                  LegalKernel.Laws.BulkBounded s r excluded ∧\n                                  LegalKernel.Laws.AmountBoundedAll s r\n                                    (LegalKernel.Laws.bulkRecipients s r excluded)\n                                    (fun kv => totalReward * kv.2 /\n                                               LegalKernel.sumOthers s r excluded)\n  ",
  "params":
  [{"type": "ResourceId", "name": "r", "kind": "explicit"},
   {"type": "ActorId", "name": "excluded", "kind": "explicit"},
@@ -20,7 +21,7 @@
  "intent":
  "Proportionally dilute `excluded` by minting `totalReward * v_k / sumOthers` (Nat floor; dust discarded) to each non-excluded actor `k`.  The strongest analogue of 'burning excluded's balance share' available without removing tokens.  Classified `IsMonotonic`.",
  "impl_block":
- "fun s =>\n      let bm := s.balances[r]?.getD ∅\n      let S  := sumOthers s r excluded\n      let toReward := bm.toList.filter (fun kv => kv.1 != excluded)\n      toReward.foldl\n        (fun s' kv =>\n          setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S))\n        s\n  -- Per plan §19.4 LX.29: `proportionalDilute` claims\n  -- `monotonic` (every actor's balance can only increase or stay\n  -- the same — Nat floor never decreases), `local`,\n  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.\n  -- NOT `conservative` (additive — distributes new tokens, with\n  -- floor-division dust discarded per the\n  -- `proportionalDilute_distributed_le_totalReward` dust bound).\n  ",
+ "fun s =>\n      let S  := sumOthers s r excluded\n      (LegalKernel.Laws.bulkRecipients s r excluded).foldl\n        (fun s' kv =>\n          setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S))\n        s\n  -- Per plan §19.4 LX.29: `proportionalDilute` claims\n  -- `monotonic` (every actor's balance can only increase or stay\n  -- the same — Nat floor never decreases), `local`,\n  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.\n  -- NOT `conservative` (additive — distributes new tokens, with\n  -- floor-division dust discarded per the\n  -- `proportionalDilute_distributed_le_totalReward` dust bound).\n  ",
  "identifier": "legalkernel.proportionalDilute",
  "events_block": "[]\n\n",
  "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},

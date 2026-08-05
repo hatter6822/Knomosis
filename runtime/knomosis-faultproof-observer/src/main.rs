@@ -35,6 +35,7 @@ use knomosis_faultproof_observer::error::ObserverError;
 use knomosis_faultproof_observer::jsonrpc_submitter::{JsonRpcSubmitter, JsonRpcSubmitterConfig};
 use knomosis_faultproof_observer::observer::{Observer, ObserverConfig};
 use knomosis_faultproof_observer::persistence::Persistence;
+use knomosis_faultproof_observer::state_reader::{GameStateReader, OwnedContractGameReader};
 use knomosis_faultproof_observer::strategy::{
     MemoryTruthOracle, SubprocessTruthOracle, TerminateBundleOracle, TruthOracle,
 };
@@ -206,6 +207,7 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             if let Some(bundle_oracle) = build_terminate_bundle_oracle(cfg) {
                 observer = observer.with_terminate_bundle_oracle(bundle_oracle);
             }
+            observer = observer.with_state_reader(build_state_reader(cfg)?);
             if let Some(start) = cfg.start_block {
                 observer.set_start_block(start);
                 info!(
@@ -241,6 +243,11 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             if let Some(bundle_oracle) = build_terminate_bundle_oracle(cfg) {
                 observer = observer.with_terminate_bundle_oracle(bundle_oracle);
             }
+            // The mock-submitter path does not broadcast, but it must
+            // still hydrate: an operator running in observation mode
+            // needs to see which moves WOULD be made, and an
+            // un-hydrated game produces none.
+            observer = observer.with_state_reader(build_state_reader(cfg)?);
             if let Some(start) = cfg.start_block {
                 observer.set_start_block(start);
                 info!(
@@ -251,6 +258,30 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             observer.run()
         }
     }
+}
+
+/// Construct the on-chain game-state reader from the parsed CLI
+/// config.
+///
+/// The reader is what hydrates games adopted from a `GameOpened`
+/// event, whose payload does not carry the disputed range.  Without
+/// it every adopted game stays `state_known = false` and the observer
+/// never responds — so this is wired unconditionally on both the
+/// broadcasting and the observation-only path, and a bad RPC URL is a
+/// fail-fast startup error rather than a silent liveness loss.
+///
+/// # Errors
+///
+/// Returns [`ObserverError::Config`] if the L1 RPC URL does not parse.
+fn build_state_reader(
+    cfg: &CliConfig,
+) -> Result<Box<dyn GameStateReader + Send + Sync>, ObserverError> {
+    let rpc = JsonRpcL1Source::new(cfg.l1_rpc.clone())
+        .map_err(|e| ObserverError::Config(format!("L1 RPC URL parse (state reader): {e}")))?;
+    Ok(Box::new(OwnedContractGameReader::new(
+        rpc,
+        cfg.game_contract.0,
+    )))
 }
 
 /// Construct the production truth oracle from the parsed CLI

@@ -141,14 +141,37 @@ structure GameState where
 
 /-- The legal transitions from one game state to the next.
 
-    **v1 bug fix**: v1's `terminateOnSingleStep` constructor
-    took both `submitterPostCommit` and `challengerPostCommit`
-    — but only one of them is the claim being tested; the L1
-    step VM determines which is correct from its own
-    re-execution.  v2 takes a single claimed post-commit. -/
+    **Adjudication reads on-chain data, never a caller
+    parameter.**  Both non-trivial transitions take strictly less
+    from the caller than the state machine needs and derive the
+    rest from `gs`, mirroring the L1 contract:
+
+    * `submitMidpoint` carries only a *commit*.  The index is
+      `gs.range.midpointIdx`, computed here exactly as
+      `KnomosisFaultProofGame.submitMidpoint` computes
+      `mpIdx = (g.low.idx + g.high.idx) / 2`.  Taking the index
+      from the caller — as this did — let a party narrow by a
+      single step per round, which is why
+      `bisection_converges_after_enough_rounds` could only prove
+      *linear* narrowing.  With the midpoint canonical the bound
+      is logarithmic (`bisection_converges_in_log_rounds`).
+
+    * `terminateOnSingleStep` carries only the step.  There is no
+      `claimedPostCommit`: the disputed endpoint is
+      `gs.range.high.commit` and the pre-state is
+      `gs.range.low.commit`, both already fixed in the game
+      state.  Taking the claim from the caller made the
+      transition vacuous — the responder supplied both the claim
+      and the `KernelStep` whose `postStateCommit` the old
+      `kernelStepApply` echoed back, so the responder always won.
+      This mirrors the 5-argument
+      `KnomosisFaultProofGame.terminateOnSingleStep`, which
+      passes `g.low.commit` to the step VM and tests the result
+      against `g.high.commit`. -/
 inductive GameTransition
-  /-- The party whose turn it is submits a midpoint commit. -/
-  | submitMidpoint (mp : Claim)
+  /-- The party whose turn it is submits the commit it claims for
+      the canonical midpoint index of the current range. -/
+  | submitMidpoint (midpointCommit : StateCommit)
   /-- The opposing party agrees with the pending midpoint;
       range narrows to `[mid.idx, high.idx]`. -/
   | respondAgree
@@ -156,11 +179,11 @@ inductive GameTransition
       `[low.idx, mid.idx]`. -/
   | respondDisagree
   /-- When range is single-step, terminate by executing.  The
-      step VM determines who's right; the contract reads its
-      output. -/
+      step VM re-executes from the committed pre-state and its
+      output is compared against the committed disputed
+      endpoint. -/
   | terminateOnSingleStep
       (kernelStep : KernelStep)
-      (claimedPostCommit : StateCommit)
   /-- A party times out (BISECTION_RESPONSE_TIMEOUT exceeded).
       The loser is *derived* from `gs.turn` at apply-time: the
       party whose turn it is when the deadline elapses is the
@@ -232,16 +255,22 @@ def applyTransition (gs : GameState) :
   --   * Bisection depth hasn't exceeded the cap.
   --   * The midpoint's idx is strictly between low.idx and high.idx
   --     (i.e. the range is at least 2 steps wide).
-  | .submitMidpoint mp =>
+  | .submitMidpoint midpointCommit =>
     if gs.status ≠ .inProgress then .error .gameAlreadyEnded
     else if gs.pendingMidpoint.isSome then .error .midpointDuringResponse
     else if gs.depth ≥ MAX_BISECTION_DEPTH then
       .error .bisectionDepthExceeded
-    else if mp.idx ≤ gs.range.low.idx ∨ gs.range.high.idx ≤ mp.idx then
+    else if gs.range.midpointIdx ≤ gs.range.low.idx
+            ∨ gs.range.high.idx ≤ gs.range.midpointIdx then
+      -- The index is DERIVED, not supplied.  `KnomosisFaultProofGame`
+      -- computes the same value and applies the same guard; the only
+      -- way it can fire is a degenerate range (width ≤ 1), which is
+      -- what forces `terminateOnSingleStep` instead.
       .error .midpointOutOfRange
     else
       .ok { gs with
-              pendingMidpoint := some mp,
+              pendingMidpoint :=
+                some { idx := gs.range.midpointIdx, commit := midpointCommit },
               turn := gs.turn.flip }
 
   -- Respond by agreeing.  Range narrows to [mid.idx, high.idx].
@@ -278,16 +307,32 @@ def applyTransition (gs : GameState) :
                 depth := gs.depth + 1,
                 turn := gs.turn.flip }
 
-  -- Single-step termination.  The L1 step VM verifies the
-  -- claimed post-commit matches the kernelStepApply output.
-  | .terminateOnSingleStep step claimedPostCommit =>
+  -- Single-step termination.  The step VM re-executes the disputed
+  -- step from the COMMITTED pre-state and its output is compared
+  -- against the COMMITTED disputed endpoint.  Neither side of that
+  -- comparison comes from the caller.
+  | .terminateOnSingleStep step =>
     if gs.status ≠ .inProgress then .error .gameAlreadyEnded
     else if !gs.range.isSingleStep then
       .error .rangeNotSingleStep
+    else if gs.pendingMidpoint.isSome then
+      -- Mirrors `MidpointAlreadyPending` on L1: a bisection round is
+      -- open, so the range is not settled enough to terminate on.
+      -- This error existed but was unreachable.
+      .error .terminationDuringBisection
+    else if step.preStateCommit ≠ gs.range.low.commit then
+      -- On L1 this cannot arise: the contract passes `g.low.commit`
+      -- to the step VM itself.  In the Lean model the pre-state
+      -- travels inside the `KernelStep`, so the mismatch must be
+      -- rejected explicitly — otherwise a party could re-execute the
+      -- disputed step from a pre-state of their own choosing and
+      -- produce whatever post-commit they needed.
+      .ok { gs with
+              status :=
+                match gs.turn with
+                | .sequencer  => .challengerWon
+                | .challenger => .sequencerWon }
     else
-      -- The step VM determines correctness.  If kernelStepApply
-      -- agrees with the claimed post-commit, the responding party
-      -- (whose turn it is) wins; otherwise, they lose.
       match kernelStepApply step with
       | none =>
         -- Cell-proof verification failed; the responding party loses.
@@ -297,9 +342,9 @@ def applyTransition (gs : GameState) :
                   | .sequencer  => .challengerWon
                   | .challenger => .sequencerWon }
       | some computedPostCommit =>
-        if computedPostCommit = claimedPostCommit then
-          -- The responding party's claim matches the VM's output;
-          -- they win.
+        if computedPostCommit = gs.range.high.commit then
+          -- The step VM reproduces the committed endpoint, so the
+          -- responding party's position is upheld; they win.
           .ok { gs with
                   status :=
                     match gs.turn with
@@ -476,6 +521,87 @@ theorem range_narrows_on_response_disagree
   have h_high_idx : gs'.range.high.idx = mp.idx := by rw [h_hi_eq]
   rw [h_low_idx, h_high_idx]
   exact nat_sub_lt_sub_right _ _ _ h_lo_lt_mp h_mp_lt_hi
+
+/-! ## Halving (the canonical-midpoint strengthening)
+
+`range_narrows_on_response_*` above give *strict* narrowing, which
+is all an arbitrary interior midpoint supports.  Now that
+`submitMidpoint` derives the index as `gs.range.midpointIdx`, the
+pending midpoint of any reachable state is the canonical one and
+each response **halves** the range rather than merely shrinking
+it.  That is what upgrades `bisection_converges_after_enough_rounds`
+from a linear bound to a logarithmic one. -/
+
+/-- Ceiling-halving bound for both response directions, over bare
+    `Nat`.  `respondAgree` leaves `high - (lo+hi)/2`;
+    `respondDisagree` leaves `(lo+hi)/2 - lo`.  Both are at most
+    `⌈(hi - lo) / 2⌉ = (hi - lo + 1) / 2`.
+
+    Stated on `Nat` for the same reason as
+    `midpointIdx_degenerate_iff`: `omega` decides it directly once
+    the structure projections are out of the way. -/
+theorem midpoint_halves (lo hi : Nat) :
+    hi - (lo + hi) / 2 ≤ (hi - lo + 1) / 2 ∧
+    (lo + hi) / 2 - lo ≤ (hi - lo + 1) / 2 := by
+  omega
+
+/-- After a `respondAgree` on a canonical midpoint, the width is
+    at most `⌈w/2⌉`. -/
+theorem range_halves_on_response_agree
+    (gs gs' : GameState) (mp : Claim)
+    (h_pending : gs.pendingMidpoint = some mp)
+    (h_canonical : mp.idx = gs.range.midpointIdx)
+    (h_status : gs.status = .inProgress)
+    (h_apply : applyTransition gs .respondAgree = .ok gs') :
+    gs'.range.high.idx - gs'.range.low.idx ≤
+      (gs.range.high.idx - gs.range.low.idx + 1) / 2 := by
+  obtain ⟨h_lo_eq, h_hi_eq⟩ :=
+    applyTransition_respondAgree_shape gs gs' mp h_pending h_status h_apply
+  have h_low_idx : gs'.range.low.idx = mp.idx := by rw [h_lo_eq]
+  have h_high_idx : gs'.range.high.idx = gs.range.high.idx := by rw [h_hi_eq]
+  rw [h_low_idx, h_high_idx, h_canonical]
+  unfold DisputedRange.midpointIdx
+  exact (midpoint_halves gs.range.low.idx gs.range.high.idx).1
+
+/-- Symmetric halving bound for `respondDisagree`. -/
+theorem range_halves_on_response_disagree
+    (gs gs' : GameState) (mp : Claim)
+    (h_pending : gs.pendingMidpoint = some mp)
+    (h_canonical : mp.idx = gs.range.midpointIdx)
+    (h_status : gs.status = .inProgress)
+    (h_apply : applyTransition gs .respondDisagree = .ok gs') :
+    gs'.range.high.idx - gs'.range.low.idx ≤
+      (gs.range.high.idx - gs.range.low.idx + 1) / 2 := by
+  obtain ⟨h_lo_eq, h_hi_eq⟩ :=
+    applyTransition_respondDisagree_shape gs gs' mp h_pending h_status h_apply
+  have h_low_idx : gs'.range.low.idx = gs.range.low.idx := by rw [h_lo_eq]
+  have h_high_idx : gs'.range.high.idx = mp.idx := by rw [h_hi_eq]
+  rw [h_low_idx, h_high_idx, h_canonical]
+  unfold DisputedRange.midpointIdx
+  exact (midpoint_halves gs.range.low.idx gs.range.high.idx).2
+
+/-- Every midpoint `submitMidpoint` installs is the canonical one.
+    This is what lets a trace assume canonicality without taking it
+    on trust: no other value is reachable. -/
+theorem submitMidpoint_installs_canonical
+    (gs gs' : GameState) (c : StateCommit)
+    (h_apply : applyTransition gs (.submitMidpoint c) = .ok gs') :
+    gs'.pendingMidpoint = some { idx := gs.range.midpointIdx, commit := c } := by
+  -- Non-`only` `simp` at each branch: the three rejecting branches
+  -- reduce `h_apply` to `Except.error _ = Except.ok _`, which is
+  -- the contradiction that closes them.
+  unfold applyTransition at h_apply
+  by_cases h_status : gs.status = .inProgress
+  · by_cases h_pending : gs.pendingMidpoint.isSome
+    · simp [h_status, h_pending] at h_apply
+    · by_cases h_depth : MAX_BISECTION_DEPTH ≤ gs.depth
+      · simp [h_status, h_pending, h_depth] at h_apply
+      · by_cases h_oob : gs.range.midpointIdx ≤ gs.range.low.idx
+                          ∨ gs.range.high.idx ≤ gs.range.midpointIdx
+        · simp [h_status, h_pending, h_depth, h_oob] at h_apply
+        · simp [h_status, h_pending, h_depth, h_oob] at h_apply
+          rw [← h_apply]
+  · simp [h_status] at h_apply
 
 /-! ## Smoke checks -/
 

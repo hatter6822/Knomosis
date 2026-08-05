@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {IKnomosisDisputeVerifier} from "src/interfaces/IKnomosisDisputeVerifier.sol";
 import {IKnomosisBridge} from "src/interfaces/IKnomosisBridge.sol";
@@ -79,6 +79,80 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
     ///         constructor.  Immutable thereafter.
     mapping(address => bool) private _approvedAdjudicator;
     bytes32 public immutable approvedAdjudicatorRoot;
+
+    /// @notice Wei a challenger must post to `fileDispute`, refunded
+    ///         when the dispute is UPHELD and forfeited to the
+    ///         sequencer-stake contract when it is REJECTED.
+    ///
+    ///         Filing is permissionless by design — the dispute
+    ///         pipeline must stay available for as long as the bridge
+    ///         accepts state roots.  But an open dispute now LOCKS the
+    ///         sequencer's stake (see `openDisputeCount`), so without
+    ///         a cost to filing anyone could freeze the stake
+    ///         indefinitely by opening disputes and never resolving
+    ///         them.  The bond makes that attack cost the griefer the
+    ///         bond per open dispute while leaving an honest
+    ///         challenger whole.
+    uint256 public immutable challengerBond;
+
+    /// @notice Number of disputes currently in `STATUS_OPEN`.
+    ///
+    ///         Incremented by `fileDispute` and decremented on every
+    ///         terminal status transition.  `KnomosisSequencerStake`
+    ///         reads this to refuse a withdrawal while any dispute is
+    ///         open — the condition its lock is *supposed* to test.
+    ///         Its previous oracle,
+    ///         `IKnomosisBridge.hasOpenDisputeOlderThan`, answers a
+    ///         different question ("was a state root submitted inside
+    ///         the dispute window"), so once the window elapsed with
+    ///         no new root the sequencer could withdraw with a dispute
+    ///         still pending and `slash` would find nothing to take.
+    uint64 public openDisputeCount;
+
+    /// @notice The challenger's posted bond per dispute, held until a
+    ///         terminal verdict.  Zero for disputes filed while
+    ///         `challengerBond == 0`.
+    mapping(uint64 => uint256) public disputeBond;
+
+    /// @notice Settled-bond ledger, withdrawn by `claimBond()`.
+    ///
+    ///         Bond settlement is **pull**, not push, and that is
+    ///         load-bearing rather than stylistic.  A terminal verdict
+    ///         must not be blockable by the recipient of the bond:
+    ///         under a push model a challenger contract with a
+    ///         reverting `receive()` would make `finalizeUpheld`
+    ///         revert forever, and since an open dispute locks the
+    ///         sequencer's stake that is a permanent stake freeze —
+    ///         the exact attack the bond exists to price.  The forfeit
+    ///         leg cannot push either: `KnomosisSequencerStake`'s
+    ///         `receive()` deliberately rejects bare ETH (`deposit()`
+    ///         is sequencer-only), so a direct transfer there always
+    ///         reverts.  Crediting a balance and letting the recipient
+    ///         pull makes both legs unconditional.
+    mapping(address => uint256) public bondCredit;
+
+    /// @notice Emitted when a challenger's bond is credited back to
+    ///         them (dispute upheld).  Withdraw with `claimBond()`.
+    event ChallengerBondRefunded(uint64 indexed disputeId, address indexed challenger,
+                                 uint256 amount);
+
+    /// @notice Emitted when a challenger's bond is forfeited to the
+    ///         sequencer (dispute rejected).  Withdraw with
+    ///         `claimBond()`.
+    event ChallengerBondForfeited(uint64 indexed disputeId, address indexed challenger,
+                                  address indexed beneficiary, uint256 amount);
+
+    /// @notice Emitted when a settled bond is withdrawn.
+    event BondClaimed(address indexed beneficiary, uint256 amount);
+
+    /// @notice `fileDispute` was called with the wrong `msg.value`.
+    error IncorrectChallengerBond(uint256 sent, uint256 required);
+
+    /// @notice `claimBond()` was called with nothing credited.
+    error NoBondToClaim();
+
+    /// @notice A bond withdrawal transfer failed.
+    error BondTransferFailed();
 
     /// @notice The EIP-712 domain name used for **per-action signing**
     ///         by users.  This MUST match the domain used at the
@@ -200,6 +274,11 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
         address migration;
         uint8 quorumThreshold;
         address[] approvedAdjudicators;
+        /// @dev Wei a challenger must post to file a dispute.  See
+        ///      `challengerBond`.  Zero disables bonding (open
+        ///      filing), which is only safe where filing is
+        ///      permissioned by other means.
+        uint256 challengerBond;
     }
 
     constructor(ConstructorArgs memory args) {
@@ -234,6 +313,7 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
         identityRegistry = args.identityRegistry;
         migration = args.migration;
         quorumThreshold = args.quorumThreshold;
+        challengerBond = args.challengerBond;
 
         // Snapshot the approved adjudicator set.  Duplicates in
         // `approvedAdjudicators` are silently merged (the per-key
@@ -269,7 +349,14 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
         uint64 impugnedLogIndex,
         uint8 claimVariant,
         bytes calldata evidenceBlob
-    ) external returns (uint64 disputeId) {
+    ) external payable returns (uint64 disputeId) {
+        // The bond is what keeps permissionless filing from being a
+        // stake-freezing griefing vector now that an open dispute
+        // locks the sequencer's stake.  Exact-value (not `>=`) so a
+        // mis-sent amount fails loudly instead of being absorbed.
+        if (msg.value != challengerBond) {
+            revert IncorrectChallengerBond(msg.value, challengerBond);
+        }
         if (claimVariant != CLAIM_SIGNATURE_INVALID && claimVariant != CLAIM_NONCE_MISMATCH
             && claimVariant != CLAIM_DOUBLE_APPLY)
         {
@@ -291,7 +378,58 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
         // Emit `evidenceBlob` in the event for off-chain inspection;
         // we deliberately do NOT store it on-chain (the file-time
         // blob is unused by finalisation).
+        disputeBond[disputeId] = msg.value;
+        openDisputeCount += 1;
+
         emit DisputeFiled(disputeId, msg.sender, impugnedLogIndex, claimVariant, evidenceBlob);
+    }
+
+    /// @dev Close an open dispute: decrement the open counter and
+    ///      settle the challenger's bond.  Called from EVERY terminal
+    ///      status transition; a transition that forgot to call it
+    ///      would leave the sequencer's stake locked forever.
+    ///
+    ///      `refund == true` credits the bond back to the challenger
+    ///      (the dispute was upheld — they were right); `false`
+    ///      credits it to the sequencer (rejected — they were wrong,
+    ///      and the sequencer's stake was locked for the duration).
+    ///
+    ///      Storage-only: no external call, so no terminal transition
+    ///      can be blocked by a hostile bond recipient.  See
+    ///      `bondCredit`.
+    function _closeDispute(uint64 disputeId, address challenger, bool refund) internal {
+        if (openDisputeCount > 0) {
+            openDisputeCount -= 1;
+        }
+        uint256 bond = disputeBond[disputeId];
+        if (bond == 0) return;
+        disputeBond[disputeId] = 0;
+        if (refund) {
+            bondCredit[challenger] += bond;
+            emit ChallengerBondRefunded(disputeId, challenger, bond);
+        } else {
+            // The griefed party is the sequencer whose stake this
+            // dispute locked, not the stake escrow itself (which
+            // refuses bare ETH by design).
+            address beneficiary = IKnomosisSequencerStake(sequencerStake).sequencer();
+            bondCredit[beneficiary] += bond;
+            emit ChallengerBondForfeited(disputeId, challenger, beneficiary, bond);
+        }
+    }
+
+    /// @notice Withdraw every bond settled in the caller's favour.
+    ///         Refunds (upheld) and forfeits (rejected) accumulate in
+    ///         the same ledger; this is the only way ETH leaves this
+    ///         contract.
+    /// @return amount The wei transferred.
+    function claimBond() external nonReentrant returns (uint256 amount) {
+        amount = bondCredit[msg.sender];
+        if (amount == 0) revert NoBondToClaim();
+        // Effects before interaction.
+        bondCredit[msg.sender] = 0;
+        emit BondClaimed(msg.sender, amount);
+        (bool ok, ) = payable(msg.sender).call{value: amount}("");
+        if (!ok) revert BondTransferFailed();
     }
 
     // ------------------------------------------------------------------
@@ -631,6 +769,9 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
 
         // ---- Effects ----
         d.status = STATUS_UPHELD;
+        // The challenger was right: release the stake lock and return
+        // their bond.
+        _closeDispute(disputeId, d.challenger, /* refund */ true);
 
         // ---- Interactions: slash + revert ----
         // Both calls happen inside this transaction; if either
@@ -667,6 +808,9 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
         if (verdict != VERDICT_REJECTED) revert EvidenceNotRejected();
 
         d.status = STATUS_REJECTED;
+        // The challenger was wrong: release the stake lock and forfeit
+        // their bond toward the cost of answering.
+        _closeDispute(disputeId, d.challenger, /* refund */ false);
         emit DisputeRejected(disputeId);
     }
 

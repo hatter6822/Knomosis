@@ -39,9 +39,9 @@ by their logical sub-state + key:
 *witness* `ExtendedState` plus the cell tag and value.  Verification
 re-commits the witness state and checks that (a) the recommitted
 hash equals the public commit and (b) the witness state has the
-claimed cell value at the claimed tag.  Under `CollisionFree
-hashBytes`, the witness state is unique up to extensional
-equality.
+claimed cell value at the claimed tag.  Under collision-freeness of
+`hashBytes` on the commitment chain's pre-images, that witness state
+is the unique one behind the commit, up to extensional equality.
 
 This design is **mathematically equivalent to a Sparse Merkle
 Tree** for soundness purposes — the SMT version optimises the L1
@@ -52,7 +52,7 @@ module) is the simpler reference; the SMT form
 (`LegalKernel/FaultProof/Smt.lean`) is gas-efficient and used by
 L1 deployments.  Deployments select the form via the
 `KnomosisStateRootSubmission` parameter set; both have full Lean
-soundness proofs under `CollisionFree hashBytes`.
+soundness proofs under collision-freeness of `hashBytes` on the pre-images below.
 
 This module is **not** part of the trusted computing base.  Bugs
 here would only affect the deployment-side fault-proof tooling;
@@ -71,6 +71,19 @@ namespace FaultProof
 
 open LegalKernel.Authority
 open LegalKernel.Bridge
+
+/-! ## State commitment type
+
+Declared here rather than beside `commitExtendedState` because the
+cell layer has to name it — `commitExtendedStateSmt` is a state
+commitment built out of cells, so the type must sit below both the
+cell reader and the commitment function that consumes it.  The
+`abbrev` is `ByteArray` either way, so no consumer moves. -/
+
+/-- The 32-byte top-level state commitment.  The sequencer
+    publishes this value to L1 as the "state root"; the L1
+    fault-proof game contract holds it for dispute resolution. -/
+abbrev StateCommit : Type := ByteArray
 
 /-! ## `CellTag` (§12.1.4) -/
 
@@ -106,27 +119,105 @@ inductive CellTag
   /-- The bridge `nextWdId` counter (no key needed; singleton).
       Frozen tag 6. -/
   | bridgeNextWdId
+  /-- GP.11.8 L2 mirror of the L1 AMM ETH reserve.  Tag 7. -/
+  | bridgeAmmReserveEth
+  /-- GP.11.8 L2 mirror of the L1 AMM BOLD reserve.  Tag 8. -/
+  | bridgeAmmReserveBold
+  /-- GP.11.8 BOLD circuit-breaker flag.  Tag 9. -/
+  | bridgeBoldCircuitClosed
+  /-- GP.11.8 per-BOLD TVL cap.  Tag 10. -/
+  | bridgeBoldTvlCap
+  /-- GP.11.8 per-BOLD total locked value.  Tag 11. -/
+  | bridgeBoldTotalLockedValue
+  /-- GP.11.10 AMM kill-switch flag.  Tag 12. -/
+  | bridgeAmmDisabled
+  /-- An actor's epoch-budget cell (`lastSeenEpoch`,
+      `budgetBalance`).  Tag 13. -/
+  | epochBudget (actor : ActorId)
+  /-- The deployment's budget policy, whole.  Tag 14.
+
+      One cell, not three.  `BudgetPolicy` is a single value —
+      `.bounded freeTier actionCost currentEpoch` — and splitting it
+      across three tags made a cell write a read-modify-write (the
+      arm had to reconstruct the other two components out of the
+      state), cost three SMT leaves and three sibling paths where
+      every reader wants all three at once, and left an inconsistent
+      triple representable in the proof obligations even though it
+      was unreachable in practice. -/
+  | budgetPolicy
   deriving Repr, DecidableEq
 
 /-- Project a `CellTag` to its discriminator index, for canonical
     encoding and equality dispatch.  Aligns with the Solidity-side
     enum.  The frozen tag indices are:
     0 = balance, 1 = nonce, 2 = registry, 3 = localPolicy,
-    4 = bridgeConsumed, 5 = bridgePending, 6 = bridgeNextWdId. -/
+    4 = bridgeConsumed, 5 = bridgePending, 6 = bridgeNextWdId,
+    7 = bridgeAmmReserveEth, 8 = bridgeAmmReserveBold,
+    9 = bridgeBoldCircuitClosed, 10 = bridgeBoldTvlCap,
+    11 = bridgeBoldTotalLockedValue, 12 = bridgeAmmDisabled,
+    13 = epochBudget, 14 = budgetPolicy.
+
+    **0–6 are frozen** (they are mirrored in the Solidity `CellKind`
+    enum and pinned by the cross-stack corpus); 7–14 append to them.
+    Indices are never reused or reordered. -/
 def CellTag.kindIndex : CellTag → Nat
-  | .balance _ _      => 0
-  | .nonce _          => 1
-  | .registry _       => 2
-  | .localPolicy _    => 3
-  | .bridgeConsumed _ => 4
-  | .bridgePending _  => 5
-  | .bridgeNextWdId   => 6
+  | .balance _ _                => 0
+  | .nonce _                    => 1
+  | .registry _                 => 2
+  | .localPolicy _              => 3
+  | .bridgeConsumed _           => 4
+  | .bridgePending _            => 5
+  | .bridgeNextWdId             => 6
+  | .bridgeAmmReserveEth        => 7
+  | .bridgeAmmReserveBold       => 8
+  | .bridgeBoldCircuitClosed    => 9
+  | .bridgeBoldTvlCap           => 10
+  | .bridgeBoldTotalLockedValue => 11
+  | .bridgeAmmDisabled          => 12
+  | .epochBudget _              => 13
+  | .budgetPolicy               => 14
+
+/-- The two key components of a `CellTag`.  Singleton cells (the
+    bridge scalars, the budget policy) carry `(0, 0)`; the
+    kind index is what distinguishes them. -/
+def CellTag.keyParts : CellTag → Nat × Nat
+  | .balance r a                => (r.toNat, a.toNat)
+  | .nonce a                    => (a.toNat, 0)
+  | .registry a                 => (a.toNat, 0)
+  | .localPolicy a              => (a.toNat, 0)
+  -- `DepositId` / `WithdrawalId` are `Nat` already, so no `.toNat`.
+  | .bridgeConsumed d           => (d, 0)
+  | .bridgePending w            => (w, 0)
+  | .bridgeNextWdId             => (0, 0)
+  | .bridgeAmmReserveEth        => (0, 0)
+  | .bridgeAmmReserveBold       => (0, 0)
+  | .bridgeBoldCircuitClosed    => (0, 0)
+  | .bridgeBoldTvlCap           => (0, 0)
+  | .bridgeBoldTotalLockedValue => (0, 0)
+  | .bridgeAmmDisabled          => (0, 0)
+  | .epochBudget a              => (a.toNat, 0)
+  | .budgetPolicy               => (0, 0)
+
+/-- `(kindIndex, keyA, keyB)` — the canonical flat projection of a
+    cell tag.
+
+    One source of truth for a destructuring that had been written
+    out three times (the SMT key derivation, the cell-proof JSON
+    formatter, and the cross-stack fixture writer), each an
+    exhaustive match that had to be extended in lockstep.  A
+    divergence between them is a cross-stack key mismatch — the
+    failure mode where a proof for one cell verifies against
+    another. -/
+def CellTag.flatKey (t : CellTag) : Nat × Nat × Nat :=
+  let (a, b) := t.keyParts
+  (t.kindIndex, a, b)
+
 
 /-! ## `CellProof` (§12.1.4)
 
 The proof carries a *witness* `ExtendedState` from which the
 verifier can recompute the top-level commit and the cell at the
-claimed tag.  Under `CollisionFree hashBytes`, the witness state
+claimed tag.  Under collision-freeness of `hashBytes` on the pre-images below, the witness state
 is unique up to extensional equality, so a verifying proof
 authoritatively binds the cell value to the public commit.
 
@@ -147,7 +238,7 @@ implementation prioritises mathematical clarity over gas. -/
       1. `commitExtendedState witnessState = committed root`
       2. `getCellValue witnessState cellTag = cellValue`
 
-    Under `CollisionFree hashBytes`, condition 1 plus
+    Under collision-freeness of `hashBytes` on the pre-images below, condition 1 plus
     `commitExtendedState`'s injectivity (theorem #220) makes the
     `witnessState` unique up to extensional equality, so the
     verifier authoritatively binds `cellValue` to the public
@@ -160,6 +251,24 @@ structure CellProof where
   /-- The witness state from which the verifier can recompute
       the commitment and read the cell. -/
   witnessState  : ExtendedState
+  /-- The SMT opening for this cell, in the L1 wire format:
+      `bitmask(32 bytes) || siblings(N × 32 bytes)`.
+
+      **No default.**  It carried `:= ByteArray.empty` briefly, and
+      that is exactly the shape that lets an opening go missing without
+      anyone noticing: two of the cross-stack corpus's bulk builders
+      inherited the default and published proofs with no opening at
+      all, which the shape check caught and nothing else would have.
+      A field every construction site must state is a field no site can
+      forget.
+
+      Empty is still a representable value, and an honest one — it says
+      "this proof carries no opening" — but it is now a written choice
+      rather than the path of least resistance.  It is not a valid
+      opening for a populated tree (it would encode "every sibling is
+      the canonical empty sub-tree"), so it fails L1 intake rather than
+      passing with a hole. -/
+  proofData     : ByteArray
   deriving Repr
 
 /-- A bundle of cell proofs covering every cell read/written by
@@ -214,22 +323,25 @@ abbrev smtVerify := @verifySmtCellProof
 /-- Re-export: SMT cell-proof soundness theorem
     (`LegalKernel.FaultProof.smtCellProof_sound_under_collision_free`).
     Documents the operational binding property: under
-    `CollisionFree hashBytes`, the verifier accepts at most one
-    value per `(root, key)` pair. -/
+    collision-freeness of `hashBytes` on the proofs' own hash
+    pre-images, the verifier accepts at most one value per
+    `(root, key)` pair. -/
 theorem smtSound
     {K V : Type} [BitsKey K]
     [LegalKernel.Encoding.Encodable K] [LegalKernel.Encoding.Encodable V]
     (hVInj : Function.Injective
                 (LegalKernel.Encoding.Encodable.encode :
                   V → LegalKernel.Encoding.Stream))
-    (h_cf : Bridge.CollisionFree LegalKernel.Runtime.hashBytes)
     (root : ByteArray) (key : K) (v₁ v₂ : V)
     (proof₁ proof₂ : SmtCellProof)
+    (h_cf : Bridge.CollisionFreeOn
+      (smtCellProofPreimages key v₁ v₂ proof₁ proof₂)
+      LegalKernel.Runtime.hashBytes)
     (h_verify₁ : verifySmtCellProof root key v₁ proof₁ = true)
     (h_verify₂ : verifySmtCellProof root key v₂ proof₂ = true) :
     v₁ = v₂ :=
-  smtCellProof_sound_under_collision_free hVInj h_cf root key v₁ v₂
-    proof₁ proof₂ h_verify₁ h_verify₂
+  smtCellProof_sound_under_collision_free hVInj root key v₁ v₂
+    proof₁ proof₂ h_cf h_verify₁ h_verify₂
 
 end Cell
 

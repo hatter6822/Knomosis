@@ -114,20 +114,25 @@ def gameStateJson (gs : GameState) : Test.Bridge.CrossCheck.Json :=
     `Ok` with status unchanged.  Corrected. -/
 def transitionJson (t : GameTransition) : Test.Bridge.CrossCheck.Json :=
   match t with
-  | .submitMidpoint mp =>
-    .obj [ ("kind",     .str "SubmitMidpoint"),
-           ("midpoint", claimJson mp) ]
+  | .submitMidpoint midpointCommit =>
+    -- Only the COMMIT crosses the wire.  The index is derived by
+    -- `applyTransition` as `(low + high) / 2`, exactly as
+    -- `KnomosisFaultProofGame.submitMidpoint` derives `mpIdx`, so
+    -- shipping an index would be shipping a value neither side is
+    -- allowed to choose.
+    .obj [ ("kind",            .str "SubmitMidpoint"),
+           ("midpoint_commit", .str (commitHex midpointCommit)) ]
   | .respondAgree =>
     .obj [ ("kind", .str "RespondAgree") ]
   | .respondDisagree =>
     .obj [ ("kind", .str "RespondDisagree") ]
-  | .terminateOnSingleStep _ claimedPost =>
-    -- The Rust observer's `TerminateOnSingleStep` variant does
-    -- not include the step itself (the L1 step VM is the
-    -- authority); only the claimed post-commit ships over the
-    -- wire.
-    .obj [ ("kind",                .str "TerminateOnSingleStep"),
-           ("claimed_post_commit", .str (commitHex claimedPost)) ]
+  | .terminateOnSingleStep _ =>
+    -- Nothing but the tag.  The step itself stays off the wire (the
+    -- L1 step VM is the authority), and there is no
+    -- `claimed_post_commit` any more: the contract compares the step
+    -- VM's output against the on-chain `g.high.commit`, so the claim
+    -- is not the caller's to make.
+    .obj [ ("kind", .str "TerminateOnSingleStep") ]
   | .timeoutLoss =>
     .obj [ ("kind", .str "TimeoutLoss") ]
 
@@ -258,7 +263,7 @@ def traceSingleStepAgree : Trace :=
   mkTrace "single-step-agree-1"
     "Two-step range, sequencer submits mid=1, challenger agrees"
     init
-    [ .submitMidpoint { idx := 1, commit := mkCommit 150 }
+    [ .submitMidpoint (mkCommit 150)
     , .respondAgree ]
 
 /-- Trace 2: single-step bisection — submit midpoint, respond
@@ -268,7 +273,7 @@ def traceSingleStepDisagree : Trace :=
   mkTrace "single-step-disagree-1"
     "Two-step range, sequencer submits mid=1, challenger disagrees"
     init
-    [ .submitMidpoint { idx := 1, commit := mkCommit 150 }
+    [ .submitMidpoint (mkCommit 150)
     , .respondDisagree ]
 
 /-- Trace 3: 4-round bisection ending in `respond-agree`. -/
@@ -277,13 +282,13 @@ def traceBisection4Agree : Trace :=
   mkTrace "bisection-4-agree"
     "16-step range, 4 rounds of bisection, final agree"
     init
-    [ .submitMidpoint { idx := 8, commit := mkCommit 150 }
+    [ .submitMidpoint (mkCommit 150)
     , .respondAgree
-    , .submitMidpoint { idx := 12, commit := mkCommit 170 }
+    , .submitMidpoint (mkCommit 170)
     , .respondAgree
-    , .submitMidpoint { idx := 14, commit := mkCommit 185 }
+    , .submitMidpoint (mkCommit 185)
     , .respondDisagree
-    , .submitMidpoint { idx := 13, commit := mkCommit 177 }
+    , .submitMidpoint (mkCommit 177)
     , .respondAgree ]
 
 /-- Trace 4: timeout on sequencer's turn (challenger calls timeout
@@ -320,41 +325,59 @@ def traceSubmitWhilePending : Trace :=
   mkTrace "err-submit-while-pending"
     "Submit first midpoint, then try second while first is pending"
     init
-    [ .submitMidpoint { idx := 2, commit := mkCommit 150 }
-    , .submitMidpoint { idx := 1, commit := mkCommit 175 } ]
+    [ .submitMidpoint (mkCommit 150)
+    , .submitMidpoint (mkCommit 175) ]
 
-/-- Trace 8: error path — submit midpoint outside range (low). -/
-def traceMidpointBelowRange : Trace :=
-  let init := mkInitialState 1 2 10 20 100 200 .sequencer
-  mkTrace "err-midpoint-below-range"
-    "Submit a midpoint with idx ≤ low.idx"
-    init
-    [ .submitMidpoint { idx := 5, commit := mkCommit 150 } ]
+/-! The four traces below used to submit a caller-chosen midpoint
+    index outside the range (`5`, `25`, `10`, `20` against `[10,
+    20]`) and assert `MidpointOutOfRange`.  That is no longer
+    expressible: `submitMidpoint` carries only a commit and
+    `applyTransition` derives the index as `(low + high) / 2`,
+    mirroring the L1 contract's `mpIdx`.  With the index derived,
+    the guard can fire for exactly one reason — the range is too
+    narrow to bisect — so the four cases are retargeted at the
+    conditions that remain reachable, plus a positive control
+    pinning the derived index itself. -/
 
-/-- Trace 9: error path — submit midpoint outside range (high). -/
-def traceMidpointAboveRange : Trace :=
+/-- Trace 8: the derived midpoint IS the canonical one.  Positive
+    control: `[10, 20]` must bisect at `15`, whatever commit the
+    caller supplies. -/
+def traceMidpointDerived : Trace :=
   let init := mkInitialState 1 2 10 20 100 200 .sequencer
-  mkTrace "err-midpoint-above-range"
-    "Submit a midpoint with idx ≥ high.idx"
+  mkTrace "midpoint-derived-canonical"
+    "Caller supplies only a commit; the index is derived as (10+20)/2 = 15"
     init
-    [ .submitMidpoint { idx := 25, commit := mkCommit 150 } ]
+    [ .submitMidpoint (mkCommit 150) ]
 
-/-- Trace 10: error path — submit midpoint at `low.idx` (must be
-    strictly between). -/
-def traceMidpointAtLow : Trace :=
-  let init := mkInitialState 1 2 10 20 100 200 .sequencer
-  mkTrace "err-midpoint-at-low"
-    "Submit midpoint at low.idx (boundary case)"
+/-- Trace 9: error path — single-step range.  `(10 + 11) / 2 = 10`
+    lands on `low`, so bisection is impossible and the responder
+    owes `terminateOnSingleStep` instead. -/
+def traceMidpointSingleStepRange : Trace :=
+  let init := mkInitialState 1 2 10 11 100 200 .sequencer
+  mkTrace "err-midpoint-single-step-range"
+    "Width-1 range: the derived midpoint collapses onto low.idx"
     init
-    [ .submitMidpoint { idx := 10, commit := mkCommit 150 } ]
+    [ .submitMidpoint (mkCommit 150) ]
 
-/-- Trace 11: error path — submit midpoint at `high.idx`. -/
-def traceMidpointAtHigh : Trace :=
-  let init := mkInitialState 1 2 10 20 100 200 .sequencer
-  mkTrace "err-midpoint-at-high"
-    "Submit midpoint at high.idx (boundary case)"
+/-- Trace 10: error path — empty range.  `(10 + 10) / 2 = 10`
+    equals both endpoints. -/
+def traceMidpointEmptyRange : Trace :=
+  let init := mkInitialState 1 2 10 10 100 200 .sequencer
+  mkTrace "err-midpoint-empty-range"
+    "Width-0 range: the derived midpoint equals both endpoints"
     init
-    [ .submitMidpoint { idx := 20, commit := mkCommit 150 } ]
+    [ .submitMidpoint (mkCommit 150) ]
+
+/-- Trace 11: error path — inverted range (`high < low`).  A
+    malformed game state the contract's `initiateChallenge` guard
+    rejects up front; the transition must refuse it too rather
+    than bisect a negative width. -/
+def traceMidpointInvertedRange : Trace :=
+  let init := mkInitialState 1 2 20 10 100 200 .sequencer
+  mkTrace "err-midpoint-inverted-range"
+    "high.idx < low.idx: the derived midpoint is not interior"
+    init
+    [ .submitMidpoint (mkCommit 150) ]
 
 /-- Trace 12: error path — apply transition to a settled game.
     First settle via timeout, then try another transition. -/
@@ -364,7 +387,7 @@ def traceTransitionToSettled : Trace :=
     "Game settles via timeout, then we try to submit a midpoint"
     init
     [ .timeoutLoss
-    , .submitMidpoint { idx := 2, commit := mkCommit 150 } ]
+    , .submitMidpoint (mkCommit 150) ]
 
 /-- Trace 13: error path — `respondDisagree` with no pending. -/
 def traceRespondDisagreeNoPending : Trace :=
@@ -380,9 +403,9 @@ def traceBisection2ChallengerStart : Trace :=
   mkTrace "bisection-2-challenger-start"
     "4-step range starting on challenger's turn, 2-round bisection"
     init
-    [ .submitMidpoint { idx := 2, commit := mkCommit 150 }
+    [ .submitMidpoint (mkCommit 150)
     , .respondDisagree
-    , .submitMidpoint { idx := 1, commit := mkCommit 130 }
+    , .submitMidpoint (mkCommit 130)
     , .respondAgree ]
 
 /-- Trace 15: 8-round deep bisection. -/
@@ -391,21 +414,21 @@ def traceBisection8Deep : Trace :=
   mkTrace "bisection-8-deep"
     "256-step range, 8-round bisection narrowing to single step"
     init
-    [ .submitMidpoint { idx := 128, commit := mkCommit 150 }
+    [ .submitMidpoint (mkCommit 150)
     , .respondAgree
-    , .submitMidpoint { idx := 192, commit := mkCommit 175 }
+    , .submitMidpoint (mkCommit 175)
     , .respondAgree
-    , .submitMidpoint { idx := 224, commit := mkCommit 188 }
+    , .submitMidpoint (mkCommit 188)
     , .respondAgree
-    , .submitMidpoint { idx := 240, commit := mkCommit 194 }
+    , .submitMidpoint (mkCommit 194)
     , .respondAgree
-    , .submitMidpoint { idx := 248, commit := mkCommit 197 }
+    , .submitMidpoint (mkCommit 197)
     , .respondAgree
-    , .submitMidpoint { idx := 252, commit := mkCommit 199 }
+    , .submitMidpoint (mkCommit 199)
     , .respondAgree
-    , .submitMidpoint { idx := 254, commit := mkCommit 200 }
+    , .submitMidpoint (mkCommit 200)
     , .respondAgree
-    , .submitMidpoint { idx := 255, commit := mkCommit 201 }
+    , .submitMidpoint (mkCommit 201)
     , .respondAgree ]
 
 /-- Generate happy-path bisection traces of length 2^N for N in
@@ -427,7 +450,7 @@ def happyTraces : List Trace :=
         else
           let mid := (lowIdx + highIdx) / 2
           let commit := mkCommit seedAcc
-          .submitMidpoint { idx := mid, commit := commit } ::
+          .submitMidpoint (commit) ::
           .respondAgree ::
           buildSeq mid highIdx (seedAcc + 17) fuel
     let seq := buildSeq 0 highIdx 100 (n + 2)
@@ -440,10 +463,10 @@ def happyTraces : List Trace :=
 def errorTraces : List Trace :=
   [ traceRespondAgreeNoPending
   , traceSubmitWhilePending
-  , traceMidpointBelowRange
-  , traceMidpointAboveRange
-  , traceMidpointAtLow
-  , traceMidpointAtHigh
+  , traceMidpointDerived
+  , traceMidpointSingleStepRange
+  , traceMidpointEmptyRange
+  , traceMidpointInvertedRange
   , traceTransitionToSettled
   , traceRespondDisagreeNoPending ]
 
@@ -465,11 +488,11 @@ def multiRoundTraces : List Trace :=
     mkTrace "bisection-mixed-responses"
       "8-step range with alternating agree/disagree"
       init
-      [ .submitMidpoint { idx := 4, commit := mkCommit 150 }
+      [ .submitMidpoint (mkCommit 150)
       , .respondDisagree
-      , .submitMidpoint { idx := 2, commit := mkCommit 140 }
+      , .submitMidpoint (mkCommit 140)
       , .respondAgree
-      , .submitMidpoint { idx := 3, commit := mkCommit 145 }
+      , .submitMidpoint (mkCommit 145)
       , .respondAgree ] ]
 
 /-- Generate "varied actor identity" traces (different sequencer
@@ -477,20 +500,20 @@ def multiRoundTraces : List Trace :=
 def variedActorTraces : List Trace :=
   [ let init := mkInitialState 42 99 0 4 100 200 .sequencer
     mkTrace "varied-actors-1" "Sequencer=42, challenger=99" init
-      [ .submitMidpoint { idx := 2, commit := mkCommit 150 }
+      [ .submitMidpoint (mkCommit 150)
       , .respondAgree ]
   , let init := mkInitialState 1000 2000 0 4 100 200 .sequencer
     mkTrace "varied-actors-2" "Sequencer=1000, challenger=2000" init
-      [ .submitMidpoint { idx := 2, commit := mkCommit 150 }
+      [ .submitMidpoint (mkCommit 150)
       , .respondDisagree ]
   , let init := mkInitialState (UInt64.ofNat 0xFFFF) (UInt64.ofNat 0xFFFE)
                   0 4 100 200 .challenger
     mkTrace "varied-actors-3" "Sequencer=0xFFFF, challenger=0xFFFE" init
-      [ .submitMidpoint { idx := 2, commit := mkCommit 150 }
+      [ .submitMidpoint (mkCommit 150)
       , .respondAgree ]
   , let init := mkInitialState 0 1 0 4 100 200 .sequencer
     mkTrace "varied-actors-4" "Sequencer=0, challenger=1 (edge case)" init
-      [ .submitMidpoint { idx := 2, commit := mkCommit 150 }
+      [ .submitMidpoint (mkCommit 150)
       , .respondAgree ] ]
 
 /-- Generate "varied bond" traces (different bond amounts).
@@ -501,7 +524,7 @@ def variedBondTraces : List Trace :=
     let init := { base with sequencerBond := seqBond
                            , challengerBond := chBond }
     mkTrace id desc init
-      [ .submitMidpoint { idx := 2, commit := mkCommit 150 }
+      [ .submitMidpoint (mkCommit 150)
       , .respondAgree ]
   [ mk 1 1 .sequencer "varied-bond-min" "Both bonds = 1 (min)"
   , mk 100000 1 .sequencer "varied-bond-asymmetric-1"
@@ -522,10 +545,10 @@ def depthCapTraces : List Trace :=
     mkTrace id desc init [ action ]
   [ mkAtDepth 63 "depth-63-submit-allowed"
       "Depth=63 submit allowed (just under cap)"
-      (.submitMidpoint { idx := 2, commit := mkCommit 150 })
+      (.submitMidpoint (mkCommit 150))
   , mkAtDepth 64 "depth-64-submit-blocked"
       "Depth=64 submit blocked by cap"
-      (.submitMidpoint { idx := 2, commit := mkCommit 150 })
+      (.submitMidpoint (mkCommit 150))
   -- For respondAgree we also need the pending midpoint set; use
   -- the post-step state from a non-cap submit.
   , let base := mkInitialState 1 2 0 4 100 200 .sequencer
@@ -581,10 +604,9 @@ def proceduralBatch : List Trace :=
     mkTrace s!"procedural-{i}"
       s!"Procedurally-generated trace #{i}"
       init
-      [ .submitMidpoint { idx := 4, commit := mkCommit (100 + i) }
+      [ .submitMidpoint (mkCommit (100 + i))
       , if agree then .respondAgree else .respondDisagree
-      , .submitMidpoint { idx := if agree then 6 else 2
-                        , commit := mkCommit (150 + i) }
+      , .submitMidpoint (mkCommit (150 + i))
       , if agree then .respondAgree else .respondDisagree ])
 
 /-- The full corpus, exposed for the test suite. -/
@@ -702,7 +724,7 @@ def tests : List Test.TestCase :=
         for t in corpus do
           for s in t.steps do
             match s.transition with
-            | .terminateOnSingleStep _ _ =>
+            | .terminateOnSingleStep _ =>
               throw (IO.userError
                 s!"trace {t.id} emits TerminateOnSingleStep; this is disallowed (Lean/Rust diverge on terminate outcome — see transitionJson docstring)")
             | .submitMidpoint _   => pure ()

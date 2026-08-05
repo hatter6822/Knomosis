@@ -8,9 +8,18 @@
 #
 # Every line lists one Lean module name that the trusted-core source files
 # (`LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean`) are permitted
-# to `import`.  Project-internal modules under `LegalKernel.*` are always
-# allowed and need not be listed here; the audit tool whitelists them
-# unconditionally.
+# to `import`.
+#
+# Project-internal modules are NOT whitelisted wholesale.  `tcb_audit`
+# additionally accepts exactly the two entries in
+# `Tools.Common.tcbInternalImports` — `LegalKernel.Kernel` and
+# `LegalKernel.RBMapLemmas`, the TCB-core files themselves — and nothing
+# else under `LegalKernel.*`.  Importing any other project module into a
+# TCB-core file fails the gate, which is the point: `Tools/TcbAudit.lean`
+# records that whitelisting the namespace "would allow the TCB to import a
+# non-TCB module (e.g. `LegalKernel.Laws.Transfer`), expanding the TCB
+# silently".  The previous wording said the opposite and would have told a
+# reviewer an unreviewed TCB expansion was permitted.
 #
 # Adding a line to this file is a TCB expansion and triggers the
 # two-reviewer gate (Genesis Plan §13.6 / CLAUDE.md "Two reviewer rule").

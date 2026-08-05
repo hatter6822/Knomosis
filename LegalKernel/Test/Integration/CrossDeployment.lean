@@ -124,6 +124,86 @@ def emptyLogReplayAcceptsUnderAnyDeployment : TestCase := {
       throw <| IO.userError "empty log unexpectedly rejected under some deploymentId"
 }
 
+/-- The regression the pre-existing cases could not reach: a
+    **non-empty** log.
+
+    `bootstrap` accepted a `deploymentId`, stored it in the returned
+    `RuntimeState`, and then replayed through the back-compat `replay`
+    alias — which hard-codes `ByteArray.empty` as the signature domain
+    separator.  So the flag was threaded everywhere except the one
+    operation that consumes it: entries signed under a non-empty
+    deployment id were re-verified against the empty domain and a node
+    could never re-bootstrap its own log.
+
+    Every existing case in this file deletes the log first, and an
+    empty log has no signatures to verify — which is exactly why the
+    defect survived them.  This case writes one signed entry, then
+    asserts the from-log path accepts under the producing id and
+    rejects under a different one. -/
+def bootstrapVerifiesNonEmptyLogUnderItsDeploymentId : TestCase := {
+  name := "AR.23.1: bootstrap re-verifies a non-empty log under its deploymentId"
+  body := do
+    let path := System.FilePath.mk "/tmp/knomosis-ar23-nonempty-log.bin"
+    if (← path.pathExists) then IO.FS.removeFile path
+    -- Seed actor 10 with balance so a transfer is admissible, and
+    -- register its mock key so `mockVerify` has something to check.
+    let pk := mockPubKey 10
+    let genesis : ExtendedState :=
+      { ExtendedState.empty with
+        base         := setBalance ExtendedState.empty.base 1 10 100
+      , registry     := ExtendedState.empty.registry.insert 10 pk
+        -- A free tier the single transfer can pay for; the default
+        -- policy admits nothing.
+      , budgetPolicy := .bounded 5 1 1 }
+    let rs0 : RuntimeState :=
+      { policy       := AuthorityPolicy.unrestricted
+      , state        := genesis
+      , prevHash     := zeroHash
+      , logIndex     := 0
+      , logPath      := path
+      , deploymentId := deploymentId1
+      , epochLength  := 0 }
+    -- One transfer, signed under deployment 1's domain.
+    let action : Action := .transfer 1 10 20 5
+    let msg := Authority.signingInput action 10 0 deploymentId1
+    -- `mockVerify` accepts any `0xFF`-prefixed signature REGARDLESS of
+    -- the message, so it cannot observe which domain separator the
+    -- caller used — which is why no existing case here could catch
+    -- this.  This verifier is message-sensitive: it accepts only the
+    -- exact signing input produced under `deploymentId1`, so a replay
+    -- under any other deployment id fails.
+    let domainSensitiveVerify : PublicKey → ByteArray → Signature → Bool :=
+      fun _pk m sig => m.data == msg.data && mockVerify pk msg sig
+    let st : SignedAction :=
+      { action := action, signer := 10, nonce := 0, sig := mockSign pk msg }
+    match (← processSignedActionWith domainSensitiveVerify deploymentId1 rs0 st) with
+    | .error e => throw <| IO.userError s!"writing the log entry failed: {repr e}"
+    | .ok _ => pure ()
+    -- The producing deployment id re-verifies the entry.  `logIndex = 1`
+    -- is the load-bearing assertion: it proves the entry was actually
+    -- replayed rather than the log being read as empty.
+    match (← bootstrapWith domainSensitiveVerify AuthorityPolicy.unrestricted
+                           genesis path (deploymentId := deploymentId1)) with
+    | .ok (rs, _) =>
+      assertEq (expected := 1) (actual := rs.logIndex)
+        "the signed entry was replayed, not skipped"
+    | .error e =>
+      throw <| IO.userError
+        s!"BUG: a log signed under d₁ failed to bootstrap under d₁: {repr e}"
+    -- A DIFFERENT deployment id must reject it.  Before the fix,
+    -- `bootstrap` replayed through the back-compat `replay` alias,
+    -- which hard-codes `ByteArray.empty` — so BOTH ids produced the
+    -- empty-domain signing input, this call succeeded, and the flag was
+    -- decorative.
+    match (← bootstrapWith domainSensitiveVerify AuthorityPolicy.unrestricted
+                           genesis path (deploymentId := deploymentId2)) with
+    | .ok _ =>
+      throw <| IO.userError
+        "BUG: a log signed under d₁ bootstrapped under d₂ (domain separator ignored)"
+    | .error _ => pure ()
+    IO.FS.removeFile path
+}
+
 /-- AR.23.1 — term-level API stability for the parameterised replay
     entry: `replayWith` has the documented signature so a future
     refactor that changes the parameter order or breaks the
@@ -142,6 +222,7 @@ def replayWithAPI : TestCase := {
 def tests : List TestCase :=
   [ deploymentIdsDistinct
   , bootstrapPreservesDeploymentId
+  , bootstrapVerifiesNonEmptyLogUnderItsDeploymentId
   , emptyLogReplayAcceptsUnderAnyDeployment
   , replayWithAPI
   ]

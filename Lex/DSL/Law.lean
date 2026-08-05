@@ -102,6 +102,75 @@ namespace LegalKernel.DSL
 
 open Lean Lean.Elab Lean.Elab.Command
 
+namespace Lex
+
+/-! ## `ImplStmt` → synthesizer input
+
+`Lex/DSL/Property.lean`'s `synth_local`, `synth_freeze_preserving`
+and `dispatchSynthesizerResourceAware` all take
+`List (ImplStmtKind × Option String)` and their docstrings direct
+callers to build it "via `ImplStmt.kindAndResource` (defined in
+`LexImplCalculus.lean`)".  No such function existed anywhere, so the
+resource-aware dispatch had no way to be called with real resource
+info and the `local [S]` / `freeze_preserving [S]` claims could only
+reach the kind-only fallbacks — which admit any resource set.
+
+The adapter lives here rather than in `ImplCalculus.lean` because
+`ImplStmtKind` is declared in `Property.lean` and neither of those
+two modules imports the other; this module is the first that sees
+both. -/
+
+/-- Project an `ImplStmt` to the synthesizer's `(kind, resource)`
+    pair.
+
+    The resource is `some r` exactly for the statements that name
+    one — the four balance-moving primitives and
+    `freeze_resource` — and `none` for the authority-layer,
+    control-flow and escape-hatch shapes, which carry no resource
+    for a `local [S]` claim to be checked against.
+
+    The two forbidden shapes (`revokeKey`, `bareSetBalance`) map to
+    `.bareTerm`: they are rejected by their own diagnostics (L022 /
+    L010) before a synthesizer runs, and classifying them as opaque
+    here means that if one ever did reach a synthesizer it would be
+    refused rather than silently admitted. -/
+def ImplStmt.kindAndResource : ImplStmt → ImplStmtKind × Option String
+  | .flow r _ _ _          => (.flow, some r)
+  | .mint r _ _            => (.mint, some r)
+  | .burn r _ _            => (.burn, some r)
+  | .reward r _ _          => (.reward, some r)
+  | .freezeResource r      => (.freezeResource, some r)
+  | .registerKey _ _       => (.registerKey, none)
+  | .registerIdentity _ _  => (.registerIdentity, none)
+  | .forLoop _ _ _         => (.forLoop, none)
+  | .ifStmt _ _ _          => (.ifStmt, none)
+  | .letBind _ _           => (.letBind, none)
+  | .bareTerm _            => (.bareTerm, none)
+  | .revokeKey _           => (.bareTerm, none)
+  | .bareSetBalance _      => (.bareTerm, none)
+
+/-- Lift `ImplStmt.kindAndResource` over a statement list — the
+    exact shape `dispatchSynthesizerResourceAware` consumes. -/
+def implStmtsToKindAndResource (stmts : List ImplStmt) :
+    List (ImplStmtKind × Option String) :=
+  stmts.map ImplStmt.kindAndResource
+
+/-- The kind projection agrees with the kind-only view, so the
+    resource-aware and kind-only dispatch paths classify every
+    statement identically.  Pins the adapter against
+    `ImplStmt.effectKind`'s sibling classification drifting apart
+    from it. -/
+theorem kindAndResource_resource_iff_balance_bearing (s : ImplStmt) :
+    (ImplStmt.kindAndResource s).2.isSome =
+      (match s with
+       | .flow _ _ _ _ | .mint _ _ _ | .burn _ _ _
+       | .reward _ _ _ | .freezeResource _ => true
+       | _ => false) := by
+  cases s <;> rfl
+
+end Lex
+
+
 /-! ## Surface syntax declarations (LX.6) -/
 
 set_option linter.missingDocs false
@@ -808,7 +877,23 @@ elab_rules : command
       let parsed := LegalKernel.DSL.Lex.parsePropertyList env satisfiesNames
       for p in parsed do
         match p with
-        | .ok _ => pure ()  -- recognised; synthesizer dispatch is M2
+        -- NOT dispatched to a synthesizer here, and the reason is
+        -- specific rather than "M2 work": `parsePropertyList`
+        -- returns a bare `PropertyKind`, dropping the payload that
+        -- the resource-aware synthesizers need — the `[S]` of a
+        -- `local [S]` / `freeze_preserving [S]` claim and the `[a]`
+        -- of `nonce_advances [a]`.  Calling
+        -- `dispatchSynthesizerResourceAware` with empty sets checks
+        -- every resource-bearing statement against the EMPTY set and
+        -- every nonce claim against an empty actor name, so it
+        -- refutes claims that are in fact correct.  Surfacing the
+        -- payloads from the parser is the prerequisite; see
+        -- `docs/audits/19-findings-and-followups.md`.
+        --
+        -- `ImplStmt.kindAndResource` / `implStmtsToKindAndResource`
+        -- (this module) supply the other half of that call and are
+        -- ready for it.
+        | .ok _ => pure ()
         | .unknownName uName =>
           Lean.logErrorAt name.raw
             (LegalKernel.DSL.Lex.L020Message uName)

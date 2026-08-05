@@ -21,7 +21,7 @@ unprovable hypotheses**:
     distinct encoded bytes imply distinct values.  Operator-
     facing form: if the wire bytes differ, the values differ.
   * **`commitState` byte-injectivity for `setBalance`** — under
-    `CollisionFree hashBytes`, equal commits of two
+    collision-freeness on the two encodings, equal commits of two
     `setBalance`-modified states imply equal `State.encode` byte
     streams.  Composes the existing
     `commitState_bytes_injective_under_collision_free` lemma.
@@ -56,15 +56,19 @@ open LegalKernel.Runtime
 
 /-! ## #213 — commit-after-setBalance byte injectivity -/
 
-/-- #213 (byte form) — under `CollisionFree hashBytes`, equal
-    `commitState` outputs of two `setBalance`-modified states
-    imply equal `State.encode` byte streams.  Composes the
-    existing `commitState_bytes_injective_under_collision_free`
-    lemma in `Commit.lean`. -/
+/-- #213 (byte form) — under collision-freeness on the two states'
+    own encodings, equal `commitState` outputs of two
+    `setBalance`-modified states imply equal `State.encode` byte
+    streams.  Composes the existing
+    `commitState_bytes_injective_under_collision_free` lemma in
+    `Commit.lean`. -/
 theorem commitState_setBalance_bytes_inj_under_collision_free
     (s : LegalKernel.State) (r : ResourceId) (a : ActorId)
     (v₁ v₂ : Amount)
-    (h_cf : Bridge.CollisionFree Runtime.hashBytes)
+    (h_cf : Bridge.CollisionFreeOn
+      [ ByteArray.mk (Encoding.State.encode (setBalance s r a v₁)).toArray
+      , ByteArray.mk (Encoding.State.encode (setBalance s r a v₂)).toArray ]
+      Runtime.hashBytes)
     (h_eq : commitState (setBalance s r a v₁) =
             commitState (setBalance s r a v₂)) :
     ByteArray.mk (Encoding.State.encode (setBalance s r a v₁)).toArray =

@@ -36,7 +36,7 @@ use knomosis_indexer::client::SubscribeClient;
 use knomosis_indexer::daemon::{consume_stream, ConsumeOutcome};
 use knomosis_indexer::decoder::encode_event;
 use knomosis_indexer::event::Event;
-use knomosis_indexer::indexer::{Indexer, IndexerError};
+use knomosis_indexer::indexer::{Indexer, IndexerError, INDEXER_MAX_BATCH_EVENTS};
 use knomosis_storage::sqlite::SqliteStorage;
 use knomosis_storage::storage::Storage;
 use std::io::{Read, Write};
@@ -146,6 +146,46 @@ fn partial_batch_on_eof_not_committed() {
     // Cursor MUST remain at 0 — the in-flight batch was discarded.
     assert_eq!(indexer.cursor(), 0);
     // Neither balance should be set.
+    assert_eq!(storage.scan(b"b/").unwrap().len(), 0);
+
+    let _ = server.join().unwrap();
+}
+
+/// **The in-flight batch accumulator is bounded.**
+///
+/// `apply_batch` checks `INDEXER_MAX_BATCH_EVENTS`, but it only runs
+/// when the seq ADVANCES — and a peer that repeats one seq forever
+/// never advances it, so the commit-time check was unreachable and the
+/// accumulator grew until the process was killed.  The cap is now
+/// applied at push time, so a peer flooding one seq halts with a typed
+/// `BatchTooLarge` instead of exhausting memory.
+///
+/// This sends `INDEXER_MAX_BATCH_EVENTS + 1` events all at seq 1 — a
+/// shape the pre-fix code accepted without complaint.
+#[test]
+fn repeated_seq_flood_halts_on_the_batch_cap() {
+    let (listener, addr) = bind_listener();
+    let mut frames = Vec::with_capacity(INDEXER_MAX_BATCH_EVENTS + 1);
+    for i in 0..=INDEXER_MAX_BATCH_EVENTS {
+        let actor = u64::try_from(i).unwrap() + 1;
+        frames.push(event_frame(1, &balance_changed_bytes(0, actor, 0, 100)));
+    }
+    let server = thread::spawn(move || run_mock_server(listener, frames, true));
+
+    let storage = SqliteStorage::open_in_memory().unwrap();
+    let mut indexer = Indexer::open(&storage).unwrap();
+
+    let mut client = SubscribeClient::connect(&addr, 0, 1024 * 1024).unwrap();
+    let outcome = consume_stream(&mut indexer, &mut client);
+    assert!(
+        matches!(
+            outcome,
+            ConsumeOutcome::IndexerError(IndexerError::BatchTooLarge { .. })
+        ),
+        "expected BatchTooLarge, got {outcome:?}"
+    );
+    // Nothing was committed: the batch never completed.
+    assert_eq!(indexer.cursor(), 0);
     assert_eq!(storage.scan(b"b/").unwrap().len(), 0);
 
     let _ = server.join().unwrap();

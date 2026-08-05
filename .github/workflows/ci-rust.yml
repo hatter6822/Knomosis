@@ -54,21 +54,30 @@ on:
       - 'runtime/**'
       # CI definition itself.
       - '.github/workflows/ci-rust.yml'
-      # The Lean-sourced cross-stack fixture the Rust differential
-      # (`knomosis-l1-ingest/tests/cross_stack_lean_action.rs`)
-      # consumes lives in the Solidity tree (the shared cross-check
+      # The Lean-sourced cross-stack fixtures the Rust differentials
+      # consume live in the Solidity tree (the shared cross-check
       # fixtures dir).  Without this entry a PR that regenerates,
-      # moves, or deletes ONLY the fixture would not trigger the
-      # Rust workflow, so the Lean→Rust byte-equivalence check
-      # (and the CI-fail-on-absence guard) would not run.  GP.6.1.
-      - 'solidity/test/CrossCheck/fixtures/deposit_with_fee_action.json'
+      # moves, or deletes ONLY a fixture would not trigger the Rust
+      # workflow, so the Lean→Rust byte-equivalence checks (and the
+      # CI-fail-on-absence guards) would not run.
+      #
+      # Globbed rather than enumerated: the single-file form named only
+      # `deposit_with_fee_action.json`, so regenerating the event,
+      # observer or AMM corpora skipped the Rust lane entirely.  The
+      # consumers today are l1-ingest (action + AMM), event-subscribe,
+      # indexer, gateway and the fault-proof observer, and enumerating
+      # them is exactly the thing that went stale.  The cost is that
+      # Rust also runs on Solidity-only fixtures it never reads
+      # (`withdrawal_proof.json`, `smt_cell_proof.json`, …) — cheap
+      # next to a silently-skipped boundary check.
+      - 'solidity/test/CrossCheck/fixtures/**'
   pull_request:
     branches:
       - main
     paths:
       - 'runtime/**'
       - '.github/workflows/ci-rust.yml'
-      - 'solidity/test/CrossCheck/fixtures/deposit_with_fee_action.json'
+      - 'solidity/test/CrossCheck/fixtures/**'
 
 # Cancel in-progress runs of the same workflow on the same ref.
 concurrency:

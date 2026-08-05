@@ -321,26 +321,50 @@ The monotonicity tier is populated with three new laws, all in
    grant `mint` and `reward` permissions independently.
 
 2. **`distributeOthers r excluded amount`** — uniform credit of
-   `+amount` to every actor present in `r`'s `BalanceMap` except
-   `excluded`.  Substitute for "fining `excluded` by the equivalent
-   of `amount * k`" without removing tokens from `excluded`.  Empty
-   maps and excluded-only maps are no-ops.
+   `+amount` to every recipient.  Substitute for "fining `excluded`
+   by the equivalent of `amount * k`" without removing tokens from
+   `excluded`.  Empty maps and excluded-only maps are no-ops.
 
 3. **`proportionalDilute r excluded totalReward`** — proportional
    credit of `totalReward * v_k / sumOthers` (Nat floor; **dust
-   discarded**) to each non-excluded actor `k` in proportion to their
-   existing balance `v_k`.  Strongest analogue of "burning
-   `excluded`'s balance share" available without removing tokens;
-   non-excluded actors retain their relative wealth ranking.
+   discarded**) to each recipient `k` in proportion to their existing
+   balance `v_k`.  Strongest analogue of "burning `excluded`'s balance
+   share" available without removing tokens; recipients retain their
+   relative wealth ranking.
+
+Both laws draw their recipients from one definition,
+`Laws.bulkRecipients s r excluded` (`Laws/BulkBound.lean`), which the
+fault proof's `Action.stateWriteCells` also calls — so the cell
+footprint a step declares and the set it credits cannot drift apart.
+A **recipient** is an actor holding a *positive* balance of `r` other
+than `excluded`.  Two exclusions, for different reasons:
+
+  * an actor with **no entry** in `r`'s `BalanceMap` receives nothing;
+    to reach them, a deployment mints to them first.  This has always
+    been the rule.
+  * an actor whose entry is **present and zero** likewise receives
+    nothing.  It has no leaf in the state-commitment tree
+    (`stateCellEntries` drops canonically-absent cells, and
+    `encodeAmount 0` is a balance cell's canonical absent value), so
+    crediting it would make a bulk step's post-root depend on
+    something the pre-root does not observe.  See finding **C-2** in
+    `docs/audits/19-findings-and-followups.md`.
+
+Both laws additionally require `BulkBounded s r excluded` — at most
+`maxRecipientsPerBulkAction` recipients — so that no admitted step
+exceeds what the L1 can adjudicate.
 
 The dust-bound theorem
 `proportionalDilute_distributed_le_totalReward` formally pins the
 floor-division dust loss: post-supply ≤ pre-supply + totalReward.
-The proof goes through new filter-sum infrastructure in
+The proof goes through the filter-sum infrastructure in
 `Conservation.lean` (`balanceMap_filter_sum_plus_lookup`,
 `state_filter_sum_eq_sumOthers`), which uses
 `Std.TreeMap.distinct_keys_toList` to bridge per-bm filter sums to
-`sumOthers`.
+`sumOthers`, and its zero-dropping corollary
+`Laws.bulkRecipients_values_sum_eq_sumOthers` — zero entries contribute
+nothing to a sum, so narrowing the recipient list leaves the divisor
+untouched.
 
 ### Burn's place under the firewall
 

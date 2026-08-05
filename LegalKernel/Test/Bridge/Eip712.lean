@@ -32,7 +32,7 @@ The Lean-level acceptance contract for the EIP-712 wrap module
     domainPreHash_injective, etc.).
 
 Note: theorems #24 and #25 are stated under the
-`CollisionFree hashBytes` hypothesis.  At the Lean level this
+`CollisionFreeOn` hypothesis.  At the Lean level this
 hypothesis is *false* (the FNV-1a-64 fallback is not collision-free
 in 64 bits), so we cannot exercise the headline implications at the
 value level — we exercise the API stability instead.  The Rust
@@ -500,9 +500,10 @@ def wrapInjectiveAPI : TestCase := {
   name := "eip712Wrap_injective API stability"
   body := do
     let _proof :
-        ∀ (_hcf : CollisionFree hashBytes) (m₁ m₂ : Eip712Message) (d : ByteArray),
+        ∀ (m₁ m₂ : Eip712Message) (d : ByteArray),
+          CollisionFreeOn (eip712WrapPreimages m₁ m₂) hashBytes →
           eip712Wrap m₁ d = eip712Wrap m₂ d → m₁.signInput = m₂.signInput :=
-      fun hcf => eip712Wrap_injective hcf
+      eip712Wrap_injective
     pure ()
 }
 
@@ -511,13 +512,15 @@ def dsDistinguishesAPI : TestCase := {
   name := "eip712DomainSeparator_distinguishes API stability"
   body := do
     let _proof :
-        ∀ (_hcf : CollisionFree hashBytes) (p₁ p₂ : DomainParams)
-          (_hcb₁ : p₁.chainId < 256 ^ 32) (_hcb₂ : p₂.chainId < 256 ^ 32)
-          (_hrb₁ : p₁.rollupId < 256 ^ 32) (_hrb₂ : p₂.rollupId < 256 ^ 32),
-          p₁ ≠ p₂ →
-          eip712DomainSeparator p₁ ≠ eip712DomainSeparator p₂ :=
-      fun hcf p₁ p₂ hcb₁ hcb₂ hrb₁ hrb₂ =>
-        eip712DomainSeparator_distinguishes hcf p₁ p₂ hcb₁ hcb₂ hrb₁ hrb₂
+        ∀ (p₁ p₂ : DomainParams),
+          CollisionFreeOn
+            (domainPreHash p₁ :: domainPreHash p₂ ::
+              domainPreHashPreimages p₁ p₂) hashBytes →
+          ∀ (_hcb₁ : p₁.chainId < 256 ^ 32) (_hcb₂ : p₂.chainId < 256 ^ 32)
+            (_hrb₁ : p₁.rollupId < 256 ^ 32) (_hrb₂ : p₂.rollupId < 256 ^ 32),
+            p₁ ≠ p₂ →
+            eip712DomainSeparator p₁ ≠ eip712DomainSeparator p₂ :=
+      eip712DomainSeparator_distinguishes
     pure ()
 }
 
@@ -526,11 +529,12 @@ def wrapDistinguishesAPI : TestCase := {
   name := "eip712Wrap_distinguishes API stability"
   body := do
     let _proof :
-        ∀ (_hcf : CollisionFree hashBytes) (m₁ m₂ : Eip712Message) (d₁ d₂ : ByteArray),
+        ∀ (m₁ m₂ : Eip712Message) (d₁ d₂ : ByteArray),
+          CollisionFreeOn (eip712WrapPreimages m₁ m₂) hashBytes →
           d₁.size = d₂.size →
           eip712Wrap m₁ d₁ = eip712Wrap m₂ d₂ →
           d₁ = d₂ ∧ m₁.signInput = m₂.signInput :=
-      fun hcf => eip712Wrap_distinguishes hcf
+      eip712Wrap_distinguishes
     pure ()
 }
 
@@ -539,11 +543,12 @@ def domainPreHashInjectiveAPI : TestCase := {
   name := "domainPreHash_injective API stability"
   body := do
     let _proof :
-        ∀ (_hcf : CollisionFree hashBytes) (p₁ p₂ : DomainParams)
-          (_hcb₁ : p₁.chainId < 256 ^ 32) (_hcb₂ : p₂.chainId < 256 ^ 32)
-          (_hrb₁ : p₁.rollupId < 256 ^ 32) (_hrb₂ : p₂.rollupId < 256 ^ 32),
-          domainPreHash p₁ = domainPreHash p₂ → p₁ = p₂ :=
-      fun hcf p₁ p₂ => domainPreHash_injective hcf p₁ p₂
+        ∀ (p₁ p₂ : DomainParams),
+          CollisionFreeOn (domainPreHashPreimages p₁ p₂) hashBytes →
+          ∀ (_hcb₁ : p₁.chainId < 256 ^ 32) (_hcb₂ : p₂.chainId < 256 ^ 32)
+            (_hrb₁ : p₁.rollupId < 256 ^ 32) (_hrb₂ : p₂.rollupId < 256 ^ 32),
+            domainPreHash p₁ = domainPreHash p₂ → p₁ = p₂ :=
+      domainPreHash_injective
     pure ()
 }
 

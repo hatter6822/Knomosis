@@ -165,12 +165,13 @@ the same logical state with a different signature input. -/
 def decoderRejectsUnsortedKeys : TestCase := {
   name := "decoder rejects unsorted-key map (canonicality)"
   body := do
-    -- Build a CBE map manually with keys 5, 3 (unsorted).
+    -- Build a CBE map manually with keys 5, 3 (unsorted).  Keys ride
+    -- the 9-byte uint head, balances the 33-byte amount head.
     let mapHead := cborHeadEncode cbeTagMap 2
     let key5 := cborHeadEncode cbeTagUint 5
-    let val100 := cborHeadEncode cbeTagUint 100
+    let val100 := encodeAmount 100
     let key3 := cborHeadEncode cbeTagUint 3
-    let val200 := cborHeadEncode cbeTagUint 200
+    let val200 := encodeAmount 200
     let unsorted := mapHead ++ key5 ++ val100 ++ key3 ++ val200
     match BalanceMap.decode unsorted with
     | .ok _ =>
@@ -184,8 +185,8 @@ def decoderRejectsDuplicateKeys : TestCase := {
   body := do
     let mapHead := cborHeadEncode cbeTagMap 2
     let key5 := cborHeadEncode cbeTagUint 5
-    let val100 := cborHeadEncode cbeTagUint 100
-    let val200 := cborHeadEncode cbeTagUint 200
+    let val100 := encodeAmount 100
+    let val200 := encodeAmount 200
     let dup := mapHead ++ key5 ++ val100 ++ key5 ++ val200
     match BalanceMap.decode dup with
     | .ok _ =>
@@ -201,9 +202,9 @@ def decoderAcceptsCanonicalMap : TestCase := {
   body := do
     let mapHead := cborHeadEncode cbeTagMap 2
     let key3 := cborHeadEncode cbeTagUint 3
-    let val200 := cborHeadEncode cbeTagUint 200
+    let val200 := encodeAmount 200
     let key5 := cborHeadEncode cbeTagUint 5
-    let val100 := cborHeadEncode cbeTagUint 100
+    let val100 := encodeAmount 100
     let canonical := mapHead ++ key3 ++ val200 ++ key5 ++ val100
     match BalanceMap.decode canonical with
     | .ok (bm, rest) =>
@@ -211,6 +212,59 @@ def decoderAcceptsCanonicalMap : TestCase := {
       assertEq (200 : Amount) (bm[(3 : ActorId)]?.getD 0) "actor 3 balance"
       assertEq (100 : Amount) (bm[(5 : ActorId)]?.getD 0) "actor 5 balance"
     | .error e => throw <| IO.userError s!"Canonical map rejected: {repr e}"
+}
+
+/-- Decoder rejects a balance written on the narrow 9-byte uint head.
+
+    The head byte is what separates a balance from an identifier, and
+    the separation is load-bearing: the narrow head truncates modulo
+    `2^64`, which a wei-denominated balance crosses at ~18.45 ETH.  A
+    decoder that accepted either width would let a peer re-encode the
+    same logical balance two ways, and `commitState` hashes exactly
+    these bytes — so the state root would stop binding the ledger.
+    Fail closed on the tag instead. -/
+def decoderRejectsNarrowHeadBalance : TestCase := {
+  name := "decoder rejects a balance on the narrow uint head"
+  body := do
+    let mapHead := cborHeadEncode cbeTagMap 1
+    let key3 := cborHeadEncode cbeTagUint 3
+    -- Deliberately the WRONG head for a value slot.
+    let narrowVal := cborHeadEncode cbeTagUint 200
+    match BalanceMap.decode (mapHead ++ key3 ++ narrowVal) with
+    | .ok _ =>
+      throw <| IO.userError "BUG: decoder accepted a narrow-head balance"
+    | .error _ => pure ()
+}
+
+/-- A balance at `2^64` round-trips.  The exact value the narrow head
+    truncated to zero, and the reason the wide head exists: two states
+    whose balances differ by `2^64` used to encode to identical bytes
+    and therefore to one L1 state root. -/
+def decoderRoundtripsBalanceAtNarrowOverflow : TestCase := {
+  name := "balance at 2^64 round-trips through the amount head"
+  body := do
+    let big : Amount := 2 ^ 64
+    let bm : BalanceMap := (∅ : BalanceMap).insert (3 : ActorId) big
+    match BalanceMap.decode (BalanceMap.encode bm) with
+    | .ok (bm', rest) =>
+      assertEq (0 : Nat) rest.length "no residual"
+      assertEq big (bm'[(3 : ActorId)]?.getD 0) "actor 3 balance at 2^64"
+    | .error e => throw <| IO.userError s!"2^64 balance rejected: {repr e}"
+}
+
+/-- Two balances differing by exactly `2^64` must encode to distinct
+    bytes.  This is the direct inversion of the defect: under the
+    narrow head these two states produced byte-identical encodings,
+    so `commitState` mapped them to one commitment. -/
+def encoderSeparatesBalancesDifferingByNarrowModulus : TestCase := {
+  name := "balances differing by 2^64 encode distinctly"
+  body := do
+    let bmLo : BalanceMap := (∅ : BalanceMap).insert (7 : ActorId) (100 : Amount)
+    let bmHi : BalanceMap := (∅ : BalanceMap).insert (7 : ActorId) (100 + 2 ^ 64 : Amount)
+    let eLo := BalanceMap.encode bmLo
+    let eHi := BalanceMap.encode bmHi
+    assertEq eLo.length eHi.length "same width"
+    assert (eLo != eHi) "BUG: balances differing by 2^64 collided on the encoder"
 }
 
 /-- Encode-decode-encode idempotence: encoding a state, decoding it,
@@ -678,6 +732,8 @@ def tests : List TestCase :=
   [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
    stateEncodeOrderInvariant, stateRoundtripGetBalance, extendedStateRoundtrip,
    decoderRejectsUnsortedKeys, decoderRejectsDuplicateKeys, decoderAcceptsCanonicalMap,
+   decoderRejectsNarrowHeadBalance, decoderRoundtripsBalanceAtNarrowOverflow,
+   encoderSeparatesBalancesDifferingByNarrowModulus,
    stateEncodeDecodeEncodeIdempotent,
    stateDeterministicAPI, extendedStateDeterministicAPI, balanceMapEquivAPI,
    -- LP.3:

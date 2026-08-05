@@ -5,9 +5,11 @@
 //  This program comes with ABSOLUTELY NO WARRANTY.
 //  This is free software, and you are welcome to redistribute it
 //  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+
+import {LogChain} from "../lib/LogChain.sol";
 
 /// @title KnomosisStateRootSubmission
 /// @notice Sequencer state-root submission registry for the
@@ -24,6 +26,12 @@ import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/Reentrancy
 /// **Hash-chain integrity** (WU H.7.4): each submission's
 /// `prevLogEntryHash` must match the previous submission's
 /// `expectedNextHash`, preventing out-of-order or skipped indices.
+/// The chain also commits to the ACTION that carried the previous
+/// root to this one (`actionCommit`), which is what lets
+/// `KnomosisFaultProofGame.terminateOnSingleStep` authenticate the
+/// action it is handed instead of executing whatever the responding
+/// party supplies.  See `src/lib/LogChain.sol` for the encoding and
+/// for what the state-roots-only chain could not do.
 ///
 /// **Anti-DoS** (WU H.7.3): immutable rate-limit constants
 /// (submission interval, outstanding cap) set at construction.
@@ -85,8 +93,30 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     ///         ceiling]` is considered reverted; this avoids the
     ///         per-index iteration that a simple "is-reverted"
     ///         boolean map would require.
-    uint64 public lowestRevertedLogIndex;
+    ///
+    ///         `lowestRevertedLogIndex` is initialised to
+    ///         `NO_REVERTED_FLOOR` (`type(uint64).max`) rather than to
+    ///         zero, so "no floor set" is distinguishable from "the
+    ///         floor is index 0".  With a zero sentinel, reverting from
+    ///         index 0 — the genesis root — was indistinguishable from
+    ///         never having reverted anything, and
+    ///         `isStateRootReverted` returned `false` for every index.
+    uint64 public lowestRevertedLogIndex = NO_REVERTED_FLOOR;
     uint64 public highestRevertedLogIndex;
+
+    /// @notice Sentinel for "no reverted floor has been set".  Chosen as
+    ///         `type(uint64).max` because it is above every reachable
+    ///         log index, so the `idx >= floor` half of the range test
+    ///         is false for all of them without a separate guard.
+    uint64 public constant NO_REVERTED_FLOOR = type(uint64).max;
+
+    /// @notice Highest log index ever passed to `submitStateRoot`.
+    ///         Maintained with a `max` because submission is NOT
+    ///         monotone: the hash-chain check only requires the
+    ///         PREDECESSOR to exist, so indices can be filled in an
+    ///         order that revisits a lower one.  This is the ceiling
+    ///         `revertStateRootsFrom` reverts up to.
+    uint64 public latestSubmittedLogIndex;
 
     /* ---------------------------------------------------------- */
     /* Events                                                     */
@@ -204,10 +234,21 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
 
     /// @notice Submit a new state root.  Only the registered
     ///         sequencer can call.
+    /// @param logIndex          the L2 log index this root publishes.
+    /// @param stateCommit       the state root at `logIndex`.
+    /// @param prevLogEntryHash  the predecessor entry's chain hash.
+    /// @param actionCommit      `LogChain.actionCommit` over the
+    ///                          `(actionKind, signer, actionFields)`
+    ///                          triple of the action that carried
+    ///                          `logIndex - 1` to `logIndex`.  Binding
+    ///                          it here is what makes the fault-proof
+    ///                          game's terminal step adjudicate the
+    ///                          action the L2 actually executed.
     function submitStateRoot(
         uint64  logIndex,
         bytes32 stateCommit,
-        bytes32 prevLogEntryHash
+        bytes32 prevLogEntryHash,
+        bytes32 actionCommit
     ) external payable nonReentrant {
         if (msg.sender != sequencer) revert NotSequencer();
         if (msg.value != STATE_ROOT_SUBMISSION_BOND) revert InvalidBond();
@@ -231,7 +272,7 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
 
         // Compute this root's expected-next-hash.
         bytes32 expectedNextHash =
-            keccak256(abi.encode(prevLogEntryHash, stateCommit));
+            LogChain.nextEntryHash(prevLogEntryHash, stateCommit, actionCommit);
 
         roots[logIndex] = SubmittedRoot({
             sequencer:        msg.sender,
@@ -246,6 +287,9 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
 
         lastSubmissionBlock[msg.sender] = uint64(block.number);
         outstandingRootsCount[msg.sender]++;
+        if (logIndex > latestSubmittedLogIndex) {
+            latestSubmittedLogIndex = logIndex;
+        }
 
         emit StateRootSubmitted(logIndex, stateCommit, msg.sender);
     }
@@ -389,20 +433,41 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     /* External: revertToPriorRoot (called by faultProofGame)     */
     /* ---------------------------------------------------------- */
 
-    /// @notice Revert the state-root range from `fromIdx`
-    ///         onwards.  Only callable by the fault-proof game
-    ///         contract.
+    /// @notice Revert the state-root range from `fromIdx` onwards.
+    ///         Only callable by the fault-proof game contract.
+    ///
+    ///         "Onwards" is the point: a root proven invalid at
+    ///         `fromIdx` invalidates every root that descends from it,
+    ///         because each root's `prevLogEntryHash` chains to its
+    ///         predecessor's `expectedNextHash`.  The ceiling is
+    ///         therefore `latestSubmittedLogIndex`, not `fromIdx` —
+    ///         raising the ceiling only to `fromIdx` marked the single
+    ///         disputed index and left its descendants finalisable.
+    ///
+    ///         A later submission above the ceiling is NOT retroactively
+    ///         reverted: it chains onto a reverted predecessor and so
+    ///         fails the hash-chain check in `submitStateRoot` unless
+    ///         the sequencer re-submits the corrected range, which is
+    ///         the intended recovery path.
     function revertStateRootsFrom(uint64 fromIdx) external nonReentrant {
         if (msg.sender != faultProofGame) revert NotFaultProofGame();
 
         // Update the floor (no-op if a lower floor is already in
-        // place).
-        if (lowestRevertedLogIndex == 0 || fromIdx < lowestRevertedLogIndex) {
+        // place).  The `NO_REVERTED_FLOOR` sentinel makes `fromIdx = 0`
+        // an ordinary case rather than an unrepresentable one.
+        if (fromIdx < lowestRevertedLogIndex) {
             lowestRevertedLogIndex = fromIdx;
         }
-        // Update the ceiling.
-        if (fromIdx > highestRevertedLogIndex) {
-            highestRevertedLogIndex = fromIdx;
+        // Raise the ceiling to cover every root that descends from
+        // `fromIdx`, i.e. everything submitted so far.
+        uint64 ceiling = latestSubmittedLogIndex;
+        if (ceiling < fromIdx) {
+            // Reverting an index at or above anything yet submitted:
+            // the range is the single index, which is all there is.
+            ceiling = fromIdx;
+        }
+        if (ceiling > highestRevertedLogIndex) {
+            highestRevertedLogIndex = ceiling;
         }
 
         emit StateRootRangeReverted(lowestRevertedLogIndex,
@@ -420,9 +485,13 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         view
         returns (bool)
     {
+        // No `> 0` guard: the floor's sentinel is `NO_REVERTED_FLOOR`,
+        // which is above every reachable index, so an unset floor makes
+        // the first comparison false on its own — and a floor of 0 (the
+        // genesis root reverted) is now a representable state rather
+        // than one the guard silently erased.
         return logIndex >= lowestRevertedLogIndex &&
-               logIndex <= highestRevertedLogIndex &&
-               lowestRevertedLogIndex > 0;
+               logIndex <= highestRevertedLogIndex;
     }
 
     /* ---------------------------------------------------------- */

@@ -25,7 +25,7 @@ tag and value.  Verification:
   3. Check the witness state has the claimed cell value at the
      claimed tag.
 
-Under `CollisionFree hashBytes`, condition 1 plus
+Under collision-freeness of `hashBytes` on the pre-images below, condition 1 plus
 `commitExtendedState`'s injectivity (theorem #220) makes the
 witness state unique up to extensional equality.  Condition 3
 then authoritatively binds the cell value to the underlying
@@ -46,9 +46,13 @@ state.
   * `verifyCellProof_complete` — the canonical proof for any
     cell at any state always verifies against the state's
     commit.  Unconditional.
-  * `verifyCellProof_sound_under_collision_free` — under
-    `CollisionFree hashBytes`, a verifying proof's witness state
-    has the claimed cell value at the claimed tag.
+  * `verifyCellProof_sound` — a verifying proof's witness state
+    has the claimed cell value at the claimed tag.  Unconditional:
+    the verifier's own two checks establish it.
+  * `verifyCellProof_witness_unique_under_collision_free` — under
+    collision-freeness on the commitment chain's hash pre-images,
+    that witness is the ONLY state behind the published root, so a
+    responder cannot substitute a different cell value.
   * `updateCommitment_agrees_with_setCell` — recomputing the
     commit after writing one cell agrees with `commitExtendedState`
     on the post-state.
@@ -61,6 +65,8 @@ Lean built-ins (`propext`, `Quot.sound`, `Classical.choice`).
 import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.Eip712
 import LegalKernel.FaultProof.Cell
+import LegalKernel.FaultProof.CellValue
+import LegalKernel.FaultProof.StateCellsInjective
 import LegalKernel.FaultProof.Commit
 
 namespace LegalKernel
@@ -69,162 +75,6 @@ namespace FaultProof
 open LegalKernel.Authority
 open LegalKernel.Bridge
 open LegalKernel.Encoding
-
-/-! ## Canonical absent values (§12.3.4 / WU H.3.4)
-
-The canonical "absent" value for each cell type is the value
-that `getCellValue` returns when the underlying sub-state has no
-entry for the cell key. -/
-
-/-- The canonical "absent" value for each cell type:
-    * `balance`, `nonce`, `bridgeNextWdId`: CBE-encoded `0`.
-    * `registry`, `localPolicy`, `bridgeConsumed`, `bridgePending`:
-      empty bytes. -/
-def canonicalAbsentValue : CellTag → ByteArray
-  | .balance _ _      => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
-  | .nonce _          => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
-  | .registry _       => ByteArray.empty
-  | .localPolicy _    => ByteArray.empty
-  | .bridgeConsumed _ => ByteArray.empty
-  | .bridgePending _  => ByteArray.empty
-  | .bridgeNextWdId   => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
-
-/-! ## `getCellValue` (§12.1.2 helper) -/
-
-/-- Read a single cell's CBE-encoded value from an
-    `ExtendedState`.  Total: absent cells return
-    `canonicalAbsentValue tag`.
-
-    The byte form matches the encoder's per-cell value layout
-    (CBE uint for amounts/nonces; CBE byte string for keys
-    /policies/etc.). -/
-def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
-  match tag with
-  | .balance r a =>
-    ByteArray.mk
-      (Encodable.encode (T := Nat) (LegalKernel.getBalance es.base r a)).toArray
-  | .nonce a =>
-    ByteArray.mk
-      (Encodable.encode (T := Nat) (Authority.expectsNonce es a)).toArray
-  | .registry a =>
-    match es.registry[a]? with
-    | some pk => pk
-    | none    => ByteArray.empty
-  | .localPolicy a =>
-    -- Encode the policy via its CBE byte string; absent ⇒ empty.
-    let p := es.localPolicies.lookup a
-    if p.clauses.isEmpty then ByteArray.empty
-    else ByteArray.mk
-           (Encodable.encode (T := Authority.LocalPolicy) p).toArray
-  | .bridgeConsumed d =>
-    if es.bridge.consumed.contains d then
-      -- Encode the deposit-record bytes (an opaque marker is enough
-      -- for cell-value comparison; canonical is the encoded record).
-      match es.bridge.consumed[d]? with
-      | some rec => ByteArray.mk (Bridge.DepositRecord.encode rec).toArray
-      | none     => ByteArray.empty
-    else ByteArray.empty
-  | .bridgePending wd =>
-    match es.bridge.pending[wd]? with
-    | some pw => ByteArray.mk (Bridge.PendingWithdrawal.encode pw).toArray
-    | none    => ByteArray.empty
-  | .bridgeNextWdId =>
-    ByteArray.mk
-      (Encodable.encode (T := Nat) es.bridge.nextWdId).toArray
-
-/-- Determinism of `getCellValue`: equal states + equal tags
-    produce equal cell values.  Mechanical via `rfl`. -/
-theorem getCellValue_deterministic
-    (es₁ es₂ : ExtendedState) (tag₁ tag₂ : CellTag)
-    (h_es : es₁ = es₂) (h_tag : tag₁ = tag₂) :
-    getCellValue es₁ tag₁ = getCellValue es₂ tag₂ := by rw [h_es, h_tag]
-
-/-! ## `isCellAbsent` (§12.3.4 helper) -/
-
-/-- Decidable predicate: a cell is "absent" iff its current
-    value at the state equals `canonicalAbsentValue tag`. -/
-def isCellAbsent (es : ExtendedState) (tag : CellTag) : Prop :=
-  getCellValue es tag = canonicalAbsentValue tag
-
-/-- Decidability of `isCellAbsent`.  Reduces to `ByteArray`
-    equality (decidable). -/
-instance instDecidableIsCellAbsent
-    (es : ExtendedState) (tag : CellTag) :
-    Decidable (isCellAbsent es tag) := by
-  unfold isCellAbsent
-  exact inferInstance
-
-/-! ## `setCell` (§12.1.2 helper) -/
-
-/-- Write a single cell's value into an `ExtendedState`.  The
-    `value` argument is the CBE-encoded post-cell value.  The
-    function decodes the bytes and inserts the result; on a
-    decode failure (which shouldn't happen if the verifier is
-    composed correctly), returns the original state unchanged.
-
-    This is the L1 step VM's per-cell write primitive.  The
-    semantic-correctness theorem `updateCommitment_agrees_with_setCell`
-    establishes the agreement with `commitExtendedState`. -/
-def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
-    ExtendedState :=
-  match tag with
-  | .balance r a =>
-    -- Decode the value as a Nat; on failure leave the cell unchanged.
-    match Encodable.decode (T := Nat) value.data.toList with
-    | .ok (v, _) => { es with base := LegalKernel.setBalance es.base r a v }
-    | .error _   => es
-  | .nonce _a =>
-    -- Nonces are bumped by `advanceNonce`, not arbitrarily set.
-    -- For verifier-driven write, treat as no-op (the kernel-side
-    -- `apply_admissible` is the canonical way to bump nonces).
-    es
-  | .registry a =>
-    -- The bytes ARE the public key (registry stores pk as ByteArray).
-    if value.size = 0 then es  -- empty bytes ⇒ no change
-    else { es with registry := es.registry.insert a value }
-  | .localPolicy a =>
-    if value.size = 0 then
-      -- Empty bytes ⇒ revoke the policy.
-      { es with localPolicies := es.localPolicies.revoke a }
-    else
-      -- Decode the policy bytes; on success, declare; on failure no-op.
-      match Encodable.decode (T := Authority.LocalPolicy) value.data.toList with
-      | .ok (p, _) => { es with localPolicies := es.localPolicies.declare a p }
-      | .error _   => es
-  | .bridgeConsumed d =>
-    if value.size = 0 then es  -- empty ⇒ no change
-    else
-      match Bridge.DepositRecord.decode value.data.toList with
-      | .ok (rec, _) => { es with bridge := es.bridge.markConsumed d rec }
-      | .error _     => es
-  | .bridgePending _wd =>
-    -- Pending withdrawals are appended via `appendWithdrawal` (which
-    -- assigns a fresh id); arbitrary key writes are a runtime-layer
-    -- concern.  No-op at the cell-write level.
-    es
-  | .bridgeNextWdId =>
-    match Encodable.decode (T := Nat) value.data.toList with
-    | .ok (n, _) =>
-      { es with bridge := { es.bridge with nextWdId := n } }
-    | .error _   => es
-
-/-- Determinism of `setCell`. -/
-theorem setCell_deterministic
-    (es₁ es₂ : ExtendedState) (tag₁ tag₂ : CellTag) (v₁ v₂ : ByteArray)
-    (h_es : es₁ = es₂) (h_tag : tag₁ = tag₂) (h_v : v₁ = v₂) :
-    setCell es₁ tag₁ v₁ = setCell es₂ tag₂ v₂ := by
-  rw [h_es, h_tag, h_v]
-
-/-! ## `buildCellProof` (§12.1.2 helper) -/
-
-/-- Build the canonical cell proof for a given cell of an
-    `ExtendedState`.  Total function; the witness state IS the
-    state itself (see the witness-state design rationale in
-    `Cell.lean`). -/
-def buildCellProof (es : ExtendedState) (tag : CellTag) : CellProof where
-  cellTag      := tag
-  cellValue    := getCellValue es tag
-  witnessState := es
 
 /-! ## `verifyCellProof` (§12.3.3) -/
 
@@ -244,6 +94,19 @@ def verifyCellProof (commit : StateCommit) (proof : CellProof) : Bool :=
 def verifyCellProofs (commit : StateCommit) (bundle : CellProofBundle) :
     Bool :=
   bundle.proofs.all (fun p => verifyCellProof commit p)
+
+/-- **The verifier does not read the opening.**  `verifyCellProof`
+    inspects the witness state, the tag and the value; `proofData`
+    carries the SMT siblings the L1 walks and is invisible here.
+
+    Stated because the two builders differ in exactly that field, so
+    every theorem about the plain bundle transfers to the
+    opening-bearing one without re-proving anything — and because a
+    verifier that DID read it would be checking two independent
+    encodings of the same fact, which is how they drift. -/
+@[simp] theorem verifyCellProof_proofData_irrelevant
+    (commit : StateCommit) (p : CellProof) (d : ByteArray) :
+    verifyCellProof commit { p with proofData := d } = verifyCellProof commit p := rfl
 
 /-- Named decidable instance for `verifyCellProof`. -/
 instance instDecidableVerifyCellProof
@@ -273,7 +136,7 @@ theorem verifyCellProofs_deterministic
 
 /-- The canonical cell proof for any cell at any state always
     verifies against that state's commit.  Unconditional —
-    no `CollisionFree` hypothesis needed for completeness. -/
+    no collision-freeness hypothesis needed for completeness. -/
 theorem verifyCellProof_complete (es : ExtendedState) (tag : CellTag) :
     verifyCellProof (commitExtendedState es) (buildCellProof es tag) = true := by
   unfold verifyCellProof buildCellProof
@@ -304,7 +167,24 @@ theorem verifyCellProofs_complete_for_canonical_bundle
   obtain ⟨t, _, rfl⟩ := hp
   exact verifyCellProof_complete es t
 
-/-! ## #222 — Verifier soundness under `CollisionFree` -/
+/-- The same, for the opening-bearing builder.  Stated separately
+    rather than derived at each call site because the two builders
+    differ in a field `verifyCellProof` does not read, and threading
+    that through a `List.map` congruence at every use is noise. -/
+theorem verifyCellProofs_complete_for_opening_bundle
+    (es : ExtendedState) (tags : List CellTag) :
+    verifyCellProofs (commitExtendedState es)
+      { proofs := tags.map (fun t => buildCellProofWithOpening es t) } = true := by
+  unfold verifyCellProofs
+  simp only [List.all_eq_true, List.mem_map]
+  intro p hp
+  obtain ⟨t, _, rfl⟩ := hp
+  show verifyCellProof (commitExtendedState es) (buildCellProofWithOpening es t) = true
+  unfold buildCellProofWithOpening
+  rw [verifyCellProof_proofData_irrelevant]
+  exact verifyCellProof_complete es t
+
+/-! ## #222 — Verifier soundness under collision-freeness on the level's pre-images -/
 
 /-- A verifying proof's witness state recommits to the public
     commit.  Direct from the verifier's first check. -/
@@ -330,23 +210,73 @@ theorem verifyCellProof_witness_has_cell_value
   obtain ⟨_, h₂⟩ := h
   exact decide_eq_true_eq.mp h₂
 
-/-- #222 — Soundness: under `CollisionFree hashBytes`, a verifying
-    proof witnesses an existing state whose cell at the claimed
-    tag has the claimed value.
+/-- #222 — Existence: a verifying proof witnesses a state whose
+    cell at the claimed tag has the claimed value.
 
-    The witness state is the proof's `witnessState` field;
-    `CollisionFree` plus `commitExtendedState`'s injectivity
-    (theorem #220) makes the witness state unique up to
-    extensional equality. -/
-theorem verifyCellProof_sound_under_collision_free
+    The witness state is the proof's `witnessState` field, and the
+    verifier's own two checks establish both conjuncts, so this
+    direction needs no collision-resistance hypothesis at all.  The
+    hypothesis that makes the witness *unique* is stated separately
+    by `verifyCellProof_witness_unique_under_collision_free` below —
+    that is the property a fault-proof consumer actually relies on,
+    and carrying it as an unused argument here stated nothing. -/
+theorem verifyCellProof_sound
     (commit : StateCommit) (proof : CellProof)
-    (_h_cf : Bridge.CollisionFree LegalKernel.Runtime.hashBytes)
     (h_verify : verifyCellProof commit proof = true) :
     ∃ es, commitExtendedState es = commit ∧
           getCellValue es proof.cellTag = proof.cellValue :=
   ⟨proof.witnessState,
    verifyCellProof_witness_recommits commit proof h_verify,
    verifyCellProof_witness_has_cell_value commit proof h_verify⟩
+
+/-- #222 — Uniqueness: any state that commits to the same root as a
+    verifying proof reads identically through every cell.
+
+    This is the operational content of cell-proof soundness: an
+    adversarial responder cannot exhibit a *different* state behind
+    the same published root and thereby claim a different cell
+    value.
+
+    The conclusion is per-cell agreement rather than
+    `ExtendedState.extEq`, and that is a strengthening in the
+    direction that matters rather than a concession.  A cell proof
+    speaks about a cell; what a consumer needs is that the cell reads
+    the same in every state behind the root, which is exactly this.
+    `extEq` was also unreachable for a cell root and should not have
+    been the target: `State.Equiv` separates a resource present with
+    an all-zero balance map from a resource absent entirely, and no
+    cell read — hence no step — can tell those apart. -/
+theorem verifyCellProof_witness_cells_agree_under_collision_free
+    (commit : StateCommit) (proof : CellProof) (es : ExtendedState)
+    (h_cf : Bridge.CollisionFreeOn
+      (stateCommitSmtPreimages es proof.witnessState)
+      LegalKernel.Runtime.hashBytes)
+    (h_wf₁ : StateCellsWellFormed es)
+    (h_wf₂ : StateCellsWellFormed proof.witnessState)
+    (h_verify : verifyCellProof commit proof = true)
+    (h_commit : commitExtendedState es = commit) :
+    ∀ t : CellTag, getCellValue es t = getCellValue proof.witnessState t :=
+  commitExtendedState_determines_cells es proof.witnessState h_wf₁ h_wf₂ h_cf
+    (h_commit.trans
+      (verifyCellProof_witness_recommits commit proof h_verify).symm)
+
+/-- The consumer-facing corollary: the value a verifying proof claims
+    is the value ANY state behind that root holds at the proof's
+    tag.  No value substitution, stated where a fault-proof consumer
+    reads it. -/
+theorem verifyCellProof_no_value_substitution_under_collision_free
+    (commit : StateCommit) (proof : CellProof) (es : ExtendedState)
+    (h_cf : Bridge.CollisionFreeOn
+      (stateCommitSmtPreimages es proof.witnessState)
+      LegalKernel.Runtime.hashBytes)
+    (h_wf₁ : StateCellsWellFormed es)
+    (h_wf₂ : StateCellsWellFormed proof.witnessState)
+    (h_verify : verifyCellProof commit proof = true)
+    (h_commit : commitExtendedState es = commit) :
+    getCellValue es proof.cellTag = proof.cellValue :=
+  (verifyCellProof_witness_cells_agree_under_collision_free commit proof es
+      h_cf h_wf₁ h_wf₂ h_verify h_commit proof.cellTag).trans
+    (verifyCellProof_witness_has_cell_value commit proof h_verify)
 
 /-! ## #223 — Update commitment agrees with setCell
 
@@ -374,14 +304,22 @@ theorem updateCommitment_agrees_with_setCell
 /-- A canonical-absent cell proof verifies against any state's
     commit at a tag where the state has no cell.  The witness is
     the state itself; the proof's value matches the canonical
-    absent marker by `isCellAbsent`. -/
+    absent marker by `isCellAbsent`.
+
+    Quantified over the `opening`: `verifyCellProof` recomputes the
+    commit from `witnessState` and never reads `proofData`, so the
+    completeness result holds for every opening — including the empty
+    one a `buildCellProof`-built proof carries.  Stating it that way
+    keeps the Lean verifier's independence from the L1 one visible in
+    the type. -/
 theorem verifyCellProof_complete_for_absent_cell
-    (es : ExtendedState) (tag : CellTag)
+    (es : ExtendedState) (tag : CellTag) (opening : ByteArray)
     (h_absent : isCellAbsent es tag) :
     verifyCellProof (commitExtendedState es)
       { cellTag := tag,
         cellValue := canonicalAbsentValue tag,
-        witnessState := es } = true := by
+        witnessState := es,
+        proofData := opening } = true := by
   unfold verifyCellProof
   -- (1) commitExtendedState witness = commit: rfl
   -- (2) getCellValue witness tag = canonicalAbsentValue tag: from h_absent

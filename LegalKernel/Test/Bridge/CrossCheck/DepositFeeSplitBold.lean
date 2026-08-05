@@ -429,7 +429,7 @@ def tests : List TestCase :=
     , body := do
         let seed ← readSeed
         let (json, _) := buildFixture seed
-        writeFixture fixtureName json.encode
+        writeHashDependentFixture fixtureName json.encode
     }
   , { name := "GP.5.4: cross-stack assertion gated on isKeccak256Linked"
     , body := do

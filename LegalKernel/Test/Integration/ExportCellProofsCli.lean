@@ -44,14 +44,14 @@ namespace LegalKernel.Test.Integration.ExportCellProofsCli
 
 /-- The cell-proof bundle for a transfer has the documented
     four cells (registry, balance×2, nonce). -/
-def transfer_bundle_has_four_cells : IO Unit := do
+def transfer_bundle_has_five_cells : IO Unit := do
   let es : ExtendedState := ExtendedState.empty
   let signer : ActorId := 1
   let action : Action := Action.transfer 1 signer 2 100
   let bundle := buildObserverCellProofs es action signer
-  unless bundle.proofs.length = 4 do
+  unless bundle.proofs.length = 5 do
     throw (IO.userError
-      s!"buildObserverCellProofs transfer bundle.proofs.length = {bundle.proofs.length}, expected 4")
+      s!"buildObserverCellProofs transfer bundle.proofs.length = {bundle.proofs.length}, expected 5")
 
 /-- The cell-proof bundle is deterministic in its inputs.
     Audit-pass-4 fix: strengthened from length-only equality to
@@ -130,7 +130,7 @@ def cell_proof_json_envelope_shape_pinned : IO Unit := do
     "\"key_a\"",
     "\"key_b\"",
     "\"cell_value\"",
-    "\"witness_commit\""
+    "\"proof_data\""
   ]
   for field in requiredFields do
     let parts := json.splitOn field
@@ -158,12 +158,12 @@ def cell_proof_json_envelope_shape_pinned : IO Unit := do
   let newlineParts := json.splitOn "\n"
   unless newlineParts.length = 1 do
     throw (IO.userError s!"formatCellProofJson must be single-line: {json}")
-  -- Audit-pass-4-round-4 LOW fix: enforce EXACTLY 5 fields by
-  -- counting key-value separators.  A maintainer adding a sixth
-  -- field would silently slip into production wire traffic
-  -- otherwise (the Rust serde struct ignores unknown fields by
-  -- default).  Count the `":"` separators between keys and
-  -- values — should be exactly 5.
+  -- Enforce EXACTLY 5 fields by counting key-value separators.
+  -- A maintainer adding a sixth would silently slip into production
+  -- wire traffic otherwise (the Rust serde struct ignores unknown
+  -- fields by default).  It WAS 6: the sixth was `witness_commit`,
+  -- a claim only a holder of the whole `ExtendedState` could check
+  -- and a responder could set freely, which the opening replaced.
   let colonCount := (json.splitOn "\":").length - 1
   unless colonCount = 5 do
     throw (IO.userError
@@ -182,23 +182,56 @@ def cell_proof_json_byte_pinning_minimal : IO Unit := do
   let proof : CellProof :=
     { cellTag := CellTag.balance (resource := 7) (actor := 1)
     , cellValue := ByteArray.empty
-    , witnessState := witness }
+    , witnessState := witness, proofData := ByteArray.empty }
   let json := LegalKernel.Runtime.CellProofJson.formatCellProofJson proof
-  -- Pin the prefix (witness_commit value depends on the kernel's
-  -- hash implementation, which is FNV-1a-64 in the default test
-  -- mode but keccak in production — so we don't pin the full
-  -- string).
+  -- The WHOLE object is pinnable now.  It used to carry a
+  -- `witness_commit` word whose value is the kernel's hash of the
+  -- witness state — FNV-1a-64 in the default test build, keccak in
+  -- production — so only a prefix could be pinned.  That word is gone;
+  -- nothing here depends on the hash binding.
   let expectedPrefix :=
     "{\"cell_kind\":0," ++
     "\"key_a\":\"0000000000000007\"," ++
     "\"key_b\":\"0000000000000001\"," ++
     "\"cell_value\":\"\"," ++
-    "\"witness_commit\":\""
+    "\"proof_data\":\"\"}"
   unless json.startsWith expectedPrefix do
     throw (IO.userError s!"formatCellProofJson byte-pinning failed.\n  Expected prefix: {expectedPrefix}\n  Actual:         {json}")
-  -- The closing must be a hex string + quote + brace.
-  unless json.endsWith "\"}" do
-    throw (IO.userError s!"formatCellProofJson must close with quote-brace: {json}")
+  -- The closing must be the (here empty) `proof_data` hex + brace.
+  -- `CellProof.proofData` defaults to empty, so a proof built
+  -- without an opening emits `""` — pinned exactly, since a
+  -- defaulted field silently changing shape is the failure mode
+  -- this test exists for.
+  unless json.endsWith ",\"proof_data\":\"\"}" do
+    throw (IO.userError s!"formatCellProofJson must close with an empty proof_data: {json}")
+
+/-- The `proof_data` field carries the SMT opening, not a
+    placeholder.
+
+    The default is empty, so every shape check above passes on a
+    bundle whose openings were never built — which is exactly the
+    regression this guards.  An L1 verifier holds no `ExtendedState`,
+    so `witness_commit` is unusable to it and the opening is the whole
+    payload; if `buildCellProofWithOpening` ever silently degrades to
+    `buildCellProof`, the wire stays well-formed and the L1 stops
+    being able to check anything. -/
+def cell_proof_json_carries_the_opening : IO Unit := do
+  let es : ExtendedState := ExtendedState.empty
+  let proof := buildCellProofWithOpening es (CellTag.nonce (actor := 1))
+  let json := LegalKernel.Runtime.CellProofJson.formatCellProofJson proof
+  if json.endsWith ",\"proof_data\":\"\"}" then
+    throw (IO.userError
+      s!"formatCellProofJson emitted an EMPTY proof_data for an \
+         opening-bearing proof — the opening was dropped: {json}")
+  -- The opening is a 32-byte bitmask followed by 32-byte siblings,
+  -- so its hex length is a nonzero multiple of 64.
+  let parts := json.splitOn "\"proof_data\":\""
+  unless parts.length = 2 do
+    throw (IO.userError s!"formatCellProofJson has no proof_data field: {json}")
+  let hex := (parts[1]!).splitOn "\"" |>.headD ""
+  unless hex.length % 64 = 0 && hex.length > 0 do
+    throw (IO.userError
+      s!"proof_data must be a nonzero multiple of 32 bytes, got {hex.length / 2}: {json}")
 
 end LegalKernel.Test.Integration.ExportCellProofsCli
 
@@ -207,8 +240,8 @@ namespace LegalKernel.Test.Integration.ExportCellProofsCli
 /-- All tests in this module — collected via the `@[test]`
     attribute and dispatched from `Tests.lean`. -/
 def tests : List TestCase := [
-  ⟨"export-cell-proofs: transfer bundle has 4 cells",
-    transfer_bundle_has_four_cells⟩,
+  ⟨"export-cell-proofs: transfer bundle has 5 cells",
+    transfer_bundle_has_five_cells⟩,
   ⟨"export-cell-proofs: bundle is deterministic",
     bundle_is_deterministic⟩,
   ⟨"export-cell-proofs: bundle verifies against commit",
@@ -220,7 +253,9 @@ def tests : List TestCase := [
   ⟨"export-cell-proofs: JSON envelope shape pinned",
     cell_proof_json_envelope_shape_pinned⟩,
   ⟨"export-cell-proofs: JSON byte-pinning (minimal balance proof)",
-    cell_proof_json_byte_pinning_minimal⟩
+    cell_proof_json_byte_pinning_minimal⟩,
+  ⟨"export-cell-proofs: proof_data carries the SMT opening",
+    cell_proof_json_carries_the_opening⟩
 ]
 
 end LegalKernel.Test.Integration.ExportCellProofsCli

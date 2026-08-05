@@ -681,8 +681,8 @@ def test_balanceMap_encode_injective_api : TestCase := {
   body := do
     let _proof : ∀ (bm₁ bm₂ : BalanceMap),
         bm₁.toList.length < 256 ^ 8 → bm₂.toList.length < 256 ^ 8 →
-        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 8) →
-        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 8) →
+        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 32) →
+        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 32) →
         BalanceMap.encode bm₁ = BalanceMap.encode bm₂ →
         bm₁.Equiv bm₂ :=
       BalanceMap.encode_injective
@@ -753,8 +753,8 @@ def test_balanceMap_encode_injective_to_equiv_api : TestCase := {
   body := do
     let _proof : ∀ (bm₁ bm₂ : BalanceMap),
         bm₁.toList.length < 256 ^ 8 → bm₂.toList.length < 256 ^ 8 →
-        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 8) →
-        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 8) →
+        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 32) →
+        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 32) →
         BalanceMap.encode bm₁ = BalanceMap.encode bm₂ →
         bm₁.Equiv bm₂ :=
       BalanceMap.encode_injective_to_equiv
@@ -769,8 +769,8 @@ def test_balanceMap_encodeAsBytes_injective_api : TestCase := {
   body := do
     let _proof : ∀ (bm₁ bm₂ : BalanceMap),
         bm₁.toList.length < 256 ^ 8 → bm₂.toList.length < 256 ^ 8 →
-        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 8) →
-        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 8) →
+        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 32) →
+        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 32) →
         BalanceMap.encodeAsBytes bm₁ = BalanceMap.encodeAsBytes bm₂ →
         bm₁.Equiv bm₂ :=
       BalanceMap.encodeAsBytes_injective
@@ -818,8 +818,8 @@ def test_state_encode_injective_api : TestCase := {
         s₂.balances.toList.length < 256 ^ 8 →
         (∀ p ∈ s₁.balances.toList, p.2.toList.length < 256 ^ 8) →
         (∀ p ∈ s₂.balances.toList, p.2.toList.length < 256 ^ 8) →
-        (∀ p ∈ s₁.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 8) →
-        (∀ p ∈ s₂.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 8) →
+        (∀ p ∈ s₁.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 32) →
+        (∀ p ∈ s₂.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 32) →
         (∀ p ∈ s₁.balances.toList, (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ s₂.balances.toList, (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8) →
         State.encode s₁ = State.encode s₂ →
@@ -1219,10 +1219,10 @@ def test_depositRecord_encode_injective_api : TestCase := {
   name := "Bridge.DepositRecord.encode_injective API stability"
   body := do
     let _proof : ∀ (rec₁ rec₂ : LegalKernel.Bridge.DepositRecord),
-        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 8 ∧
-          rec₁.poolAmount < 256 ^ 8 ∧ rec₁.budgetGrant < 256 ^ 8 →
-        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 8 ∧
-          rec₂.poolAmount < 256 ^ 8 ∧ rec₂.budgetGrant < 256 ^ 8 →
+        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 32 ∧
+          rec₁.poolAmount < 256 ^ 32 ∧ rec₁.budgetGrant < 256 ^ 8 →
+        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 32 ∧
+          rec₂.poolAmount < 256 ^ 32 ∧ rec₂.budgetGrant < 256 ^ 8 →
         Bridge.DepositRecord.encode rec₁ = Bridge.DepositRecord.encode rec₂ →
         rec₁ = rec₂ :=
       Bridge.DepositRecord.encode_injective
@@ -1352,10 +1352,10 @@ def test_depositRecord_encodeAsBytes_injective_api : TestCase := {
   name := "Bridge.DepositRecord.encodeAsBytes_injective API stability"
   body := do
     let _proof : ∀ (rec₁ rec₂ : LegalKernel.Bridge.DepositRecord),
-        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 8 ∧
-          rec₁.poolAmount < 256 ^ 8 ∧ rec₁.budgetGrant < 256 ^ 8 →
-        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 8 ∧
-          rec₂.poolAmount < 256 ^ 8 ∧ rec₂.budgetGrant < 256 ^ 8 →
+        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 32 ∧
+          rec₁.poolAmount < 256 ^ 32 ∧ rec₁.budgetGrant < 256 ^ 8 →
+        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 32 ∧
+          rec₂.poolAmount < 256 ^ 32 ∧ rec₂.budgetGrant < 256 ^ 8 →
         Bridge.DepositRecord.encodeAsBytes rec₁ = Bridge.DepositRecord.encodeAsBytes rec₂ →
         rec₁ = rec₂ :=
       Bridge.DepositRecord.encodeAsBytes_injective
@@ -1386,10 +1386,10 @@ def test_bridgeState_encodeConsumed_injective_api : TestCase := {
         (∀ p ∈ bs₂.consumed.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₁.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
-        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
-        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+          p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+          p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8) →
         Bridge.BridgeState.encodeConsumed bs₁ = Bridge.BridgeState.encodeConsumed bs₂ →
         bs₁.consumed.Equiv bs₂.consumed :=
       Bridge.BridgeState.encodeConsumed_injective
@@ -1454,10 +1454,10 @@ def test_pendingWithdrawal_encode_injective_api : TestCase := {
   body := do
     let _proof : ∀ (wd₁ wd₂ : LegalKernel.Bridge.PendingWithdrawal),
         wd₁.resource.toNat < 256 ^ 8 →
-        wd₁.amount < 256 ^ 8 →
+        wd₁.amount < 256 ^ 32 →
         wd₁.l2LogIndex < 256 ^ 8 →
         wd₂.resource.toNat < 256 ^ 8 →
-        wd₂.amount < 256 ^ 8 →
+        wd₂.amount < 256 ^ 32 →
         wd₂.l2LogIndex < 256 ^ 8 →
         Bridge.PendingWithdrawal.encode wd₁ = Bridge.PendingWithdrawal.encode wd₂ →
         wd₁ = wd₂ :=
@@ -1486,10 +1486,10 @@ def test_pendingWithdrawal_encodeAsBytes_injective_api : TestCase := {
   body := do
     let _proof : ∀ (wd₁ wd₂ : LegalKernel.Bridge.PendingWithdrawal),
         wd₁.resource.toNat < 256 ^ 8 →
-        wd₁.amount < 256 ^ 8 →
+        wd₁.amount < 256 ^ 32 →
         wd₁.l2LogIndex < 256 ^ 8 →
         wd₂.resource.toNat < 256 ^ 8 →
-        wd₂.amount < 256 ^ 8 →
+        wd₂.amount < 256 ^ 32 →
         wd₂.l2LogIndex < 256 ^ 8 →
         Bridge.PendingWithdrawal.encodeAsBytes wd₁ = Bridge.PendingWithdrawal.encodeAsBytes wd₂ →
         wd₁ = wd₂ :=
@@ -1510,9 +1510,9 @@ def test_bridgeState_encodePending_injective_api : TestCase := {
         (∀ p ∈ bs₁.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₁.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧ p.2.l2LogIndex < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧ p.2.l2LogIndex < 256 ^ 8) →
         Bridge.BridgeState.encodePending bs₁ = Bridge.BridgeState.encodePending bs₂ →
         bs₁.pending.Equiv bs₂.pending :=
       Bridge.BridgeState.encodePending_injective
@@ -1531,24 +1531,24 @@ def test_bridgeState_encode_injective_api : TestCase := {
         (∀ p ∈ bs₂.consumed.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₁.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
-        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
-        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+          p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 32 ∧
+          p.2.poolAmount < 256 ^ 32 ∧ p.2.budgetGrant < 256 ^ 8) →
         bs₁.pending.toList.length < 256 ^ 8 → bs₂.pending.toList.length < 256 ^ 8 →
         (∀ p ∈ bs₁.pending.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₁.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₁.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧ p.2.l2LogIndex < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧ p.2.l2LogIndex < 256 ^ 8) →
         bs₁.nextWdId < 256 ^ 8 → bs₂.nextWdId < 256 ^ 8 →
-        bs₁.ammReserveEth < 256 ^ 8 → bs₂.ammReserveEth < 256 ^ 8 →
-        bs₁.ammReserveBold < 256 ^ 8 → bs₂.ammReserveBold < 256 ^ 8 →
-        bs₁.boldTvlCap < 256 ^ 8 → bs₂.boldTvlCap < 256 ^ 8 →
-        bs₁.boldTotalLockedValue < 256 ^ 8 → bs₂.boldTotalLockedValue < 256 ^ 8 →
+        bs₁.ammReserveEth < 256 ^ 32 → bs₂.ammReserveEth < 256 ^ 32 →
+        bs₁.ammReserveBold < 256 ^ 32 → bs₂.ammReserveBold < 256 ^ 32 →
+        bs₁.boldTvlCap < 256 ^ 32 → bs₂.boldTvlCap < 256 ^ 32 →
+        bs₁.boldTotalLockedValue < 256 ^ 32 → bs₂.boldTotalLockedValue < 256 ^ 32 →
         Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂ →
         bs₁.consumed.Equiv bs₂.consumed ∧ bs₁.pending.Equiv bs₂.pending ∧
         bs₁.nextWdId = bs₂.nextWdId ∧
@@ -1647,11 +1647,12 @@ def test_commitExtendedState_subcommits_extensional_eq_api : TestCase := {
   name := "commitExtendedState_subcommits_extensional_eq API stability"
   body := do
     let _proof : ∀ (es₁ es₂ : LegalKernel.Authority.ExtendedState),
-        LegalKernel.Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+        LegalKernel.Bridge.CollisionFreeOn
+          (extendedStateCommitPreimages es₁ es₂) LegalKernel.Runtime.hashBytes →
         ExtendedState.CanonicalBounds es₁ → ExtendedState.CanonicalBounds es₂ →
-        commitExtendedState es₁ = commitExtendedState es₂ →
+        commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂ →
         ExtendedState.extEq es₁ es₂ :=
-      commitExtendedState_subcommits_extensional_eq_under_collision_free
+      commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free
     pure ()
 }
 
@@ -1662,8 +1663,104 @@ fixture-smoke checks from EI.0.c stay at the head as shared-machinery
 regressions; EI.1's per-lemma coverage follows.  EI.2 onwards will
 each append their per-sub-state tests when those PRs land. -/
 
+/-! ## 256-bit amount head (`cbeTagAmount`)
+
+A fixed-width head truncates modulo its body width, and a truncated
+value-carrying field breaks the state root two ways at once: two values
+differing by exactly the modulus commit to the same root, and a value at
+a *nonzero multiple* of the modulus encodes byte-for-byte as zero — which
+is `canonicalAbsentValue` for a balance cell, so the cell drops out of
+`stateCellEntries` and the root stops seeing the balance at all.
+
+That has now been closed at two successively wider moduli: `2^64` (the
+8-byte `cbeTagUint` body, which ordinary wei balances cross at ~18.45
+ETH) and `2^128`.  These pin both boundaries, so neither can regress. -/
+
+/-- Two values differing by exactly `2^64` share an 8-byte-head
+    encoding, but are distinguished by the amount head. -/
+def test_amountHead_separates_the_2_64_collision : TestCase := {
+  name := "amount head separates values colliding mod 2^64"
+  body := do
+    let lo : Nat := 100
+    let hi : Nat := 100 + 2 ^ 64
+    -- The narrow uint head cannot tell them apart.
+    assertEq
+      (Encodable.encode (T := Nat) lo)
+      (Encodable.encode (T := Nat) hi)
+      "the 8-byte uint head collides on values differing by 2^64"
+    -- The wide amount head does.
+    assert
+      (encodeAmount lo != encodeAmount hi)
+      "the amount head must separate them"
+}
+
+/-- The `2^128` boundary the 16-byte body aliased on, in the sharpest
+    form: a balance at a nonzero multiple of the old modulus encoded
+    identically to `0`, and `encodeAmount 0` *is* the canonical absent
+    value for a balance cell.  So the pair was not merely
+    indistinguishable from each other — the larger one was
+    indistinguishable from a cell that does not exist, which is what let
+    two states with different balance maps publish one root.
+
+    Pinned against `0` rather than against another live value because
+    the absent-value collision is the strictly worse half. -/
+def test_amountHead_separates_the_2_128_collision : TestCase := {
+  name := "amount head separates a 2^128 multiple from absent"
+  body := do
+    for k in [1, 2, 7] do
+      let v : Nat := k * 2 ^ 128
+      assert
+        (encodeAmount v != encodeAmount 0)
+        s!"a balance at {k}*2^128 must not encode as the absent value"
+    -- And the ordinary same-modulus pair.
+    assert
+      (encodeAmount 100 != encodeAmount (100 + 2 ^ 128))
+      "the amount head must separate values differing by 2^128"
+}
+
+/-- The amount head is 33 bytes (tag + 32 LE body) and round-trips
+    values across both retired moduli. -/
+def test_amountHead_roundtrips_above_2_64 : TestCase := {
+  name := "amount head round-trips values above 2^64"
+  body := do
+    for n in [0, 1, 2 ^ 64 - 1, 2 ^ 64, 2 ^ 64 + 100, 2 ^ 100,
+              2 ^ 128 - 1, 2 ^ 128, 2 ^ 128 + 100, 2 ^ 200,
+              2 ^ 256 - 1] do
+      assertEq (33 : Nat) (encodeAmount n).length s!"amount head width for {n}"
+      match decodeAmount (encodeAmount n) with
+      | .ok (n', rest) =>
+        assertEq n n' s!"amount round-trip value for {n}"
+        assertEq ([] : Stream) rest s!"amount round-trip tail for {n}"
+      | .error e => throw <| IO.userError s!"amount decode failed for {n}: {repr e}"
+}
+
+/-- An amount head never aliases a uint head: the leading tag differs,
+    so a widened amount field cannot collide with an identifier field. -/
+def test_amountHead_never_aliases_uint_head : TestCase := {
+  name := "amount head is tag-disjoint from the uint head"
+  body := do
+    for n in [0, 1, 42, 2 ^ 63] do
+      assert
+        (encodeAmount n != Encodable.encode (T := Nat) n)
+        s!"amount head must not equal the uint head for {n}"
+    let _proof : ∀ a b : Nat, encodeAmount a ≠ Encodable.encode (T := Nat) b :=
+      encodeAmount_ne_encodeNat
+    pure ()
+}
+
+/-- Term-level API stability for `encodeAmount_injective`. -/
+def test_encodeAmount_injective_api : TestCase := {
+  name := "encodeAmount_injective API stability"
+  body := do
+    let _proof : ∀ (n₁ n₂ : Nat), n₁ < 256 ^ 32 → n₂ < 256 ^ 32 →
+        encodeAmount n₁ = encodeAmount n₂ → n₁ = n₂ :=
+      encodeAmount_injective
+    pure ()
+}
+
 /-- Workstream EI's test cases.  Includes the four EI.0.c fixture
-    smoke checks and the EI.1 per-lemma coverage. -/
+    smoke checks, the EI.1 per-lemma coverage, and the C-1
+    128-bit-amount-head pins. -/
 def tests : List TestCase :=
   [ -- EI.0.c — Shared-fixture smoke checks.
     fixtureEmptyShape
@@ -1776,6 +1873,12 @@ def tests : List TestCase :=
   , test_extendedState_extEq_refl_empty
   , test_extendedState_extEq_refl_nonEmpty
   , test_commitExtendedState_subcommits_extensional_eq_api
+    -- C-1 groundwork — the 128-bit `cbeTagAmount` head.
+  , test_amountHead_separates_the_2_64_collision
+  , test_amountHead_separates_the_2_128_collision
+  , test_amountHead_roundtrips_above_2_64
+  , test_amountHead_never_aliases_uint_head
+  , test_encodeAmount_injective_api
   ]
 
 end InjectivityTests

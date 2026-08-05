@@ -156,12 +156,13 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
 
     // Per `actionKindByte`, Transfer dispatches to 0.
     assert_eq!(bundle.action_kind, 0, "Transfer's action_kind is 0");
-    // Per `actionFieldsForL1`, Transfer fields are 4 × 8 = 32
-    // bytes BE: r=1, sender=1, receiver=2, amount=100.
+    // Per `actionFieldsForL1`, Transfer fields are 3 × uint64BE
+    // (r=1, sender=1, receiver=2) + 1 × uint256BE (amount=100) = 56
+    // bytes BE.  The amount is value-carrying and so 32 bytes wide.
     assert_eq!(
         bundle.action_fields.len(),
-        32,
-        "Transfer fields = 4 × uint64BE = 32 bytes"
+        56,
+        "Transfer fields = 3 × uint64BE + 1 × uint256BE = 56 bytes"
     );
     // r at bytes [0..8]: BE-encoded 1 → bytes[7] = 1.
     assert_eq!(bundle.action_fields[7], 1, "r=1 in BE last byte");
@@ -169,20 +170,37 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
     assert_eq!(bundle.action_fields[15], 1, "sender=1 in BE last byte");
     // receiver at bytes [16..24]: BE-encoded 2 → bytes[23] = 2.
     assert_eq!(bundle.action_fields[23], 2, "receiver=2 in BE last byte");
-    // amount at bytes [24..32]: BE-encoded 100 → bytes[31] = 100.
-    assert_eq!(bundle.action_fields[31], 100, "amount=100 in BE last byte");
+    // amount occupies [24..56] (uint256BE), so its LSB is byte 55.
+    assert_eq!(bundle.action_fields[55], 100, "amount=100 in BE last byte");
     assert_eq!(bundle.signer, 1, "Transfer signer is 1");
     assert_eq!(
-        bundle.claimed_post_commit.len(),
+        bundle.expected_post_commit.len(),
         32,
-        "claimed_post_commit is 32 bytes"
+        "expected_post_commit is 32 bytes"
     );
-    // Transfer's cell-proof bundle has 4 cells (registry,
-    // balance×2, nonce).
+    // Transfer's frontier is 5 cells: `balance × 2, nonce,
+    // epochBudget` — the cells `writeCellsAt` names — plus the
+    // read-only budget policy, which is IN the frontier rather than
+    // beside it now that a read is a write of the same value.
     assert_eq!(
-        bundle.cell_proofs.len(),
-        4,
-        "Transfer bundle has 4 cell proofs"
+        bundle.opened_cells.len(),
+        5,
+        "Transfer frontier is 4 written cells plus the policy"
+    );
+    // ...and the policy cell is one of them.
+    assert!(
+        bundle.opened_cells.iter().any(|c| c.cell_kind == 14),
+        "the frontier must open the budget-policy cell"
+    );
+    // The wire is present and whole.
+    assert!(
+        !bundle.gap_mask.is_empty(),
+        "a real bundle carries a gap mask"
+    );
+    assert_eq!(
+        bundle.siblings.len() % 32,
+        0,
+        "the sibling region must be whole 32-byte siblings"
     );
 }
 
@@ -214,7 +232,8 @@ fn real_knomosis_export_terminate_bundle_deterministic() {
     );
 }
 
-/// Mint variant: `action_kind` = 1, fields are 3 × `uint64BE`.
+/// Mint variant: `action_kind` = 1, fields are 2 × `uint64BE`
+/// (r, to) + 1 × `uint128BE` (amount).
 #[test]
 fn real_knomosis_export_terminate_bundle_mint_variant() {
     let Some(knomosis_path) = locate_knomosis_binary() else {
@@ -244,15 +263,20 @@ fn real_knomosis_export_terminate_bundle_mint_variant() {
     assert_eq!(bundle.action_kind, 1, "Mint's action_kind is 1");
     assert_eq!(
         bundle.action_fields.len(),
-        24,
-        "Mint fields = 3 × uint64BE = 24 bytes"
+        48,
+        "Mint fields = 2 × uint64BE + 1 × uint256BE = 48 bytes"
     );
     assert_eq!(bundle.action_fields[7], 3, "r=3 in BE last byte");
     assert_eq!(bundle.action_fields[15], 11, "to=11 in BE last byte");
-    assert_eq!(bundle.action_fields[23], 42, "amount=42 in BE last byte");
+    // amount occupies [16..48] (uint256BE), so its LSB is byte 47.
+    assert_eq!(bundle.action_fields[47], 42, "amount=42 in BE last byte");
     assert_eq!(bundle.signer, 11, "Mint signer is 11");
-    // Mint bundle: 3 cells (registry, balance, nonce).
-    assert_eq!(bundle.cell_proofs.len(), 3, "Mint bundle has 3 cell proofs");
+    // Mint's frontier: balance, nonce, epochBudget, plus the policy.
+    assert_eq!(
+        bundle.opened_cells.len(),
+        4,
+        "Mint frontier is 3 written cells plus the policy"
+    );
 }
 
 /// Withdraw variant: `action_kind` = 14, fields include the
@@ -287,23 +311,35 @@ fn real_knomosis_export_terminate_bundle_withdraw_variant() {
     let bundle = parse_terminate_bundle_json(0, json_line).unwrap();
 
     assert_eq!(bundle.action_kind, 14, "Withdraw's action_kind is 14");
-    // Withdraw fields = 3 × uint64BE (24 bytes) + 20-byte EthAddress = 44 bytes.
+    // Withdraw fields = 2 × uint64BE (r, sender) + 1 × uint256BE
+    // (amount) + 20-byte EthAddress = 16 + 32 + 20 = 68 bytes.
     assert_eq!(
         bundle.action_fields.len(),
-        44,
-        "Withdraw fields = 24 + 20 = 44 bytes"
+        68,
+        "Withdraw fields = 16 + 32 + 20 = 68 bytes"
     );
     assert_eq!(bundle.action_fields[7], 2, "r=2 in BE last byte");
     assert_eq!(bundle.action_fields[15], 3, "sender=3 in BE last byte");
-    assert_eq!(bundle.action_fields[23], 50, "amount=50 in BE last byte");
+    // amount occupies [16..48] (uint256BE), so its LSB is byte 47.
+    assert_eq!(bundle.action_fields[47], 50, "amount=50 in BE last byte");
     // Trailing 20 bytes are the recipient_l1.  All bytes 0xAB.
-    for i in 24..44 {
+    for i in 48..68 {
         assert_eq!(
             bundle.action_fields[i], 0xAB,
             "recipient_l1 byte {i} should be 0xAB"
         );
     }
     assert_eq!(bundle.signer, 3, "Withdraw signer is 3");
+    // Withdraw is the one variant whose write set is not a function of
+    // `(action, signer)`: its pending-withdrawal cell is keyed by the
+    // PRE-state's counter, so it writes five cells — balance, nonce,
+    // epochBudget, the counter, and the cell it names — and the
+    // frontier adds the policy.
+    assert_eq!(
+        bundle.opened_cells.len(),
+        6,
+        "Withdraw frontier is 5 written cells plus the policy"
+    );
 }
 
 /// Out-of-range idx: exit code 2.

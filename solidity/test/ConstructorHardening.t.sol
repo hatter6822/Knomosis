@@ -2,7 +2,7 @@
 //
 //  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 
@@ -108,7 +108,8 @@ contract ConstructorHardeningTest is Test {
             identityRegistry: registry,
             migration: address(0),
             quorumThreshold: 1,
-            approvedAdjudicators: adj
+            approvedAdjudicators: adj,
+            challengerBond: 0
         });
     }
 

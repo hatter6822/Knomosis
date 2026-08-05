@@ -2,11 +2,11 @@
 //
 //  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {Script} from "forge-std/Script.sol";
 
-import {KnomosisStepVM}                from "../src/contracts/KnomosisStepVM.sol";
+import {KnomosisStepVMRoot}            from "../src/contracts/KnomosisStepVMRoot.sol";
 import {KnomosisFaultProofGame}        from "../src/contracts/KnomosisFaultProofGame.sol";
 import {KnomosisStateRootSubmission}   from "../src/contracts/KnomosisStateRootSubmission.sol";
 import {KnomosisDisputeVerifierV2}     from "../src/contracts/KnomosisDisputeVerifierV2.sol";
@@ -82,8 +82,11 @@ contract DeployFaultProof is Script {
         address[] memory adjudicators = new address[](1);
         adjudicators[0] = sequencer;  // placeholder adjudicator
 
-        // Step 1: deploy KnomosisStepVM (no dependencies).
-        KnomosisStepVM stepVM = new KnomosisStepVM();
+        // Step 1: deploy the step VM (no dependencies).  The
+// ROOT-computing build: its terminal output is a state
+// root, so the game's comparison is between two values of
+// the same construction.
+        KnomosisStepVMRoot stepVM = new KnomosisStepVMRoot();
 
         // Step 2-4: predict the game's address before deploying
         // state-root-sub or verifier.  The broadcaster's nonce

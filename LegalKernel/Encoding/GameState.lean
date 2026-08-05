@@ -17,20 +17,29 @@ requires a canonical byte encoding.  Layout matches the plan
 §12.4.5 specification:
 
 ```
-sequencer        : 8 bytes  (UInt64 / CBE uint head)
-challenger       : 8 bytes
-range.low.idx    : 8 bytes
-range.low.commit : variable (CBE bstr)
-range.high.idx   : 8 bytes
-range.high.commit: variable (CBE bstr)
-pendingMidpoint  : 1 byte  (Bool tag) + (Claim if Some)
-depth            : 8 bytes
-turn             : 1 byte  (TurnSide tag)
-sequencerBond    : variable (CBE Nat)
-challengerBond   : variable (CBE Nat)
-status           : 1 byte  (GameStatus tag)
-deploymentId     : variable (CBE bstr)
+sequencer         :  9 bytes  (CBE uint head: 1 tag + 8 LE)
+challenger        :  9 bytes
+range.low.idx     :  9 bytes
+range.low.commit  : 9 + len   (CBE bstr: head + payload)
+range.high.idx    :  9 bytes
+range.high.commit : 9 + len
+pendingMidpoint   :  9 bytes  (CBE array head, count 0 or 1)
+                    + Claim (18 + commit len) when `some`
+depth             :  9 bytes
+turn              :  9 bytes  (CBE uint tag 0 / 1)
+sequencerBond     :  9 bytes
+challengerBond    :  9 bytes
+status            :  9 bytes  (CBE uint tag 0..4)
+deploymentId      : 9 + len
 ```
+
+Every scalar rides a full CBE head — there are no bare 1-byte tags
+and no bare 8-byte integers in this layout.  `TurnSide` and
+`GameStatus` encode through `Encodable (T := Nat)` exactly as the
+numeric fields do, and `Option Claim` uses the array head with count
+0 or 1, not a Bool byte.  (The header previously described a mix of
+8-byte integers and 1-byte tags that the encoder has never
+produced.)
 
 This module is **not** part of the trusted computing base.
 -/
@@ -93,7 +102,7 @@ def TurnSide.encode : LegalKernel.FaultProof.TurnSide → Stream
   | .sequencer  => Encodable.encode (T := Nat) 0
   | .challenger => Encodable.encode (T := Nat) 1
 
-/-- Decode a `TurnSide` from a 1-byte CBE uint tag. -/
+/-- Decode a `TurnSide` from its 9-byte CBE uint tag. -/
 def TurnSide.decode (s : Stream) :
     Except DecodeError (LegalKernel.FaultProof.TurnSide × Stream) :=
   match Encodable.decode (T := Nat) s with

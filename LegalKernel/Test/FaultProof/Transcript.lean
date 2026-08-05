@@ -9,7 +9,7 @@
 
 /-
 LegalKernel.Test.FaultProof.Transcript — value-level tests for the
-transcript machinery: applyCellWrites, extractRequiredCells,
+transcript machinery: applyCellWrites_to_state, extractRequiredCells,
 Action.requiredCellProofs, NonMembershipProof, isLegalTranscript,
 chainKernelStepApplyFromLog.
 -/
@@ -38,11 +38,19 @@ private def emptyES : ExtendedState := ExtendedState.empty
 
 /-- Tests for the transcript machinery. -/
 def tests : List TestCase :=
-  [ { name := "applyCellWrites is deterministic on equal inputs"
+  [ { name := "applyCellWrites_to_state is deterministic on equal inputs"
     , body := do
-        let h := applyCellWrites_deterministic emptyES emptyES transferSt transferSt rfl rfl
-        let _ := h
-        assert true "API exists; determinism holds"
+        -- Term-level: the signature callers depend on.
+        let _proof : ∀ (es₁ es₂ : ExtendedState) (st₁ st₂ : SignedAction) (i₁ i₂ : Nat),
+            es₁ = es₂ → st₁ = st₂ → i₁ = i₂ →
+            applyCellWrites_to_state es₁ st₁ i₁ = applyCellWrites_to_state es₂ st₂ i₂ :=
+          applyCellWrites_to_state_deterministic
+        -- Value-level: the advance produces a state whose root is a
+        -- real 32-byte commitment.  `assert true` used to stand here,
+        -- which is not a test — it passes for any body at all.
+        assertEq (expected := 32)
+          (actual := (commitExtendedState (applyCellWrites_to_state emptyES transferSt 0)).size)
+          "the advance produces a committable state"
     }
   , { name := "extractRequiredCells is deterministic"
     , body := do
@@ -72,27 +80,35 @@ def tests : List TestCase :=
     }
   , { name := "isLegalTranscript_singleton iff statement"
     , body := do
-        let _ := @isLegalTranscript_singleton
+        let _proof : ∀ (initialCommit : StateCommit) (s : KernelStep),
+            isLegalTranscript initialCommit [s] ↔
+            s.preStateCommit = initialCommit :=
+          isLegalTranscript_singleton
         assert true "API exists"
     }
   , { name := "chainKernelStepApplyFromLog on empty log is empty"
     , body := do
-        let r := chainKernelStepApplyFromLog emptyES []
+        let r := chainKernelStepApplyFromLog emptyES 0 []
         assertEq (expected := 0) (actual := r.length) "empty produces empty"
     }
   , { name := "chainKernelStepApplyFromLog_length theorem holds"
     , body := do
-        let _ := @chainKernelStepApplyFromLog_length
+        let _proof : ∀ (es : ExtendedState) (i : Nat) (log : List LogEntry),
+            (chainKernelStepApplyFromLog es i log).length = log.length :=
+          chainKernelStepApplyFromLog_length
         assert true "API exists"
     }
   , { name := "chainKernelStepApplyFromLog_isLegalTranscript theorem holds"
     , body := do
-        let _ := @chainKernelStepApplyFromLog_isLegalTranscript
+        let _proof : ∀ (es : ExtendedState) (i : Nat) (log : List LogEntry),
+            isLegalTranscript (commitExtendedState es)
+              (chainKernelStepApplyFromLog es i log) :=
+          chainKernelStepApplyFromLog_isLegalTranscript
         assert true "API exists"
     }
   , { name := "chainKernelStepApplyFromLog produces legal transcript on empty"
     , body := do
-        let h := chainKernelStepApplyFromLog_isLegalTranscript emptyES []
+        let h := chainKernelStepApplyFromLog_isLegalTranscript emptyES 0 []
         let _ := h
         assert true "value-level legality holds for empty"
     }

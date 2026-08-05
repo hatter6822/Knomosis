@@ -102,7 +102,7 @@ Coverage map:
     * `eip712Wrap_distinguishes` (theorem #26)
 
 The headline injectivity statements are stated under a Prop
-hypothesis `CollisionFree hashBytes` (the deployment-supplied
+hypothesis `CollisionFreeOn ... hashBytes` (the deployment-supplied
 keccak256 is collision-resistant); the hypothesis is *not* a
 Lean axiom.  Real-world security depends on the production
 keccak256 binding (Workstream A.2).
@@ -119,20 +119,106 @@ open LegalKernel.Runtime
 
 /-! ## Hash collision-resistance hypothesis
 
-`CollisionFree h` says: distinct inputs to `h` produce distinct
-outputs.  Stated as a Prop parameter (not an axiom), so the
-EIP-712 theorems are *conditional* on the deployment-supplied
-hash being collision-resistant.  Real-world security requires
-linking the keccak256 binding (Workstream A.2). -/
+`CollisionFreeOn S h` says: `h` does not collide on the finite set
+of pre-images `S`.  Stated as a Prop parameter (not an axiom), so
+the EIP-712 theorems are *conditional* on the deployment-supplied
+hash being collision-resistant on the pre-images each theorem
+actually hashes.  Real-world security requires linking the
+keccak256 binding (Workstream A.2).
 
-/-- Hash collision-resistance predicate.  `h` is collision-free
-    iff `h x = h y → x = y` for all inputs.  Stated for any
-    `ByteArray → ByteArray` function so it composes with both
-    `hashBytes` and any future hash adaptor.  The Lean fallback
-    (FNV-1a-64 padded) is *not* collision-free in 64 bits;
+**Why the hypothesis is scoped to a pre-image set.**  The obvious
+statement — `∀ b₁ b₂, h b₁ = h b₂ → b₁ = b₂`, i.e. `h` injective on
+*all* of `ByteArray` — is unsatisfiable for any hash with bounded
+output, and Knomosis proves that bound: `Runtime.hashBytes_size`
+gives `(hashBytes b).size = 32` for every `b`.  `ByteArray` is
+infinite and the 32-byte arrays are finite, so no injection exists;
+a global-injectivity hypothesis is refutable *inside Lean* and every
+theorem conditioned on it is vacuously true.  `UniformOutputSize H
+32` makes the same contradiction available for an abstract `H`, so
+the two together were jointly unsatisfiable for every hash function.
+
+Scoping to a finite pre-image set removes the contradiction while
+keeping exactly the strength each proof uses: every proof below
+applies the hypothesis at finitely many points, so the pre-image
+list is read straight off the proof.  Satisfiability is not merely
+plausible, it is exhibited — see `collisionFreeOn_id` and
+`exists_uniformOutputSize_collisionFreeOn_of_ne`. -/
+
+/-- Hash collision-resistance predicate, scoped to a set of
+    pre-images.  `CollisionFreeOn S h` says `h` is injective on `S`.
+    Stated for any `ByteArray → ByteArray` function so it composes
+    with both `hashBytes` and any future hash adaptor.  The Lean
+    fallback (FNV-1a-64 padded) collides even on small sets;
     production deployments link keccak256 via `@[extern]`. -/
-def CollisionFree (h : ByteArray → ByteArray) : Prop :=
-  ∀ b₁ b₂, h b₁ = h b₂ → b₁ = b₂
+def CollisionFreeOn (S : List ByteArray) (h : ByteArray → ByteArray) : Prop :=
+  ∀ x ∈ S, ∀ y ∈ S, h x = h y → x = y
+
+/-- Apply the hypothesis at a pair of pre-images drawn from the set. -/
+theorem CollisionFreeOn.apply {S : List ByteArray} {h : ByteArray → ByteArray}
+    (hcf : CollisionFreeOn S h) {x y : ByteArray}
+    (hx : x ∈ S) (hy : y ∈ S) (heq : h x = h y) : x = y :=
+  hcf x hx y hy heq
+
+/-- Collision-freeness on a set restricts to any subset.  This is
+    what lets an inductive proof hand its induction hypothesis the
+    tail of the pre-image list. -/
+theorem CollisionFreeOn.mono {S S' : List ByteArray} {h : ByteArray → ByteArray}
+    (hsub : ∀ x ∈ S', x ∈ S) (hcf : CollisionFreeOn S h) :
+    CollisionFreeOn S' h :=
+  fun x hx y hy heq => hcf x (hsub x hx) y (hsub y hy) heq
+
+/-- Both halves of a concatenated pre-image list inherit the
+    hypothesis. -/
+theorem CollisionFreeOn.append_left {S₁ S₂ : List ByteArray}
+    {h : ByteArray → ByteArray} (hcf : CollisionFreeOn (S₁ ++ S₂) h) :
+    CollisionFreeOn S₁ h :=
+  hcf.mono (fun _ hx => List.mem_append_left _ hx)
+
+/-- Symmetric counterpart of `CollisionFreeOn.append_left`. -/
+theorem CollisionFreeOn.append_right {S₁ S₂ : List ByteArray}
+    {h : ByteArray → ByteArray} (hcf : CollisionFreeOn (S₁ ++ S₂) h) :
+    CollisionFreeOn S₂ h :=
+  hcf.mono (fun _ hx => List.mem_append_right _ hx)
+
+/-- Satisfiability, cheapest witness: the identity function is
+    collision-free on every set.  Exhibiting a witness is what
+    distinguishes a conditional theorem from a vacuous one — the
+    former's hypothesis set is inhabited, the latter's is not. -/
+theorem collisionFreeOn_id (S : List ByteArray) :
+    CollisionFreeOn S id :=
+  fun _ _ _ _ heq => heq
+
+/-- Satisfiability jointly with a bounded output size.  For any two
+    distinct pre-images there is a hash function with 32-byte outputs
+    that separates them, so `CollisionFreeOn [x, y] H` and
+    `∀ b, (H b).size = 32` hold together.  The corresponding
+    conjunction for the *global* predicate had no witness at all: an
+    injection from `ByteArray` into the 32-byte arrays does not
+    exist. -/
+theorem exists_uniformOutputSize_collisionFreeOn_of_ne
+    {x y : ByteArray} (hne : x ≠ y) :
+    ∃ H : ByteArray → ByteArray,
+      (∀ b, (H b).size = 32) ∧ CollisionFreeOn [x, y] H := by
+  classical
+  -- Separate `x` from everything else; both outputs are 32 bytes.
+  refine ⟨fun b => if b = x then ByteArray.mk (Array.replicate 32 (1 : UInt8))
+                   else ByteArray.mk (Array.replicate 32 (0 : UInt8)),
+          fun b => by
+            by_cases hb : b = x <;>
+              simp [hb, ByteArray.size, Array.size_replicate], ?_⟩
+  intro a ha b hb heq
+  -- `S = [x, y]`, so each of `a`, `b` is `x` or `y`.
+  have hmem : ∀ c ∈ [x, y], c = x ∨ c = y := by
+    intro c hc
+    rcases List.mem_cons.mp hc with h | h
+    · exact Or.inl h
+    · exact Or.inr (List.mem_singleton.mp h)
+  have hxy : ∀ c, c = y → c ≠ x := fun c hc => hc ▸ (Ne.symm hne)
+  rcases hmem a ha with rfl | ha' <;> rcases hmem b hb with rfl | hb'
+  · rfl
+  · exact absurd heq (by simp [hxy b hb'])
+  · exact absurd heq (by simp [hxy a ha'])
+  · exact ha'.trans hb'.symm
 
 /-! ## ByteArray helper lemmas
 
@@ -515,7 +601,7 @@ hashBytes(deploymentId)`):
   1. From `eip712Wrap m₁ d = eip712Wrap m₂ d`, extract the
      suffix struct-hash equality via byte-level append injectivity
      at the boundary `(prefix ++ d).size`.
-  2. Apply `CollisionFree hashBytes` to the struct hashes; lift
+  2. Apply collision-freeness to the struct hashes; lift
      to equality of the pre-images (`structPreHash m₁ =
      structPreHash m₂`).
   3. Peel `knomosisActionTypeHash` (32 bytes) from the preimage:
@@ -524,7 +610,7 @@ hashBytes(deploymentId)`):
   4. Peel `m₁.actionHash` (32 bytes) from the leftover: get
      `m₁.actionHash = m₂.actionHash` and the remaining-fields
      equality.
-  5. Apply `CollisionFree hashBytes` to the action hashes
+  5. Apply collision-freeness to the action hashes
      (`actionHash = hashBytes signInput`); conclude
      `m₁.signInput = m₂.signInput`.
 
@@ -539,6 +625,13 @@ in `(action, signer, nonce, deploymentId)`, which is a separate
 property of the Knomosis CBE encoding (provable but not stated here).
 The theorem below exposes the strongest provable conclusion: equal
 wraps imply equal sign-input bytes. -/
+
+/-- The pre-images `eip712Wrap_injective` hashes: the two struct
+    pre-images, and the two sign-input byte strings underneath them.
+    Naming the set is what makes the theorem's collision-resistance
+    hypothesis satisfiable — see `CollisionFreeOn`. -/
+def eip712WrapPreimages (m₁ m₂ : Eip712Message) : List ByteArray :=
+  [structPreHash m₁, structPreHash m₂, m₁.signInput, m₂.signInput]
 
 /-- Theorem #24: under collision-free hashing, equal EIP-712 wraps
     for a fixed domain separator imply equal sign-input bytes for
@@ -559,11 +652,10 @@ wraps imply equal sign-input bytes. -/
     structured field equality apply CBE field-injectivity at the
     FFI boundary. -/
 theorem eip712Wrap_injective
-    (hcf : CollisionFree hashBytes) :
-    ∀ (m₁ m₂ : Eip712Message) (d : ByteArray),
-      eip712Wrap m₁ d = eip712Wrap m₂ d →
-      m₁.signInput = m₂.signInput := by
-  intro m₁ m₂ d h
+    (m₁ m₂ : Eip712Message) (d : ByteArray)
+    (hcf : CollisionFreeOn (eip712WrapPreimages m₁ m₂) hashBytes)
+    (h : eip712Wrap m₁ d = eip712Wrap m₂ d) :
+    m₁.signInput = m₂.signInput := by
   -- Step 1: extract struct-hash equality from the wrap concat.
   unfold eip712Wrap at h
   -- h : eip712Prefix ++ d ++ eip712StructHash m₁ =
@@ -575,7 +667,8 @@ theorem eip712Wrap_injective
   -- hstruct : eip712StructHash m₁ = eip712StructHash m₂
   -- Step 2: apply collision-freedom to the struct hashes.
   unfold eip712StructHash at hstruct
-  have hstructPre : structPreHash m₁ = structPreHash m₂ := hcf _ _ hstruct
+  have hstructPre : structPreHash m₁ = structPreHash m₂ :=
+    hcf.apply (by simp [eip712WrapPreimages]) (by simp [eip712WrapPreimages]) hstruct
   unfold structPreHash at hstructPre
   -- hstructPre : knomosisActionTypeHash ++ m₁.actionHash ++
   --                encodeUint256BE m₁.signer.toNat ++ encodeUint256BE m₁.nonce ++
@@ -631,7 +724,8 @@ theorem eip712Wrap_injective
   -- Step 4: apply collision-freedom to the action hashes.
   unfold Eip712Message.actionHash at hAH
   -- hAH : hashBytes m₁.signInput = hashBytes m₂.signInput
-  exact hcf _ _ hAH
+  exact hcf.apply (by simp [eip712WrapPreimages])
+    (by simp [eip712WrapPreimages]) hAH
 
 /-! ## Theorem 25 — `eip712DomainSeparator_distinguishes`
 
@@ -654,6 +748,15 @@ For the per-field injectivity:
 Composing these via fixed-size-boundary extraction gives
 `domainPreHash`-injectivity. -/
 
+/-- The pre-images `domainPreHash_injective` hashes: the three
+    variable-width `DomainParams` fields, for both parameter sets.
+    The fixed-width fields (`chainId`, `rollupId`) are recovered by
+    encoding injectivity, not by hashing, so they do not appear. -/
+def domainPreHashPreimages (p₁ p₂ : DomainParams) : List ByteArray :=
+  [ p₁.name, p₂.name
+  , p₁.version, p₂.version
+  , p₁.verifyingContract, p₂.verifyingContract ]
+
 /-- Auxiliary: `domainPreHash` is injective on `DomainParams`
     under collision-free hashing of the variable-width fields.
 
@@ -663,8 +766,8 @@ Composing these via fixed-size-boundary extraction gives
     conditions.  Real-world `chainId`s and `rollupId`s fit in
     `uint64` (well below the bound). -/
 theorem domainPreHash_injective
-    (hcf : CollisionFree hashBytes)
     (p₁ p₂ : DomainParams)
+    (hcf : CollisionFreeOn (domainPreHashPreimages p₁ p₂) hashBytes)
     (hcb₁ : p₁.chainId < 256 ^ 32) (hcb₂ : p₂.chainId < 256 ^ 32)
     (hrb₁ : p₁.rollupId < 256 ^ 32) (hrb₂ : p₂.rollupId < 256 ^ 32)
     (h : domainPreHash p₁ = domainPreHash p₂) :
@@ -685,7 +788,9 @@ theorem domainPreHash_injective
       hashBytes_size, encodeUint256BE_size]
   obtain ⟨h_left₅, h_vc⟩ :=
     byteArray_append_inj_of_size_left _ _ _ _ h h_size₅
-  have hvc : p₁.verifyingContract = p₂.verifyingContract := hcf _ _ h_vc
+  have hvc : p₁.verifyingContract = p₂.verifyingContract :=
+    hcf.apply (by simp [domainPreHashPreimages])
+      (by simp [domainPreHashPreimages]) h_vc
   -- 2) Peel rollupId:
   have h_size₄ :
       (eip712DomainTypeHash ++ hashBytes p₁.name ++ hashBytes p₁.version ++
@@ -716,13 +821,17 @@ theorem domainPreHash_injective
       hashBytes_size]
   obtain ⟨h_left₂, h_ver⟩ :=
     byteArray_append_inj_of_size_left _ _ _ _ h_left₃ h_size₂
-  have hver : p₁.version = p₂.version := hcf _ _ h_ver
+  have hver : p₁.version = p₂.version :=
+    hcf.apply (by simp [domainPreHashPreimages])
+      (by simp [domainPreHashPreimages]) h_ver
   -- 5) Peel name (the only remaining field at the leftmost position):
   have h_size₁ :
       eip712DomainTypeHash.size = eip712DomainTypeHash.size := rfl
   obtain ⟨_, h_name⟩ :=
     byteArray_append_inj_of_size_left _ _ _ _ h_left₂ h_size₁
-  have hname : p₁.name = p₂.name := hcf _ _ h_name
+  have hname : p₁.name = p₂.name :=
+    hcf.apply (by simp [domainPreHashPreimages])
+      (by simp [domainPreHashPreimages]) h_name
   -- Combine all field equalities into structure equality.
   cases p₁; cases p₂
   simp_all
@@ -736,8 +845,10 @@ theorem domainPreHash_injective
     standardised chainId fits in `uint64`).  At the deployment
     boundary, the runtime adaptor enforces the bound. -/
 theorem eip712DomainSeparator_distinguishes
-    (hcf : CollisionFree hashBytes)
     (p₁ p₂ : DomainParams)
+    (hcf : CollisionFreeOn
+      (domainPreHash p₁ :: domainPreHash p₂ :: domainPreHashPreimages p₁ p₂)
+      hashBytes)
     (hcb₁ : p₁.chainId < 256 ^ 32) (hcb₂ : p₂.chainId < 256 ^ 32)
     (hrb₁ : p₁.rollupId < 256 ^ 32) (hrb₂ : p₂.rollupId < 256 ^ 32)
     (h_neq : p₁ ≠ p₂) :
@@ -745,8 +856,10 @@ theorem eip712DomainSeparator_distinguishes
   intro h_eq
   apply h_neq
   unfold eip712DomainSeparator at h_eq
-  have h_pre : domainPreHash p₁ = domainPreHash p₂ := hcf _ _ h_eq
-  exact domainPreHash_injective hcf p₁ p₂ hcb₁ hcb₂ hrb₁ hrb₂ h_pre
+  have h_pre : domainPreHash p₁ = domainPreHash p₂ :=
+    hcf.apply (by simp) (by simp) h_eq
+  exact domainPreHash_injective p₁ p₂
+    (hcf.mono (fun _ hx => by simp [hx])) hcb₁ hcb₂ hrb₁ hrb₂ h_pre
 
 /-! ## Theorem 26 — `eip712Wrap_distinguishes`
 
@@ -770,8 +883,8 @@ equal. -/
     leaving the struct hashes equal — which by #24 means equal
     sign-input bytes. -/
 theorem eip712Wrap_distinguishes
-    (hcf : CollisionFree hashBytes)
     (m₁ m₂ : Eip712Message) (d₁ d₂ : ByteArray)
+    (hcf : CollisionFreeOn (eip712WrapPreimages m₁ m₂) hashBytes)
     (h_size : d₁.size = d₂.size)
     (h : eip712Wrap m₁ d₁ = eip712Wrap m₂ d₂) :
     d₁ = d₂ ∧ m₁.signInput = m₂.signInput := by
@@ -797,6 +910,6 @@ theorem eip712Wrap_distinguishes
   have hwrap : eip712Wrap m₁ d₁ = eip712Wrap m₂ d₁ := by
     unfold eip712Wrap
     rw [h_struct]
-  exact ⟨h_d, eip712Wrap_injective hcf m₁ m₂ d₁ hwrap⟩
+  exact ⟨h_d, eip712Wrap_injective m₁ m₂ d₁ hcf hwrap⟩
 
 end LegalKernel.Bridge

@@ -59,6 +59,38 @@ or deserialises bytes, only the deployment-facing runtime adaptor
 (Phase 5) does.
 -/
 
+/-! ## `ByteArray` equality is lawful
+
+Lean core gives `ByteArray` a `BEq` instance but no `LawfulBEq`, so
+`a == b` and `a = b` are formally unrelated: neither
+`a = b → (a == b) = true` nor `(a == b) = true → a = b` is available.
+That gap is not harmless in a project whose every content-addressed
+identity — cell keys, commitments, encoded values — is a `ByteArray`
+compared with `==`, because a side condition phrased on `≠` is then
+*not* the condition the code decides, and a lemma proved about one
+does not apply to the other.
+
+The instance is true and its proof is three lines: `ByteArray` is a
+one-field structure over `Array UInt8`, its `BEq` is that field's, and
+`Array UInt8` is lawful.  Stated here rather than at the point of use
+because it is a fact about the byte-level foundation, and an instance
+in scope in some modules and not others is worse than none — `simp`
+would close a goal in one file and fail on it in the next. -/
+
+/-- `ByteArray`'s `==` decides its `=`.
+
+    Both directions, and both are used: `eq_of_beq` is what lets a
+    computed key comparison discharge a propositional side condition,
+    and `rfl` is what lets a propositional distinctness hypothesis
+    discharge a computed one. -/
+instance : LawfulBEq ByteArray where
+  eq_of_beq {a b} h := by
+    cases a; cases b
+    exact congrArg ByteArray.mk (eq_of_beq h)
+  rfl {a} := by
+    cases a
+    exact beq_self_eq_true (α := Array UInt8) _
+
 namespace LegalKernel
 namespace Encoding
 
@@ -106,6 +138,44 @@ encoders / decoders use them directly. -/
 
 /-- Type byte for a CBE unsigned integer (canonical CBOR major type 0). -/
 abbrev cbeTagUint  : UInt8 := 0x00
+
+/-- Type byte for a CBE **256-bit amount** — a value-carrying uint with a
+    32-byte little-endian body instead of the 8-byte body `cbeTagUint`
+    uses.
+
+    Value-carrying fields are the ones that legitimately exceed `2^64`: a
+    balance denominated in wei passes that bound at ~18.45 ETH, and such
+    fields additionally *accumulate*, so no gate on individual input
+    amounts can keep a stored value inside a narrow body.  Encoding an
+    out-of-range value through a too-narrow head silently truncates it,
+    which makes `State.encode` — and therefore the L1 state root —
+    non-injective: two values differing by exactly the modulus commit to
+    the same root, and a value at a nonzero multiple of it becomes
+    byte-identical to the *absent* encoding, so the cell drops out of
+    `stateCellEntries` and the root stops seeing it at all.
+
+    That defect has now been closed twice at successively wider moduli
+    (`2^64`, then `2^128`).  The body is 32 bytes so the ceiling is
+    `2^256` — the width of an EVM word, which is also the widest value
+    any mirrored L1 surface can hold, so there is no wider head to
+    migrate to next.  `Laws.AmountBound` makes the bound a checked
+    precondition rather than a standing assumption, which is what stops
+    the cycle rather than merely deferring it.
+
+    What stays on the 8-byte `cbeTagUint` head is **structurally bounded
+    or non-accumulating**: identifiers (`ActorId` / `ResourceId`, which
+    are `UInt64` at the source and cannot exceed the range), constructor
+    tags, list counts and every length prefix.  A list length does not
+    accumulate the way a balance does, and `2^64` elements is not a
+    reachable quantity, so widening those would cost wire size for no
+    benefit.  The distinct tag keeps the two forms unambiguous for a
+    decoder that knows which shape a field should have.
+
+    The tag value moved when the body widened.  Holding the old byte at
+    a new width would let a stale decoder read a 33-byte value as 17 and
+    silently mis-parse the remainder of the stream; changing it makes
+    that decoder fail closed on `invalidMajorType` instead. -/
+abbrev cbeTagAmount : UInt8 := 0x06
 
 /-- Type byte for a CBE byte string (canonical CBOR major type 2). -/
 abbrev cbeTagBytes : UInt8 := 0x02
@@ -313,6 +383,85 @@ theorem cborHeadRoundtrip_append (major : UInt8) (n : Nat) (rest : Stream)
   unfold cborHeadEncode cborHeadDecode
   simp
   exact natFromBytesLE_append_natToBytesLE n 8 rest h
+
+/-! ## The 256-bit amount head
+
+The `cbeTagAmount` counterpart of `cborHeadEncode` / `cborHeadDecode`:
+a 33-byte head (tag byte + 32 little-endian body bytes) carrying a
+value in `[0, 2^256)`.  Everything below mirrors the 8-byte head
+exactly — the underlying `natToBytesLE` / `natFromBytesLE` helpers are
+already width-parametric, so the width is the only difference. -/
+
+/-- Encode a 256-bit CBE amount head: the `cbeTagAmount` type byte
+    followed by 32 little-endian body bytes.
+
+    Total, and lossy only above `2^256` — the width of an EVM word, so
+    no mirrored L1 surface can hold a value this head cannot.  Unlike
+    the `2^128` bound it replaces, the ceiling is not merely far from
+    reachable values but is *enforced*: `Laws.AmountBound` carries it as
+    a precondition conjunct on every balance-increasing law. -/
+def cborAmountHeadEncode (n : Nat) : Stream :=
+  cbeTagAmount :: natToBytesLE n 32
+
+/-- Decode a 256-bit CBE amount head.  Rejects a tag byte that is not
+    `cbeTagAmount` (`invalidMajorType`) and inputs shorter than 33 bytes
+    (`unexpectedEof`).
+
+    As with the 8-byte head, no non-canonicality check is needed: the
+    fixed-width body gives exactly one byte sequence per value in
+    `[0, 2^256)`. -/
+def cborAmountHeadDecode (s : Stream) :
+    Except DecodeError (Nat × Stream) :=
+  match s with
+  | []       => .error .unexpectedEof
+  | b :: rest =>
+    if b != cbeTagAmount then
+      .error (.invalidMajorType b cbeTagAmount)
+    else
+      natFromBytesLE rest 32
+
+/-- The amount head is 33 bytes wide. -/
+theorem cborAmountHeadEncode_length (n : Nat) :
+    (cborAmountHeadEncode n).length = 33 := by
+  unfold cborAmountHeadEncode
+  simp [natToBytesLE_length]
+
+/-- Amount-head round-trip with a suffix: for `n < 2^256`, decoding
+    `cborAmountHeadEncode n ++ rest` returns `(n, rest)`. -/
+theorem cborAmountHeadRoundtrip_append (n : Nat) (rest : Stream)
+    (h : n < 256 ^ 32) :
+    cborAmountHeadDecode (cborAmountHeadEncode n ++ rest) = .ok (n, rest) := by
+  unfold cborAmountHeadEncode cborAmountHeadDecode
+  simp
+  exact natFromBytesLE_append_natToBytesLE n 32 rest h
+
+/-- Amount-head round-trip with no suffix. -/
+theorem cborAmountHeadRoundtrip (n : Nat) (h : n < 256 ^ 32) :
+    cborAmountHeadDecode (cborAmountHeadEncode n) = .ok (n, []) := by
+  have := cborAmountHeadRoundtrip_append n [] h
+  simpa using this
+
+/-- Amount-head injectivity: two in-range values with equal encodings
+    are equal.  The `EI.1`-tier lemma the amount-carrying encoders build
+    on, exactly as `cborHeadEncode_injective` serves the 8-byte head. -/
+theorem cborAmountHeadEncode_injective
+    {n₁ n₂ : Nat} (h₁ : n₁ < 256 ^ 32) (h₂ : n₂ < 256 ^ 32)
+    (h : cborAmountHeadEncode n₁ = cborAmountHeadEncode n₂) : n₁ = n₂ := by
+  have d₁ := cborAmountHeadRoundtrip n₁ h₁
+  have d₂ := cborAmountHeadRoundtrip n₂ h₂
+  rw [h] at d₁
+  have heq : (Except.ok (n₁, ([] : Stream)) : Except DecodeError (Nat × Stream))
+           = Except.ok (n₂, []) := d₁.symm.trans d₂
+  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
+
+/-- A 256-bit amount head never collides with an 8-byte uint head: the
+    leading type byte differs (`cbeTagAmount` vs `cbeTagUint`).  This is
+    what lets a decoder keep the two forms apart, and what stops a
+    widened amount field from aliasing an identifier field. -/
+theorem cborAmountHeadEncode_ne_cborHeadEncode (n₁ n₂ : Nat) :
+    cborAmountHeadEncode n₁ ≠ cborHeadEncode cbeTagUint n₂ := by
+  unfold cborAmountHeadEncode cborHeadEncode
+  simp [cbeTagAmount, cbeTagUint]
 
 /-! ## CBE-head injectivity (EI.1.c)
 

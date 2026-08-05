@@ -476,26 +476,157 @@ theorem localPolicy_encode_deterministic
 
 /-! ## §3.0 Encode-size bound
 
-The §3.0 `MAX_POLICY_ENCODE_BYTES = 16_384` constraint holds by
-construction from `MAX_CLAUSES_PER_POLICY * (per-clause max bytes)
-+ CBE map / list overhead`.  We document the bound here as a
-deployment-correctness obligation; the precise per-clause byte
-calculation is:
+`LocalPolicy.MAX_POLICY_ENCODE_BYTES` used to be a bare constant
+whose docstring cited a `LocalPolicy.encode_size_bound` lemma that
+did not exist, whose value (`16_384`) this module's own comment
+admitted was smaller than the worst case it computed, and which no
+production code consulted.  It is now the PROVEN bound below, so it
+cannot drift from the encoder again.
 
-  * denyTags `[t1, ..., t_64]`:  9 (clause tag) + 9 (list head) + 64 * 9 (Nat each) = 594 bytes
-  * requireRecipientIn (r, allow): 9 + 9 (resource) + 9 (list head) + 64 * 9 = 603 bytes
-  * capAmount (r, max):           9 + 9 + 9 = 27 bytes
+The arithmetic, all of it discharged by the lemmas rather than
+asserted:
 
-Worst case: 64 clauses * 603 bytes = 38 592 bytes; the `16_384`
-bound is conservative and holds for any *practical* policy.
-Deployments that need the loose 38 KB bound can amend §3.0 via
-the §13.6 two-reviewer gate.
+  * every CBE head is `1 + 8 = 9` bytes (`cborHeadEncode`), and a
+    `Nat` / `ActorId` / list head is exactly one head;
+  * an `Amount` rides the 33-byte head after C-1, which is why
+    `capAmount` is the widest fixed-size clause;
+  * a clause is at most `9 (variant tag) + 9 (resource) + 9 (list
+    head) + 64 * 9 (elements) = 603` bytes;
+  * a policy is `9 (clause-list head) + 64 * 603 = 38 601` bytes.
+-/
 
-We do not prove the bound at the Lean level — it would require a
-detailed length calculation through `cborHeadEncode` and
-`encodeList`'s recursion.  Instead, we document it as a
-deployment-correctness obligation; the runtime adaptor's mempool
-policy applies the bound at the network boundary. -/
+/-- Every CBE head is exactly 9 bytes: a 1-byte tag plus an 8-byte
+    little-endian length. -/
+theorem cborHeadEncode_length (major : UInt8) (n : Nat) :
+    (cborHeadEncode major n).length = 9 := by
+  unfold cborHeadEncode
+  simp [natToBytesLE_length]
+
+/-- A `Nat`'s canonical encoding is exactly one CBE head. -/
+theorem nat_encode_length (n : Nat) :
+    (Encodable.encode (T := Nat) n).length = 9 :=
+  cborHeadEncode_length _ _
+
+/-- An `ActorId`'s canonical encoding is exactly one CBE head. -/
+theorem actorId_encode_length (a : ActorId) :
+    (Encodable.encode (T := ActorId) a).length = 9 :=
+  cborHeadEncode_length _ _
+
+/-- A list's encoding is the 9-byte head plus the concatenated
+    element encodings, so its length is bounded by
+    `9 + xs.length * w` whenever every element encodes to at most
+    `w` bytes. -/
+theorem encodeList_length_le {α : Type} [Encodable α]
+    (xs : List α) (w : Nat)
+    (h_elem : ∀ x ∈ xs, (Encodable.encode x).length ≤ w) :
+    (encodeList xs).length ≤ 9 + xs.length * w := by
+  unfold encodeList
+  rw [List.length_append, cborHeadEncode_length]
+  have h_body : ∀ (ys : List α),
+      (∀ y ∈ ys, (Encodable.encode y).length ≤ w) →
+      (ys.foldr (fun x acc => Encodable.encode x ++ acc) []).length
+        ≤ ys.length * w := by
+    intro ys
+    induction ys with
+    | nil => intro _; simp
+    | cons y ys ih =>
+      intro h
+      have hy : (Encodable.encode y).length ≤ w :=
+        h y (List.mem_cons_self)
+      have hrest : (ys.foldr (fun x acc => Encodable.encode x ++ acc) []).length
+          ≤ ys.length * w :=
+        ih (fun z hz => h z (List.mem_cons_of_mem _ hz))
+      show ((Encodable.encode y) ++
+        (ys.foldr (fun x acc => Encodable.encode x ++ acc) [])).length
+          ≤ (y :: ys).length * w
+      rw [List.length_append]
+      calc (Encodable.encode y).length
+            + (ys.foldr (fun x acc => Encodable.encode x ++ acc) []).length
+          ≤ w + ys.length * w := Nat.add_le_add hy hrest
+        _ = (ys.length + 1) * w := by rw [Nat.succ_mul]; omega
+        _ = (y :: ys).length * w := by rw [List.length_cons]
+  have := h_body xs h_elem
+  omega
+
+/-- Maximum encoded size of a single `LocalPolicyClause` satisfying
+    `fieldsBounded`: the variant tag, an optional resource id, a list
+    head, and at most 64 list elements — all 9-byte heads. -/
+def MAX_CLAUSE_ENCODE_BYTES : Nat := 9 + 9 + 9 + 64 * 9
+
+/-- `LocalPolicyClause.encode` respects `MAX_CLAUSE_ENCODE_BYTES`
+    under `fieldsBounded`. -/
+theorem localPolicyClause_encode_size_bound
+    (c : LocalPolicyClause) (h : LocalPolicyClause.fieldsBounded c) :
+    (LocalPolicyClause.encode c).length ≤ MAX_CLAUSE_ENCODE_BYTES := by
+  unfold MAX_CLAUSE_ENCODE_BYTES
+  cases c with
+  | denyTags tags =>
+    unfold LocalPolicyClause.fieldsBounded at h
+    obtain ⟨h_len, _⟩ := h
+    show ((Encodable.encode (T := Nat) 0) ++
+      (Encodable.encode (T := List Nat) tags)).length ≤ _
+    rw [List.length_append, nat_encode_length]
+    have : (Encodable.encode (T := List Nat) tags).length ≤ 9 + tags.length * 9 :=
+      encodeList_length_le tags 9 (fun x _ => le_of_eq (nat_encode_length x))
+    have h64 : tags.length ≤ 64 := h_len
+    have : tags.length * 9 ≤ 64 * 9 := Nat.mul_le_mul_right 9 h64
+    omega
+  | requireRecipientIn r allow =>
+    unfold LocalPolicyClause.fieldsBounded at h
+    show ((Encodable.encode (T := Nat) 1) ++
+      (Encodable.encode (T := Nat) r.toNat) ++
+      (Encodable.encode (T := List ActorId) allow)).length ≤ _
+    rw [List.length_append, List.length_append, nat_encode_length, nat_encode_length]
+    have : (Encodable.encode (T := List ActorId) allow).length ≤ 9 + allow.length * 9 :=
+      encodeList_length_le allow 9 (fun x _ => le_of_eq (actorId_encode_length x))
+    have : allow.length * 9 ≤ 64 * 9 := Nat.mul_le_mul_right 9 h
+    omega
+  | capAmount r max =>
+    show ((Encodable.encode (T := Nat) 2) ++
+      (Encodable.encode (T := Nat) r.toNat) ++
+      (Encodable.encode (T := Nat) max)).length ≤ _
+    rw [List.length_append, List.length_append,
+        nat_encode_length, nat_encode_length, nat_encode_length]
+    omega
+  | allowTopUpFrom delegates =>
+    unfold LocalPolicyClause.fieldsBounded at h
+    show ((Encodable.encode (T := Nat) 3) ++
+      (Encodable.encode (T := List ActorId) delegates)).length ≤ _
+    rw [List.length_append, nat_encode_length]
+    have : (Encodable.encode (T := List ActorId) delegates).length
+        ≤ 9 + delegates.length * 9 :=
+      encodeList_length_le delegates 9 (fun x _ => le_of_eq (actorId_encode_length x))
+    have : delegates.length * 9 ≤ 64 * 9 := Nat.mul_le_mul_right 9 h
+    omega
+
+/-- **The §3.0 encode-size bound.**  A `fieldsBounded` policy encodes
+    to at most `LocalPolicy.MAX_POLICY_ENCODE_BYTES` bytes.
+
+    This is the lemma `LocalPolicy.MAX_POLICY_ENCODE_BYTES`'s
+    docstring named and that this module previously declined to
+    prove ("we do not prove the bound at the Lean level"), leaving a
+    constant that was arithmetically FALSE — its `16_384` was below
+    the 38 KB worst case the same comment computed. -/
+theorem LocalPolicy.encode_size_bound
+    (p : LocalPolicy) (h : LocalPolicy.fieldsBounded p) :
+    (LocalPolicy.encode p).length ≤ LocalPolicy.MAX_POLICY_ENCODE_BYTES := by
+  obtain ⟨h_len, h_all⟩ := h
+  show (encodeList p.clauses).length ≤ _
+  have h_elem : ∀ c ∈ p.clauses,
+      (Encodable.encode (T := LocalPolicyClause) c).length ≤ MAX_CLAUSE_ENCODE_BYTES := by
+    intro c hc
+    have : LocalPolicyClause.fieldsBounded c :=
+      of_decide_eq_true ((List.all_eq_true.mp h_all) c hc)
+    exact localPolicyClause_encode_size_bound c this
+  have hb := encodeList_length_le p.clauses MAX_CLAUSE_ENCODE_BYTES h_elem
+  have h64 : p.clauses.length ≤ 64 := h_len
+  have hm : p.clauses.length * MAX_CLAUSE_ENCODE_BYTES
+      ≤ 64 * MAX_CLAUSE_ENCODE_BYTES :=
+    Nat.mul_le_mul_right _ h64
+  calc (encodeList p.clauses).length
+      ≤ 9 + p.clauses.length * MAX_CLAUSE_ENCODE_BYTES := hb
+    _ ≤ 9 + 64 * MAX_CLAUSE_ENCODE_BYTES := Nat.add_le_add_left hm 9
+    _ = LocalPolicy.MAX_POLICY_ENCODE_BYTES := rfl
 
 /-! ## §3.3 LocalPolicies map encoding (sorted-key CBE map)
 
@@ -588,12 +719,15 @@ def LocalPolicies.decodeMap (s : Stream) :
             (fun (acc : List (ActorId × LocalPolicy))
                  (p : Nat × ByteArray) =>
               match LocalPolicy.decode p.2.data.toList with
-              | .ok (lp, []) => .ok (acc ++ [(p.1.toUInt64, lp)])
+              -- Cons + reverse: `acc ++ [x]` walks the whole
+              -- accumulator per element, so decoding an N-entry map
+              -- cost O(N^2) on attacker-controlled input.
+              | .ok (lp, []) => .ok ((p.1.toUInt64, lp) :: acc)
               | .ok (_, _ :: _) => .error (.trailingBytes 1)
               | .error e => .error e)
             []
         match inner with
-        | .ok entries => .ok (TreeMap.ofList entries compare, rest')
+        | .ok entries => .ok (TreeMap.ofList entries.reverse compare, rest')
         | .error e => .error e
       else
         .error (.nonCanonical "localPolicies map keys must be strictly ascending")

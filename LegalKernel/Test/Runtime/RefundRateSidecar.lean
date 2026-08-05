@@ -107,17 +107,34 @@ def refundRateSidecarCheckAbsentOk : TestCase := {
     | .error m => throw <| IO.userError s!"absent sidecar should be OK, got: {m}"
 }
 
-/-- A default (refunds-disabled) config writes NO sidecar (preserving
-    the pre-GP.9.1 on-disk footprint); a non-default config writes one,
-    and a subsequent matching check passes while a mismatched check
-    fails (the operator forgot / changed the rate on restart). -/
+/-- EVERY config writes a sidecar, including the refunds-disabled
+    default; a subsequent matching check passes while a mismatched check
+    fails (the operator forgot / changed the rate on restart).
+
+    Recording the disabled default is the load-bearing half.  An absent
+    sidecar means "no constraint", so a log written with refunds off used
+    to accept a refunds-ON binary later — and that is an escalation, not
+    a reconfiguration: budget acquired at rate `0` was priced by the
+    round-trip seal at `budgetIncrement × 0 ≤ gasAmount`, i.e. not priced
+    at all, and enabling a rate makes all of it redeemable from the pool. -/
 def refundRateSidecarWriteAndCheck : TestCase := {
-  name := "RefundRateSidecar.write/check: default skipped, non-default enforced"
+  name := "RefundRateSidecar.write/check: every rate recorded and enforced"
   body := do
-    -- Disabled config: no sidecar written.
+    -- Disabled config: a sidecar IS written, and it pins the log to
+    -- refunds-off — turning a later rate-enable into a loud failure.
     let logD ← tmpLog
     writeSidecarIfAbsent logD disabled
-    assert (! (← (sidecarPath logD).pathExists)) "disabled config must not create a sidecar"
+    assert (← (sidecarPath logD).pathExists) "disabled config must record a sidecar"
+    match (← checkConsistent logD disabled) with
+    | .ok () => pure ()
+    | .error m => throw <| IO.userError s!"disabled config should re-check clean, got: {m}"
+    match (← checkConsistent logD (ofFlags 5 3000)) with
+    | .ok () =>
+      throw <| IO.userError
+        "BUG: refunds enabled on a log written with refunds disabled \
+         (budget minted at rate 0 becomes redeemable)"
+    | .error _ => pure ()
+    IO.FS.removeFile (sidecarPath logD)
     -- Non-default config: sidecar written; matching check OK.
     let log ← tmpLog
     let cfg := ofFlags 5 3000

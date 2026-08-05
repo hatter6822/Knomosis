@@ -71,7 +71,7 @@ stack against that manifest, (3) expose the gateway to Licio's BFF.
 
 | Need | How |
 |------|-----|
-| Toolchains | `./scripts/setup.sh --build` (Lean + Foundry + solc 0.8.20); `cd runtime && cargo build --release` (the Rust daemons) |
+| Toolchains | `./scripts/setup.sh --build` (Lean + Foundry + solc 0.8.36); `cd runtime && cargo build --release` (the Rust daemons) |
 | A funded **Sepolia deployer EOA** | ~0.5 test-ETH covers the 9 deploys (~5–6M gas total). Get test-ETH from a Sepolia faucet. |
 | A **Sepolia RPC endpoint** | Alchemy / Infura / a public endpoint → `SEPOLIA_RPC_URL` |
 | An **Etherscan API key** (Sepolia) | For `--verify` source-verification → `ETHERSCAN_API_KEY` (one Etherscan v2 key verifies on every chain) |

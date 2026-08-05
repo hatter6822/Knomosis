@@ -199,7 +199,22 @@ initialize lexPreAttr : Lean.TagAttribute ←
   Lean.registerTagAttribute `lex_pre
     "Marks a predicate or Nat-valued function as admissible inside a Lex `lex_pre` clause.  The tagged definition should produce a `Decidable` result via `inferInstance` for any in-grammar argument."
 
-/-- True iff the function `n` is tagged `@[lex_pre]`. -/
+/-- True iff the function `n` is tagged `@[lex_pre]`.
+
+    **`n` must be the FULLY-QUALIFIED name.**  The attribute records
+    qualified names, and the walker runs on surface syntax *before*
+    elaboration (see the conservatism note at the top of this module),
+    so it has no namespace context with which to resolve a short
+    identifier.  A `lex_pre` clause naming a tagged helper therefore
+    spells it out — `LegalKernel.Laws.BulkBounded s r excluded`, not
+    `BulkBounded s r excluded`.  The short form is not wrong Lean; it
+    is simply invisible to this check, and falls through to L003 and
+    the elaborator's `[DecidablePred pre]` synthesis, which is the
+    authoritative gate either way.
+
+    Pinned by `lex-pregrammar`'s "the tag fires on a qualified name
+    and not on a bare one" case, so the requirement cannot become
+    folklore. -/
 def isLexPreTagged (env : Lean.Environment) (n : Lean.Name) : Bool :=
   lexPreAttr.hasTag env n
 
@@ -210,7 +225,7 @@ def isLexPreTagged (env : Lean.Environment) (n : Lean.Name) : Bool :=
     (the macro layer threads `Lean.Syntax.getPos?` through to a
     `Diagnostic`). -/
 def L003Message (s : String) : String :=
-  s!"L003: precondition contains undecidable / unsupported sub-expression `{s}` (only the §7.2 grammar is admitted; tag user-defined helpers with `@[lex_pre]` and supply a `Decidable` instance)"
+  s!"L003: precondition contains undecidable / unsupported sub-expression `{s}` (only the §7.2 grammar is admitted; tag user-defined helpers with `@[lex_pre]`, supply a `Decidable` instance, and name them FULLY-QUALIFIED in the clause — the walker runs before elaboration and cannot resolve a short identifier)"
 
 /-! ## Walker (§7.3)
 

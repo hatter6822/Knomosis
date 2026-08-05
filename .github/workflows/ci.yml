@@ -185,6 +185,28 @@ jobs:
         # regenerated files.
         run: lake exe lex_codegen --check
 
+      - name: lake exe lex_codegen --canonical --check (manifest gate)
+        # The canonical manifest (`Lex/Inputs/canonical_manifest.txt`)
+        # is a generated artefact and must be regenerated whenever a
+        # law is added or its metadata changes.  Without this gate it
+        # drifted silently: it was missing
+        # `reserved.gp.reclaimAmmReserves` entirely, so the manifest
+        # described a law set the registry no longer matched.  Do NOT
+        # hand-edit the file — the emitter's layout must be byte-exact;
+        # run `lake exe lex_codegen --canonical` and commit the result.
+        run: lake exe lex_codegen --canonical --check
+
+      - name: lake exe api_stability_audit (term-level API-pin gate)
+        # CLAUDE.md promises every post-Phase-0 theorem carries a
+        # term-level test "whose elaboration fails if the theorem
+        # signature changes".  The type ascription is what delivers
+        # that — `let _ := @thm` pins only that the NAME exists, so
+        # reordering hypotheses or weakening a conclusion still
+        # elaborates and the test still reports PASS.  This gate
+        # blocks NEW unascribed pins; the pre-existing ones are frozen
+        # in `tools/api_stability_allowlist.txt` and burn down.
+        run: lake exe api_stability_audit
+
       - name: lake exe naming_audit (content-name discipline gate)
         # Enforces CLAUDE.md's "Names describe content, never
         # provenance" rule for file names AND declaration

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
+import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -33,7 +35,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         `testFuzz_seed_conservation_acrossRatios`, plus the stateful
 ///         `AmmDepositSeedingInvariantTest` (reserve == sum-of-seeds,
 ///         reserves a subset of TVL).
-contract AmmDepositSeedingTest is Test {
+contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
 
@@ -42,8 +44,6 @@ contract AmmDepositSeedingTest is Test {
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_BOLD`.
     uint64 private constant BOLD_RID = 1;
 
-    /// @dev Mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
     /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.
@@ -124,11 +124,6 @@ contract AmmDepositSeedingTest is Test {
     }
 
     /// @notice Place a fresh conformant `MockBold` at the pinned address.
-    function _etchBold() internal {
-        MockBold impl = new MockBold();
-        vm.etch(BOLD, address(impl).code);
-    }
-
     /// @notice Deploy a BOLD-ENABLED bridge with a chosen seed ratio.
     function _deployBoldEnabled(uint16 ammSeedRatioBps) internal returns (KnomosisBridge) {
         uint64[] memory rids = new uint64[](0);
@@ -162,39 +157,6 @@ contract AmmDepositSeedingTest is Test {
         );
     }
 
-    /// @notice Mint `amount` BOLD to `user` and approve `bridge`.
-    function _mintApprove(KnomosisBridge bridge, address user, uint256 amount) internal {
-        MockBold(BOLD).mint(user, amount);
-        vm.prank(user);
-        MockBold(BOLD).approve(address(bridge), amount);
-    }
-
-    /// @notice Locate + decode the single canonical `DepositWithFeeInitiated`
-    ///         entry in a recorded-log array.  Reverts if absent.
-    function _decodeDepositWithFee(Vm.Log[] memory logs)
-        internal
-        pure
-        returns (
-            uint256 userAmount,
-            uint256 poolAmount,
-            uint256 ammSeedAmount,
-            uint64 budgetGrant,
-            uint64 nonce,
-            bytes32 receiptHash
-        )
-    {
-        bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
-        );
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
-                (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
-                return (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash);
-            }
-        }
-        revert("DepositWithFeeInitiated not found");
-    }
 
     // ------------------------------------------------------------------
     // Core ETH-leg seeding + the canonical event's ammSeedAmount field
@@ -744,9 +706,8 @@ contract AmmDepositSeedingTest is Test {
 ///         accrued (recomputed via the `FeeSplitMath` reference on every
 ///         admitted deposit).  The invariant runner asserts the live
 ///         reserves equal those running sums.
-contract AmmSeedingHandler {
+contract AmmSeedingHandler is BoldTestSupport {
     Vm internal constant VM_CHEATS = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
 
     KnomosisBridge public immutable bridge;
     address public immutable actor;
@@ -791,10 +752,6 @@ contract AmmSeedingHandler {
         }
     }
 
-    function _bound(uint256 x, uint256 lo, uint256 hi) internal pure returns (uint256) {
-        if (hi <= lo) return lo;
-        return lo + (x % (hi - lo + 1));
-    }
 }
 
 /// @title AmmDepositSeedingInvariantTest
@@ -802,8 +759,7 @@ contract AmmSeedingHandler {
 ///         of ETH and BOLD deposits (some of which revert at the TVL cap),
 ///         the live reserves equal the cumulative seeds of the ADMITTED
 ///         deposits, and the reserves are always a subset of TVL.
-contract AmmDepositSeedingInvariantTest is Test {
-    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+contract AmmDepositSeedingInvariantTest is Test, BoldTestSupport {
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
     /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.

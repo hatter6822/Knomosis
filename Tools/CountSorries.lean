@@ -50,6 +50,14 @@ is fast enough to run on every CI build.
 
 import Tools.Common
 
+namespace LegalKernel.Tools.CountSorries
+
+-- Namespaced like the sibling `NamingAudit` / `DeferralAudit`
+-- audit libraries.  Without it this module's helpers sat in the
+-- root namespace, so `searchRoots` here and in the other
+-- root-namespace tool collided and no single module could import
+-- both — which is why neither had a test suite.
+
 open LegalKernel.Tools (kernelTcbFiles readFileSafe)
 
 /-- Files-and-directories search root.  Covers the kernel
@@ -80,64 +88,6 @@ partial def listLeanFiles (root : String) : IO (List String) := do
       pure [root]
     else
       pure []
-
-/-- Lexical state of the character-level preprocessor. -/
-inductive LexState
-  /-- Ordinary code; characters pass through unchanged. -/
-  | code
-  /-- Inside a `"…"` string literal; characters become spaces.
-      `escaped` is `true` immediately after a backslash, so the next
-      `"` does not close the string. -/
-  | inString (escaped : Bool)
-  /-- Inside a `/- … -/` block comment (or `/-- … -/` docstring) at
-      the given nesting depth.  Lean allows nested block comments. -/
-  | inBlockComment (depth : Nat)
-  /-- Inside a `-- …` line comment; characters become spaces until
-      the next newline. -/
-  | inLineComment
-
-/-- Mask one character given the current state, returning the
-    `(replacement, newState)` pair.  `'\n'` is preserved verbatim in
-    every state so line numbering matches the original file. -/
-def maskStep : LexState → Char → Char → Char × LexState
-  | .code, '/', '-'           => (' ', .inBlockComment 1)
-  | .code, '-', '-'           => (' ', .inLineComment)
-  | .code, '"', _             => (' ', .inString false)
-  | .code, c, _               => (c, .code)
-  | .inString true, _, _      => (' ', .inString false)
-  | .inString false, '\\', _  => (' ', .inString true)
-  | .inString false, '"', _   => (' ', .code)
-  | .inString false, '\n', _  => ('\n', .inString false)
-  | .inString false, _, _     => (' ', .inString false)
-  | .inLineComment, '\n', _   => ('\n', .code)
-  | .inLineComment, _, _      => (' ', .inLineComment)
-  | .inBlockComment d, '/', '-' => (' ', .inBlockComment (d + 1))
-  | .inBlockComment 1, '-', '/' => (' ', .code)
-  | .inBlockComment (d + 1), '-', '/' => (' ', .inBlockComment d)
-  | .inBlockComment d, '\n', _ => ('\n', .inBlockComment d)
-  | .inBlockComment d, _, _   => (' ', .inBlockComment d)
-
-/-- Walk a list of characters, blanking out comments and string
-    literals.  After this pass, the only `sorry` substrings remaining
-    are those in code position. -/
-def maskNonCode (cs : List Char) : List Char :=
-  let rec go (st : LexState) (acc : List Char) : List Char → List Char
-    | []           => acc.reverse
-    | [c]          =>
-        -- Last character: no lookahead.  Mask under the current state
-        -- treating the lookahead as a non-special placeholder.
-        let (c', _) := maskStep st c ' '
-        go st (c' :: acc) []
-    | c₁ :: c₂ :: rest =>
-        let (c', st') := maskStep st c₁ c₂
-        match st, st', c₁, c₂ with
-        | .code, .inBlockComment _, '/', '-'  => go st' (' ' :: ' ' :: acc) rest
-        | .code, .inLineComment, '-', '-'      => go st' (' ' :: ' ' :: acc) rest
-        | .inBlockComment _, .code, '-', '/'   => go st' (' ' :: ' ' :: acc) rest
-        | .inBlockComment _, .inBlockComment _, '/', '-' =>
-            go st' (' ' :: ' ' :: acc) rest
-        | _, _, _, _                            => go st' (c' :: acc) (c₂ :: rest)
-  go .code [] cs
 
 /-- Test whether `needle` appears as a contiguous substring of `haystack`.
     Naive `O(n·m)` scan, sufficient for the short patterns the audit uses. -/
@@ -307,36 +257,4 @@ def selfCheckPatternDetector : List String :=
     if actual == expected then none
     else some s!"  fail: input={repr input} expected={expected} actual={actual}"
 
-/-- Entry point.  Reports per-file sorry counts; fails (exit 1) if
-    any kernel-TCB file has a non-zero count, in which case the
-    matching lines are echoed to stderr for the failing reviewer.
-
-    AR.14: runs the pattern-detector self-check before the file
-    scan so a regression in `isSorryProofPosition` fails fast
-    rather than scanning the codebase under a broken detector. -/
-def main : IO UInt32 := do
-  -- AR.14 self-check.
-  let failures := selfCheckPatternDetector
-  if !failures.isEmpty then
-    IO.eprintln "count_sorries: FAIL — pattern-detector self-check regressed:"
-    for f in failures do
-      IO.eprintln f
-    return 1
-  let counts ← aggregate
-  let total := counts.foldl (fun acc p => acc + p.snd) 0
-  IO.println s!"count_sorries: {total} sorry/sorries across {counts.length} file(s)."
-  for (path, n) in counts do
-    IO.println s!"  {path}: {n}"
-  let mut tcbFail := false
-  for tcbPath in kernelTcbFiles do
-    let ms ← fileMatches tcbPath
-    if ms.length > 0 then
-      IO.eprintln s!"count_sorries: FAIL — kernel-TCB file '{tcbPath}' has {ms.length} sorry/sorries:"
-      for (n, line) in ms do
-        IO.eprintln s!"{tcbPath}:{n}: {line}"
-      tcbFail := true
-  if tcbFail then
-    pure 1
-  else
-    IO.println "count_sorries: PASS — every kernel-TCB module has zero sorries."
-    pure 0
+end LegalKernel.Tools.CountSorries

@@ -88,7 +88,7 @@ def tests : List TestCase :=
   , { name := "reward_not_conservative witnesses non-conservation"
     , body := do
         let _proof : ¬ IsConservative (reward 1 10 50) :=
-          reward_not_conservative 1 10 50 (by decide)
+          reward_not_conservative 1 10 50 (by decide) (by decide)
         pure ()
     }
   , { name := "reward_other_resource_untouched: BalanceMap unchanged at r' ≠ r"

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
@@ -53,14 +53,11 @@ contract WithdrawalProofCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".header.isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("keccak256 fallback; cross-check skipped");
-            return;
-        }
+        _requireKeccakLinked(raw, ".header.isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes32 stateRoot =
                 vm.parseJsonBytes32(raw, string.concat(base, ".stateRootHex"));
             uint256 idx =
@@ -73,9 +70,9 @@ contract WithdrawalProofCrossCheck is CrossCheckFramework {
 
             bool actual = _verify(idx, leaf, siblings, stateRoot);
             if (shouldVerify) {
-                assertTrue(actual, "valid entry failed to verify");
+                checkTrue(actual, "valid entry failed to verify");
             } else {
-                assertFalse(actual, "tampered entry unexpectedly verified");
+                checkFalse(actual, "tampered entry unexpectedly verified");
             }
         }
     }
@@ -83,15 +80,16 @@ contract WithdrawalProofCrossCheck is CrossCheckFramework {
     /// @notice Sanity check: all proof.siblings arrays have length
     ///         64 (the SMT_HEIGHT).  Catches a class of
     ///         fixture-corruption bugs.
-    function test_all_proofs_have_64_siblings() public view {
+    function test_all_proofs_have_64_siblings() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            beginEntry(base);
             bytes[] memory siblings =
                 vm.parseJsonBytesArray(raw, string.concat(base, ".proof.siblingsHex"));
-            assertEq(siblings.length, 64, "siblings array length");
+            checkEq(siblings.length, 64, "siblings array length");
         }
     }
 }

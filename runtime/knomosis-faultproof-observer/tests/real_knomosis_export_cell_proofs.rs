@@ -186,11 +186,16 @@ fn real_knomosis_export_cell_proofs_transfer_round_trip() {
     }
 
     // 5. Verify the expected cell-proof bundle for a Transfer:
-    //    [registry signer=1, balance r=1 sender=1, balance r=1 receiver=2, nonce signer=1]
+    //    [registry signer=1, balance r=1 sender=1, balance r=1 receiver=2,
+    //     nonce signer=1, epochBudget signer=1]
+    //
+    //    The epoch-budget cell (kind 13) joined `Action.writeCells` once
+    //    it was established that the production advance rewrites the
+    //    signer's budget entry on every admitted action.
     assert_eq!(
         parsed_proofs.len(),
-        4,
-        "Transfer bundle should have 4 cell proofs, got {}: {parsed_proofs:?}",
+        5,
+        "Transfer bundle should have 5 cell proofs, got {}: {parsed_proofs:?}",
         parsed_proofs.len()
     );
 
@@ -218,22 +223,36 @@ fn real_knomosis_export_cell_proofs_transfer_round_trip() {
     assert_eq!(p3.key_a, 1, "cell 3 key_a should be signer=1");
     assert_eq!(p3.key_b, 0, "cell 3 key_b should be 0 for nonce");
 
-    // 6. All cell proofs should have a 32-byte witness_commit.
-    for (i, p) in parsed_proofs.iter().enumerate() {
-        assert_eq!(
-            p.witness_commit.len(),
-            32,
-            "cell {i} witness_commit should be 32 bytes, got {}",
-            p.witness_commit.len()
-        );
-    }
+    // 6. Every proof carries a real SMT opening.
+    //
+    //    This replaced a pair of checks on a `witness_commit` word
+    //    that no longer exists: it claimed the value came from a state
+    //    whose root is the pre-state root, which only a party holding
+    //    the whole `ExtendedState` could verify — and which a
+    //    responder could set to anything.  The opening is the binding
+    //    now, and it is one an L1 holding nothing but a 32-byte root
+    //    can check.
+    assert_openings_present(&parsed_proofs);
+}
 
-    // 7. All four cell proofs share the same witness_commit
-    //    (they all witness the SAME pre-state).
-    for (i, p) in parsed_proofs.iter().enumerate().skip(1) {
+/// Every proof carries a real SMT opening.
+///
+/// The Rust deserializer already rejects a malformed one, so reaching
+/// here proves the shape; what this adds is that the REAL Lean binary
+/// emits it at all.  An `ExtendedState`-witnessed bundle is well-formed
+/// in every other respect without an opening, so a builder that stopped
+/// attaching them would look correct everywhere but here.
+fn assert_openings_present(proofs: &[CellProof]) {
+    for (i, p) in proofs.iter().enumerate() {
+        assert!(
+            !p.proof_data.is_empty(),
+            "cell {i} carries no SMT opening — the Lean builder dropped it",
+        );
         assert_eq!(
-            p.witness_commit, parsed_proofs[0].witness_commit,
-            "cell {i} witness_commit should match cell 0 (same pre-state)",
+            p.proof_data.len() % 32,
+            0,
+            "cell {i} opening is misaligned: {} bytes",
+            p.proof_data.len(),
         );
     }
 }
@@ -338,11 +357,12 @@ fn real_knomosis_export_cell_proofs_withdraw() {
 
     // Withdraw cell layout:
     //   readOnly: [registry signer]
-    //   write:    [balance r sender, nonce signer, bridgeNextWdId]
+    //   write:    [balance r sender, nonce signer, epochBudget signer,
+    //              bridgeNextWdId]
     assert_eq!(
         parsed_proofs.len(),
-        4,
-        "Withdraw bundle should have 4 cell proofs"
+        5,
+        "Withdraw bundle should have 5 cell proofs"
     );
 
     // Cell 0: registry signer=3.
@@ -360,10 +380,15 @@ fn real_knomosis_export_cell_proofs_withdraw() {
     assert_eq!(parsed_proofs[2].key_a, 3);
     assert_eq!(parsed_proofs[2].key_b, 0);
 
-    // Cell 3: bridgeNextWdId.  kind=6, key_a=0, key_b=0.
-    assert_eq!(parsed_proofs[3].cell_kind, 6);
-    assert_eq!(parsed_proofs[3].key_a, 0);
+    // Cell 3: epochBudget signer=3.  kind=13.
+    assert_eq!(parsed_proofs[3].cell_kind, 13);
+    assert_eq!(parsed_proofs[3].key_a, 3);
     assert_eq!(parsed_proofs[3].key_b, 0);
+
+    // Cell 4: bridgeNextWdId.  kind=6, key_a=0, key_b=0.
+    assert_eq!(parsed_proofs[4].cell_kind, 6);
+    assert_eq!(parsed_proofs[4].key_a, 0);
+    assert_eq!(parsed_proofs[4].key_b, 0);
 }
 
 /// Negative test: out-of-range idx should exit code 2 with the

@@ -71,12 +71,10 @@ private def signedActionToLogEntry (st : SignedAction) : LogEntry :=
     entry, regardless of which Action variant the SignedAction
     carries.  This is the structural reduction every per-variant
     theorem below specialises. -/
-theorem recomputeCommitment_eq_signedActionToLogEntry
-    (es : ExtendedState) (st : SignedAction) :
-    recomputeCommitment es st =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry st)) := by
-  exact recomputeCommitment_coherent_with_kernelOnlyApply
-          es st (signedActionToLogEntry st) rfl
+theorem recomputeCommitment_eq_productionApplyBudget
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    recomputeCommitment es st l2LogIndex =
+    commitExtendedState (productionApplyBudget es st l2LogIndex) := rfl
 
 /-! ## #226.* — Per-variant coherence theorems (one per Action
     constructor).  Each pins the universal form to the specific
@@ -87,223 +85,223 @@ theorem recomputeCommitment_eq_signedActionToLogEntry
 theorem coherence_transfer
     (es : ExtendedState)
     (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .transfer r sender receiver amount,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .transfer r sender receiver amount,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.mint — coherence for `Action.mint`. -/
 theorem coherence_mint
     (es : ExtendedState)
     (r : ResourceId) (to : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .mint r to amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .mint r to amount, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.burn — coherence for `Action.burn`. -/
 theorem coherence_burn
     (es : ExtendedState)
     (r : ResourceId) (fromActor : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .burn r fromActor amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .burn r fromActor amount, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.freezeResource — coherence for `Action.freezeResource`. -/
 theorem coherence_freezeResource
     (es : ExtendedState)
     (r : ResourceId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .freezeResource r, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .freezeResource r, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.replaceKey — coherence for `Action.replaceKey`. -/
 theorem coherence_replaceKey
     (es : ExtendedState)
     (actor : ActorId) (newKey : Authority.PublicKey)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .replaceKey actor newKey, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .replaceKey actor newKey, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.reward — coherence for `Action.reward`. -/
 theorem coherence_reward
     (es : ExtendedState)
     (r : ResourceId) (to : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .reward r to amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .reward r to amount, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.distributeOthers — coherence for `Action.distributeOthers`. -/
 theorem coherence_distributeOthers
     (es : ExtendedState)
     (r : ResourceId) (excluded : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .distributeOthers r excluded amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .distributeOthers r excluded amount, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.proportionalDilute — coherence for `Action.proportionalDilute`. -/
 theorem coherence_proportionalDilute
     (es : ExtendedState)
     (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .proportionalDilute r excluded totalReward, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .proportionalDilute r excluded totalReward, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.dispute — coherence for `Action.dispute`. -/
 theorem coherence_dispute
     (es : ExtendedState)
     (d : Dispute)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .dispute d, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .dispute d, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.disputeWithdraw — coherence for `Action.disputeWithdraw`. -/
 theorem coherence_disputeWithdraw
     (es : ExtendedState)
     (idx : LogIndex)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .disputeWithdraw idx, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .disputeWithdraw idx, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.verdict — coherence for `Action.verdict`. -/
 theorem coherence_verdict
     (es : ExtendedState)
     (v : Verdict)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .verdict v, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .verdict v, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.rollback — coherence for `Action.rollback`. -/
 theorem coherence_rollback
     (es : ExtendedState)
     (targetIdx : LogIndex)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .rollback targetIdx, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .rollback targetIdx, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.registerIdentity — coherence for `Action.registerIdentity`. -/
 theorem coherence_registerIdentity
     (es : ExtendedState)
     (actor : ActorId) (newKey : Authority.PublicKey)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .registerIdentity actor newKey, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .registerIdentity actor newKey, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.deposit — coherence for `Action.deposit`. -/
 theorem coherence_deposit
     (es : ExtendedState)
     (r : ResourceId) (recipient : ActorId) (amount : Amount)
     (depositId : Bridge.DepositId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .deposit r recipient amount depositId, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .deposit r recipient amount depositId, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.withdraw — coherence for `Action.withdraw`. -/
 theorem coherence_withdraw
     (es : ExtendedState)
     (r : ResourceId) (sender : ActorId) (amount : Amount)
     (recipientL1 : Bridge.EthAddress)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .withdraw r sender amount recipientL1, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .withdraw r sender amount recipientL1, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.declareLocalPolicy — coherence for `Action.declareLocalPolicy`. -/
 theorem coherence_declareLocalPolicy
     (es : ExtendedState)
     (policy : LegalKernel.Authority.LocalPolicy)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .declareLocalPolicy policy, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .declareLocalPolicy policy, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.revokeLocalPolicy — coherence for `Action.revokeLocalPolicy`. -/
 theorem coherence_revokeLocalPolicy
     (es : ExtendedState)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .revokeLocalPolicy, signer := signer,
-        nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .revokeLocalPolicy, signer := signer,
-        nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.faultProofChallenge — coherence for `Action.faultProofChallenge`. -/
 theorem coherence_faultProofChallenge
@@ -311,30 +309,30 @@ theorem coherence_faultProofChallenge
     (bindingHash : ByteArray)
     (disputedStartIdx disputedEndIdx : LogIndex)
     (challengerCommit : ByteArray)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .faultProofChallenge bindingHash
                     disputedStartIdx disputedEndIdx challengerCommit,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .faultProofChallenge bindingHash
                     disputedStartIdx disputedEndIdx challengerCommit,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.faultProofResolution — coherence for `Action.faultProofResolution`. -/
 theorem coherence_faultProofResolution
     (es : ExtendedState)
     (bindingHash : ByteArray) (gameId : Nat) (winner : ActorId)
     (revertFromIdx : LogIndex)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .faultProofResolution bindingHash gameId winner revertFromIdx,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .faultProofResolution bindingHash gameId winner revertFromIdx,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.depositWithFee — coherence for `Action.depositWithFee`
     (Workstream GP, action-index 19).  Specialisation of the
@@ -345,16 +343,16 @@ theorem coherence_depositWithFee
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
     (depositId : Bridge.DepositId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .depositWithFee r recipient poolActor userAmount
                                    poolAmount budgetGrant depositId,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .depositWithFee r recipient poolActor userAmount
                                    poolAmount budgetGrant depositId,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.topUpActionBudget — coherence for `Action.topUpActionBudget`
     (Workstream GP, action-index 20).  Specialisation of the
@@ -364,16 +362,16 @@ theorem coherence_topUpActionBudget
     (es : ExtendedState)
     (gasResource : ResourceId) (gasAmount : Amount)
     (budgetIncrement : Nat) (poolActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .topUpActionBudget gasResource gasAmount
                                       budgetIncrement poolActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .topUpActionBudget gasResource gasAmount
                                       budgetIncrement poolActor,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #226.topUpActionBudgetFor — coherence for the GP.3.4 delegated
     `Action.topUpActionBudgetFor` (action-index 21).  Specialisation
@@ -388,16 +386,16 @@ theorem coherence_topUpActionBudgetFor
     (es : ExtendedState)
     (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
     (budgetIncrement : Nat) (poolActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .topUpActionBudgetFor recipient gasResource gasAmount
                                          budgetIncrement poolActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .topUpActionBudgetFor recipient gasResource gasAmount
                                          budgetIncrement poolActor,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- Commit coherence for `claimBudgetRefund` (GP.9.1): the recomputed
     commitment over the refund's SignedAction equals the commit of the
@@ -408,14 +406,14 @@ theorem coherence_claimBudgetRefund
     (es : ExtendedState)
     (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
     (poolActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #250.ammSwap (GP.11.4) — `recomputeCommitment` agrees with
     `commitExtendedState ∘ kernelOnlyApply` for `Action.ammSwap`.
@@ -425,14 +423,14 @@ theorem coherence_ammSwap
     (es : ExtendedState)
     (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
     (ammReserveActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #250.reclaimAmmReserves (GP.11.10) — `recomputeCommitment` agrees
     with `commitExtendedState ∘ kernelOnlyApply` for
@@ -443,14 +441,14 @@ theorem coherence_reclaimAmmReserves
     (es : ExtendedState)
     (r : ResourceId) (amount : Amount)
     (reserveActor poolActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .reclaimAmmReserves r amount reserveActor poolActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    commitExtendedState (productionApplyBudget es
       { action := .reclaimAmmReserves r amount reserveActor poolActor,
-        signer := signer, nonce := nonce, sig := sig })) :=
-  recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
+  recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
 /-! ## #251.* — Per-variant cell-write semantic agreement.
 
@@ -462,233 +460,232 @@ constructors. -/
 /-- The structural template: `applyCellWrites_to_state` agrees
     with `kernelOnlyApply (signedActionToLogEntry st)` for every
     SignedAction.  Both sides reduce to the same expression. -/
-theorem applyCellWrites_eq_signedActionToLogEntry
-    (es : ExtendedState) (st : SignedAction) :
-    applyCellWrites_to_state es st = kernelOnlyApply es (signedActionToLogEntry st) := by
-  unfold applyCellWrites_to_state signedActionToLogEntry
-  rfl
+theorem applyCellWrites_eq_productionApplyBudget
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    applyCellWrites_to_state es st l2LogIndex
+      = productionApplyBudget es st l2LogIndex := rfl
 
 /-- #251.transfer — semantic agreement for `Action.transfer`. -/
 theorem cellwrites_transfer
     (es : ExtendedState)
     (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .transfer r sender receiver amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .transfer r sender receiver amount, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.mint — semantic agreement for `Action.mint`. -/
 theorem cellwrites_mint
     (es : ExtendedState)
     (r : ResourceId) (to : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .mint r to amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .mint r to amount, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.burn — semantic agreement for `Action.burn`. -/
 theorem cellwrites_burn
     (es : ExtendedState)
     (r : ResourceId) (fromActor : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .burn r fromActor amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .burn r fromActor amount, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.freezeResource — semantic agreement for `Action.freezeResource`. -/
 theorem cellwrites_freezeResource
     (es : ExtendedState)
     (r : ResourceId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .freezeResource r, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .freezeResource r, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.replaceKey — semantic agreement for `Action.replaceKey`. -/
 theorem cellwrites_replaceKey
     (es : ExtendedState)
     (actor : ActorId) (newKey : Authority.PublicKey)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .replaceKey actor newKey, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .replaceKey actor newKey, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.reward — semantic agreement for `Action.reward`. -/
 theorem cellwrites_reward
     (es : ExtendedState)
     (r : ResourceId) (to : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .reward r to amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .reward r to amount, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.distributeOthers — semantic agreement for `Action.distributeOthers`. -/
 theorem cellwrites_distributeOthers
     (es : ExtendedState)
     (r : ResourceId) (excluded : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .distributeOthers r excluded amount, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .distributeOthers r excluded amount, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.proportionalDilute — semantic agreement for `Action.proportionalDilute`. -/
 theorem cellwrites_proportionalDilute
     (es : ExtendedState)
     (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .proportionalDilute r excluded totalReward, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .proportionalDilute r excluded totalReward, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.dispute — semantic agreement for `Action.dispute`. -/
 theorem cellwrites_dispute
     (es : ExtendedState)
     (d : Dispute)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .dispute d, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .dispute d, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.disputeWithdraw — semantic agreement for `Action.disputeWithdraw`. -/
 theorem cellwrites_disputeWithdraw
     (es : ExtendedState)
     (idx : LogIndex)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .disputeWithdraw idx, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .disputeWithdraw idx, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.verdict — semantic agreement for `Action.verdict`. -/
 theorem cellwrites_verdict
     (es : ExtendedState)
     (v : Verdict)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .verdict v, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .verdict v, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.rollback — semantic agreement for `Action.rollback`. -/
 theorem cellwrites_rollback
     (es : ExtendedState)
     (targetIdx : LogIndex)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .rollback targetIdx, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .rollback targetIdx, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.registerIdentity — semantic agreement for `Action.registerIdentity`. -/
 theorem cellwrites_registerIdentity
     (es : ExtendedState)
     (actor : ActorId) (newKey : Authority.PublicKey)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .registerIdentity actor newKey, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .registerIdentity actor newKey, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.deposit — semantic agreement for `Action.deposit`. -/
 theorem cellwrites_deposit
     (es : ExtendedState)
     (r : ResourceId) (recipient : ActorId) (amount : Amount)
     (depositId : Bridge.DepositId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .deposit r recipient amount depositId, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .deposit r recipient amount depositId, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.withdraw — semantic agreement for `Action.withdraw`. -/
 theorem cellwrites_withdraw
     (es : ExtendedState)
     (r : ResourceId) (sender : ActorId) (amount : Amount)
     (recipientL1 : Bridge.EthAddress)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .withdraw r sender amount recipientL1, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .withdraw r sender amount recipientL1, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.declareLocalPolicy — semantic agreement for `Action.declareLocalPolicy`. -/
 theorem cellwrites_declareLocalPolicy
     (es : ExtendedState)
     (policy : LegalKernel.Authority.LocalPolicy)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .declareLocalPolicy policy, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .declareLocalPolicy policy, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.revokeLocalPolicy — semantic agreement for `Action.revokeLocalPolicy`. -/
 theorem cellwrites_revokeLocalPolicy
     (es : ExtendedState)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .revokeLocalPolicy, signer := signer,
-        nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .revokeLocalPolicy, signer := signer,
-        nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.faultProofChallenge — semantic agreement for `Action.faultProofChallenge`. -/
 theorem cellwrites_faultProofChallenge
@@ -696,30 +693,30 @@ theorem cellwrites_faultProofChallenge
     (bindingHash : ByteArray)
     (disputedStartIdx disputedEndIdx : LogIndex)
     (challengerCommit : ByteArray)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .faultProofChallenge bindingHash
                     disputedStartIdx disputedEndIdx challengerCommit,
-        signer := signer, nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .faultProofChallenge bindingHash
                     disputedStartIdx disputedEndIdx challengerCommit,
-        signer := signer, nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.faultProofResolution — semantic agreement for `Action.faultProofResolution`. -/
 theorem cellwrites_faultProofResolution
     (es : ExtendedState)
     (bindingHash : ByteArray) (gameId : Nat) (winner : ActorId)
     (revertFromIdx : LogIndex)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .faultProofResolution bindingHash gameId winner revertFromIdx,
-        signer := signer, nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .faultProofResolution bindingHash gameId winner revertFromIdx,
-        signer := signer, nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.depositWithFee — semantic agreement for `Action.depositWithFee`
     (Workstream GP).  Specialisation of the universal
@@ -729,16 +726,16 @@ theorem cellwrites_depositWithFee
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
     (depositId : Bridge.DepositId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .depositWithFee r recipient poolActor userAmount
                                    poolAmount budgetGrant depositId,
-        signer := signer, nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .depositWithFee r recipient poolActor userAmount
                                    poolAmount budgetGrant depositId,
-        signer := signer, nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.topUpActionBudget — semantic agreement for
     `Action.topUpActionBudget` (Workstream GP). -/
@@ -746,16 +743,16 @@ theorem cellwrites_topUpActionBudget
     (es : ExtendedState)
     (gasResource : ResourceId) (gasAmount : Amount)
     (budgetIncrement : Nat) (poolActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .topUpActionBudget gasResource gasAmount
                                       budgetIncrement poolActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .topUpActionBudget gasResource gasAmount
                                       budgetIncrement poolActor,
-        signer := signer, nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.topUpActionBudgetFor — semantic agreement for the GP.3.4
     delegated `Action.topUpActionBudgetFor`.  Confirms the declared
@@ -767,16 +764,16 @@ theorem cellwrites_topUpActionBudgetFor
     (es : ExtendedState)
     (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
     (budgetIncrement : Nat) (poolActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .topUpActionBudgetFor recipient gasResource gasAmount
                                          budgetIncrement poolActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .topUpActionBudgetFor recipient gasResource gasAmount
                                          budgetIncrement poolActor,
-        signer := signer, nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.claimBudgetRefund (GP.9.1) — semantic agreement for
     `Action.claimBudgetRefund`: its static cell-write set
@@ -788,14 +785,14 @@ theorem cellwrites_claimBudgetRefund
     (es : ExtendedState)
     (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
     (poolActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
-        signer := signer, nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.ammSwap (GP.11.4) — semantic agreement for
     `Action.ammSwap`: its static cell-write set
@@ -807,14 +804,14 @@ theorem cellwrites_ammSwap
     (es : ExtendedState)
     (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
     (ammReserveActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
-        signer := signer, nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 /-- #251.reclaimAmmReserves (GP.11.10) — semantic agreement for
     `Action.reclaimAmmReserves`: its static cell-write set
@@ -827,14 +824,14 @@ theorem cellwrites_reclaimAmmReserves
     (es : ExtendedState)
     (r : ResourceId) (amount : Amount)
     (reserveActor poolActor : ActorId)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .reclaimAmmReserves r amount reserveActor poolActor,
-        signer := signer, nonce := nonce, sig := sig } =
-    kernelOnlyApply es (signedActionToLogEntry
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex =
+    productionApplyBudget es
       { action := .reclaimAmmReserves r amount reserveActor poolActor,
-        signer := signer, nonce := nonce, sig := sig }) :=
-  applyCellWrites_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
+  applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 
 end FaultProof
 end LegalKernel

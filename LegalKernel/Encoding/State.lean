@@ -537,6 +537,46 @@ def decodeMap {K V : Type} [Encodable K] [Encodable V]
     | .error e => .error e
   | .error e => .error e
 
+/-! ## Amount-valued maps (128-bit values)
+
+A balance map's VALUES are amounts and so ride the 33-byte
+`cbeTagAmount` head, while its KEYS are `ActorId`s and stay on the
+8-byte uint head.  `encodeSortedPairs` / `decodeMap` select the value
+codec by `Encodable` resolution, and `Amount` reduces to `Nat`, which
+`instEncodableNat` already owns for identifiers, nonces, tags and
+length prefixes — widening *that* instance would drag all of them to 17
+bytes for no benefit.
+
+The value slot therefore travels wrapped in `Encoding.AmountValue`
+(`Encoding/Encodable.lean`), the one-field carrier whose `Encodable`
+instance routes to `encodeAmount` / `decodeAmount`.  Wrapping rather
+than duplicating is what keeps the EI.1.e machinery applicable
+verbatim: `encodeSortedPairs_injective_bounded` and
+`encodeSortedPairs_self_delim_split` are polymorphic in the value
+carrier, so amount-valued maps consume them unchanged. -/
+
+/-- Project a `(ActorId, Amount)` pair into the `(Nat, AmountValue)`
+    carrier the CBE map combinators encode: the key drops to `Nat` (the
+    8-byte uint head) and the value rises into `AmountValue` (the
+    33-byte amount head).
+
+    Named rather than inlined so the injectivity proofs can state the
+    `proj`-injectivity obligation of `List.map_inj_right` against a
+    single stable term. -/
+def balanceMapPair (p : ActorId × Amount) : Nat × AmountValue :=
+  (p.1.toNat, ⟨p.2⟩)
+
+/-- `balanceMapPair` is injective: the key projection `UInt64.toNat` is
+    injective and `AmountValue.mk` is a single-field constructor. -/
+theorem balanceMapPair_injective :
+    ∀ x y : ActorId × Amount, balanceMapPair x = balanceMapPair y → x = y := by
+  intro ⟨a₁, v₁⟩ ⟨a₂, v₂⟩ h
+  unfold balanceMapPair at h
+  simp only [Prod.mk.injEq, AmountValue.mk.injEq] at h
+  obtain ⟨hk, hv⟩ := h
+  have : a₁ = a₂ := UInt64.toNat_inj.mp hk
+  subst this; subst hv; rfl
+
 /-! ## State encoding
 
 A `State` is encoded as a CBE map of `ResourceId → (CBE map of
@@ -555,9 +595,11 @@ know where each inner map's encoding ends and the next outer pair
 begins. -/
 
 /-- Encode a `BalanceMap` (the inner per-resource `TreeMap ActorId
-    Amount`).  Produces a sorted-pair-list CBE map. -/
+    Amount`).  Produces a sorted-pair-list CBE map: each key on the
+    8-byte uint head, each balance on the 33-byte amount head (via the
+    `AmountValue` carrier `balanceMapPair` projects into). -/
 def BalanceMap.encode (bm : BalanceMap) : Stream :=
-  encodeSortedPairs (bm.toList.map (fun (a, v) => (a.toNat, v)))
+  encodeSortedPairs (bm.toList.map balanceMapPair)
 
 /-- Convenience helper: pack the inner-map bytes as a `ByteArray` so
     the outer encoder uses the `Encodable ByteArray` instance (CBE
@@ -591,12 +633,14 @@ def State.encode (s : State) : Stream :=
     check on the keys), rebuild via `TreeMap.ofList`.
 
     Each key is a CBE-decoded `Nat`; by the codec invariant it lies
-    in `[0, 2^64)` and converts to `UInt64` exactly via `toUInt64`. -/
+    in `[0, 2^64)` and converts to `UInt64` exactly via `toUInt64`.
+    Each value is read through `AmountValue`, i.e. off the 33-byte
+    amount head — the symmetric inverse of `balanceMapPair`. -/
 def BalanceMap.decode (s : Stream) : Except DecodeError (BalanceMap × Stream) :=
-  match decodeMap (K := Nat) (V := Nat) s with
+  match decodeMap (K := Nat) (V := AmountValue) s with
   | .ok (pairs, rest) =>
     let pairs' : List (ActorId × Amount) :=
-      pairs.map (fun (k, v) => (k.toUInt64, v))
+      pairs.map (fun (k, v) => (k.toUInt64, v.val))
     .ok (TreeMap.ofList pairs' compare, rest)
   | .error e => .error e
 
@@ -612,16 +656,19 @@ def State.decode (s : Stream) : Except DecodeError (State × Stream) :=
   | .ok (pairs, rest) =>
     -- Each pair carries a serialised inner balance map (as a CBE
     -- byte string).  Re-decode each inner payload as a `BalanceMap`.
+    -- Accumulate by CONS and reverse once.  `acc ++ [x]` walks the
+    -- whole accumulator per element, so decoding an N-entry map cost
+    -- O(N^2) on input an untrusted peer controls the length of.
     let inner : Except DecodeError (List (ResourceId × BalanceMap)) := pairs.foldlM
       (fun (acc : List (ResourceId × BalanceMap)) (p : Nat × ByteArray) =>
         match BalanceMap.decode p.2.data.toList with
-        | .ok (bm, []) => .ok (acc ++ [(p.1.toUInt64, bm)])
+        | .ok (bm, []) => .ok ((p.1.toUInt64, bm) :: acc)
         | .ok (_, _ :: _) =>
           .error (.trailingBytes 1)
         | .error e => .error e)
       []
     match inner with
-    | .ok entries => .ok ({ balances := TreeMap.ofList entries compare }, rest)
+    | .ok entries => .ok ({ balances := TreeMap.ofList entries.reverse compare }, rest)
     | .error e => .error e
   | .error e => .error e
 
@@ -679,8 +726,8 @@ Each inner record is encoded as a fixed-order field concatenation. -/
     the per-actor budget timeline survive replay. -/
 def Bridge.DepositRecord.encode (rec : Bridge.DepositRecord) : Stream :=
   Encodable.encode (T := Nat) rec.resource.toNat ++
-  Encodable.encode (T := Nat) rec.userAmount ++
-  Encodable.encode (T := Nat) rec.poolAmount ++
+  encodeAmount rec.userAmount ++
+  encodeAmount rec.poolAmount ++
   Encodable.encode (T := Nat) rec.budgetGrant
 
 /-- Decode a `DepositRecord`.  Reads the four CBE-uint segments in
@@ -690,9 +737,9 @@ def Bridge.DepositRecord.decode (s : Stream) :
   match Encodable.decode (T := Nat) s with
   | .ok (resN, s₁) =>
     if h : resN < 18446744073709551616 then
-      match Encodable.decode (T := Nat) s₁ with
+      match decodeAmount s₁ with
       | .ok (userAmount, s₂) =>
-        match Encodable.decode (T := Nat) s₂ with
+        match decodeAmount s₂ with
         | .ok (poolAmount, s₃) =>
           match Encodable.decode (T := Nat) s₃ with
           | .ok (budgetGrant, s₄) =>
@@ -736,7 +783,7 @@ def Bridge.BridgeState.encodeConsumed (bs : Bridge.BridgeState) : Stream :=
 def Bridge.PendingWithdrawal.encode (wd : Bridge.PendingWithdrawal) : Stream :=
   Encodable.encode (T := Nat) wd.resource.toNat ++
   Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
-  Encodable.encode (T := Nat) wd.amount ++
+  encodeAmount wd.amount ++
   Encodable.encode (T := Nat) wd.l2LogIndex
 
 /-- Wrap a `PendingWithdrawal` as a length-prefixed CBE byte string
@@ -761,7 +808,7 @@ def Bridge.PendingWithdrawal.decode (s : Stream) :
       | .ok (recBytes, s₂) =>
         match Bridge.EthAddress.ofBytes recBytes with
         | some rcp =>
-          match Encodable.decode (T := Nat) s₂ with
+          match decodeAmount s₂ with
           | .ok (amount, s₃) =>
             match Encodable.decode (T := Nat) s₃ with
             | .ok (idx, s₄) =>
@@ -799,11 +846,11 @@ def Bridge.BridgeState.encode (bs : Bridge.BridgeState) : Stream :=
   Bridge.BridgeState.encodeConsumed bs ++
   Bridge.BridgeState.encodePending bs ++
   Encodable.encode (T := Nat) bs.nextWdId ++
-  Encodable.encode (T := Nat) bs.ammReserveEth ++
-  Encodable.encode (T := Nat) bs.ammReserveBold ++
+  encodeAmount bs.ammReserveEth ++
+  encodeAmount bs.ammReserveBold ++
   Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-  Encodable.encode (T := Nat) bs.boldTvlCap ++
-  Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+  encodeAmount bs.boldTvlCap ++
+  encodeAmount bs.boldTotalLockedValue ++
   Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0)
 
 /-- Decode the `consumed` map, rebuilding each inner `DepositRecord`
@@ -817,12 +864,13 @@ def Bridge.BridgeState.decodeConsumed (s : Stream) :
         (fun (acc : List (Bridge.DepositId × Bridge.DepositRecord))
              (p : Nat × ByteArray) =>
           match Bridge.DepositRecord.decode p.2.data.toList with
-          | .ok (rec, []) => .ok (acc ++ [(p.1, rec)])
+          -- Cons + reverse: see `State.decode`.
+          | .ok (rec, []) => .ok ((p.1, rec) :: acc)
           | .ok (_, _ :: _) => .error (.trailingBytes 1)
           | .error e => .error e)
         []
     match inner with
-    | .ok entries => .ok (TreeMap.ofList entries compare, rest)
+    | .ok entries => .ok (TreeMap.ofList entries.reverse compare, rest)
     | .error e => .error e
   | .error e => .error e
 
@@ -836,12 +884,13 @@ def Bridge.BridgeState.decodePending (s : Stream) :
         (fun (acc : List (Bridge.WithdrawalId × Bridge.PendingWithdrawal))
              (p : Nat × ByteArray) =>
           match Bridge.PendingWithdrawal.decode p.2.data.toList with
-          | .ok (wd, []) => .ok (acc ++ [(p.1, wd)])
+          -- Cons + reverse: see `State.decode`.
+          | .ok (wd, []) => .ok ((p.1, wd) :: acc)
           | .ok (_, _ :: _) => .error (.trailingBytes 1)
           | .error e => .error e)
         []
     match inner with
-    | .ok entries => .ok (TreeMap.ofList entries compare, rest)
+    | .ok entries => .ok (TreeMap.ofList entries.reverse compare, rest)
     | .error e => .error e
   | .error e => .error e
 
@@ -856,18 +905,18 @@ def Bridge.BridgeState.decode (s : Stream) :
     | .ok (pending, s₂) =>
       match Encodable.decode (T := Nat) s₂ with
       | .ok (nextWdId, s₃) =>
-        match Encodable.decode (T := Nat) s₃ with
+        match decodeAmount s₃ with
         | .ok (ammReserveEth, s₄) =>
-          match Encodable.decode (T := Nat) s₄ with
+          match decodeAmount s₄ with
           | .ok (ammReserveBold, s₅) =>
             match Encodable.decode (T := Nat) s₅ with
             | .ok (circuitN, s₆) =>
               if circuitN > 1 then .error (.nonCanonical "boldCircuitClosed: expected 0 or 1")
               else
               let boldCircuitClosed := circuitN == 1
-              match Encodable.decode (T := Nat) s₆ with
+              match decodeAmount s₆ with
               | .ok (boldTvlCap, s₇) =>
-                match Encodable.decode (T := Nat) s₇ with
+                match decodeAmount s₇ with
                 | .ok (boldTotalLockedValue, s₈) =>
                   match Encodable.decode (T := Nat) s₈ with
                   | .ok (ammDisabledN, s₉) =>
@@ -944,6 +993,41 @@ def BudgetPolicy.decode (s : Stream) : Except DecodeError (BudgetPolicy × Strea
 instance instEncodableBudgetPolicy : Encodable BudgetPolicy where
   encode := BudgetPolicy.encode
   decode := BudgetPolicy.decode
+
+/-! ## `EpochBudgetState` encoding (H-1)
+
+`EpochBudgetState` is `TreeMap ActorId ActorBudget`, the per-actor
+gas-budget ledger the GP.3.2 admission gate meters spending against.
+It is live, mutable state — `Bridge/Admissible.lean` rewrites it on
+admitted actions — but it was absent from `commitExtendedState`, so the
+state root the sequencer publishes did not bind it.  Two executions
+agreeing on every committed sub-state while disagreeing on budget
+grants or consumption produced the same root, leaving a fault proof
+nothing to challenge.
+
+Encoded exactly like `NonceState`: a sorted-pair CBE map keyed by the
+actor id, with `ActorBudget`'s existing fixed-width instance as the
+value codec. -/
+
+/-- Encode an `EpochBudgetState` as a sorted-pair CBE map
+    (`ActorId → ActorBudget`). -/
+def EpochBudgetState.encode (ebs : EpochBudgetState) : Stream :=
+  encodeSortedPairs (ebs.toList.map (fun (a, b) => (a.toNat, b)))
+
+/-- Decode an `EpochBudgetState`: read the CBE map (with the
+    strictly-ascending-key canonicality check), then rebuild the
+    `TreeMap`.  Each key is a CBE `Nat` in `[0, 2^64)` by the codec
+    invariant and converts to `UInt64` exactly. -/
+def EpochBudgetState.decode (s : Stream) :
+    Except DecodeError (EpochBudgetState × Stream) :=
+  match decodeMap (K := Nat) (V := ActorBudget) s with
+  | .ok (pairs, rest) =>
+    .ok (TreeMap.ofList (pairs.map (fun (k, v) => (k.toUInt64, v))) compare, rest)
+  | .error e => .error e
+
+instance instEncodableEpochBudgetState : Encodable EpochBudgetState where
+  encode := EpochBudgetState.encode
+  decode := EpochBudgetState.decode
 
 /-! ## GP.3.1.d — `ActorBudget` and `BudgetPolicy` encoder injectivity
 
@@ -1216,8 +1300,8 @@ theorem pendingWithdrawal_encode_deterministic
     triple. -/
 theorem depositRecord_roundtrip
     (rec : Bridge.DepositRecord) (rest : Stream)
-    (h : rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 8 ∧
-         rec.poolAmount < 256 ^ 8 ∧ rec.budgetGrant < 256 ^ 8) :
+    (h : rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 32 ∧
+         rec.poolAmount < 256 ^ 32 ∧ rec.budgetGrant < 256 ^ 8) :
     Bridge.DepositRecord.decode (Bridge.DepositRecord.encode rec ++ rest) =
     .ok (rec, rest) := by
   unfold Bridge.DepositRecord.encode Bridge.DepositRecord.decode
@@ -1226,12 +1310,12 @@ theorem depositRecord_roundtrip
   -- consumed left-to-right by its own decoder.
   rw [show
     Encodable.encode (T := Nat) rec.resource.toNat ++
-      Encodable.encode (T := Nat) rec.userAmount ++
-      Encodable.encode (T := Nat) rec.poolAmount ++
+      encodeAmount rec.userAmount ++
+      encodeAmount rec.poolAmount ++
       Encodable.encode (T := Nat) rec.budgetGrant ++ rest =
     Encodable.encode (T := Nat) rec.resource.toNat ++
-      (Encodable.encode (T := Nat) rec.userAmount ++
-        (Encodable.encode (T := Nat) rec.poolAmount ++
+      (encodeAmount rec.userAmount ++
+        (encodeAmount rec.poolAmount ++
           (Encodable.encode (T := Nat) rec.budgetGrant ++ rest)))
     from by simp [List.append_assoc]]
   -- Segment 1: resource (Nat, guarded by the < 2^64 check).
@@ -1242,10 +1326,10 @@ theorem depositRecord_roundtrip
     omega
   rw [dif_pos hp]
   -- Segment 2: userAmount (Nat).
-  rw [nat_roundtrip rec.userAmount _ h_user]
+  rw [amount_roundtrip rec.userAmount _ h_user]
   dsimp only
   -- Segment 3: poolAmount (Nat).
-  rw [nat_roundtrip rec.poolAmount _ h_pool]
+  rw [amount_roundtrip rec.poolAmount _ h_pool]
   dsimp only
   -- Segment 4: budgetGrant (Nat).
   rw [nat_roundtrip rec.budgetGrant rest h_budget]
@@ -1274,7 +1358,7 @@ theorem depositRecord_roundtrip
 theorem pendingWithdrawal_roundtrip
     (wd : Bridge.PendingWithdrawal) (rest : Stream)
     (h_res : wd.resource.toNat < 256 ^ 8)
-    (h_amt : wd.amount < 256 ^ 8)
+    (h_amt : wd.amount < 256 ^ 32)
     (h_idx : wd.l2LogIndex < 256 ^ 8) :
     Bridge.PendingWithdrawal.decode (Bridge.PendingWithdrawal.encode wd ++ rest) =
     .ok (wd, rest) := by
@@ -1284,11 +1368,11 @@ theorem pendingWithdrawal_roundtrip
   rw [show
     Encodable.encode (T := Nat) wd.resource.toNat ++
       Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
-      Encodable.encode (T := Nat) wd.amount ++
+      encodeAmount wd.amount ++
       Encodable.encode (T := Nat) wd.l2LogIndex ++ rest =
     Encodable.encode (T := Nat) wd.resource.toNat ++
       (Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
-        (Encodable.encode (T := Nat) wd.amount ++
+        (encodeAmount wd.amount ++
           (Encodable.encode (T := Nat) wd.l2LogIndex ++ rest)))
     from by simp [List.append_assoc]]
   -- Segment 1: resource (Nat).
@@ -1309,7 +1393,7 @@ theorem pendingWithdrawal_roundtrip
   rw [Bridge.EthAddress.ofBytes_toBytes]
   dsimp only
   -- Segment 3: amount (Nat).
-  rw [nat_roundtrip wd.amount _ h_amt]
+  rw [amount_roundtrip wd.amount _ h_amt]
   dsimp only
   -- Segment 4: l2LogIndex (Nat).
   rw [nat_roundtrip wd.l2LogIndex rest h_idx]

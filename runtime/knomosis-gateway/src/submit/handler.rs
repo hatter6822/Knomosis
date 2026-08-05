@@ -48,8 +48,11 @@ pub fn handle(state: &AppState, request: &RequestPayload) -> RouteOutcome {
     // round-trip — so a client retry never re-submits a processed action
     // (which the kernel nonce would otherwise decline with a *different*
     // verdict).
+    // The lookup is namespaced by the presenting credential, so a key another
+    // client chose can never replay ITS verdict here (which would also mean
+    // this action was silently never submitted).
     if let Some(key) = request.idempotency_key {
-        if let Some(cached) = state.idempotency.get(key) {
+        if let Some(cached) = state.idempotency.get(request.credential, key) {
             return cached;
         }
     }
@@ -76,7 +79,7 @@ pub fn handle(state: &AppState, request: &RequestPayload) -> RouteOutcome {
     // the cache is disabled, the key is absent, or the outcome is a
     // transient 5xx — see `idempotency::is_cacheable`).
     if let Some(key) = request.idempotency_key {
-        state.idempotency.put(key, &outcome);
+        state.idempotency.put(request.credential, key, &outcome);
     }
     outcome
 }

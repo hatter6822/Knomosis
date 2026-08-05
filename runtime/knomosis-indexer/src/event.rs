@@ -10,7 +10,7 @@
 //! ## Frozen constructor indices
 //!
 //! Per `LegalKernel/Events/Types.lean` (§8.9.2) and `docs/abi.md`
-//! §5.3, the `Event` inductive has 21 constructors with frozen
+//! §5.3, the `Event` inductive has 23 constructors with frozen
 //! indices.  This module exposes the same shape as a Rust enum so
 //! the decoder can produce typed values without reaching into
 //! raw bytes everywhere.

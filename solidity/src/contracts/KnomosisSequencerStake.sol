@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 import {IKnomosisSequencerStake} from "src/interfaces/IKnomosisSequencerStake.sol";
 import {IKnomosisBridge} from "src/interfaces/IKnomosisBridge.sol";
+import {IKnomosisDisputeVerifier} from "src/interfaces/IKnomosisDisputeVerifier.sol";
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
@@ -34,6 +35,8 @@ contract KnomosisSequencerStake is IKnomosisSequencerStake, ReentrancyGuard {
     error SlashRatioOutOfRange();
     error ZeroAddress();
     error EthSendFailed();
+    /// @notice `claimSlashReward()` was called with nothing credited.
+    error NothingToClaim();
     /// @notice Constructor guard: a peer address (`disputeVerifier` /
     ///         `bridge`) has no deployed code.  Both are deployed before
     ///         this contract in every legitimate order (backward refs), so a
@@ -66,6 +69,27 @@ contract KnomosisSequencerStake is IKnomosisSequencerStake, ReentrancyGuard {
     uint256 public totalStaked;
     mapping(uint64 => bool) private _slashedDispute;
 
+    /// @notice Slash rewards owed to challengers, withdrawn by
+    ///         `claimSlashReward()`.
+    ///
+    ///         The challenger's cut is credited rather than pushed,
+    ///         and that is load-bearing now that an open dispute
+    ///         blocks `withdraw`.  Under a push model a challenger
+    ///         contract with a reverting `receive()` would make
+    ///         `slash` revert, `KnomosisDisputeVerifier.finalizeUpheld`
+    ///         revert with it, and the dispute stay open forever —
+    ///         freezing the whole stake at the cost of one challenger
+    ///         bond.  Crediting makes the terminal transition
+    ///         unconditional; a recipient that cannot receive ETH only
+    ///         strands its own reward.
+    ///
+    ///         `burnAddress` is not credited: it is a sink chosen at
+    ///         deployment and the burn is intended to be
+    ///         irrecoverable, so the residual is sent directly.  A
+    ///         `burnAddress` that reverts would be a deployment
+    ///         error, not an attacker-chosen address.
+    mapping(address => uint256) public slashCredit;
+
     // ------------------------------------------------------------------
     // Events
     // ------------------------------------------------------------------
@@ -79,6 +103,9 @@ contract KnomosisSequencerStake is IKnomosisSequencerStake, ReentrancyGuard {
         uint256 burned,
         uint256 newTotal
     );
+    /// @notice Emitted when a challenger withdraws a credited slash
+    ///         reward.
+    event SlashRewardClaimed(address indexed challenger, uint256 amount);
 
     // ------------------------------------------------------------------
     // Constructor
@@ -143,10 +170,35 @@ contract KnomosisSequencerStake is IKnomosisSequencerStake, ReentrancyGuard {
         if (msg.sender != sequencer) revert NotSequencer();
         if (amount == 0 || amount > totalStaked) revert InsufficientStake();
 
-        // Lock-up: the sequencer cannot withdraw while there is an
-        // open / unfinalised state root within the dispute window.
-        // The bridge's `hasOpenDisputeOlderThan` getter is the
-        // authoritative oracle.
+        // ---- Lock 1: a dispute is actually open. ----
+        //
+        // This is the condition that makes slashing meaningful, and
+        // it must be tested against the contract that owns the
+        // open-dispute set.  `slash` zeroes `totalStaked` outright —
+        // the penalty is the WHOLE stake, not a per-dispute share —
+        // so while any dispute is open no part of the balance is
+        // safely withdrawable and the lock is all-or-nothing.
+        //
+        // Filing is permissionless, so this lock is a griefing
+        // surface; `KnomosisDisputeVerifier.challengerBond` is what
+        // prices it.  A griefer pays the bond per dispute and
+        // forfeits it on rejection.
+        if (IKnomosisDisputeVerifier(disputeVerifier).openDisputeCount() != 0) {
+            revert WithdrawDuringOpenDispute();
+        }
+
+        // ---- Lock 2: a state root is still inside its challenge window. ----
+        //
+        // Complementary, not redundant: lock 1 covers the period
+        // AFTER someone files, this covers the window during which
+        // they still may.  Withdrawing here would let the sequencer
+        // submit a bad root and exit before anyone could dispute it.
+        //
+        // Note the getter's name overstates what it answers — it
+        // reports whether a root was submitted inside the window, not
+        // whether a dispute exists.  That is the correct question for
+        // THIS lock; it was the wrong question when it was the only
+        // one.
         uint64 threshold = block.number > disputeWindowBlocks
             ? uint64(block.number - disputeWindowBlocks)
             : 0;
@@ -188,9 +240,24 @@ contract KnomosisSequencerStake is IKnomosisSequencerStake, ReentrancyGuard {
 
         emit Slashed(disputeId, challenger, paid, burned, totalStaked);
 
-        // Interactions: pay challenger, burn residual.
-        if (paid > 0) Address.sendValue(payable(challenger), paid);
+        // The challenger's cut is credited, not pushed — see
+        // `slashCredit`.  A push here is a liveness hole: it lets the
+        // reward recipient revert the finalisation that awards it.
+        if (paid > 0) slashCredit[challenger] += paid;
+
+        // Interaction: burn the residual.
         if (burned > 0) Address.sendValue(payable(burnAddress), burned);
+    }
+
+    /// @notice Withdraw every slash reward credited to the caller.
+    /// @return amount The wei transferred.
+    function claimSlashReward() external nonReentrant returns (uint256 amount) {
+        amount = slashCredit[msg.sender];
+        if (amount == 0) revert NothingToClaim();
+        // Effects before interaction.
+        slashCredit[msg.sender] = 0;
+        emit SlashRewardClaimed(msg.sender, amount);
+        Address.sendValue(payable(msg.sender), amount);
     }
 
     // ------------------------------------------------------------------

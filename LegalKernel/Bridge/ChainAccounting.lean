@@ -71,10 +71,21 @@ theorem deposit_step_supply
     TotalSupply (apply_bridge_admissible_with verify P dep es st idx h).base r
       = TotalSupply es.base r + (if r₀ = r then amt else 0) := by
   rw [deposit_step_base haction h]
+  -- The law's precondition comes from admissibility rather than from a
+  -- new hypothesis: `AdmissibleWith` already carries it, which is what
+  -- keeps the escrow identity UNCONDITIONAL now that `deposit.pre` is
+  -- the C-3 ceiling instead of `True`.  Were it not carried, an
+  -- over-ceiling deposit would no-op the credit while
+  -- `applyActionToBridgeState` still recorded the ledger entry, and
+  -- `totalWithdrawn + TotalSupply = totalDeposited` would break.
+  have hpre : (Laws.deposit r₀ recip amt dpid).pre es.base := by
+    have hp := h.1.2.2.2.1
+    rw [haction] at hp
+    exact hp
   by_cases hr : r₀ = r
   · subst hr
     rw [if_pos rfl]
-    exact Laws.totalSupply_after_deposit r₀ recip amt dpid es.base
+    exact Laws.totalSupply_after_deposit r₀ recip amt dpid es.base hpre
   · rw [if_neg hr]
     exact Laws.deposit_conserves_other_resource r₀ r recip amt dpid es.base hr
 

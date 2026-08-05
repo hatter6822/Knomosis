@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
+import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisAmmDisasterRecoveryMultisig} from
     "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
+import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
+import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 import {MockBoldOz} from "test/utils/MockBoldOz.sol";
 import {MockLiquityV2TroveManager} from "test/utils/MockLiquityV2.sol";
@@ -33,8 +36,11 @@ contract InactiveMigration {
 ///         `approve` prerequisite, `ammSwap` in both directions and both
 ///         approval shapes, the BOLD circuit-breaker surface, the AMM kill
 ///         switch, the Liquity auto-trigger paths, and the
-///         `withdrawWithProof` exit legs), so deployments can budget
-///         L1-gas costs and review can spot performance regressions.
+///         `withdrawWithProof` exit legs) plus the fault proof's
+///         terminal step (`KnomosisStepVMRoot.executeStepToRoot`, in
+///         both its distinct-cell and duplicate-cell shapes), so
+///         deployments can budget L1-gas costs and review can spot
+///         performance regressions.
 ///
 ///         The committed baseline lives in
 ///         `test/BenchmarkGasV1_3.gas-baseline.json`; regenerate it (and
@@ -95,14 +101,12 @@ contract InactiveMigration {
 ///         production BOLD / TroveManager bytecode may differ marginally
 ///         from the mocks (larger dispatch tables, recipient checks) —
 ///         a few hundred gas, not thousands.
-abstract contract BenchmarkGasV1_3Base is Test {
+abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
     /// @dev The snapshot group: all benchmarks across all scenario
     ///      contracts aggregate into `snapshots/BenchmarkGasV1_3.json`
     ///      (forge scratch output; the committed copy is the baseline).
     string internal constant SNAP_GROUP = "BenchmarkGasV1_3";
 
-    /// @dev Mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.
-    address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     /// @dev Mirrors of the three constitutional Liquity V2 TroveManager pins.
     address internal constant LIQUITY_TM_ETH = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
     address internal constant LIQUITY_TM_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
@@ -265,7 +269,10 @@ abstract contract BenchmarkGasV1_3Base is Test {
 
     /// @notice Mint `amount` BOLD to `user` and approve `b` for exactly
     ///         that amount.
-    function _mintApprove(KnomosisBridge b, address user, uint256 amount) internal {
+    function _mintApprove(KnomosisBridge b, address user, uint256 amount)
+        internal
+        override
+    {
         MockBoldOz(BOLD).mint(user, amount);
         vm.prank(user);
         MockBoldOz(BOLD).approve(address(b), amount);
@@ -1049,7 +1056,7 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         );
         boldProof = _encodeWithdrawalProof(boldLeaf, 0, siblings);
 
-        vm.roll(block.number + DISPUTE_WINDOW_BLOCKS);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW_BLOCKS);
     }
 
     /// @notice `withdrawWithProof`, native-ETH leg (canonical 64-sibling
@@ -1086,13 +1093,16 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         assertTrue(bridge.isStateRootFinalised(BOLD_ROOT_LOG_INDEX), "BOLD root finalised");
         assertFalse(bridge.withdrawalLeafRedeemed(keccak256(ethLeaf)), "ETH leaf unredeemed");
         assertFalse(bridge.withdrawalLeafRedeemed(keccak256(boldLeaf)), "BOLD leaf unredeemed");
-        // Canonical proof-blob size: cbeBytes(56-byte leaf) = 65, cbeUint
+        // Canonical proof-blob size: cbeBytes(80-byte leaf) = 89, cbeUint
         // index = 9, array head = 9, 64 x cbeBytes(32-byte sibling) = 64
-        // x 41 = 2624; total 2707 bytes.  Pins the proof shape the
-        // benchmark's ~2.7 kB calldata figure rests on.
-        assertEq(ethProof.length, 2707, "canonical proof blob is 2707 bytes");
-        assertEq(boldProof.length, 2707, "canonical proof blob is 2707 bytes");
-        assertEq(ethLeaf.length, 56, "canonical leaf blob is 56 bytes");
+        // x 41 = 2624; total 2731 bytes.  Pins the proof shape the
+        // benchmark's ~2.7 kB calldata figure rests on.  The leaf has
+        // grown twice with the amount head: 56 -> 64 with C-1 (uint
+        // head -> 17-byte amount head), then 64 -> 80 closing C-3
+        // (17 -> 33 bytes, the EVM word).
+        assertEq(ethProof.length, 2731, "canonical proof blob is 2731 bytes");
+        assertEq(boldProof.length, 2731, "canonical proof blob is 2731 bytes");
+        assertEq(ethLeaf.length, 80, "canonical leaf blob is 80 bytes");
         assertGt(alice.balance, 0, "recipient already funded with ETH");
         assertGt(MockBoldOz(BOLD).balanceOf(alice), 0, "recipient holds residual BOLD");
     }
@@ -1225,4 +1235,161 @@ contract BenchmarkGasV1_3DisasterRecoveryTest is BenchmarkGasV1_3Base {
         assertFalse(bridge.ammDisabled(), "AMM live in the staged state");
         assertGt(bridge.ammReserveEth(), 0, "pool seeded");
     }
+}
+
+/// @title BenchmarkGasV1_3StepVMRootTest
+/// @notice The fault proof's TERMINAL STEP —
+///         `KnomosisStepVMRoot.executeStepToRootMulti`, the call
+///         `KnomosisFaultProofGame.terminateOnSingleStep` makes to
+///         adjudicate a converged bisection.
+///
+/// @dev    Not a v1.3 bridge operation, and here for a reason the rest
+///         of the suite makes obvious by contrast: every other L1
+///         operation a deployment pays for is measured, and the one
+///         whose cost is dominated by a 256-level Merkle walk per
+///         opening was not.  That is the operation a challenger and a
+///         defender each pay to settle a game, so it is the one whose
+///         calldata and hashing budget an operator most needs, and the
+///         one any change to the opening discipline
+///         (`docs/planning/state_root_merkleisation_plan.md` §6) must
+///         be measured against.
+///
+///         Two probes rather than one, because the cost is not a single
+///         number: `transfer` opens five DISTINCT cells, while
+///         `selfTransfer` names the same balance cell twice and the
+///         frontier dedups it to four — the shape the multiproof helps
+///         most and the retired chained fold helped not at all.
+///         Measuring only the first would report an average that
+///         neither case has.
+///
+///         The inputs are the committed `multiProofGoldens` corpus,
+///         loaded through the SAME harness the cross-check suite uses
+///         (`StepVMRootProbeHarness`), so the measured call and the
+///         verified call cannot drift apart.  The corpus is a keccak
+///         artifact by construction, so the scenario is as fixed as a
+///         constant while staying a single source of truth.
+contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbeHarness {
+    /// @dev The subject.  Deployed, not linked, so the calldata
+    ///      boundary the benchmark measures is the real one.
+    KnomosisStepVMRoot internal vmRoot;
+
+    /// @dev The corpus, read once.
+    string internal raw;
+    /// @dev The five-distinct-cell probe (`transfer`).
+    string internal multiDistinctBase;
+    /// @dev The duplicate-cell probe (`transfer` with sender ==
+    ///      receiver), whose frontier dedups to four cells.
+    string internal multiDuplicateBase;
+
+    function setUp() public {
+        vmRoot = new KnomosisStepVMRoot();
+        raw = readFixture(STEP_VM_FIXTURE);
+        _requireKeccakLinked(raw, ".isKeccak256Linked");
+        multiDistinctBase = findMultiProbeBase(raw, "transfer");
+        multiDuplicateBase = findMultiProbeBase(raw, "selfTransfer");
+    }
+
+    /// @notice `executeStepToRootMulti` over the SAME distinct-cell
+    ///         step, opened as a deduplicating pre-root multiproof.
+    ///
+    /// @dev    Paired with `executeStepToRoot_distinctCells` so the two
+    ///         opening disciplines are measured on one scenario rather
+    ///         than compared across two.  This is the majority case —
+    ///         most steps write distinct cells — and it is where the
+    ///         multiproof's structural wins (one root check, order-free
+    ///         bundles, a derived wire length) have to be paid for
+    ///         rather than granted: the merge only absorbs the top few
+    ///         levels of five 256-level paths.
+    function test_gas_executeStepToRootMulti_distinctCells() public {
+        _bench(
+            "executeStepToRootMulti_distinctCells",
+            address(this),
+            address(vmRoot),
+            0,
+            encodeMultiProbeCall(loadProbeInput(raw, multiDistinctBase)),
+            true
+        );
+    }
+
+    /// @notice `executeStepToRootMulti` over the duplicate-cell step.
+    ///
+    /// @dev    The shape the dedup exists for.  The chained fold pays a
+    ///         full second opening — 256 levels verified and 256
+    ///         re-walked — to land the value the first write already
+    ///         did; here the cell appears once and the second walk is
+    ///         simply gone.  The delta against
+    ///         `executeStepToRoot_duplicateCell` is the measurement
+    ///         `state_root_merkleisation_plan.md` §6 asked for.
+    function test_gas_executeStepToRootMulti_duplicateCell() public {
+        _bench(
+            "executeStepToRootMulti_duplicateCell",
+            address(this),
+            address(vmRoot),
+            0,
+            encodeMultiProbeCall(loadProbeInput(raw, multiDuplicateBase)),
+            true
+        );
+    }
+
+    /// @notice Pins both benchmarked scenarios: each reaches Lean's
+    ///         published post-root, that root is not the pre-root, and
+    ///         the two probes have the shapes their names claim.
+    ///
+    /// @dev    Discipline point (4) of this file's header: a benchmark
+    ///         whose effects are unpinned measures whatever `setUp`
+    ///         happens to stage.
+    function test_sanity_stepVMRootMultiScenarioAssumptions() public view {
+        KnomosisStepVMRoot.OpenedCell[] memory distinct =
+            loadOpenedCells(raw, multiDistinctBase);
+        KnomosisStepVMRoot.OpenedCell[] memory duplicate =
+            loadOpenedCells(raw, multiDuplicateBase);
+
+        // The write set is four cells in both probes; the frontier adds
+        // the policy cell and removes the alias.
+        assertEq(distinct.length, 5, "transfer's frontier is five cells");
+        assertEq(duplicate.length, 4, "selfTransfer's frontier dedups to four");
+
+        assertEq(
+            _runMulti(multiDistinctBase, distinct),
+            probePostRoot(raw, multiDistinctBase),
+            "the distinct-cell multiproof reaches Lean's post-root"
+        );
+        assertEq(
+            _runMulti(multiDuplicateBase, duplicate),
+            probePostRoot(raw, multiDuplicateBase),
+            "the duplicate-cell multiproof reaches Lean's post-root"
+        );
+        // The duplicate probe's frontier is strictly smaller than its
+        // write set, which is the dedup being exercised rather than
+        // assumed: a corpus regeneration that changed `selfTransfer`'s
+        // aliasing would silently turn the duplicate benchmark into a
+        // second distinct-cell one.
+        assertLt(
+            duplicate.length,
+            distinct.length,
+            "the duplicate probe must dedup to a smaller frontier"
+        );
+        assertTrue(
+            probePostRoot(raw, multiDistinctBase) != probePreRoot(raw, multiDistinctBase),
+            "the distinct-cell fold moves the root"
+        );
+        assertTrue(
+            probePostRoot(raw, multiDuplicateBase) != probePreRoot(raw, multiDuplicateBase),
+            "the duplicate-cell fold moves the root"
+        );
+    }
+
+    /// @dev Run a multiproof probe and return the root it reaches.
+    function _runMulti(
+        string memory base,
+        KnomosisStepVMRoot.OpenedCell[] memory cells
+    ) private view returns (bytes32 root) {
+        ProbeInput memory input = loadProbeInput(raw, base);
+        input.cells = cells;
+        (bool ok, bytes memory out) =
+            address(vmRoot).staticcall(encodeMultiProbeCall(input));
+        assertTrue(ok, "multiproof probe reverted");
+        root = abi.decode(out, (bytes32));
+    }
+
 }

@@ -496,6 +496,33 @@ theorem state_filter_sum_eq_sumOthers
   unfold sumOthers
   exact Nat.eq_sub_of_add_eq h_id
 
+/-- Dropping zero-valued entries from a balance list does not change
+    the sum of its values, whatever else the filter keeps.  Trivial
+    arithmetically; stated because the bulk laws' recipient list
+    (`Laws.bulkRecipients`) carries a `kv.2 != 0` conjunct that the
+    dust bound's divisor identity has to see through.
+
+    Deliberately general in `p` rather than specialised to
+    `fun kv => kv.1 != excluded`: this module sits below
+    `Laws/BulkBound.lean` and so cannot name `bulkRecipients`, and a
+    specialised statement here would be a second copy of that filter —
+    exactly the duplication the recipient list exists to remove.  The
+    bulk-specific corollary lives with the definition, as
+    `Laws.bulkRecipients_values_sum_eq_sumOthers`. -/
+theorem balanceList_sum_filter_ne_zero
+    (xs : List (ActorId × Nat)) (p : ActorId × Nat → Bool) :
+    ((xs.filter (fun kv => p kv && kv.2 != 0)).map (·.2)).sum =
+    ((xs.filter p).map (·.2)).sum := by
+  induction xs with
+  | nil => rfl
+  | cons hd tl ih =>
+      simp only [List.filter_cons]
+      by_cases hp : p hd = true
+      · by_cases hz : hd.2 = 0
+        · simp [hp, hz, ih]
+        · simp [hp, hz, ih]
+      · simp [hp, ih]
+
 /-! ## `IsMonotonic` typeclass (positive-incentive tier) -/
 
 /-- A transition that *never decreases* the total supply at any

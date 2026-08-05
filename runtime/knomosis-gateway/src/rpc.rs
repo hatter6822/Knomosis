@@ -96,10 +96,21 @@ pub fn handle(state: &AppState, payload: &RequestPayload) -> RouteOutcome {
                     &format!("batch too large (max {MAX_BATCH} requests)"),
                 ))
             } else {
-                let responses: Vec<Value> = requests
-                    .iter()
-                    .filter_map(|req| handle_one(req, l2_chain_id, state))
-                    .collect();
+                // One cursor read per REQUEST, not per batch member: a
+                // 100-member all-`eth_blockNumber` batch previously did 100
+                // unauthenticated SQLite reads (the endpoint is auth- and
+                // rate-limit-exempt, so a wallet can reach it with no
+                // credential).  The cursor cannot change mid-batch as far as a
+                // caller can observe, so memoising it is also the more correct
+                // answer — every member of one batch now reports the same
+                // height.
+                let mut height = BlockHeight::new(state);
+                let mut responses: Vec<Value> = Vec::new();
+                for req in &requests {
+                    if let Some(r) = handle_one(req, l2_chain_id, &mut height) {
+                        responses.push(r);
+                    }
+                }
                 // A batch consisting solely of notifications gets no reply.
                 if responses.is_empty() {
                     None
@@ -108,7 +119,10 @@ pub fn handle(state: &AppState, payload: &RequestPayload) -> RouteOutcome {
                 }
             }
         }
-        obj @ Value::Object(_) => handle_one(&obj, l2_chain_id, state),
+        obj @ Value::Object(_) => {
+            let mut height = BlockHeight::new(state);
+            handle_one(&obj, l2_chain_id, &mut height)
+        }
         _ => Some(error_response(
             Value::Null,
             INVALID_REQUEST,
@@ -128,7 +142,7 @@ pub fn handle(state: &AppState, payload: &RequestPayload) -> RouteOutcome {
 /// which JSON-RPC 2.0 §4.1 says must not be replied to; otherwise
 /// `Some(response)`.  A malformed request (no / non-string `method`) is always
 /// answered (with the echoed or `null` id) — it is not a valid Notification.
-fn handle_one(req: &Value, l2_chain_id: u64, state: &AppState) -> Option<Value> {
+fn handle_one(req: &Value, l2_chain_id: u64, height: &mut BlockHeight<'_>) -> Option<Value> {
     let id_field = req.get("id");
     let Some(method) = req.get("method").and_then(Value::as_str) else {
         // Invalid request: always answered, id echoed (or null).
@@ -149,9 +163,7 @@ fn handle_one(req: &Value, l2_chain_id: u64, state: &AppState) -> Option<Value> 
         // The L2 advance counter as a `0x`-hex quantity.  The indexer cursor is
         // read lazily here — only this method needs it, so the other methods
         // (and malformed requests) never touch SQLite.
-        "eth_blockNumber" => {
-            result_response(id, Value::String(format!("0x{:x}", current_block(state))))
-        }
+        "eth_blockNumber" => result_response(id, Value::String(format!("0x{:x}", height.get()))),
         "web3_clientVersion" => result_response(
             id,
             Value::String(format!("knomosis-gateway/{}", crate::VERSION)),
@@ -166,6 +178,37 @@ fn handle_one(req: &Value, l2_chain_id: u64, state: &AppState) -> Option<Value> 
             ),
         ),
     })
+}
+
+/// Memoises the indexer-cursor read for the lifetime of ONE `/rpc` request.
+///
+/// `/rpc` is auth- and rate-limit-exempt (a browser wallet's Add-Network probe
+/// cannot present the bearer credential), so anything it does per batch member
+/// is unauthenticated work an anonymous caller can multiply by `MAX_BATCH`.
+/// Reading the cursor once per request keeps that at one SQLite read no matter
+/// how many `eth_blockNumber` members the batch carries.
+struct BlockHeight<'a> {
+    state: &'a AppState,
+    cached: Option<u64>,
+}
+
+impl<'a> BlockHeight<'a> {
+    fn new(state: &'a AppState) -> Self {
+        Self {
+            state,
+            cached: None,
+        }
+    }
+
+    /// The height, reading it at most once.
+    fn get(&mut self) -> u64 {
+        if let Some(v) = self.cached {
+            return v;
+        }
+        let v = current_block(self.state);
+        self.cached = Some(v);
+        v
+    }
 }
 
 /// The current L2 advance height: the indexer cursor (event `seq`) when an
@@ -234,6 +277,7 @@ mod tests {
             content_type: Some("application/json"),
             body: body.as_bytes(),
             idempotency_key: None,
+            credential: None,
         };
         handle(state, &payload)
     }

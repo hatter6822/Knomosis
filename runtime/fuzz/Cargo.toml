@@ -49,6 +49,11 @@ arbitrary = { version = "1", features = ["derive"] }
 knomosis-host = { path = "../knomosis-host" }
 knomosis-l1-ingest = { path = "../knomosis-l1-ingest" }
 knomosis-indexer = { path = "../knomosis-indexer" }
+knomosis-faultproof-observer = { path = "../knomosis-faultproof-observer" }
+
+# The observer's cell-proof intake is JSON, so the target needs the
+# same deserialiser the daemon uses rather than a re-spelling of it.
+serde_json = "1"
 
 # Release-profile debug symbols so a crash's stack trace is legible in
 # the CI artifact, without disabling optimisation (fuzzing throughput
@@ -73,6 +78,19 @@ bench = false
 [[bin]]
 name = "indexer_decode_event"
 path = "fuzz_targets/indexer_decode_event.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "observer_cell_proof_json"
+path = "fuzz_targets/observer_cell_proof_json.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "observer_terminate_bundle_json"
+path = "fuzz_targets/observer_terminate_bundle_json.rs"
 test = false
 doc = false
 bench = false

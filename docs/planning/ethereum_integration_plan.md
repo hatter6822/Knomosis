@@ -699,8 +699,8 @@ backed by the existing Phase-6 fraud-proof pipeline.
 
     **Toolchain bootstrap.**  `scripts/setup.sh` extended to
     install Foundry v1.7.1 (SHA-256 pinned for x86_64 +
-    aarch64) and solc v0.8.20 (SHA-256 pinned for x86_64;
-    upstream v0.8.20 doesn't ship an ARM static binary).  New
+    aarch64) and solc v0.8.36 (SHA-256 pinned for x86_64;
+    upstream v0.8.36 doesn't ship an ARM static binary).  New
     flags `--skip-solidity` and `--solidity-only`.  A
     `.claude/hooks/session-start.sh` SessionStart hook invokes
     `setup.sh --quiet` so subsequent `lake build` / `forge
@@ -2823,7 +2823,7 @@ snapshot for redemption).
 ## 9. Workstream E — Solidity contracts
 
 This workstream is the on-chain complement.  All contracts
-target Solidity `^0.8.20` and use audited OpenZeppelin libraries
+target Solidity `^0.8.36` and use audited OpenZeppelin libraries
 for primitives — no custom crypto.  Specifically:
 
   * `@openzeppelin/contracts/utils/ReentrancyGuard.sol`
@@ -3044,7 +3044,7 @@ event DepositInitiated(
      `transfer`.
   5. **`totalLockedValue` accounting**: each successful deposit
      increments `totalLockedValue` by `amount` (using checked
-     arithmetic — Solidity 0.8.20+ default).  This feeds the
+     arithmetic — Solidity 0.8.36+ default).  This feeds the
      `tvlCap` circuit breaker; it also lets the off-chain
      watchdog reconcile against the Lean side's
      `totalDeposited - totalWithdrawn`.

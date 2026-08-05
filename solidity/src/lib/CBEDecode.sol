@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.36;
 
 /// @title CBEDecode
 /// @notice Byte-level decoder for the **Knomosis Binary Encoding** (CBE)
@@ -39,13 +39,35 @@ library CBEDecode {
     // ------------------------------------------------------------------
 
     uint8 internal constant TAG_UINT = 0x00;
+    /// @notice CBE type tag for a value-carrying amount (32-byte LE
+    ///         payload).  Distinct from `TAG_UINT` so a widened amount
+    ///         field can never alias an adjacent identifier field in a
+    ///         concatenated layout.
+    ///
+    ///         `0x06`, not the `0x01` it was: the tag moved with the
+    ///         width so a stale peer fails closed on an unexpected tag
+    ///         rather than reading 17 of 33 bytes and mis-parsing the
+    ///         rest of the stream.  `0x04`/`0x05` are array/map, so
+    ///         `0x06` is the next free value.
+    uint8 internal constant TAG_AMOUNT = 0x06;
     uint8 internal constant TAG_BYTES = 0x02;
     uint8 internal constant TAG_TEXT = 0x03;
     uint8 internal constant TAG_ARRAY = 0x04;
     uint8 internal constant TAG_MAP = 0x05;
 
-    /// @notice Length of a CBE head: 1 type byte + 8 LE value bytes.
+    /// @notice Length of a CBE uint head: 1 type byte + 8 LE value
+    ///         bytes.  Identifiers, nonces, tags, length prefixes and
+    ///         budget-unit counts.
     uint256 internal constant HEAD_SIZE = 9;
+
+    /// @notice Length of a CBE amount head: 1 type byte + 32 LE value
+    ///         bytes.  Value-carrying fields only.  The width is the
+    ///         EVM word, so no value this contract can hold is one the
+    ///         head cannot carry — the property finding C-3 turned on,
+    ///         since a truncating head makes a balance read as the
+    ///         canonically-absent value and the state root goes blind
+    ///         to it.
+    uint256 internal constant AMOUNT_HEAD_SIZE = 33;
 
     // ------------------------------------------------------------------
     // Custom errors
@@ -99,6 +121,36 @@ library CBEDecode {
     }
 
     // ------------------------------------------------------------------
+    // Primitive: read 32 LE bytes as uint256
+    // ------------------------------------------------------------------
+
+    /// @notice Read 32 little-endian bytes from `buf` starting at
+    ///         `offset` and return the Nat-equivalent uint256 value
+    ///         plus the next-offset.  Reverts on EOF.
+    /// @dev    Mirrors `natFromBytesLE rest 32` in Lean.  The 16-byte
+    ///         `readUint128LE` this replaces is gone rather than kept
+    ///         alongside: a narrower amount reader returns a truncated
+    ///         value instead of failing, which is the quiet half of
+    ///         finding C-3.
+    function readUint256LE(bytes calldata buf, uint256 offset)
+        internal
+        pure
+        returns (uint256 value, uint256 nextOffset)
+    {
+        if (offset + 32 > buf.length) revert CBEUnexpectedEof();
+        uint256 acc = 0;
+        unchecked {
+            // The loop runs exactly 32 times, so `8 * i < 256` always
+            // and the accumulator stays within `[0, 2^256 - 1]`.
+            for (uint256 i = 0; i < 32; ++i) {
+                acc |= uint256(uint8(buf[offset + i])) << (8 * i);
+            }
+        }
+        value = acc;
+        nextOffset = offset + 32;
+    }
+
+    // ------------------------------------------------------------------
     // CBE head: tag-byte + 8 LE value bytes
     // ------------------------------------------------------------------
 
@@ -129,6 +181,23 @@ library CBEDecode {
         returns (uint64 value, uint256 nextOffset)
     {
         return readHead(buf, offset, TAG_UINT);
+    }
+
+    /// @notice Decode a CBE amount (tag 0x06 + 32 LE bytes).
+    /// @dev    Mirrors `cborAmountHeadDecode` in Lean.  Rejects
+    ///         `TAG_UINT` rather than accepting either width: one
+    ///         logical value must have exactly one byte form, or a peer
+    ///         could re-encode the same amount two ways and the state
+    ///         root would stop binding.
+    function readAmount(bytes calldata buf, uint256 offset)
+        internal
+        pure
+        returns (uint256 value, uint256 nextOffset)
+    {
+        if (offset >= buf.length) revert CBEUnexpectedEof();
+        uint8 gotTag = uint8(buf[offset]);
+        if (gotTag != TAG_AMOUNT) revert CBEInvalidMajorType(gotTag, TAG_AMOUNT);
+        (value, nextOffset) = readUint256LE(buf, offset + 1);
     }
 
     /// @notice Decode a CBE byte string (tag 0x02 + length head +

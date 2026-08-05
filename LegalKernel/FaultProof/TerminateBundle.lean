@@ -21,24 +21,34 @@ function terminateOnSingleStep(
     uint8 actionKind,
     bytes calldata actionFields,
     uint64 signer,
-    KnomosisStepVM.CellProof[] calldata cellProofs,
-    bytes32 claimedPostCommit
+    KnomosisStepVM.CellProof[] calldata cellProofs
 ) external nonReentrant
 ```
 
-The five non-`gameId` arguments are derivable from a canonical
+**Five arguments, not six.**  This block used to spell a trailing
+`bytes32 claimedPostCommit`, and the Rust submitter was built
+against that shape — a different 4-byte selector, so every honest
+terminate reverted into the unknown-selector fallback.  The
+contract's shape is also the better design: it runs the step VM
+from `g.low.commit` and compares the result against
+`g.high.commit`, both already on-chain, so the post-commit is not
+the caller's to claim.
+
+The four non-`gameId` arguments are derivable from a canonical
 `(ExtendedState, LogEntry)` pair via the per-variant encoders this
 module composes:
 
-  * `actionKind`        := `actionKindByte action`
-  * `actionFields`      := `actionFieldsForL1 action`
-  * `signer`            := `entry.signedAction.signer`
-  * `cellProofs`        := `buildObserverCellProofs preState action signer`
-  * `claimedPostCommit` := `stepVMHashFromAction preState action signer`
+  * `actionKind`   := `actionKindByte action`
+  * `actionFields` := `actionFieldsForL1 action`
+  * `signer`       := `entry.signedAction.signer`
+  * `cellProofs`   := `buildObserverCellProofs preState action signer`
 
-A `TerminateBundle` value bundles these five fields; the
-`buildTerminateBundle` function constructs the canonical bundle
-for a (pre-state, log-entry) pair.
+A `TerminateBundle` carries those four plus
+`expectedPostCommit := stepVMHashFromAction preState action signer`.
+The fifth is **not** calldata: it is what the observer expects the
+step VM to compute, retained so the observer can cross-check its
+own bundle against an independent oracle before broadcasting
+(`BundleCommitMismatch`).  Shipping it would change the selector.
 
 ## Wire format
 
@@ -53,9 +63,11 @@ serde-deserialize default conventions, so the Rust observer's
   "action_kind": 0,
   "action_fields_hex": "00000000000000010000000000000002000...",
   "signer": 5,
-  "claimed_post_commit_hex": "abcd1234...",
+  "expected_post_commit_hex": "abcd1234...",
   "cell_proofs": [
-    {"cell_kind": 0, "key_a": "0x01", "key_b": "0x05", ...},
+    {"cell_kind": 0, "key_a": "0x01", "key_b": "0x05",
+     "cell_value": "...", "witness_commit": "...",
+     "proof_data": "..."},
     ...
   ]
 }
@@ -69,6 +81,7 @@ import LegalKernel.FaultProof.Coherence
 import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.Observer
 import LegalKernel.FaultProof.StepVMCoherence
+import LegalKernel.FaultProof.Terminate
 import LegalKernel.Runtime.CellProofJson
 import LegalKernel.Runtime.LogFile
 
@@ -96,7 +109,7 @@ derived bundle). -/
     pair plus the per-variant encoders.  Bundle construction is
     pure (no IO, no error paths); validity is established by the
     builder's contract:
-      * `claimedPostCommit` equals what the L1 step VM would
+      * `expectedPostCommit` equals what the L1 step VM would
         compute on the same inputs (under the production keccak256
         binding).
       * `cellProofs` includes proofs for every cell the per-variant
@@ -114,11 +127,44 @@ structure TerminateBundle where
   signer            : ActorId
   /-- The canonical step-VM hash for this step.  Under the
       production keccak256 binding, this equals what
-      `KnomosisStepVM.executeStep` returns on the same inputs. -/
-  claimedPostCommit : ByteArray
-  /-- The cell-proof bundle for the action's required cells,
-      witnessed by the pre-state. -/
-  cellProofs        : CellProofBundle
+      `KnomosisStepVM.executeStep` returns on the same inputs.
+
+      **Not part of the calldata** — see the module docstring.  The
+      contract derives both sides of its comparison from the game
+      state; this field exists so the observer can check its own
+      bundle against an independent oracle before it broadcasts. -/
+  expectedPostCommit : ByteArray
+  /-- The log index this step produces.  Not an action field:
+      `withdraw`'s pending-withdrawal record carries it, so the fold
+      has to know which index it is adjudicating.
+
+      **Not on the wire either.**  The L1 reads it from the game
+      (`g.high.idx`) rather than from the caller, so shipping it would
+      offer a responder a value to disagree with.  It is retained here
+      because the builder needs it to compute `expectedPostCommit`. -/
+  l2LogIndex        : Nat
+  /-- The step's FRONTIER: every cell the step opens, with its proven
+      PRE-state value, in path order.
+
+      Replaced a `policyProof` + `cellProofs` pair.  The read-only
+      budget-policy cell is IN here rather than beside it — under a
+      multiproof a read is a write of the same value, so it is one more
+      cell and costs no separate walk.  And a cell the step writes
+      twice (a self-transfer, which anyone can submit) appears ONCE:
+      every opening is against the same root, so the second one carried
+      no information the first did not.
+
+      Order is free on the wire — the L1 sorts by path index — but the
+      builder emits path order anyway, which is what the walk consumes. -/
+  openedCells       : List (CellTag × ByteArray)
+  /-- The single shared wire: a gap mask, then the siblings the mask
+      marks as non-canonical-empty.
+
+      One list rather than one path per opening.  Sound because every
+      sibling is the root of a sub-tree holding no opened cell, so the
+      step's writes cannot move it and the pre- and post-folds share
+      it — `multiSiblings_congr` is the Lean statement of that. -/
+  wire              : SmtMultiProof
   deriving Repr
 
 /-! ## Bundle builder
@@ -132,7 +178,7 @@ The canonical builder threads the per-variant encoders together: -/
       `actionKind        := actionKindByte action`
       `actionFields      := actionFieldsForL1 action`
       `signer            := entry.signedAction.signer`
-      `claimedPostCommit := stepVMHashFromAction preState action signer`
+      `expectedPostCommit := stepVMHashFromAction preState action signer`
       `cellProofs        := buildObserverCellProofs preState action signer`
 
     Pre-conditions:
@@ -143,14 +189,19 @@ The canonical builder threads the per-variant encoders together: -/
       unconditionally so test fixtures and debugging tools can
       emit it for any input pair. -/
 def buildTerminateBundle
-    (preState : ExtendedState) (entry : LogEntry) : TerminateBundle :=
+    (preState : ExtendedState) (entry : LogEntry) (l2LogIndex : Nat := 0) :
+    TerminateBundle :=
   let action := entry.signedAction.action
   let signer := entry.signedAction.signer
   { actionKind        := actionKindByte action,
     actionFields      := actionFieldsForL1 action,
     signer            := signer,
-    claimedPostCommit := stepVMHashFromAction preState action signer,
-    cellProofs        := Observer.buildObserverCellProofs preState action signer }
+    l2LogIndex        := l2LogIndex,
+    expectedPostCommit :=
+      (stepMultiPostRoot preState entry.signedAction l2LogIndex).getD
+        ByteArray.empty,
+    openedCells       := (stepMultiBundle preState entry.signedAction).cells,
+    wire              := (stepMultiBundle preState entry.signedAction).proof }
 
 /-! ## Well-formedness theorems -/
 
@@ -179,30 +230,49 @@ theorem buildTerminateBundle_signer
     (buildTerminateBundle es entry).signer =
     entry.signedAction.signer := rfl
 
-/-- The bundle's `claimedPostCommit` agrees with
-    `stepVMHashFromAction`. -/
-theorem buildTerminateBundle_claimedPostCommit
-    (es : ExtendedState) (entry : LogEntry) :
-    (buildTerminateBundle es entry).claimedPostCommit =
-    stepVMHashFromAction es entry.signedAction.action
-      entry.signedAction.signer := rfl
+/-- The bundle's `expectedPostCommit` is the fold's result — the root
+    an L1 reaches from the pre-root and these openings, and the value
+    the observer cross-checks before broadcasting.
 
-/-- The bundle's `cellProofs` agrees with
-    `buildObserverCellProofs`. -/
-theorem buildTerminateBundle_cellProofs
-    (es : ExtendedState) (entry : LogEntry) :
-    (buildTerminateBundle es entry).cellProofs =
-    Observer.buildObserverCellProofs es entry.signedAction.action
-      entry.signedAction.signer := rfl
+    It was `stepVMHashFromAction`, a bespoke per-variant hash living
+    outside state-root space, so the contract's terminal comparison
+    against `g.high.commit` could never succeed. -/
+theorem buildTerminateBundle_expectedPostCommit
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).expectedPostCommit =
+    (stepMultiPostRoot es entry.signedAction idx).getD ByteArray.empty := rfl
 
-/-- The bundle's cell-proof bundle verifies against the pre-state
-    commit.  Direct from `buildObserverCellProofs_verifies`. -/
-theorem buildTerminateBundle_cellProofs_verify
-    (es : ExtendedState) (entry : LogEntry) :
-    verifyCellProofs (commitExtendedState es)
-      (buildTerminateBundle es entry).cellProofs = true := by
-  rw [buildTerminateBundle_cellProofs]
-  exact Observer.buildObserverCellProofs_verifies _ _ _
+/-- The bundle's opened cells are the honest sequencer's frontier. -/
+theorem buildTerminateBundle_openedCells
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).openedCells =
+    (stepMultiBundle es entry.signedAction).cells := rfl
+
+/-- The bundle's wire is the honest sequencer's. -/
+theorem buildTerminateBundle_wire
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).wire =
+    (stepMultiBundle es entry.signedAction).proof := rfl
+
+/-- **The bundle's cells are exactly the step's frontier** — the cells
+    the action writes plus the read-only budget policy, deduplicated
+    and in path order.
+
+    The L1 re-derives that list and compares, so an observer that
+    dropped a cell, added one, or named one twice fails the shape check
+    rather than folding to a root no state has.  Order is NOT part of
+    the comparison — the verifier sorts — but the builder emits the
+    sorted form, which is what this states. -/
+theorem buildTerminateBundle_openedCells_tags
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).openedCells.map Prod.fst
+      = multiFrontierOf entry.signedAction.action entry.signedAction.signer
+          es.bridge.nextWdId := by
+  show ((multiFrontierOf entry.signedAction.action entry.signedAction.signer
+          es.bridge.nextWdId).map (fun t => (t, getCellValue es t))).map Prod.fst = _
+  rw [List.map_map]
+  exact List.map_id _
+
 
 /-! ## JSON formatter
 
@@ -220,11 +290,25 @@ def formatUInt8 (b : UInt8) : String :=
 def formatUInt64 (n : UInt64) : String :=
   toString n.toNat
 
-/-- Format the `cellProofs` list as a JSON array (one cell-proof
-    object per element).  Uses the existing `formatCellProofJson`
-    formatter. -/
-def formatCellProofsArray (bundle : CellProofBundle) : String :=
-  let entries := bundle.proofs.map formatCellProofJson
+/-- Format one opened cell as a JSON object.
+
+    The same `cell_kind` / `key_a` / `key_b` shape a cell proof used,
+    minus the opening: under a multiproof every cell is opened against
+    the same root and they share one sibling list, so a per-cell
+    `proof_data` would be a field with nothing to put in it. -/
+def formatOpenedCellJson (c : CellTag × ByteArray) : String :=
+  let (kind, keyA, keyB) := LegalKernel.Runtime.CellProofJson.formatCellTag c.1
+  let q := "\""
+  String.join
+    [ "{", q ++ "cell_kind" ++ q, ":", kind, ","
+    , q ++ "key_a" ++ q, ":", q ++ keyA ++ q, ","
+    , q ++ "key_b" ++ q, ":", q ++ keyB ++ q, ","
+    , q ++ "pre_value" ++ q, ":", q ++ bytesHex c.2 ++ q
+    , "}" ]
+
+/-- Format the frontier as a JSON array. -/
+def formatOpenedCellsArray (cells : List (CellTag × ByteArray)) : String :=
+  let entries := cells.map formatOpenedCellJson
   let joined := match entries with
     | [] => ""
     | x :: xs => xs.foldl (fun acc e => acc ++ "," ++ e) x
@@ -244,25 +328,29 @@ def formatTerminateBundleJson (fixtureId : String)
     (bundle : TerminateBundle) : String :=
   let q := "\""
   let actionFieldsHex := bytesHex bundle.actionFields
-  let claimedPostCommitHex := bytesHex bundle.claimedPostCommit
-  let cellProofsArr := formatCellProofsArray bundle.cellProofs
+  let expectedPostCommitHex := bytesHex bundle.expectedPostCommit
+  let openedCellsArr := formatOpenedCellsArray bundle.openedCells
   let parts : List String := [
     "{",
     q ++ "fixture_id" ++ q, ":", q ++ fixtureId ++ q, ",",
     q ++ "action_kind" ++ q, ":", formatUInt8 bundle.actionKind, ",",
     q ++ "action_fields_hex" ++ q, ":", q ++ actionFieldsHex ++ q, ",",
     q ++ "signer" ++ q, ":", formatUInt64 bundle.signer, ",",
-    q ++ "claimed_post_commit_hex" ++ q, ":",
-      q ++ claimedPostCommitHex ++ q, ",",
-    q ++ "cell_proofs" ++ q, ":", cellProofsArr,
+    q ++ "expected_post_commit_hex" ++ q, ":",
+      q ++ expectedPostCommitHex ++ q, ",",
+    q ++ "opened_cells" ++ q, ":", openedCellsArr, ",",
+    q ++ "gap_mask_hex" ++ q, ":", q ++ bytesHex bundle.wire.gapMask ++ q, ",",
+    q ++ "siblings_hex" ++ q, ":",
+      q ++ bytesHex (bundle.wire.siblings.foldl (fun acc s => acc ++ s)
+                       (ByteArray.mk #[])) ++ q,
     "}"
   ]
   String.join parts
 
 /-! ## Smoke checks -/
 
-/-- An empty bundle's cell-proofs array formats as `[]`. -/
-example : formatCellProofsArray { proofs := [] } = "[]" := rfl
+/-- An empty frontier formats as `[]`. -/
+example : formatOpenedCellsArray [] = "[]" := rfl
 
 /-- `formatUInt8 0 = "0"`. -/
 example : formatUInt8 0 = "0" := rfl

@@ -412,7 +412,7 @@ pub enum Action {
         budget_units: u64,
         /// The trusted budget→gas exchange rate (wei per budget unit).
         /// Pinned by the admission gate; same `Nat`-as-CBE encoding.
-        wei_per_budget_unit: u64,
+        wei_per_budget_unit: u128,
         /// The gas-pool actor the refund is paid from.
         pool_actor: ActorId,
     },

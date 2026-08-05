@@ -12,9 +12,6 @@ LegalKernel.FaultProof.Transcript — auxiliary infrastructure for
 the fault-proof game's per-transcript reasoning.
 
 Adds the following declarations:
-  * `applyCellWrites` — the canonical cell-write function (alias
-    of `applyCellWrites_to_state` from `Coherence.lean` for the
-    per-cell write semantic).
   * `extractRequiredCells` — extract the per-action `requiredCells`
     from a SignedAction.
   * `Action.requiredCellProofs` — build the canonical cell-proof
@@ -30,6 +27,7 @@ This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.FaultProof.Coherence
+import LegalKernel.FaultProof.Step
 
 namespace LegalKernel
 namespace FaultProof
@@ -38,24 +36,16 @@ open LegalKernel.Authority
 open LegalKernel.Disputes
 open LegalKernel.Runtime
 
-/-! ## `applyCellWrites` — alias
+/-! ## The retired `applyCellWrites` alias
 
-`applyCellWrites_to_state` from `Coherence.lean` is the
-canonical cell-write function.  Per the plan §5.2 naming, we
-expose it under `applyCellWrites`. -/
-
-/-- The canonical per-step cell-write function: takes a pre-state
-    and a SignedAction, returns the post-state.  Alias for
-    `applyCellWrites_to_state` in `Coherence.lean`. -/
-def applyCellWrites (es : ExtendedState) (st : SignedAction) : ExtendedState :=
-  applyCellWrites_to_state es st
-
-/-- `applyCellWrites` is deterministic. -/
-theorem applyCellWrites_deterministic
-    (es₁ es₂ : ExtendedState) (st₁ st₂ : SignedAction)
-    (h_es : es₁ = es₂) (h_st : st₁ = st₂) :
-    applyCellWrites es₁ st₁ = applyCellWrites es₂ st₂ := by
-  rw [h_es, h_st]
+This module used to re-export `applyCellWrites_to_state`
+(`Coherence.lean`) under the name `applyCellWrites`, together with a
+determinism lemma `Coherence.lean` already proved.  Both are gone.
+The alias described a per-cell write primitive it was not — the whole-
+step advance takes a signed action, not a cell and a value — and the
+genuine per-cell primitive now exists as `CellWrites.applyCellWrites`,
+which folds a `(cell, value)` list.  A second name for the same
+function bought nothing, and the one it bought was wrong. -/
 
 /-! ## `extractRequiredCells` — projection helper -/
 
@@ -175,31 +165,33 @@ result is a list of canonical KernelSteps that:
 /-- Build the canonical chain of KernelSteps from a list of log
     entries, threading the state through each step. -/
 def chainKernelStepApplyFromLog
-    (es : ExtendedState) : List LogEntry → List KernelStep
+    (es : ExtendedState) (startIdx : Nat) : List LogEntry → List KernelStep
   | []         => []
   | e :: rest =>
-    let step := buildKernelStep es e.signedAction
-    step :: chainKernelStepApplyFromLog (kernelOnlyApply es e) rest
+    let step := buildKernelStep es e.signedAction startIdx
+    step :: chainKernelStepApplyFromLog
+              (applyCellWrites_to_state es e.signedAction startIdx)
+              (startIdx + 1) rest
 
 /-- The empty-log reduction. -/
-theorem chainKernelStepApplyFromLog_empty (es : ExtendedState) :
-    chainKernelStepApplyFromLog es [] = [] := rfl
+theorem chainKernelStepApplyFromLog_empty (es : ExtendedState) (i : Nat) :
+    chainKernelStepApplyFromLog es i [] = [] := rfl
 
 /-- The canonical chain's length matches the log length. -/
 theorem chainKernelStepApplyFromLog_length
-    (es : ExtendedState) (log : List LogEntry) :
-    (chainKernelStepApplyFromLog es log).length = log.length := by
-  induction log generalizing es with
+    (es : ExtendedState) (i : Nat) (log : List LogEntry) :
+    (chainKernelStepApplyFromLog es i log).length = log.length := by
+  induction log generalizing es i with
   | nil => rfl
   | cons e rest ih =>
     simp [chainKernelStepApplyFromLog]
-    exact ih (kernelOnlyApply es e)
+    exact ih (applyCellWrites_to_state es e.signedAction i) (i + 1)
 
 /-- The canonical chain's first step's pre-commit matches the
     initial state's commit. -/
 theorem chainKernelStepApplyFromLog_first_preCommit
-    (es : ExtendedState) (e : LogEntry) (rest : List LogEntry) :
-    (chainKernelStepApplyFromLog es (e :: rest)).head?.map
+    (es : ExtendedState) (i : Nat) (e : LogEntry) (rest : List LogEntry) :
+    (chainKernelStepApplyFromLog es i (e :: rest)).head?.map
       KernelStep.preStateCommit = some (commitExtendedState es) := by
   unfold chainKernelStepApplyFromLog
   rfl
@@ -208,43 +200,28 @@ theorem chainKernelStepApplyFromLog_first_preCommit
     transcript with the initial state's commit as the starting
     commit.  Discharged inductively over the log length. -/
 theorem chainKernelStepApplyFromLog_isLegalTranscript
-    (es : ExtendedState) (log : List LogEntry) :
+    (es : ExtendedState) (i : Nat) (log : List LogEntry) :
     isLegalTranscript (commitExtendedState es)
-                      (chainKernelStepApplyFromLog es log) := by
-  induction log generalizing es with
+                      (chainKernelStepApplyFromLog es i log) := by
+  induction log generalizing es i with
   | nil =>
-    -- Empty log: chain is empty; isLegalTranscript on empty is True.
     show isLegalTranscript (commitExtendedState es) []
     trivial
   | cons e rest ih =>
-    -- The first step is buildKernelStep es e.signedAction.  Its
-    -- preStateCommit = commitExtendedState es by definition; its
-    -- postStateCommit = recomputeCommitment es e.signedAction.
-    -- The tail is chainKernelStepApplyFromLog (kernelOnlyApply es e) rest.
-    -- IH at (kernelOnlyApply es e) gives legality starting at
-    -- commitExtendedState (kernelOnlyApply es e); we bridge via #225.
+    -- The bridge that used to be needed here is gone.  The chain
+    -- threads exactly the function `recomputeCommitment` commits, so
+    -- the first step's `postStateCommit` IS the tail's starting
+    -- commit definitionally.  It previously threaded
+    -- `kernelOnlyApply` while committing `recomputeCommitment`, and
+    -- the two were reconciled by the old #225 — which is precisely
+    -- the reconciliation that stopped being true.
     show isLegalTranscript (commitExtendedState es)
-           (buildKernelStep es e.signedAction ::
-            chainKernelStepApplyFromLog (kernelOnlyApply es e) rest)
-    refine ⟨?_, ?_⟩
-    · -- (buildKernelStep es e.signedAction).preStateCommit = commitExtendedState es.
-      show (buildKernelStep es e.signedAction).preStateCommit =
-           commitExtendedState es
-      rfl
-    · -- The tail's initial commit is the first step's postStateCommit
-      -- = recomputeCommitment es e.signedAction = commitExtendedState
-      -- (kernelOnlyApply es e) by #225 coherence.
-      have h_coh := recomputeCommitment_coherent_with_kernelOnlyApply
-                      es e.signedAction e rfl
-      show isLegalTranscript (buildKernelStep es e.signedAction).postStateCommit
-             (chainKernelStepApplyFromLog (kernelOnlyApply es e) rest)
-      have h_post : (buildKernelStep es e.signedAction).postStateCommit =
-                    commitExtendedState (kernelOnlyApply es e) := by
-        show recomputeCommitment es e.signedAction =
-             commitExtendedState (kernelOnlyApply es e)
-        exact h_coh
-      rw [h_post]
-      exact ih (kernelOnlyApply es e)
+           (buildKernelStep es e.signedAction i ::
+            chainKernelStepApplyFromLog
+              (applyCellWrites_to_state es e.signedAction i) (i + 1) rest)
+    refine ⟨buildKernelStep_preStateCommit es e.signedAction i, ?_⟩
+    rw [buildKernelStep_postStateCommit, recomputeCommitment_def]
+    exact ih (applyCellWrites_to_state es e.signedAction i) (i + 1)
 
 end FaultProof
 end LegalKernel

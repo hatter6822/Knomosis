@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity 0.8.20;
+pragma solidity 0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
+import {LogChain} from "src/lib/LogChain.sol";
 
 /// @title KnomosisStateRootSubmissionTest
 /// @notice Forge tests for the state-root submission registry
@@ -15,6 +16,12 @@ contract KnomosisStateRootSubmissionTest is Test {
     address private stranger = address(0xDEAD);
 
     bytes32 private constant DEPLOYMENT_ID = bytes32(uint256(0xCAFE));
+    /// An arbitrary but FIXED action commitment.  The registry treats
+    /// it opaquely — it folds the value into the chain and never
+    /// interprets it — so these tests need one stable value, not a
+    /// realistic one.  `KnomosisFaultProofGame.t.sol` is where a real
+    /// `LogChain.actionCommit` is exercised end-to-end.
+    bytes32 private constant ACTION_COMMIT = bytes32(uint256(0xAC7104));
     uint128 private constant BOND = 1 ether;
     uint64  private constant DISPUTE_WINDOW = 100;
     uint64  private constant MIN_INTERVAL = 10;
@@ -36,7 +43,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         // Roll past the rate-limit window (lastSubmissionBlock starts
         // at 0; require block.number ≥ MIN_INTERVAL for the first
         // submission to clear).
-        vm.roll(block.number + MIN_INTERVAL + 1);
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
     }
 
     /* -------- Constructor -------- */
@@ -115,7 +122,7 @@ contract KnomosisStateRootSubmissionTest is Test {
     function test_submitStateRoot_first_index_succeeds() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         // Verify the record was stored.
         (address seq, bytes32 commit, , , uint128 bond, uint64 atBlock, , )
           = registry.roots(0);
@@ -130,49 +137,50 @@ contract KnomosisStateRootSubmissionTest is Test {
         vm.deal(stranger, 100 ether);
         vm.expectRevert(KnomosisStateRootSubmission.NotSequencer.selector);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
     }
 
     function test_submitStateRoot_rejects_wrong_bond() public {
         vm.prank(sequencer);
         vm.expectRevert(KnomosisStateRootSubmission.InvalidBond.selector);
         registry.submitStateRoot{value: BOND - 1}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
     }
 
     function test_submitStateRoot_rejects_duplicate_index() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
-        vm.roll(block.number + MIN_INTERVAL + 1);
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
         vm.prank(sequencer);
         vm.expectRevert(KnomosisStateRootSubmission.AlreadyClaimed.selector);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xBBB)), bytes32(0));
+            0, bytes32(uint256(0xBBB)), bytes32(0), ACTION_COMMIT);
     }
 
     function test_submitStateRoot_enforces_rate_limit() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         // Try to submit a second root immediately.
         vm.prank(sequencer);
         vm.expectRevert(KnomosisStateRootSubmission.SubmissionTooFrequent.selector);
         registry.submitStateRoot{value: BOND}(
             1, bytes32(uint256(0xBBB)),
-            keccak256(abi.encode(bytes32(0), bytes32(uint256(0xAAA)))));
+            LogChain.nextEntryHash(bytes32(0), bytes32(uint256(0xAAA)), ACTION_COMMIT),
+            ACTION_COMMIT);
     }
 
     function test_submitStateRoot_hash_chain_break_rejected() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
-        vm.roll(block.number + MIN_INTERVAL + 1);
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
         vm.prank(sequencer);
         // Submit at idx 1 with WRONG prevLogEntryHash.
         vm.expectRevert(KnomosisStateRootSubmission.HashChainBroken.selector);
         registry.submitStateRoot{value: BOND}(
-            1, bytes32(uint256(0xBBB)), bytes32(uint256(0xDEAD0FF)));
+            1, bytes32(uint256(0xBBB)), bytes32(uint256(0xDEAD0FF)), ACTION_COMMIT);
     }
 
     function test_submitStateRoot_rejects_idx1_without_idx0() public {
@@ -180,7 +188,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         // Submit at idx 1 without idx 0 first.
         vm.expectRevert(KnomosisStateRootSubmission.PreviousRootMissing.selector);
         registry.submitStateRoot{value: BOND}(
-            1, bytes32(uint256(0xBBB)), bytes32(0));
+            1, bytes32(uint256(0xBBB)), bytes32(0), ACTION_COMMIT);
     }
 
     /* -------- finaliseStateRoot -------- */
@@ -188,8 +196,8 @@ contract KnomosisStateRootSubmissionTest is Test {
     function test_finaliseStateRoot_after_dispute_window_succeeds() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
-        vm.roll(block.number + DISPUTE_WINDOW + 1);
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
 
         uint256 bondBefore = sequencer.balance;
         registry.finaliseStateRoot(0);
@@ -202,7 +210,7 @@ contract KnomosisStateRootSubmissionTest is Test {
     function test_finaliseStateRoot_rejects_within_window() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         vm.expectRevert(KnomosisStateRootSubmission.NotYetFinalisable.selector);
         registry.finaliseStateRoot(0);
     }
@@ -210,8 +218,8 @@ contract KnomosisStateRootSubmissionTest is Test {
     function test_finaliseStateRoot_double_call_rejected() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
-        vm.roll(block.number + DISPUTE_WINDOW + 1);
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
         registry.finaliseStateRoot(0);
         vm.expectRevert(KnomosisStateRootSubmission.AlreadyFinalised.selector);
         registry.finaliseStateRoot(0);
@@ -278,11 +286,99 @@ contract KnomosisStateRootSubmissionTest is Test {
         registry.slashSequencerBond(999, address(0xCAFE));
     }
 
+    /// With nothing submitted, reverting from index 5 has nothing above
+    /// it to sweep, so the range is the single index.
     function test_revertStateRootsFrom_updates_range() public {
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
         assertEq(registry.lowestRevertedLogIndex(), 5);
         assertEq(registry.highestRevertedLogIndex(), 5);
+    }
+
+    /// Submit a contiguous chain 0..3, then submit them.
+    function _submitChain(uint64 upToIdx) internal returns (bytes32 nextHash) {
+        nextHash = bytes32(0);
+        for (uint64 i = 0; i <= upToIdx; i++) {
+            vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
+            vm.prank(sequencer);
+            registry.submitStateRoot{value: BOND}(
+                i, bytes32(uint256(0xAAA) + i), nextHash, ACTION_COMMIT);
+            (, , , bytes32 expectedNext, , , , ) = registry.roots(i);
+            nextHash = expectedNext;
+        }
+    }
+
+    /// **Descendant roots must be reverted too.**
+    ///
+    /// Each root's `prevLogEntryHash` chains to its predecessor's
+    /// `expectedNextHash`, so a root proven invalid at `fromIdx`
+    /// invalidates every root that descends from it.  Raising the ceiling
+    /// only to `fromIdx` marked the single disputed index and left its
+    /// descendants finalisable — this fails against that behaviour.
+    function test_revertStateRootsFrom_sweeps_descendants() public {
+        _submitChain(3);
+        assertEq(registry.latestSubmittedLogIndex(), 3);
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(1);
+        assertEq(registry.lowestRevertedLogIndex(), 1);
+        assertEq(
+            registry.highestRevertedLogIndex(),
+            3,
+            "the ceiling must cover every descendant of the disputed root"
+        );
+        assertFalse(registry.isStateRootReverted(0), "the ancestor stands");
+        assertTrue(registry.isStateRootReverted(1));
+        assertTrue(registry.isStateRootReverted(2), "descendant 2 is reverted");
+        assertTrue(registry.isStateRootReverted(3), "descendant 3 is reverted");
+    }
+
+    /// **Reverting from index 0 is not a no-op.**
+    ///
+    /// The floor sentinel used to be `0`, which made "no floor set"
+    /// indistinguishable from "the floor is the genesis root", and
+    /// `isStateRootReverted` additionally required `floor > 0`.  Reverting
+    /// from 0 therefore marked nothing at all — the cheapest possible
+    /// bypass of the whole mechanism.
+    function test_revertStateRootsFrom_zero_reverts_the_genesis_root() public {
+        _submitChain(2);
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(0);
+        assertEq(registry.lowestRevertedLogIndex(), 0);
+        assertEq(registry.highestRevertedLogIndex(), 2);
+        assertTrue(
+            registry.isStateRootReverted(0),
+            "reverting from the genesis root must actually revert it"
+        );
+        assertTrue(registry.isStateRootReverted(1));
+        assertTrue(registry.isStateRootReverted(2));
+    }
+
+    /// The floor is monotonically lowered and the ceiling monotonically
+    /// raised across repeated calls.
+    function test_revertStateRootsFrom_range_is_monotone() public {
+        _submitChain(3);
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(2);
+        assertEq(registry.lowestRevertedLogIndex(), 2);
+        assertEq(registry.highestRevertedLogIndex(), 3);
+        // A lower floor widens the range downward.
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(1);
+        assertEq(registry.lowestRevertedLogIndex(), 1);
+        assertEq(registry.highestRevertedLogIndex(), 3);
+        // A higher floor does NOT narrow it.
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(3);
+        assertEq(registry.lowestRevertedLogIndex(), 1);
+        assertEq(registry.highestRevertedLogIndex(), 3);
+    }
+
+    /// `latestSubmittedLogIndex` is a running maximum: submission is not
+    /// monotone (the hash-chain check only requires the PREDECESSOR to
+    /// exist), so a later call at a lower index must not lower it.
+    function test_latestSubmittedLogIndex_is_a_running_maximum() public {
+        _submitChain(3);
+        assertEq(registry.latestSubmittedLogIndex(), 3);
     }
 
     function test_isStateRootReverted_in_range() public {
@@ -297,9 +393,13 @@ contract KnomosisStateRootSubmissionTest is Test {
         assertFalse(registry.isStateRootReverted(4));
     }
 
-    function test_isStateRootReverted_default_floor_zero() public view {
-        // No revert ever fired; floor = 0; isStateRootReverted(0) = false.
+    function test_isStateRootReverted_unset_floor_is_the_sentinel() public view {
+        // No revert ever fired: the floor is `NO_REVERTED_FLOOR`, which is
+        // above every reachable index, so nothing reads as reverted — and
+        // that is now distinguishable from "the floor is index 0".
+        assertEq(registry.lowestRevertedLogIndex(), registry.NO_REVERTED_FLOOR());
         assertFalse(registry.isStateRootReverted(0));
+        assertFalse(registry.isStateRootReverted(type(uint64).max));
     }
 
     /* -------- assertConsistent -------- */

@@ -279,6 +279,7 @@ paths:
               schema: { $ref: '#/components/schemas/EventPage' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/TruncatedCursor' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/UpstreamUnavailable' }
@@ -332,8 +333,20 @@ paths:
               schema:
                 type: string
                 description: SSE-framed records; see operation description.
+        # A malformed `?since=` is rejected by the router before the
+        # stream opens (`route_v1_event_stream` → `Route::BadRequest`).
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '409': { $ref: '#/components/responses/TruncatedCursor' }
+        # Auth runs before routing, so a presented-but-wrong bearer token
+        # is a `403` here exactly as on every other non-exempt path.
+        '403': { $ref: '#/components/responses/Forbidden' }
+        # NOTE: no `409`.  Cursor truncation on a stream is delivered
+        # IN-BAND, as an `event: error` record carrying
+        # `EventStreamError` on an already-open `200` — see the operation
+        # description.  By the time the resume point is known to be
+        # unservable the response head has been written, so a status code
+        # is no longer available.  `409` is the REST `/events` behaviour
+        # only, where the whole response is still pending.
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/UpstreamUnavailable' }
 
@@ -355,6 +368,9 @@ paths:
               schema: { $ref: '#/components/schemas/Info' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        # `/v1/info` is not on `auth::is_exempt_path`, so the
+        # per-credential token bucket applies here as everywhere else.
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /healthz:
     # The liveness/readiness probes are served at the process ROOT, not
@@ -523,7 +539,13 @@ components:
       name: Idempotency-Key
       in: header
       required: false
-      description: Client-chosen key (e.g. the action nonce) to dedup in-flight retries.
+      description: >-
+        Client-chosen key (e.g. the action nonce) to dedup in-flight retries.
+
+        Scoped to the presenting credential: the cached response is only ever
+        replayed to the same bearer token that produced it, so two clients
+        independently choosing the same value (nonce `1`, say) do not collide
+        and neither observes the other's verdict.
       schema: { type: string, maxLength: 255 }
     LastEventId:
       name: Last-Event-ID

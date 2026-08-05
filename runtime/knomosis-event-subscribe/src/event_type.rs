@@ -611,7 +611,8 @@ mod tests {
 
     /// `from_tag` returns `None` for tags beyond the known set
     /// (forward-compatibility: future tags are not errors here).
-    /// GP.11.4 widened known tags 0..=20 → 0..=21.
+    /// GP.11.4 widened known tags 0..=20 → 0..=21, and GP.11.10
+    /// 0..=21 → 0..=22, so the first unknown tag is 23.
     #[test]
     fn from_tag_unknown_returns_none() {
         for tag in [23u64, 24, 99, 1_000, u64::MAX] {

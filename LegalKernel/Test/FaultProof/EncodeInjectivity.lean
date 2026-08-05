@@ -49,7 +49,9 @@ def tests : List TestCase :=
           preStateCommit := ByteArray.empty,
           signedAction := st,
           postStateCommit := ByteArray.empty,
-          cellProofs := { proofs := [] } }
+          l2LogIndex := 0,
+          bundle := { cells := [(.budgetPolicy, ByteArray.empty)],
+                      proof := { gapMask := ByteArray.empty, siblings := #[] } } }
         let h_eq : s = s := rfl
         let h := kernelStep_encode_deterministic s s h_eq
         let _ := h
@@ -58,18 +60,26 @@ def tests : List TestCase :=
     -- ## #229 distinguish-inputs
   , { name := "#229: kernelStep_encode_distinguishes_inputs API stable"
     , body := do
-        let _ := @kernelStep_encode_distinguishes_inputs
+        let _proof : ∀ (s₁ s₂ : FaultProof.KernelStep),
+            Encoding.KernelStep.encode s₁ ≠ Encoding.KernelStep.encode s₂ →
+            s₁ ≠ s₂ :=
+          fun s₁ s₂ h => kernelStep_encode_distinguishes_inputs s₁ s₂ h
         assert true "API exists"
     }
     -- ## #272
   , { name := "#272: gameState_encode_deterministic API stable"
     , body := do
-        let _ := @gameState_encode_deterministic
+        let _proof : ∀ (g₁ g₂ : LegalKernel.FaultProof.GameState), g₁ = g₂ →
+            Encoding.GameState.encode g₁ = Encoding.GameState.encode g₂ :=
+          fun g₁ g₂ h => gameState_encode_deterministic g₁ g₂ h
         assert true "API exists"
     }
   , { name := "#272: gameState_encode_distinguishes_inputs API stable"
     , body := do
-        let _ := @gameState_encode_distinguishes_inputs
+        let _proof : ∀ (g₁ g₂ : LegalKernel.FaultProof.GameState),
+            Encoding.GameState.encode g₁ ≠ Encoding.GameState.encode g₂ →
+            g₁ ≠ g₂ :=
+          fun g₁ g₂ h => gameState_encode_distinguishes_inputs g₁ g₂ h
         assert true "API exists"
     }
   ]

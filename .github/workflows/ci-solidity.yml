@@ -47,7 +47,7 @@
 # installed from a version-pinned release artifact (matching
 # `solidity/README.md`) rather than a third-party action, so no
 # un-pinnable action enters the supply chain.  `forge` auto-manages the
-# solc version pinned in `foundry.toml` (0.8.20) via svm on first build.
+# solc version pinned in `foundry.toml` (0.8.36) via svm on first build.
 
 name: CI (Solidity)
 
@@ -159,7 +159,7 @@ jobs:
           "$HOME/.foundry/bin/forge" --version
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
-      - name: Install solc 0.8.20
+      - name: Install solc 0.8.36
         # foundry.toml pins `solc = "/usr/local/bin/solc"`, so forge uses
         # this exact binary rather than an svm-managed one.  Install it
         # there to match the contract's pinned compiler (and the setup in
@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux -o /tmp/solc
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/ethereum/solidity/releases/download/v0.8.36/solc-static-linux -o /tmp/solc
           sudo install -m 0755 /tmp/solc /usr/local/bin/solc
           solc --version
 
@@ -184,6 +184,23 @@ jobs:
 
       - name: forge test
         run: forge test
+
+      - name: Method-selector cross-stack pin
+        # The Rust fault-proof observer builds calldata by hand and
+        # carries its own signature -> 4-byte-selector table.  That
+        # table used to be pinned only by a test that re-derived the
+        # expected selector from the same signature string the code
+        # under test returns — so it could not fail, and it did not:
+        # `terminateOnSingleStep` was spelled with a trailing
+        # `bytes32 claimedPostCommit` the contract does not take, and
+        # every honest terminate reverted through the fallback.
+        #
+        # `method_selectors.json` is emitted from the COMPILED
+        # artifacts and asserted by the Rust test, so a signature
+        # change here breaks the Rust build.  This step fails if the
+        # committed fixture has gone stale relative to `out/`.
+        working-directory: ${{ github.workspace }}
+        run: python3 solidity/scripts/export_method_selectors.py --check
 
       - name: Gas-benchmark regression gate (GP.11.9)
         # Re-runs the deterministic BenchmarkGasV1_3 suite (per-call gas

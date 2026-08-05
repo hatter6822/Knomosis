@@ -1,0 +1,26 @@
+{
+  "identifier": "knomosis-faultproof-observer/method-selectors/v1",
+  "note": "Generated from the compiled Solidity artifacts by `solidity/scripts/export_method_selectors.py`.  The Rust observer's `MethodSelector` table is asserted against this file, so a signature change on the contract side breaks the Rust build instead of silently producing calldata the contract cannot dispatch.",
+  "contracts": {
+    "KnomosisFaultProofGame": {
+      "BISECTION_RESPONSE_TIMEOUT()": "3bc389f1",
+      "MAX_BISECTION_DEPTH()": "760f0b5a",
+      "MIN_BISECTION_STEP_INTERVAL_BLOCKS()": "477faf05",
+      "MIN_CHALLENGE_BOND()": "04a829f2",
+      "activeGameForLogIndex(uint64)": "2d47ad7f",
+      "assertConsistent()": "5983ff39",
+      "claimTimeout(uint256)": "86e773f1",
+      "games(uint256)": "117a5b90",
+      "initiateChallenge(uint64,bytes32,bytes32,uint64)": "bf4540c3",
+      "nextGameId()": "b135bbb0",
+      "pendingWithdrawals(address)": "f3f43703",
+      "respondToMidpoint(uint256,bool)": "7e4d30fc",
+      "stateRootSubmission()": "e1afd6f4",
+      "stepVM()": "87a433fd",
+      "submitMidpoint(uint256,bytes32)": "11d925b3",
+      "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes)[],bytes,bytes)": "6781374b",
+      "treasury()": "61d027b3",
+      "withdraw()": "3ccfd60b"
+    }
+  }
+}

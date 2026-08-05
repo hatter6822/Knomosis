@@ -40,15 +40,15 @@ This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.FaultProof.Coherence
-import LegalKernel.FaultProof.SolidityStepVMCommit
 import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.StepVMCoherence
+import LegalKernel.FaultProof.Terminate
+import LegalKernel.FaultProof.VerifierWrites
 import LegalKernel.Test.Bridge.CrossCheck.Framework
 import LegalKernel.Test.Framework
 
 open LegalKernel
 open LegalKernel.FaultProof
-open LegalKernel.FaultProof.SolidityStepVMCommit
 open LegalKernel.FaultProof.StepVMCoherence
 open LegalKernel.Authority
 
@@ -77,6 +77,17 @@ structure CellProofForFixture where
       with `0x` prefix.  Must equal the fixture's
       `preStateCommitHex`. -/
   witnessCommitHex : String
+  /-- The cell's SMT opening against the pre-state root
+      (`SmtCellProof.toWireBytes`), hex-encoded with `0x` prefix: a
+      32-byte bitmask followed by the non-canonical-empty siblings in
+      depth order.
+
+      Pinned cross-stack because it is a CONSENSUS encoding — the L1
+      parses these bytes to re-walk the path — and because it is the
+      only field on the proof an L1 verifier can actually use:
+      `witnessCommitHex` attests the value came from a state with this
+      root, but recomputing it needs the whole `ExtendedState`. -/
+  proofDataHex     : String
   deriving Repr
 
 /-- A single F.1.8 step-VM fixture entry. -/
@@ -92,11 +103,6 @@ structure StepVMFixture where
   /-- The expected post-state commit via `commitExtendedState` —
       the canonical 5-component state commit. -/
   expectedPostStateCommitHex : String
-  /-- The expected post-state commit via Solidity's step-VM
-      recipe (`keccak256(preCommit || tagHash || packed-fields)`).
-      Under the production keccak256 binding, this equals what
-      `KnomosisStepVM.executeStep` returns byte-for-byte. -/
-  expectedStepVMCommitHex    : String
   /-- The expected revert reason, or "null" for happy paths. -/
   expectedRevertReason       : String
   /-- The action-kind dispatcher byte (0..20 post-Workstream-GP),
@@ -133,20 +139,33 @@ private def encodeActionFields (action : Action) : String :=
     state) to the flat fixture-ready record. -/
 private def cellProofForFixtureFromCellProof (p : CellProof) :
     CellProofForFixture :=
-  let (kindNat, keyA, keyB) : Nat × Nat × Nat := match p.cellTag with
-    | .balance r a       => (0, r.toNat, a.toNat)
-    | .nonce a           => (1, a.toNat, 0)
-    | .registry a        => (2, a.toNat, 0)
-    | .localPolicy a     => (3, a.toNat, 0)
-    | .bridgeConsumed d  => (4, d, 0)
-    | .bridgePending w   => (5, w, 0)
-    | .bridgeNextWdId    => (6, 0, 0)
+  -- `CellTag.flatKey` is the single source of truth for this
+  -- destructuring (see `CellProofJson`).
+  let (kindNat, keyA, keyB) : Nat × Nat × Nat := p.cellTag.flatKey
   { cellKindNat       := kindNat,
     keyANat           := keyA,
     keyBNat           := keyB,
     cellValueHex      := Test.Bridge.CrossCheck.hexFromBytes p.cellValue,
     witnessCommitHex  :=
-      Test.Bridge.CrossCheck.hexFromBytes (commitExtendedState p.witnessState) }
+      Test.Bridge.CrossCheck.hexFromBytes (commitExtendedState p.witnessState),
+    proofDataHex      := Test.Bridge.CrossCheck.hexFromBytes p.proofData }
+
+/-- The base state every fixture builds on.
+
+    `ExtendedState.empty` ships `budgetPolicy := .bounded 0 1 0` — a
+    zero free tier at epoch 0.  `ActorBudget.empty` then never
+    normalises, its balance stays 0, and the consume refuses for every
+    signer, so `productionApplyBudget` returns the un-updated state
+    and the corpus exercises the budget leg on NO entry.  That is how
+    the epoch-budget write obligation went unnoticed for as long as it
+    did: the only cross-stack evidence covering the reference apply
+    was blind to half of it.
+
+    A non-zero epoch against a real free tier makes the consume
+    succeed, so the fixtures cover the divergence they exist to
+    cover. -/
+private def fixtureBase : ExtendedState :=
+  { ExtendedState.empty with budgetPolicy := .bounded 100 1 1 }
 
 /-- Build a pre-state with one or more `(actor, balance)` entries
     on a single resource.  Other sub-states stay empty. -/
@@ -155,7 +174,7 @@ private def stateWithBalances (r : ResourceId)
   let baseState := entries.foldl
     (fun s (a, v) => LegalKernel.setBalance s r a v)
     LegalKernel.genesisState
-  { ExtendedState.empty with base := baseState }
+  { fixtureBase with base := baseState }
 
 /-- Map an entire bundle of real cell proofs into the flat
     fixture-ready list. -/
@@ -184,20 +203,11 @@ def buildTransferHappy
     else [(sender, senderInitBal), (receiver, receiverInitBal)]
   let es := stateWithBalances r entries
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Solidity's `_stepTransfer`:
   -- * self: newSender = newReceiver = preBalance (no debit).
   -- * non-self: newSender = preBalance - amount;
   --             newReceiver = receiverPreBalance + amount.
-  let senderPreBal := LegalKernel.getBalance es.base r sender
-  let receiverPreBal := LegalKernel.getBalance es.base r receiver
-  let newSenderBal : Nat :=
-    if isSelf then senderPreBal else senderPreBal - amount
-  let newReceiverBal : Nat :=
-    if isSelf then senderPreBal else receiverPreBal + amount
-  let stepVMCommit :=
-    stepCommitTransfer preCommit r.toNat sender.toNat receiver.toNat
-      sender.toNat newSenderBal newReceiverBal
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action sender
@@ -206,7 +216,6 @@ def buildTransferHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -222,12 +231,9 @@ def buildMintHappy
     StepVMFixture :=
   let action : Action := .mint r to amount
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let newToBal := amount
-  let stepVMCommit :=
-    stepCommitMint preCommit r.toNat to.toNat signer.toNat newToBal
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -236,7 +242,6 @@ def buildMintHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -255,11 +260,7 @@ def buildBurnHappy
   let st : SignedAction := { action, signer := fromActor, nonce, sig }
   let es := stateWithBalances r [(fromActor, fromInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let fromPreBal := LegalKernel.getBalance es.base r fromActor
-  let newFromBal : Nat := fromPreBal - amount
-  let stepVMCommit :=
-    stepCommitBurn preCommit r.toNat fromActor.toNat fromActor.toNat newFromBal
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action fromActor
@@ -268,7 +269,6 @@ def buildBurnHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -283,10 +283,9 @@ def buildFreezeResourceHappy
     (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   let action : Action := .freezeResource r
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let stepVMCommit := stepCommitFreezeResource preCommit r.toNat signer.toNat
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -295,7 +294,6 @@ def buildFreezeResourceHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -310,11 +308,9 @@ def buildReplaceKeyHappy
     StepVMFixture :=
   let action : Action := .replaceKey actor newKey
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let stepVMCommit :=
-    stepCommitReplaceKey preCommit actor.toNat signer.toNat newKey
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -323,7 +319,6 @@ def buildReplaceKeyHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -342,11 +337,7 @@ def buildRewardHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := stateWithBalances r [(to, toInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let toPreBal := LegalKernel.getBalance es.base r to
-  let newToBal := toPreBal + amount
-  let stepVMCommit :=
-    stepCommitReward preCommit r.toNat to.toNat signer.toNat newToBal
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -355,7 +346,6 @@ def buildRewardHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -387,7 +377,7 @@ def buildDistributeOthersHappy
       (excluded + 3, 100 + idx) ]
   let es := stateWithBalances r recipients
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Build the bundle: observer's `requiredCells` (registry +
   -- nonce for distributeOthers) plus per-recipient balance cells
   -- in deterministic order.  Solidity's bulk loop iterates the
@@ -400,30 +390,13 @@ def buildDistributeOthersHappy
       es action signer
   let recipientProofs : List CellProof :=
     recipients.map (fun (a, _) =>
-      LegalKernel.FaultProof.buildCellProof es (.balance r a))
+      LegalKernel.FaultProof.buildCellProofWithOpening es (.balance r a))
   let bundleProofs := observerBundle.proofs ++ recipientProofs
-  -- Compute the expected step-VM commit by walking the bundle in
-  -- ITERATION order, mirroring Solidity byte-for-byte.
-  let head :=
-    stepCommitDistributeOthersHead preCommit r.toNat excluded.toNat
-      signer.toNat amount
-  let stepVMCommit := bundleProofs.foldl
-    (fun acc p =>
-      match p.cellTag with
-      | .balance pr pa =>
-        if decide (pr = r) ∧ decide (pa ≠ excluded) then
-          let preBal := LegalKernel.getBalance es.base r pa
-          let newBal := preBal + amount
-          stepCommitDistributeOthersFold acc pa.toNat newBal
-        else acc
-      | _ => acc)
-    head
   { fixtureId := s!"distributeOthers-happy-{idx}",
     actionVariant := "distributeOthers",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -438,11 +411,9 @@ def buildRegisterIdentityHappy
     StepVMFixture :=
   let action : Action := .registerIdentity actor pk
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let stepVMCommit :=
-    stepCommitRegisterIdentity preCommit actor.toNat signer.toNat pk
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -451,7 +422,6 @@ def buildRegisterIdentityHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -472,12 +442,7 @@ def buildDepositHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := stateWithBalances r [(recipient, recipientInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let recipientPreBal := LegalKernel.getBalance es.base r recipient
-  let newRecipientBal := recipientPreBal + amount
-  let stepVMCommit :=
-    stepCommitDeposit preCommit r.toNat recipient.toNat signer.toNat
-      newRecipientBal depositId
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -486,7 +451,6 @@ def buildDepositHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -505,13 +469,7 @@ def buildWithdrawHappy
   let st : SignedAction := { action, signer := sender, nonce, sig }
   let es := stateWithBalances r [(sender, senderInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let senderPreBal := LegalKernel.getBalance es.base r sender
-  let newSenderBal : Nat := senderPreBal - amount
-  let recipientBytes := Bridge.EthAddress.toBytes recipientL1
-  let stepVMCommit :=
-    stepCommitWithdraw preCommit r.toNat sender.toNat sender.toNat
-      newSenderBal recipientBytes
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action sender
@@ -520,7 +478,6 @@ def buildWithdrawHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -564,24 +521,11 @@ def buildDepositWithFeeHappy
     else [(recipient, recipientInitBal), (poolActor, poolInitBal)]
   let es := stateWithBalances r entries
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Laws.depositWithFee.apply_impl:
   --   recipient += userAmount; then poolActor += poolAmount.
   -- Self-credit case: both writes target the same cell, so the
   -- new balance is `pre + userAmount + poolAmount`.
-  let recipientPreBal := LegalKernel.getBalance es.base r recipient
-  let newRecipientBal : Nat :=
-    if isSelf then recipientPreBal + userAmount + poolAmount
-    else recipientPreBal + userAmount
-  let newPoolBal : Nat :=
-    if isSelf then recipientPreBal + userAmount + poolAmount
-    else
-      let poolPreBal := LegalKernel.getBalance es.base r poolActor
-      poolPreBal + poolAmount
-  let stepVMCommit :=
-    stepCommitDepositWithFee preCommit r.toNat recipient.toNat
-      poolActor.toNat signer.toNat
-      newRecipientBal newPoolBal depositId
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -590,7 +534,6 @@ def buildDepositWithFeeHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -628,16 +571,9 @@ def buildTopUpActionBudgetHappy
   let es := stateWithBalances gasResource
               [(signer, signerInitBal), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Laws.topUpActionBudget.apply_impl:
   --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
-  let signerPreBal := LegalKernel.getBalance es.base gasResource signer
-  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
-  let newSignerBal : Nat := signerPreBal - gasAmount
-  let newPoolBal : Nat := poolPreBal + gasAmount
-  let stepVMCommit :=
-    stepCommitTopUpActionBudget preCommit gasResource.toNat
-      signer.toNat poolActor.toNat newSignerBal newPoolBal
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -646,7 +582,6 @@ def buildTopUpActionBudgetHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -689,16 +624,9 @@ def buildTopUpActionBudgetForHappy
   let es := stateWithBalances gasResource
               [(signer, signerInitBal), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Laws.topUpActionBudgetFor.apply_impl:
   --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
-  let signerPreBal := LegalKernel.getBalance es.base gasResource signer
-  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
-  let newSignerBal : Nat := signerPreBal - gasAmount
-  let newPoolBal : Nat := poolPreBal + gasAmount
-  let stepVMCommit :=
-    stepCommitTopUpActionBudgetFor preCommit gasResource.toNat
-      signer.toNat poolActor.toNat newSignerBal newPoolBal
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -707,7 +635,6 @@ def buildTopUpActionBudgetForHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -732,17 +659,9 @@ def buildClaimBudgetRefundHappy
   let es := stateWithBalances gasResource
               [(signer, claimantInitBal), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Laws.claimBudgetRefund.apply_impl: poolActor -= refundAmount;
   -- claimant (signer) += refundAmount.
-  let refundAmount : Nat := budgetUnits * weiPerBudgetUnit
-  let claimantPreBal := LegalKernel.getBalance es.base gasResource signer
-  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
-  let newSignerBal : Nat := claimantPreBal + refundAmount
-  let newPoolBal : Nat := poolPreBal - refundAmount
-  let stepVMCommit :=
-    stepCommitClaimBudgetRefund preCommit gasResource.toNat
-      signer.toNat poolActor.toNat newSignerBal newPoolBal
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -751,7 +670,6 @@ def buildClaimBudgetRefundHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -773,15 +691,12 @@ state for any input. -/
     Lean-side step-commit function. -/
 private def buildOpaqueHappy
     (variant : String) (idx : Nat) (action : Action)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray)
-    (stepCommitFn : ByteArray → ByteArray → Nat → ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
     StepVMFixture :=
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let actionFields := actionFieldsForL1 action
-  let stepVMCommit := stepCommitFn preCommit actionFields signer.toNat
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -790,7 +705,6 @@ private def buildOpaqueHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -802,21 +716,21 @@ def buildDisputeWithdrawHappy
     (idx : Nat) (targetIdx : Disputes.LogIndex) (signer : ActorId)
     (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   buildOpaqueHappy "disputeWithdraw" idx (.disputeWithdraw targetIdx)
-    signer nonce sig stepCommitDisputeWithdraw
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.rollback`. -/
 def buildRollbackHappy
     (idx : Nat) (targetIdx : Disputes.LogIndex) (signer : ActorId)
     (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   buildOpaqueHappy "rollback" idx (.rollback targetIdx)
-    signer nonce sig stepCommitRollback
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.revokeLocalPolicy`. -/
 def buildRevokeLocalPolicyHappy
     (idx : Nat) (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
     StepVMFixture :=
   buildOpaqueHappy "revokeLocalPolicy" idx .revokeLocalPolicy
-    signer nonce sig stepCommitRevokeLocalPolicy
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.faultProofChallenge`. -/
 def buildFaultProofChallengeHappy
@@ -825,7 +739,7 @@ def buildFaultProofChallengeHappy
     (sig : ByteArray) : StepVMFixture :=
   buildOpaqueHappy "faultProofChallenge" idx
     (.faultProofChallenge bindingHash startIdx endIdx challengerCommit)
-    signer nonce sig stepCommitFaultProofChallenge
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.faultProofResolution`. -/
 def buildFaultProofResolutionHappy
@@ -834,7 +748,7 @@ def buildFaultProofResolutionHappy
     (sig : ByteArray) : StepVMFixture :=
   buildOpaqueHappy "faultProofResolution" idx
     (.faultProofResolution bindingHash gameId winner revertFromIdx)
-    signer nonce sig stepCommitFaultProofResolution
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.proportionalDilute`.
 
@@ -861,48 +775,22 @@ def buildProportionalDiluteHappy
       (excluded + 3, 100 + idx) ]
   let es := stateWithBalances r recipients
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let observerBundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
   let recipientProofs : List CellProof :=
     recipients.map (fun (a, _) =>
-      LegalKernel.FaultProof.buildCellProof es (.balance r a))
+      LegalKernel.FaultProof.buildCellProofWithOpening es (.balance r a))
   let bundleProofs := observerBundle.proofs ++ recipientProofs
   -- Pass 1: compute sumOthers by walking the bundle in iteration
   -- order, applying Solidity's exact filter.
-  let sumOthers := bundleProofs.foldl
-    (fun (acc : Nat) p =>
-      match p.cellTag with
-      | .balance pr pa =>
-        if decide (pr = r) ∧ decide (pa ≠ excluded) then
-          acc + LegalKernel.getBalance es.base r pa
-        else acc
-      | _ => acc)
-    0
-  let head :=
-    stepCommitProportionalDiluteHead preCommit r.toNat excluded.toNat
-      signer.toNat totalReward sumOthers
   -- Pass 2: per-recipient credit + fold.
-  let stepVMCommit := bundleProofs.foldl
-    (fun acc p =>
-      match p.cellTag with
-      | .balance pr pa =>
-        if decide (pr = r) ∧ decide (pa ≠ excluded) then
-          let preBal := LegalKernel.getBalance es.base r pa
-          let credit := if sumOthers = 0 then 0
-                        else totalReward * preBal / sumOthers
-          let newBal := preBal + credit
-          stepCommitProportionalDiluteFold acc pa.toNat newBal
-        else acc
-      | _ => acc)
-    head
   { fixtureId := s!"proportionalDilute-happy-{idx}",
     actionVariant := "proportionalDilute",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -931,7 +819,7 @@ def buildDisputeHappy
     StepVMFixture :=
   buildOpaqueHappy "dispute" idx
     (.dispute (minimalDispute signer nonce))
-    signer nonce sig stepCommitDispute
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.verdict`.  Uses a
     minimal canonical empty-quorum verdict. -/
@@ -944,7 +832,7 @@ def buildVerdictHappy
     rationale := ByteArray.empty,
     signatures := []
   }
-  buildOpaqueHappy "verdict" idx (.verdict v) signer nonce sig stepCommitVerdict
+  buildOpaqueHappy "verdict" idx (.verdict v) signer nonce sig
 
 /-- Build a happy-path fixture for `Action.declareLocalPolicy`. -/
 def buildDeclareLocalPolicyHappy
@@ -952,7 +840,7 @@ def buildDeclareLocalPolicyHappy
     StepVMFixture :=
   let p : LocalPolicy := LocalPolicy.empty
   buildOpaqueHappy "declareLocalPolicy" idx (.declareLocalPolicy p)
-    signer nonce sig stepCommitDeclareLocalPolicy
+    signer nonce sig
 
 /-! ## Adversarial fixtures (generic) -/
 
@@ -968,7 +856,6 @@ def buildAdversarialBadPreCommit
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes badCommit,
     signedActionHex := "0x",
     expectedPostStateCommitHex := "null",
-    expectedStepVMCommitHex := "null",
     expectedRevertReason := "BadCellProof",
     actionKindByte := 0,
     actionFieldsHex := "0x",
@@ -1279,14 +1166,7 @@ def buildAmmSwapHappy
               { es with base :=
                 LegalKernel.setBalance es.base toResource ammReserveActor toInitBal })
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let fromBalance := LegalKernel.getBalance es.base fromResource ammReserveActor
-  let toBalance := LegalKernel.getBalance es.base toResource ammReserveActor
-  let newFromBalance : Nat := fromBalance + amountIn
-  let newToBalance : Nat := toBalance - amountOut
-  let stepVMCommit :=
-    stepCommitAmmSwap preCommit fromResource.toNat toResource.toNat
-      ammReserveActor.toNat signer.toNat newFromBalance newToBalance
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -1295,7 +1175,6 @@ def buildAmmSwapHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -1340,14 +1219,7 @@ def buildReclaimAmmReservesHappy
   let es := stateWithBalances r
               [(reserveActor, amount), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
-  let reserveBalance := LegalKernel.getBalance es.base r reserveActor
-  let poolBalance := LegalKernel.getBalance es.base r poolActor
-  let newReserveBalance : Nat := reserveBalance - amount
-  let newPoolBalance : Nat := poolBalance + amount
-  let stepVMCommit :=
-    stepCommitReclaimAmmReserves preCommit r.toNat reserveActor.toNat
-      poolActor.toNat signer.toNat newReserveBalance newPoolBalance
+  let postCommit := recomputeCommitment es st 0
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -1356,7 +1228,6 @@ def buildReclaimAmmReservesHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -1439,6 +1310,30 @@ def allFixtures : List StepVMFixture :=
 
 /-! ## Test suite (Lean-side fixture-stability tests) -/
 
+/-- The L1 action commitment for a fixture entry, hex-encoded.
+
+    Derived from the entry's own PUBLISHED `actionKindByte` /
+    `signerNat` / `actionFieldsHex` rather than from the `Action` the
+    builder started with, because that is exactly what the Solidity
+    side does: it parses those three fields out of the JSON and calls
+    `LogChain.actionCommit` on them.  Deriving from the same published
+    bytes makes the corpus a Lean-vs-Solidity pin on the ENCODING,
+    which is the thing the two stacks have to agree on.
+
+    Calls `l1ActionCommitBytes` — the production function — rather than
+    re-spelling its body; a second spelling here would agree with
+    Solidity while disagreeing with the chain the L2 actually binds. -/
+private def actionCommitHexOf (f : StepVMFixture) : String :=
+  match Test.Bridge.CrossCheck.bytesFromHex f.actionFieldsHex with
+  | some fields =>
+      Test.Bridge.CrossCheck.hexFromBytes
+        (StepVMCoherence.l1ActionCommitBytes f.actionKindByte f.signerNat fields)
+  -- Unreachable: `actionFieldsHex` is written by `hexFromBytes`.  Emit
+  -- a value that cannot be mistaken for a commitment, so a decoder
+  -- regression fails the Solidity-side comparison rather than
+  -- silently publishing a plausible hash.
+  | none => "0x"
+
 /-- Convert one `CellProofForFixture` to its JSON
     representation. -/
 private def cellProofForFixtureToJson (p : CellProofForFixture) :
@@ -1447,7 +1342,8 @@ private def cellProofForFixtureToJson (p : CellProofForFixture) :
        , ("keyA",              .num p.keyANat)
        , ("keyB",              .num p.keyBNat)
        , ("cellValueHex",      .str p.cellValueHex)
-       , ("witnessCommitHex",  .str p.witnessCommitHex) ]
+       , ("witnessCommitHex",  .str p.witnessCommitHex)
+       , ("proofDataHex",      .str p.proofDataHex) ]
 
 /-- Convert one fixture to its JSON representation. -/
 private def fixtureToJson (f : StepVMFixture) :
@@ -1458,12 +1354,11 @@ private def fixtureToJson (f : StepVMFixture) :
        , ("signedActionHex",          .str f.signedActionHex)
        , ("expectedPostStateCommitHex",
           .str f.expectedPostStateCommitHex)
-       , ("expectedStepVMCommitHex",
-          .str f.expectedStepVMCommitHex)
        , ("expectedRevertReason",     .str f.expectedRevertReason)
        , ("actionKindByte",           .num f.actionKindByte.toNat)
        , ("actionFieldsHex",          .str f.actionFieldsHex)
        , ("signerNat",                .num f.signerNat)
+       , ("expectedActionCommitHex",  .str (actionCommitHexOf f))
        , ("cellProofs",
           .arr (f.cellProofsForFixture.map cellProofForFixtureToJson))
        , ("cellProofsCount", .num f.cellProofsForFixture.length)
@@ -1512,6 +1407,512 @@ def packedLayoutGoldens : List Test.Bridge.CrossCheck.Json :=
     .obj [ ("width", .num 256)
          , ("valueHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)))
          , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v))) ])
+
+/-! ### CBE value-encoder goldens (the state-root flip's foundation)
+
+Once `executeStep` computes cell VALUES rather than hashing them, it
+must produce each one in its canonical CBE byte form — the SMT leaf is
+hashed over those bytes, so a value that is numerically right and
+byte-wrong re-walks to a different root and the honest sequencer's root
+becomes unreachable.
+
+Two things make this worth a golden rather than an inspection.  The
+CBE head is LITTLE-endian while `actionFieldsForL1` is big-endian, so
+both orders live in the same contract and a wrong-endianness encoder
+produces a plausible 9-byte value.  And the widths are FIXED, not
+minimal — a uint is always 8 payload bytes even when the value fits in
+one — because a length-minimal encoding would give two encodings of the
+same number, and an SMT leaf must be a function of the value alone.
+
+`solidity/src/lib/CBEEncode.sol` is the mirror.
+-/
+
+/-- Probe values for the CBE encoders: zero, one, byte and word
+    boundaries, and the maxima each width admits.  The boundaries are
+    where a fixed-width little-endian writer with an off-by-one goes
+    wrong while every small value still passes. -/
+def cbeUintGoldenVals : List Nat :=
+  [0, 1, 0xFF, 0x0100, 0x0102030405060708, 0xFFFFFFFFFFFFFFFF]
+
+/-- ...and for the 32-byte amount head. -/
+def cbeAmountGoldenVals : List Nat :=
+  [0, 1, 0xFF, 0x0100, 0x0102030405060708,
+   0xFFFFFFFFFFFFFFFF, 0x0102030405060708090A0B0C0D0E0F10,
+   0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF]
+
+/-- Byte-string payloads: empty (whose 9-byte head is what
+    distinguishes a present-empty registry entry from an absent one),
+    one byte, and a 33-byte payload that crosses the word boundary. -/
+def cbeBytesGoldenPayloads : List ByteArray :=
+  [ ByteArray.empty
+  , ByteArray.mk #[0xAB]
+  , ByteArray.mk (Array.range 33 |>.map (fun i => UInt8.ofNat (i + 1))) ]
+
+/-- Lean's actual CBE encoder output for each probe, for the Solidity
+    side to byte-match against `CBEEncode`. -/
+def cbeEncoderGoldens : List Test.Bridge.CrossCheck.Json :=
+  let h := fun (v : Nat) => Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)
+  cbeUintGoldenVals.map (fun v =>
+    .obj [ ("kind", .str "uint")
+         , ("valueHex", .str (h v))
+         , ("payloadHex", .str "0x")
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes
+             (ByteArray.mk (Encoding.Encodable.encode (T := Nat) v).toArray))) ])
+  ++ cbeAmountGoldenVals.map (fun v =>
+    .obj [ ("kind", .str "amount")
+         , ("valueHex", .str (h v))
+         , ("payloadHex", .str "0x")
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes
+             (ByteArray.mk (Encoding.encodeAmount v).toArray))) ])
+  ++ cbeBytesGoldenPayloads.map (fun bs =>
+    .obj [ ("kind", .str "bytes")
+         , ("valueHex", .str (h 0))
+         , ("payloadHex", .str (Test.Bridge.CrossCheck.hexFromBytes bs))
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes
+             (ByteArray.mk (Encoding.Encodable.encode (T := ByteArray) bs).toArray))) ])
+
+/-! ### Uniform-cell derivation goldens
+
+The two cells EVERY action writes, derived from proven pre-values —
+what `solidity/src/lib/StepWrites.sol` must reproduce.  They are the
+cells `stepVMHash` is silent about (it reads and emits balance cells
+only), so they are also the ones its output would be wrong about for
+every action the moment it is compared against a state root.
+
+The grant triple is emitted rather than re-derived on the Solidity
+side: `budgetGrant`'s recipient differs per variant — the deposit's
+recipient, the SIGNER, or a named recipient — so a mirror that assumed
+"top up the signer" would agree on twenty-two variants and diverge on
+two.  Emitting it makes the disagreement visible in the corpus instead
+of in a game.
+-/
+
+/-- The `(recipient, amount)` an action grants, and the extra units a
+    refund claim consumes.  Mirrors `budgetGrant`'s per-variant arms
+    and `refundConsumeExtra`. -/
+private def grantTripleOf (action : Action) (signer : ActorId) :
+    ActorId × Nat × Nat :=
+  match action with
+  | .depositWithFee _ recipient _ _ _ g _ => (recipient, g, 0)
+  | .topUpActionBudget _ _ inc _          => (signer, inc, 0)
+  | .topUpActionBudgetFor recipient _ _ inc _ => (recipient, inc, 0)
+  | .claimBudgetRefund _ budgetUnits _ _  => (signer, 0, budgetUnits)
+  | _                                     => (signer, 0, 0)
+
+/-- Per-entry goldens for the nonce and epoch-budget derivations, over
+    the fixture base state — the pre-values, the grant triple, and the
+    derived post-values Lean's `VerifierWrites` produces. -/
+def uniformWriteGoldens : List Test.Bridge.CrossCheck.Json :=
+  let es := fixtureBase
+  let signer : ActorId := 7
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let h256 := fun (v : Nat) => hx (uint256BE v)
+  let probes : List (String × Action) :=
+    [ ("transfer",            .transfer 1 signer 8 5)
+    , ("mint",                .mint 1 8 5)
+    , ("withdraw",            .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
+    , ("depositWithFee",      .depositWithFee 1 8 9 5 1 3 3)
+    , ("topUpActionBudget",   .topUpActionBudget 1 5 2 9)
+    , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 5 2 9)
+    , ("claimBudgetRefund",   .claimBudgetRefund 1 2 3 9) ]
+  probes.flatMap (fun (name, action) =>
+    let st : SignedAction :=
+      { action, signer, nonce := 0, sig := ByteArray.empty }
+    let (grantRecipient, grantAmount, refundExtra) := grantTripleOf action signer
+    -- The signer's own cell and, where they differ, the grant
+    -- recipient's: the branch that credits a recipient on a step the
+    -- signer could afford is only exercised when the two are distinct.
+    let targets : List ActorId :=
+      if grantRecipient = signer then [signer] else [signer, grantRecipient]
+    targets.map (fun target =>
+      .obj [ ("variant",        .str name)
+           , ("signer",         .str (h256 signer.toNat))
+           , ("target",         .str (h256 target.toNat))
+           , ("grantRecipient", .str (h256 grantRecipient.toNat))
+           , ("grantAmount",    .str (h256 grantAmount))
+           , ("refundExtra",    .str (h256 refundExtra))
+           , ("noncePreHex",    .str (hx (getCellValue es (.nonce signer))))
+           , ("noncePostHex",   .str (hx (getCellValue
+               (productionApplyBudget es st 0) (.nonce signer))))
+           , ("policyHex",      .str (hx (getCellValue es .budgetPolicy)))
+           , ("signerBudgetPreHex",
+              .str (hx (getCellValue es (.epochBudget signer))))
+           , ("targetBudgetPreHex",
+              .str (hx (getCellValue es (.epochBudget target))))
+           , ("targetBudgetPostHex",
+              .str (hx (getCellValue (productionApplyBudget es st 0)
+                (.epochBudget target)))) ]))
+
+/-! ### Balance-derivation goldens
+
+The per-variant half.  Each probe carries the proven pre-balances, the
+action's amounts, and the post-values Lean's `VerifierWrites` derives —
+including the cases a happy-path corpus would never reach:
+
+  * a **self-transfer**, where the credit reads the DEBITED state and
+    the net change is zero;
+  * a **failing precondition**, where `step_impl` no-ops and both cells
+    keep their pre-values — the case the L1 currently REVERTS on, which
+    costs the responsible party the game by timeout rather than
+    settling it;
+  * a **same-actor chain**, where the payer IS the pool actor.
+-/
+
+/-- One balance-derivation probe as JSON.  `kind` selects which
+    `StepWrites` function the Solidity side calls; the two `post`
+    columns are Lean's derived values. -/
+private def balanceGolden (kind : String) (xPre yPre : Nat)
+    (x y : Nat) (amountA amountB : Nat) (xPost yPost : Nat) :
+    Test.Bridge.CrossCheck.Json :=
+  let h := fun (v : Nat) => Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)
+  .obj [ ("kind", .str kind)
+       , ("xPre", .str (h xPre)), ("yPre", .str (h yPre))
+       , ("x", .str (h x)), ("y", .str (h y))
+       , ("amountA", .str (h amountA)), ("amountB", .str (h amountB))
+       , ("xPost", .str (h xPost)), ("yPost", .str (h yPost)) ]
+
+/-- Balance-derivation goldens, computed by the production
+    `VerifierWrites` functions over the fixture base state. -/
+def balanceWriteGoldens : List Test.Bridge.CrossCheck.Json :=
+  -- A POPULATED state, on two resources.  `fixtureBase` holds no
+  -- balances, so every probe over it would start from zero — the
+  -- transfer would fail its precondition, the self-transfer and the
+  -- chained pair would be indistinguishable from the no-op, and the
+  -- goldens would agree with a Solidity mirror that did nothing at
+  -- all.  A vacuous golden is worse than none: it reads as coverage.
+  let es : ExtendedState :=
+    let base : LegalKernel.State :=
+      { balances :=
+          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
+             ((∅ : BalanceMap).insert 9 60) }
+    { fixtureBase with base := base }
+  let r : ResourceId := 1
+  let read := stateBalanceReader es
+  let bal := fun (a : ActorId) => LegalKernel.getBalance es.base r a
+  -- Pull the derived pair out of the `Option (List …)` the derivations
+  -- return, defaulting to the pre-values on a shape the probe should
+  -- never produce (which would then fail the Solidity comparison
+  -- loudly rather than silently agreeing).
+  let pair := fun (o : Option (List ((ResourceId × ActorId) × Nat)))
+      (dx dy : Nat) =>
+    match o with
+    | some [(_, vx), (_, vy)] => (vx, vy)
+    | some [(_, vx)]          => (vx, dy)
+    | _                       => (dx, dy)
+  let transferOk := pair (deriveTransferBalances read r 7 8 30) (bal 7) (bal 8)
+  let transferSelf := pair (deriveTransferBalances read r 7 7 30) (bal 7) (bal 7)
+  let transferNoop :=
+    pair (deriveTransferBalances read r 7 8 999999) (bal 7) (bal 8)
+  let mintOk := pair (deriveCreditBalance read r 8 5) (bal 8) 0
+  let burnOk := pair (deriveBurnBalance read r 8 5) (bal 8) 0
+  let burnNoop := pair (deriveBurnBalance read r 8 999999) (bal 8) 0
+  let depositOk := pair (deriveDepositBalance read r 8 0) (bal 8) 0
+  let topUpOk := pair (deriveTopUpBalances read r 7 9 5) (bal 7) (bal 9)
+  let topUpSelf := pair (deriveTopUpBalances read r 7 7 5) (bal 7) (bal 7)
+  -- The cross-resource variant: reserve 9 credited at `r`, debited at
+  -- resource 2.  Its `toBal` is read at the OTHER resource, which is
+  -- why it does not go through the chained pair.
+  let swapOk := pair (deriveAmmSwapBalances read r 2 5 10 9)
+    (bal 9) (LegalKernel.getBalance es.base 2 9)
+  -- ...and the no-op case, where the reserve at `toResource` cannot
+  -- cover `amountOut`.  Without it the swap probe would only ever
+  -- exercise the succeeding branch.
+  let swapNoop := pair (deriveAmmSwapBalances read r 2 5 999999 9)
+    (bal 9) (LegalKernel.getBalance es.base 2 9)
+  [ balanceGolden "ammSwap" (bal 9) (LegalKernel.getBalance es.base 2 9)
+      1 2 5 10 swapOk.1 swapOk.2
+  , balanceGolden "ammSwap" (bal 9) (LegalKernel.getBalance es.base 2 9)
+      1 2 5 999999 swapNoop.1 swapNoop.2
+  , balanceGolden "transfer" (bal 7) (bal 8) 7 8 30 0 transferOk.1 transferOk.2
+  , balanceGolden "transfer" (bal 7) (bal 7) 7 7 30 0 transferSelf.1 transferSelf.2
+  , balanceGolden "transfer" (bal 7) (bal 8) 7 8 999999 0
+      transferNoop.1 transferNoop.2
+  , balanceGolden "credit" (bal 8) 0 8 0 5 0 mintOk.1 mintOk.2
+  , balanceGolden "debit" (bal 8) 0 8 0 5 0 burnOk.1 burnOk.2
+  , balanceGolden "debit" (bal 8) 0 8 0 999999 0 burnNoop.1 burnNoop.2
+  , balanceGolden "deposit" (bal 8) 0 8 0 0 0 depositOk.1 depositOk.2
+  , balanceGolden "topUp" (bal 7) (bal 9) 7 9 5 0 topUpOk.1 topUpOk.2
+  , balanceGolden "topUp" (bal 7) (bal 7) 7 7 5 0 topUpSelf.1 topUpSelf.2 ]
+
+/-! ### Registry / policy / bridge cell goldens
+
+The cells whose post-values come from the ACTION's own fields.  Cheap
+to derive and easy to get subtly wrong: the registry value rides the
+CBE byte-string encoder (so a present-EMPTY key is distinguishable from
+an absent one), a revoke emits the ABSENT marker rather than an encoded
+empty policy, and the two bridge records are field concatenations whose
+component encoders differ (uint head vs amount head vs byte-string).
+-/
+
+/-- Per-cell goldens for the action-field-derived cells. -/
+def recordWriteGoldens : List Test.Bridge.CrossCheck.Json :=
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let h256 := fun (v : Nat) => hx (uint256BE v)
+  let key := ByteArray.mk #[0xAA, 0xBB, 0xCC]
+  let rcp := LegalKernel.Bridge.EthAddress.zero
+  [ .obj [ ("kind", .str "registry"), ("payloadHex", .str (hx key))
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveRegistryCellValue key))) ]
+    -- The EMPTY key: its 9-byte head is what makes a present-empty
+    -- registration distinguishable from an absent one, and
+    -- registration is an admissibility gate.
+  , .obj [ ("kind", .str "registry"), ("payloadHex", .str (hx ByteArray.empty))
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveRegistryCellValue ByteArray.empty))) ]
+    -- The two field-passthrough cases.  `payloadHex` carries the
+    -- ACTION FIELDS here, not a key: the Solidity side slices them
+    -- itself, so a layout change shows up as a mismatch rather than
+    -- as a silently-correct-looking value.
+  , .obj [ ("kind", .str "registryFromFields")
+         , ("payloadHex",
+            .str (hx (actionFieldsForL1 (.replaceKey 8 key))))
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveRegistryCellValue key))) ]
+  , .obj [ ("kind", .str "declaredPolicy")
+         , ("payloadHex",
+            .str (hx (actionFieldsForL1
+              (.declareLocalPolicy Authority.LocalPolicy.empty))))
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveDeclaredPolicyCellValue
+             Authority.LocalPolicy.empty))) ]
+  , .obj [ ("kind", .str "revokedPolicy"), ("payloadHex", .str "0x")
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx deriveRevokedPolicyCellValue)) ]
+  , .obj [ ("kind", .str "consumed"), ("payloadHex", .str "0x")
+         , ("a", .str (h256 1)), ("b", .str (h256 5))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveConsumedCellValue
+             { resource := 1, userAmount := 5
+             , poolAmount := 0, budgetGrant := 0 }))) ]
+  , .obj [ ("kind", .str "consumed"), ("payloadHex", .str "0x")
+         , ("a", .str (h256 1)), ("b", .str (h256 5))
+         , ("c", .str (h256 2)), ("d", .str (h256 3))
+         , ("encodedHex", .str (hx (deriveConsumedCellValue
+             { resource := 1, userAmount := 5
+             , poolAmount := 2, budgetGrant := 3 }))) ]
+  , .obj [ ("kind", .str "pending")
+         , ("payloadHex", .str (hx (LegalKernel.Bridge.EthAddress.toBytes rcp)))
+         , ("a", .str (h256 1)), ("b", .str (h256 5))
+         , ("c", .str (h256 7)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (derivePendingCellValue
+             { resource := 1, recipient := rcp
+             , amount := 5, l2LogIndex := 7 }))) ] ]
+
+/-! ### The multiproof wire, per probe
+
+Twenty probes covering the shapes a verifier has to handle: the
+two-cell chain, its aliased case, the failing precondition, the
+state-keyed write, and each action-field-derived cell.
+
+Each carries TWO independently-computed roots — the one the merged
+walk reaches by folding derived writes into the pre-root, and the one
+`commitExtendedState (productionApplyBudget …)` gives from the
+post-STATE.  A verifier is right only if they coincide, which is
+strictly more than agreeing with some other verifier: the retired
+chained column asserted the latter, and this asserts the former.
+
+The wire here is the COMPRESSED one — mask plus the siblings the mask
+marks — because that is what an L1 receives.  Its length is not a free
+parameter: `gapCount` is a function of the key set, so the consumer
+derives the expected mask size and sibling count before reading a byte
+and the corpus's own column is checked against that derivation rather
+than trusted.
+-/
+
+/-- Per-probe multiproof goldens: the action in its L1 form, the
+    frontier's cells with their proven pre-values in path order, the
+    shared wire, and the two roots the wire serves. -/
+def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
+  let es : ExtendedState :=
+    let base : LegalKernel.State :=
+      { balances :=
+          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
+             ((∅ : BalanceMap).insert 9 60) }
+    { fixtureBase with base := base }
+  let signer : ActorId := 7
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let probes : List (String × Action) :=
+    [ ("transfer",   .transfer 1 signer 8 30)
+      -- The same-cell shapes.  Under the chained fold they are two
+      -- writes at one cell; under a multiproof they are ONE opening,
+      -- which is where the calldata saving concentrates and where a
+      -- dedup bug would live.
+    , ("selfTransfer", .transfer 1 signer signer 30)
+    , ("mint",       .mint 1 8 5)
+    , ("burn",       .burn 1 8 5)
+    , ("burnNoop",   .burn 1 8 999999)
+    , ("reward",     .reward 1 8 5)
+    , ("freezeResource", .freezeResource 1)
+    , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
+    , ("deposit",    .deposit 1 8 5 3)
+    , ("depositWithFee", .depositWithFee 1 8 9 5 2 3 4)
+    , ("depositWithFeeSelf", .depositWithFee 1 signer 9 5 2 3 5)
+    , ("topUpActionBudget", .topUpActionBudget 1 10 4 9)
+    , ("topUpActionBudgetForSelf", .topUpActionBudgetFor signer 1 10 4 9)
+    , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 10 4 9)
+    , ("claimBudgetRefund", .claimBudgetRefund 1 2 3 9)
+    , ("ammSwap",    .ammSwap 1 2 5 10 9)
+    , ("registerIdentity", .registerIdentity 8 (ByteArray.mk #[1, 2, 3]))
+    , ("replaceKey", .replaceKey 8 (ByteArray.mk #[0xAA, 0xBB]))
+    , ("declareLocalPolicy", .declareLocalPolicy Authority.LocalPolicy.empty)
+    , ("revokeLocalPolicy", .revokeLocalPolicy) ]
+  probes.filterMap (fun (name, action) =>
+    let st : SignedAction :=
+      { action, signer, nonce := 0, sig := ByteArray.empty }
+    match stepMultiPostRoot es st 0 with
+    | none => none
+    | some root =>
+      let b := stepMultiBundle es st
+      let opened := openedOf es (b.cells.map Prod.fst)
+      some (.obj
+        [ ("variant", .str name)
+        , ("preStateRootHex", .str (hx (commitExtendedState es)))
+          -- What the merged walk produces, and what
+          -- `executeStepToRootMulti` must return.
+        , ("postStateRootHex", .str (hx root))
+          -- The published root of the production advance, computed
+          -- WITHOUT the fold.  Emitted separately so the consumer
+          -- compares two independent numbers rather than one number
+          -- with itself: the fold is only right if it lands on the
+          -- root an honest sequencer publishes.
+        , ("publishedPostRootHex",
+           .str (hx (commitExtendedState (productionApplyBudget es st 0))))
+        , ("actionKindByte", .num (actionKindByte action).toNat)
+        , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
+        , ("signerNat", .num signer.toNat)
+        , ("l2LogIndex", .num 0)
+          -- The gap count, so the consumer's own derivation from the
+          -- key set is checked against Lean's rather than against
+          -- itself.  Everything about the wire's length follows from
+          -- this one number.
+        , ("gapCount", .num (multiGapLevels smtDepth opened).length)
+        , ("gapMaskHex", .str (hx b.proof.gapMask))
+        , ("siblingsHex",
+           .str (hx (b.proof.siblings.foldl (fun acc s => acc ++ s)
+                       (ByteArray.mk #[]))))
+        , ("cellCount", .num b.cells.length)
+          -- The frontier, in path order: the cells the wire opens with
+          -- the pre-values it proves.  The policy cell is IN here
+          -- rather than beside it -- a read is a write of the same
+          -- value -- which is what retires the separate policy walk.
+        , ("cells", .arr (b.cells.map (fun c =>
+            let (t, v) := c
+            let (kindNat, keyA, keyB) : Nat × Nat × Nat := t.flatKey
+            .obj [ ("cellKind", .num kindNat)
+                 , ("keyA", .num keyA), ("keyB", .num keyB)
+                 , ("smtKeyHex", .str (hx (smtCellKey t)))
+                 , ("preValueHex", .str (hx v))
+                 , ("preLeafHex", .str (hx (cellLeaf t v)))
+                   -- The leaf PREIMAGE, `encodeAsBytes key ++
+                   -- encodeAsBytes value` — two CBE byte-strings.
+                   -- Emitted alongside the leaf HASH so the consumer
+                   -- can check Lean's leaf CONSTRUCTION against
+                   -- `CBEEncode.bytesValue`, not only that the walk
+                   -- agrees on the result.
+                 , ("preLeafPreimageHex",
+                    .str (hx (encodeAsBytes (smtCellKey t) ++ encodeAsBytes v)))
+                 , ("isAbsent", .bool (decide (v = canonicalAbsentValue t))) ])))
+        ]))
+
+/-! ### The write SET, per variant
+
+The last piece of the flip's specification: which cells each action
+writes, as a function of `(actionKind, actionFields, signer)` plus the
+proven `.bridgeNextWdId`.  A verifier re-derives this list and rejects
+a bundle naming different cells — without it, a responder could omit a
+write and fold to a root where that cell never moved.
+
+Emitted per variant with the ACTUAL field bytes the L1 decodes, so a
+mirror's field-offset error shows up here rather than being reasoned
+about.  Every offset in `actionFieldsForL1` is a place a mirror can be
+silently wrong: the layouts are big-endian and the widths differ
+(`uint64BE` for identifiers, `uint128BE` for amounts), so a
+one-field slip still decodes to a plausible actor id.
+-/
+
+/-- Per-variant write-set goldens: the action's L1 form, and the
+    ordered `(cellKind, keyA, keyB)` list `writeCellsAt` produces. -/
+def writeSetGoldens : List Test.Bridge.CrossCheck.Json :=
+  let es := fixtureBase
+  let signer : ActorId := 7
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let probes : List Action :=
+    [ .transfer 1 signer 8 30, .mint 1 8 5, .burn 1 8 5, .freezeResource 1
+    , .replaceKey 8 (ByteArray.mk #[1, 2, 3]), .reward 1 8 5
+      -- The two bulk variants.  Present so the corpus covers all
+      -- twenty-five kinds and the EXCLUSION is data rather than a
+      -- hand-written constant on the L1 side: their write set is the
+      -- actor set at a resource, which a verifier holding only the
+      -- pre-root cannot enumerate.
+    , .distributeOthers 1 8 5, .proportionalDilute 1 8 5
+    , .dispute (minimalDispute signer 0), .disputeWithdraw 0
+    , .verdict { disputeId := 0, outcome := .upheld
+               , rationale := ByteArray.empty, signatures := [] }
+    , .rollback 0
+    , .registerIdentity 8 (ByteArray.mk #[9])
+    , .deposit 1 8 5 3
+    , .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero
+    , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
+    , .faultProofChallenge ByteArray.empty 0 1 ByteArray.empty
+    , .faultProofResolution ByteArray.empty 0 8 0
+    , .depositWithFee 1 8 9 5 1 3 4, .topUpActionBudget 1 5 2 9
+    , .topUpActionBudgetFor 8 1 5 2 9, .claimBudgetRefund 1 2 3 9
+    , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 25 9 8 ]
+  probes.map (fun action =>
+    let cells := Authority.Action.writeCellsAt es action signer
+    .obj [ ("actionKindByte", .num (actionKindByte action).toNat)
+         , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
+         , ("signerNat", .num signer.toNat)
+           -- The proven counter the `withdraw` arm keys its pending
+           -- cell by; inert for every other variant, and emitted for
+           -- all of them so the mirror takes the same input shape.
+         , ("nextWdIdPre", .num es.bridge.nextWdId)
+           -- Whether the fault proof can adjudicate this kind at all.
+           -- False on exactly the bulk pair, and emitted per probe so
+           -- the L1's own predicate is pinned against
+           -- `FaultProofAdjudicable` rather than restated.
+         , ("adjudicable", .bool (FaultProofAdjudicable action))
+         , ("cellCount", .num cells.length)
+         , ("cells", .arr (cells.map (fun t =>
+             let (k, a, b) : Nat × Nat × Nat := t.flatKey
+             .obj [ ("cellKind", .num k), ("keyA", .num a), ("keyB", .num b) ]))) ])
+
+/-! ### Canonical absence, per cell kind
+
+The last primitive the fold needs, and it is not cosmetic:
+`stateCellEntries` DROPS canonically-absent cells, so "value is
+canonically absent" and "key is absent from the tree" are the same
+condition.  A cell at this value has an EMPTY sub-tree beneath its key,
+so its leaf is the canonical empty one rather than a hash of the
+preimage — which is what makes an absent cell openable at all, and a
+step crediting a fresh actor opens one on its first line.
+-/
+
+/-- One representative tag per cell kind, so the goldens cover all
+    fifteen rather than the handful a step happens to touch. -/
+def absentValueProbeTags : List CellTag :=
+  [ .balance 1 7, .nonce 7, .registry 7, .localPolicy 7
+  , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
+  , .bridgeAmmReserveEth, .bridgeAmmReserveBold
+  , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
+  , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
+  , .epochBudget 7, .budgetPolicy ]
+
+/-- The canonical absent bytes for every cell kind. -/
+def absentValueGoldens : List Test.Bridge.CrossCheck.Json :=
+  absentValueProbeTags.map (fun t =>
+    let (k, _, _) : Nat × Nat × Nat := t.flatKey
+    .obj [ ("cellKind", .num k)
+         , ("absentValueHex",
+            .str (Test.Bridge.CrossCheck.hexFromBytes
+              (canonicalAbsentValue t))) ])
 
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
@@ -1722,14 +2123,6 @@ def tests : List Test.TestCase :=
                       (fun f => f.preStateCommitHex.length = 66))
           "preCommit is '0x' + 64 hex chars (32 bytes)"
     }
-  , { name := "SVC.5.e: every happy fixture's expectedStepVMCommit is 32 bytes"
-    , body := do
-        let happy := allFixtures.filter
-                       (fun f => f.expectedRevertReason = "null")
-        Test.assert (happy.all
-                      (fun f => f.expectedStepVMCommitHex.length = 66))
-          "happy stepVMCommit is 32 bytes"
-    }
   , { name := "GP.3.3: per-variant happy-fixture count is uniform"
     , body := do
         -- Every non-Transfer / non-Mint variant has exactly 6
@@ -1783,14 +2176,166 @@ def tests : List Test.TestCase :=
             p.witnessCommitHex = f.preStateCommitHex)))
           "witness commit binding"
     }
-  , { name := "SVC.5.e+: every happy fixture's cellProofs has cellKind ≤ 6"
+  , { name := "log-chain: every entry publishes a 32-byte action commitment"
     , body := do
+        -- The L1 stores it in a `bytes32`, and `actionCommitHexOf`
+        -- emits `"0x"` on a hex-decode failure, so anything other than
+        -- 66 characters means the derivation did not run.
+        Test.assert (allFixtures.all (fun f =>
+          (actionCommitHexOf f).length = 66 ∧
+          (actionCommitHexOf f).startsWith "0x"))
+          "action commitment is a 0x-prefixed 32-byte hex string"
+    }
+  , { name := "log-chain: the commitment separates the three components"
+    , body := do
+        -- Injectivity is the property the binding rests on: if two
+        -- distinct `(kind, signer, fields)` triples could collide, a
+        -- responding party could substitute one for the other at
+        -- terminate time.  Exhibited rather than asserted — each pair
+        -- below differs in exactly ONE component.
+        let fields := ByteArray.mk #[1, 2, 3]
+        let base := StepVMCoherence.l1ActionCommitBytes 0 7 fields
+        let otherKind := StepVMCoherence.l1ActionCommitBytes 1 7 fields
+        let otherSigner := StepVMCoherence.l1ActionCommitBytes 0 8 fields
+        let otherFields :=
+          StepVMCoherence.l1ActionCommitBytes 0 7 (ByteArray.mk #[1, 2, 4])
+        Test.assert (base != otherKind) "kind is committed"
+        Test.assert (base != otherSigner) "signer is committed"
+        Test.assert (base != otherFields) "fields are committed"
+    }
+  , { name := "log-chain: a shifted field boundary does not collide"
+    , body := do
+        -- The reason the variable-length component goes LAST.  With
+        -- `fields` first, `(kind=0x01, fields=0x0203)` and
+        -- `(kind=0x02, fields=0x03)` would concatenate to the same
+        -- bytes.  With `fields` last, the first nine bytes are
+        -- fixed-width, so the split is unambiguous and these differ.
+        let a := StepVMCoherence.l1ActionCommitBytes 1 0 (ByteArray.mk #[2, 3])
+        let b := StepVMCoherence.l1ActionCommitBytes 2 0 (ByteArray.mk #[3])
+        Test.assert (a != b) "the fixed-width prefix disambiguates the split"
+    }
+  , { name := "log-chain: the chain step commits to all three inputs"
+    , body := do
+        let z := ByteArray.mk (Array.replicate 32 (0 : UInt8))
+        let o := ByteArray.mk (Array.replicate 32 (1 : UInt8))
+        Test.assert
+          (StepVMCoherence.l1NextEntryHash z z z !=
+           StepVMCoherence.l1NextEntryHash o z z) "prev is committed"
+        Test.assert
+          (StepVMCoherence.l1NextEntryHash z z z !=
+           StepVMCoherence.l1NextEntryHash z o z) "state root is committed"
+        Test.assert
+          (StepVMCoherence.l1NextEntryHash z z z !=
+           StepVMCoherence.l1NextEntryHash z z o) "action is committed"
+    }
+  , { name := "the fold lands on the published root"
+    , body := do
+        -- The corpus's own version of the property the L1 must have:
+        -- what the merged walk computes from a pre-root and a wire is
+        -- the root `commitExtendedState (productionApplyBudget …)`
+        -- gives from the post-STATE.  Two independent computations, so
+        -- a verifier that agreed with itself would still fail here.
+        --
+        -- ...and the fold is not the identity, which is what makes the
+        -- first assertion say something: every one of the twenty-five
+        -- variants advances the signer's nonce, so no probe's post-root
+        -- is its pre-root, including the two whose LAW no-ops.
+        let get : Test.Bridge.CrossCheck.Json → String →
+            Option Test.Bridge.CrossCheck.Json := fun j k =>
+          match j with
+          | .obj fields => (fields.find? (fun p => p.1 = k)).map Prod.snd
+          | _           => none
+        Test.assert (multiProofGoldens.length > 0)
+          "the multiproof goldens must be non-empty"
+        for g in multiProofGoldens do
+          match get g "variant", get g "postStateRootHex",
+                get g "publishedPostRootHex", get g "preStateRootHex" with
+          | some (.str v), some (.str fold), some (.str published),
+            some (.str pre) =>
+            Test.assertEq (expected := published) (actual := fold)
+              s!"{v}: the fold must land on the production advance's root"
+            Test.assert (fold != pre) s!"{v}: the fold must move the root"
+          | _, _, _, _ => throw <| IO.userError "malformed multiproof golden"
+    }
+  , { name := "every multiproof wire is exactly its key set's shape"
+    , body := do
+        -- The corpus's own copy of the consumer's derivation.  The gap
+        -- count fixes the mask size and the sibling count, so a column
+        -- emitted at some other length would pin the L1 to a wire the
+        -- L1's own shape check would reject -- a corpus that could not
+        -- pass its own consumer.
+        for g in multiProofGoldens do
+          match g with
+          | .obj fields =>
+            let get := fun (k : String) =>
+              (fields.find? (fun p => p.1 = k)).map Prod.snd
+            match get "variant", get "gapCount", get "gapMaskHex",
+                  get "siblingsHex", get "cellCount" with
+            | some (.str v), some (.num gaps), some (.str mask),
+              some (.str sibs), some (.num cells) =>
+              -- Hex strings carry a `0x` prefix and two chars a byte.
+              Test.assertEq (expected := (gaps + 7) / 8)
+                (actual := (mask.length - 2) / 2)
+                s!"{v}: the mask must be ceil(G/8) bytes"
+              Test.assertEq (expected := 0) (actual := (sibs.length - 2) % 64)
+                s!"{v}: the sibling region must be whole 32-byte siblings"
+              -- G = (256 + 1) - m + sum divs, so it is at least the
+              -- single-cell 256 and grows with the frontier.  A column
+              -- reporting fewer gaps than levels would mean the walk
+              -- never reached the root.
+              Test.assert (gaps ≥ 256) s!"{v}: fewer gaps than one full path"
+              Test.assert (cells ≥ 1) s!"{v}: the frontier must open something"
+            | _, _, _, _, _ => throw <| IO.userError "malformed multiproof golden"
+          | _ => throw <| IO.userError "malformed multiproof golden"
+    }
+  , { name := "SVC.5.e+: every cellProof carries a well-formed SMT opening"
+    , body := do
+        -- Shape, not value: a `0x`-prefixed hex string of a NONZERO
+        -- multiple of 32 bytes — the 32-byte bitmask plus whole
+        -- siblings.  This is the same predicate
+        -- `KnomosisStepVM.executeStep` enforces at intake and the Rust
+        -- deserialiser enforces on the wire, so a corpus entry the L1
+        -- would reject cannot be committed.
+        --
+        -- It is a real regression guard rather than a restatement:
+        -- `CellProof.proofData` DEFAULTS to empty, so a builder that
+        -- reverted to `buildCellProof` would emit a bundle that is
+        -- well-formed in every other respect.  Two of the bulk
+        -- builders did exactly that, and only this shape check found
+        -- them.
+        Test.assert (allFixtures.all (fun f =>
+          f.cellProofsForFixture.all (fun p =>
+            p.proofDataHex.startsWith "0x" ∧
+            p.proofDataHex.length > 2 ∧
+            (p.proofDataHex.length - 2) % 64 = 0)))
+          "every opening is a nonzero multiple of 32 bytes"
+    }
+  , { name := "SVC.5.e+: openings differ across cells of one fixture"
+    , body := do
+        -- A constant opening would satisfy the shape check above while
+        -- carrying no information.  Distinct cells sit at distinct SMT
+        -- keys, so their sibling paths must differ — pick the largest
+        -- happy bundle and require at least two distinct openings.
+        let happy := allFixtures.filter (fun f =>
+          f.expectedRevertReason = "null" ∧
+          f.cellProofsForFixture.length ≥ 2)
+        Test.assert (happy.any (fun f =>
+          (f.cellProofsForFixture.map (fun p => p.proofDataHex)).eraseDups.length ≥ 2))
+          "openings are cell-specific, not a shared constant"
+    }
+  , { name := "SVC.5.e+: every happy fixture's cellProofs has a known cellKind"
+    , body := do
+        -- The bound was 6 when the cell space stopped there.  It now
+        -- runs to 16 (the AMM mirror, the kill switch, the epoch
+        -- budgets and the budget policy each got a tag), and
+        -- `Action.writeCells` declares `.epochBudget` — kind 13 — on
+        -- every variant.  The bound tracks `CellKind`'s last index.
         let happy := allFixtures.filter
                        (fun f => f.expectedRevertReason = "null")
         Test.assert (happy.all (fun f =>
           f.cellProofsForFixture.all (fun p =>
-            p.cellKindNat ≤ 6)))
-          "cellKind in 0..6"
+            p.cellKindNat ≤ 16)))
+          "cellKind in 0..16"
     }
   , { name := "SVC.5.e+: bulk variants (distributeOthers / proportionalDilute) have ≥ 5 cellProofs"
     , body := do
@@ -1909,11 +2454,25 @@ def tests : List Test.TestCase :=
           -- `abi.encodePacked`, proving the packed byte layout agrees
           -- byte-for-byte without the keccak binding.
           , ("packedLayoutGoldensCount", .num packedLayoutGoldens.length)
+          , ("cbeEncoderGoldens", .arr cbeEncoderGoldens)
+          , ("cbeEncoderGoldensCount", .num cbeEncoderGoldens.length)
+          , ("uniformWriteGoldens", .arr uniformWriteGoldens)
+          , ("uniformWriteGoldensCount", .num uniformWriteGoldens.length)
+          , ("balanceWriteGoldens", .arr balanceWriteGoldens)
+          , ("balanceWriteGoldensCount", .num balanceWriteGoldens.length)
+          , ("recordWriteGoldens", .arr recordWriteGoldens)
+          , ("recordWriteGoldensCount", .num recordWriteGoldens.length)
+          , ("multiProofGoldens", .arr multiProofGoldens)
+          , ("multiProofGoldensCount", .num multiProofGoldens.length)
+          , ("writeSetGoldens", .arr writeSetGoldens)
+          , ("writeSetGoldensCount", .num writeSetGoldens.length)
+          , ("absentValueGoldens", .arr absentValueGoldens)
+          , ("absentValueGoldensCount", .num absentValueGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)
           ]
-        Test.Bridge.CrossCheck.writeFixture "step_vm.json" header.encode
+        Test.Bridge.CrossCheck.writeHashDependentFixture "step_vm.json" header.encode
     }
   ]
 

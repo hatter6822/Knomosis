@@ -94,6 +94,7 @@ import Lex.Test.Tools.Diff
 import Lex.Test.Tools.Format
 import Lex.Test.Tools.DiagnosticCoverage
 import Lex.Test.DSL.Deployment
+import LegalKernel.Test.Tools.AuditBinaries
 import LegalKernel.Test.Deployments.UsdClearing
 import LegalKernel.Test.Deployments.GasPoolExample
 import Lex.Test.ExampleLex
@@ -163,6 +164,17 @@ import LegalKernel.Test.FaultProof.Cell
 import LegalKernel.Test.FaultProof.Smt
 import LegalKernel.Test.FaultProof.Commit
 import LegalKernel.Test.FaultProof.AmmCommit
+import LegalKernel.Test.FaultProof.StateCells
+import LegalKernel.Test.FaultProof.SmtInjective
+import LegalKernel.Test.FaultProof.StateCellsInjective
+import LegalKernel.Test.FaultProof.CellWrites
+import LegalKernel.Test.FaultProof.Frontier
+import LegalKernel.Test.Bridge.CrossCheck.MultiProof
+import LegalKernel.Test.FaultProof.MultiProof
+import LegalKernel.Test.FaultProof.StepWriteSets
+import LegalKernel.Test.FaultProof.Terminate
+import LegalKernel.Test.FaultProof.SubStep
+import LegalKernel.Test.FaultProof.BoundsReachable
 import LegalKernel.Test.FaultProof.Step
 import LegalKernel.Test.FaultProof.Game
 import LegalKernel.Test.FaultProof.LawClassification
@@ -175,7 +187,6 @@ import LegalKernel.Test.FaultProof.PerVariantCoherence
 import LegalKernel.Test.FaultProof.EncodeInjectivity
 import LegalKernel.Test.FaultProof.AbsentCellCreation
 import LegalKernel.Test.FaultProof.GameTransitionEdgeCases
-import LegalKernel.Test.FaultProof.SolidityStepVMCommit
 import LegalKernel.Test.FaultProof.Transcript
 import LegalKernel.Test.FaultProof.Coherence
 import LegalKernel.Test.FaultProof.Settlement
@@ -183,6 +194,7 @@ import LegalKernel.Test.FaultProof.MigrationFreeze
 import LegalKernel.Test.Bridge.CrossCheck.StepVM
 import LegalKernel.Test.Bridge.CrossCheck.BisectionGame
 import LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
+import LegalKernel.Test.Bridge.CrossCheck.CellKey
 import LegalKernel.Test.Bridge.CrossCheck.SmtCellProof
 import LegalKernel.Test.Bridge.CrossCheck.ObserverGameTraces
 import LegalKernel.Test.Properties.FaultProof
@@ -192,6 +204,7 @@ import LegalKernel.Test.Properties.FaultProofDeep
 import LegalKernel.Test.Integration.CrossDeployment
 import LegalKernel.Test.Integration.SnapshotBootstrap
 import LegalKernel.Test.Integration.AttestedSnapshotCli
+import LegalKernel.Test.Integration.ReplayCliFlags
 import LegalKernel.Test.Integration.ReplayUpToCli
 import LegalKernel.Test.Integration.ExportCellProofsCli
 import LegalKernel.Test.Integration.ExportTerminateBundleCli
@@ -273,6 +286,10 @@ def main : IO UInt32 := do
                                     Lex.Test.Tools.FormatTests.tests)
   failed := failed + (← runAll "tools-lex-diagnostic-coverage"
                                     Lex.Test.Tools.DiagnosticCoverage.tests)
+  failed := failed + (← runAll "tools-audit-binaries"
+                                    LegalKernel.Test.Tools.AuditBinaries.tests)
+  failed := failed + (← runAll "replay-cli-flags"
+                                    LegalKernel.Test.Integration.ReplayCliFlags.tests)
   failed := failed + (← runAll "dsl-lex-deployment"
                                     Lex.Test.DSL.DeploymentTests.tests)
   failed := failed + (← runAll "deployments-usd-clearing"
@@ -408,6 +425,28 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.Commit.tests)
   failed := failed + (← runAll "faultproof-amm-commit"
                                     LegalKernel.Test.FaultProof.AmmCommit.tests)
+  failed := failed + (← runAll "faultproof-state-cells"
+                                    LegalKernel.Test.FaultProof.StateCells.tests)
+  failed := failed + (← runAll "faultproof-smt-injective"
+                                    LegalKernel.Test.FaultProof.SmtInjective.tests)
+  failed := failed + (← runAll "faultproof-state-cells-injective"
+                            LegalKernel.Test.FaultProof.StateCellsInjective.tests)
+  failed := failed + (← runAll "faultproof-cell-writes"
+                                    LegalKernel.Test.FaultProof.CellWrites.tests)
+  failed := failed + (← runAll "faultproof-frontier"
+                                    LegalKernel.Test.FaultProof.Frontier.tests)
+  failed := failed + (← runAll "faultproof-multiproof"
+                                    LegalKernel.Test.FaultProof.MultiProof.tests)
+  failed := failed + (← runAll "crosscheck-smt-multi-proof"
+                        LegalKernel.Test.Bridge.CrossCheck.MultiProof.tests)
+  failed := failed + (← runAll "faultproof-write-sets"
+                                LegalKernel.Test.FaultProof.StepWriteSets.tests)
+  failed := failed + (← runAll "faultproof-terminate"
+                                    LegalKernel.Test.FaultProof.Terminate.tests)
+  failed := failed + (← runAll "faultproof-substep"
+                                    LegalKernel.Test.FaultProof.SubStep.tests)
+  failed := failed + (← runAll "faultproof-bounds-reachable"
+                                    LegalKernel.Test.FaultProof.BoundsReachable.tests)
   failed := failed + (← runAll "faultproof-step"
                                     LegalKernel.Test.FaultProof.Step.tests)
   failed := failed + (← runAll "faultproof-game"
@@ -432,8 +471,6 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.AbsentCellCreation.tests)
   failed := failed + (← runAll "faultproof-game-transition-edge-cases"
                                     LegalKernel.Test.FaultProof.GameTransitionEdgeCases.tests)
-  failed := failed + (← runAll "faultproof-solidity-stepvm-commit"
-                                    LegalKernel.Test.FaultProof.SolidityStepVMCommit.tests)
   failed := failed + (← runAll "faultproof-transcript"
                                     LegalKernel.Test.FaultProof.Transcript.tests)
   failed := failed + (← runAll "faultproof-coherence"
@@ -448,6 +485,8 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.BisectionGame.tests)
   failed := failed + (← runAll "crosscheck-fault-proof-scenarios"
                                     Bridge.CrossCheck.FaultProofScenarios.tests)
+  failed := failed + (← runAll "crosscheck-cell-key"
+                                    Bridge.CrossCheck.CellKey.tests)
   failed := failed + (← runAll "crosscheck-smt-cell-proof"
                                     Bridge.CrossCheck.SmtCellProof.tests)
   failed := failed + (← runAll "crosscheck-observer-game-traces"

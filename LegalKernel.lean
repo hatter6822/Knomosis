@@ -285,10 +285,17 @@ import LegalKernel.Bridge.Finalisation
 -- FaultProofChallengerWon predicate.  See
 -- `docs/planning/fault_proof_migration_plan.md` for the full plan.
 import LegalKernel.FaultProof.Cell
+import LegalKernel.FaultProof.CellValue
+import LegalKernel.FaultProof.CellStore
+import LegalKernel.FaultProof.CellWrites
 import LegalKernel.FaultProof.Commit
+import LegalKernel.FaultProof.BoundsReachable
 import LegalKernel.FaultProof.Smt
 import LegalKernel.FaultProof.LawClassification
 import LegalKernel.FaultProof.StepVariants
+import LegalKernel.FaultProof.StepWriteSets
+import LegalKernel.FaultProof.Terminate
+import LegalKernel.FaultProof.VerifierWrites
 import LegalKernel.FaultProof.Verify
 import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.Game
@@ -298,7 +305,6 @@ import LegalKernel.FaultProof.PerVariantCoherence
 import LegalKernel.FaultProof.EncodeInjectivity
 import LegalKernel.FaultProof.AbsentCellCreation
 import LegalKernel.FaultProof.GameTransitionEdgeCases
-import LegalKernel.FaultProof.SolidityStepVMCommit
 import LegalKernel.FaultProof.StepVMCoherence
 import LegalKernel.FaultProof.TerminateBundle
 import LegalKernel.FaultProof.Transcript
@@ -313,6 +319,10 @@ import LegalKernel.FaultProof.MigrationFreeze
 import LegalKernel.FaultProof.Observer
 import LegalKernel.FaultProof.SubStep
 import LegalKernel.FaultProof.KeyDerivation
+import LegalKernel.FaultProof.StateCells
+import LegalKernel.FaultProof.SmtInjective
+import LegalKernel.FaultProof.StateCellsInjective
+import LegalKernel.FaultProof.ProductionApply
 import LegalKernel.Encoding.KernelStep
 import LegalKernel.Encoding.GameState
 
@@ -332,6 +342,6 @@ namespace LegalKernel
     Lives outside `LegalKernel.Kernel` so that the trusted-core file
     contains only the §4.12 listing — the TCB audit tool can therefore
     enumerate `Kernel.lean` without seeing convenience constants. -/
-def kernelVersion : String := "0.10.2"
+def kernelVersion : String := "0.13.0"
 
 end LegalKernel

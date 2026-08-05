@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 67, "column": 0},
+ {"position": {"line": 73, "column": 0},
   "file": "LegalKernel/Laws/Reward.lean"},
  "signed_by": {"name": "to", "kind": "actorRef"},
  "schema_version": 1,
@@ -12,7 +12,8 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr": "fun _ => amount > 0\n  ",
+ "pre_expr":
+ "fun s => amount > 0 ∧\n                                LegalKernel.Laws.AmountBounded s r to amount\n  ",
  "params":
  [{"type": "ResourceId", "name": "r", "kind": "explicit"},
   {"type": "ActorId", "name": "to", "kind": "explicit"},

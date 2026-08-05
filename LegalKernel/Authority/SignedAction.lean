@@ -42,8 +42,9 @@ The deployment-facing API exposed here:
     state-advance path; takes the admissibility witness as a
     dependent proof argument so that no admissibility check can be
     skipped.
-  * `nonce_uniqueness` — two distinct admissible signed actions by
-    the same signer cannot share a nonce.
+  * `nonce_uniqueness` — any two admissible signed actions by the
+    same signer carry the SAME nonce (the signer's next-expected
+    one); no admissible action exists at any other nonce.
   * `replay_impossible` — a successfully applied signed action is
     not admissible at the post-state.
 -/
@@ -650,6 +651,36 @@ theorem apply_admissible_with_base
 
 /-! ## GP.3.2 admission-gate helpers -/
 
+/-- The per-action ceiling on how much action budget one
+    `topUpActionBudget` / `topUpActionBudgetFor` may mint.
+
+    **Why an unconditional ceiling is required.**  The GP.9.1
+    `topUpRoundTripCheck` ties `budgetIncrement` to `gasAmount` through
+    the deployment's `refundRate` — but that rate defaults to `fun _ =>
+    0` on every production path (`apply_admissible_with_budget`,
+    `apply_bridge_admissible_with_budget`, and every log-touching
+    subcommand in `Main.lean`), and at rate zero the conjunct reduces to
+    `budgetIncrement * 0 ≤ gasAmount`, i.e. `0 ≤ gasAmount` — true for
+    every input.  `topUpRoundTripCheck_true_of_zero_rate` proves exactly
+    that.  So on a refunds-disabled deployment the round-trip seal
+    bounded nothing, and an actor holding one unit of a gas resource
+    could mint arbitrarily much budget: the per-actor budget gate is the
+    L2's only spam/DoS admission control, and it was bypassable for
+    1 wei.
+
+    This bound is rate- and balance-INDEPENDENT, which is what makes it
+    the right shape: it holds whatever the deployment configures.  The
+    value mirrors the L1 deposit leg's `MAX_BUDGET_PER_DEPOSIT`, so the
+    two ways of acquiring budget are capped alike.
+
+    Repetition is still possible — but with `poolActor` pinned to
+    `Bridge.gasPoolActor` (see `topUpActionBudget_gasCheck`) each
+    repetition permanently moves `gasAmount > 0` out of the signer's
+    balance into the real pool, and costs a budget unit to admit.  The
+    mint is therefore paid for, which is the property the gate exists to
+    establish. -/
+def MAX_TOPUP_BUDGET_PER_ACTION : Nat := 1000000
+
 /-- GP.3.2 signer-aware kernel precondition gate.
 
     Returns `true` iff the action can safely proceed to the budget
@@ -716,9 +747,12 @@ theorem apply_admissible_with_base
 def topUpActionBudget_gasCheck (action : Action) (signer : ActorId)
     (es : ExtendedState) : Bool :=
   match action with
-  | .topUpActionBudget gasResource gasAmount _ poolActor =>
+  | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       decide (signer ≠ Bridge.bridgeActor ∧
               signer ≠ poolActor ∧
+              poolActor = Bridge.gasPoolActor ∧
+              (gasResource = 0 ∨ gasResource = 1) ∧
+              budgetIncrement ≤ MAX_TOPUP_BUDGET_PER_ACTION ∧
               gasAmount > 0 ∧
               getBalance es.base gasResource signer ≥ gasAmount)
   | _ => true
@@ -859,10 +893,13 @@ theorem delegatedTopUpConsentBool_iff
 def topUpActionBudgetFor_gate
     (action : Action) (signer : ActorId) (es : ExtendedState) : Bool :=
   match action with
-  | .topUpActionBudgetFor recipient gasResource gasAmount _ poolActor =>
+  | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       decide (signer ≠ Bridge.bridgeActor ∧
               signer ≠ poolActor ∧
               recipient ≠ signer ∧
+              poolActor = Bridge.gasPoolActor ∧
+              (gasResource = 0 ∨ gasResource = 1) ∧
+              budgetIncrement ≤ MAX_TOPUP_BUDGET_PER_ACTION ∧
               gasAmount > 0 ∧
               getBalance es.base gasResource signer ≥ gasAmount) &&
       delegatedTopUpConsentBool es recipient signer
@@ -1892,9 +1929,13 @@ theorem topUpActionBudget_net_budget_change
   have hForGate : topUpActionBudgetFor_gate
       (.topUpActionBudget gasResource gasAmount budgetIncrement poolActor)
       signer es = true := rfl
-  -- The gas check arm is the four-conjunct decide; unfold and beta-reduce.
+  -- The gas check arm is a single `decide` over the gate's conjuncts;
+  -- unfold and beta-reduce.
   simp only [topUpActionBudget_gasCheck] at hsuc
   by_cases hgas : signer ≠ Bridge.bridgeActor ∧ signer ≠ poolActor ∧
+                  poolActor = Bridge.gasPoolActor ∧
+                  (gasResource = 0 ∨ gasResource = 1) ∧
+                  budgetIncrement ≤ MAX_TOPUP_BUDGET_PER_ACTION ∧
                   gasAmount > 0 ∧
                   getBalance es.base gasResource signer ≥ gasAmount
   · -- gas check passes.  After simp, hsuc may be a conjunction
@@ -1923,6 +1964,9 @@ theorem topUpActionBudget_net_budget_change
   · -- gas check fails: hsuc reduces to `none = some es'`, contradiction.
     have hgas_eq : decide
         (signer ≠ Bridge.bridgeActor ∧ signer ≠ poolActor ∧
+          poolActor = Bridge.gasPoolActor ∧
+          (gasResource = 0 ∨ gasResource = 1) ∧
+          budgetIncrement ≤ MAX_TOPUP_BUDGET_PER_ACTION ∧
           gasAmount > 0 ∧
           getBalance es.base gasResource signer ≥ gasAmount) = false := by
       simp [hgas]
@@ -2128,9 +2172,9 @@ theorem replenishment_via_epoch_advance
 
     The existing `nonce_uniqueness` theorem lifts transparently
     across the budget gate: the budget gate is downstream of the
-    nonce check (admissibility's condition 4), so two distinct
-    admissible actions by the same signer still cannot share a
-    nonce.  Restated against the parameterised `AdmissibleWith`. -/
+    nonce check (admissibility's condition 4), so any two admissible
+    actions by the same signer still carry the same nonce.  Restated
+    against the parameterised `AdmissibleWith`. -/
 theorem nonce_uniqueness_preserved
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
@@ -2257,23 +2301,27 @@ admission path.  All three are proven against the kernel-only
 (the gate + grant arm are byte-identical across the two entries). -/
 
 /-- GP.3.4: the facts the `topUpActionBudgetFor_gate` certifies when
-    it returns `true` — the five gas-safety conjuncts plus the
-    recipient-consent flag.  The budget-gate theorems below consume
-    this to recover, from a successful admission, the signer / pool /
-    recipient disequalities and the gas bound. -/
+    it returns `true` — the gas-safety conjuncts, the pool / resource /
+    ceiling pins, and the recipient-consent flag.  The budget-gate
+    theorems below consume this to recover, from a successful
+    admission, the signer / pool / recipient disequalities, the bound
+    on how much budget the action can mint, and the gas bound. -/
 theorem topUpActionBudgetFor_gate_true_facts
     (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
     (signer : ActorId) (es : ExtendedState)
     (hgate : topUpActionBudgetFor_gate
               (.topUpActionBudgetFor recipient gr ga bi pa) signer es = true) :
     signer ≠ Bridge.bridgeActor ∧ signer ≠ pa ∧ recipient ≠ signer ∧
+    pa = Bridge.gasPoolActor ∧ (gr = 0 ∨ gr = 1) ∧
+    bi ≤ MAX_TOPUP_BUDGET_PER_ACTION ∧
     ga > 0 ∧ getBalance es.base gr signer ≥ ga ∧
     delegatedTopUpConsentBool es recipient signer = true := by
   unfold topUpActionBudgetFor_gate at hgate
   rw [Bool.and_eq_true] at hgate
   obtain ⟨hdec, hconsent⟩ := hgate
   have hconj := of_decide_eq_true hdec
-  exact ⟨hconj.1, hconj.2.1, hconj.2.2.1, hconj.2.2.2.1, hconj.2.2.2.2, hconsent⟩
+  exact ⟨hconj.1, hconj.2.1, hconj.2.2.1, hconj.2.2.2.1, hconj.2.2.2.2.1,
+         hconj.2.2.2.2.2.1, hconj.2.2.2.2.2.2.1, hconj.2.2.2.2.2.2.2, hconsent⟩
 
 /-- GP.3.4.g — `delegatedTopUp_requires_allowTopUpFrom`.
 
@@ -2745,11 +2793,24 @@ theorem refund_rejected_when_rate_disabled
 
 /-! ## Headline theorems (§8.5.2) -/
 
-/-- §8.5.2 / WU 3.7: two distinct signed actions by the same signer
-    cannot both be admissible at the same `ExtendedState`.
+/-- §8.5.2 / WU 3.7: any two signed actions by the same signer that
+    are both admissible at the same `ExtendedState` carry the SAME
+    nonce.
 
     Proof: condition 4 forces both actions' nonces to equal
-    `expectsNonce es signer`, hence to equal each other. -/
+    `expectsNonce es signer`, hence to equal each other.
+
+    **Read the direction carefully.**  This says admissibility PINS
+    the nonce to one value, not that two admissible actions cannot
+    share one — the conclusion is `st₁.nonce = st₂.nonce`, an
+    equality.  Two DISTINCT actions at that one nonce can both be
+    admissible; that is equivocation, and it is caught downstream by
+    `Disputes.Evidence.checkDoubleApply` rather than ruled out here.
+    What this theorem rules out is an admissible action at any OTHER
+    nonce, which is what makes the sequence gap-free: combined with
+    `Authority.expectsNonce_strict_mono`, each application advances
+    the expected nonce by exactly one, so a replay or a skip has no
+    admissible witness. -/
 theorem nonce_uniqueness
     (P : AuthorityPolicy) (es : ExtendedState)
     (st₁ st₂ : SignedAction)

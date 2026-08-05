@@ -180,6 +180,16 @@ pub fn credential_key(token: &str) -> u64 {
     hasher.finish()
 }
 
+/// The [`credential_key`] of the bearer token in `header`, or `None` when
+/// the header is absent or is not a `Bearer` credential.  Lets callers
+/// outside this module (the request handler, which namespaces the
+/// idempotency cache) identify a credential without handling the token
+/// value itself.
+#[must_use]
+pub fn bearer_credential_key(header: Option<&str>) -> Option<u64> {
+    bearer_token(header).map(credential_key)
+}
+
 /// Whether `path` is exempt from authentication (the liveness / readiness
 /// probes and the wallet-facing JSON-RPC shim — the contract's `security:
 /// []` operations).  `/rpc` is exempt because a browser wallet adding the
