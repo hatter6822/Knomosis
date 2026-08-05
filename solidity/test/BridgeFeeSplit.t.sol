@@ -3,7 +3,6 @@ pragma solidity ^0.8.36;
 
 import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {Test} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
@@ -297,12 +296,12 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: 1_000_000}(100);
-        (,,,, bytes32 hash1,,,) = _findEvent(vm.getRecordedLogs());
+        bytes32 hash1 = _findDepositReceipt(vm.getRecordedLogs()).receiptHash;
 
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: 1_000_000}(200);
-        (,,,, bytes32 hash2,,,) = _findEvent(vm.getRecordedLogs());
+        bytes32 hash2 = _findDepositReceipt(vm.getRecordedLogs()).receiptHash;
 
         assertTrue(hash1 != hash2, "different fee -> different receiptHash");
     }
@@ -318,16 +317,19 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: 1 ether}(100);
-        (,,, uint64 n1, bytes32 h1,,,) = _findEvent(vm.getRecordedLogs());
+        DepositReceipt memory r1 = _findDepositReceipt(vm.getRecordedLogs());
 
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: 1 ether}(100);
-        (,,, uint64 n2, bytes32 h2,,,) = _findEvent(vm.getRecordedLogs());
+        DepositReceipt memory r2 = _findDepositReceipt(vm.getRecordedLogs());
 
-        assertEq(n1, 0, "first deposit uses nonce 0");
-        assertEq(n2, 1, "second deposit uses nonce 1");
-        assertTrue(h1 != h2, "identical deposits at different nonces must hash differently");
+        assertEq(r1.nonce, 0, "first deposit uses nonce 0");
+        assertEq(r2.nonce, 1, "second deposit uses nonce 1");
+        assertTrue(
+            r1.receiptHash != r2.receiptHash,
+            "identical deposits at different nonces must hash differently"
+        );
     }
 
     function test_replayResistance_deploymentBinding() public {
@@ -348,17 +350,20 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         vm.recordLogs();
         vm.prank(alice);
         bridgeA.depositETHWithFee{value: 1 ether}(100);
-        (,,, uint64 na, bytes32 hA,,,) = _findEvent(vm.getRecordedLogs());
+        DepositReceipt memory rA = _findDepositReceipt(vm.getRecordedLogs());
 
         vm.recordLogs();
         vm.prank(alice);
         bridgeB.depositETHWithFee{value: 1 ether}(100);
-        (,,, uint64 nb, bytes32 hB,,,) = _findEvent(vm.getRecordedLogs());
+        DepositReceipt memory rB = _findDepositReceipt(vm.getRecordedLogs());
 
         // Both use nonce 0, so deploymentId is the only differing input.
-        assertEq(na, 0, "bridgeA deposit nonce 0");
-        assertEq(nb, 0, "bridgeB deposit nonce 0");
-        assertTrue(hA != hB, "same deposit on different deployments must hash differently");
+        assertEq(rA.nonce, 0, "bridgeA deposit nonce 0");
+        assertEq(rB.nonce, 0, "bridgeB deposit nonce 0");
+        assertTrue(
+            rA.receiptHash != rB.receiptHash,
+            "same deposit on different deployments must hash differently"
+        );
     }
 
     function test_realisticRate_tenPercentMaxFee() public {
@@ -675,13 +680,13 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: v}(feeBps);
-        (uint256 u, uint256 p, uint64 g,,,,,) = _findEvent(vm.getRecordedLogs());
+        DepositReceipt memory r = _findDepositReceipt(vm.getRecordedLogs());
 
-        assertEq(u + p, v, "conservation");
-        assertEq(u, refUser, "userAmount matches reference");
-        assertEq(p, refPool, "poolAmount matches reference");
-        assertEq(g, refBudget, "budgetGrant matches reference");
-        assertLe(g, FeeSplitMath.MAX_BUDGET_PER_DEPOSIT, "budget within cap");
+        assertEq(r.userAmount + r.poolAmount, v, "conservation");
+        assertEq(r.userAmount, refUser, "userAmount matches reference");
+        assertEq(r.poolAmount, refPool, "poolAmount matches reference");
+        assertEq(r.budgetGrant, refBudget, "budgetGrant matches reference");
+        assertLe(r.budgetGrant, FeeSplitMath.MAX_BUDGET_PER_DEPOSIT, "budget within cap");
     }
 
     /// @notice Differential across the exchange rate as well: deploy a
@@ -699,11 +704,11 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: v}(feeBps);
-        (uint256 u, uint256 p, uint64 g,, bytes32 hash,,,) = _findEvent(vm.getRecordedLogs());
+        DepositReceipt memory r = _findDepositReceipt(vm.getRecordedLogs());
 
-        assertEq(u, refUser, "userAmount matches reference");
-        assertEq(p, refPool, "poolAmount matches reference");
-        assertEq(g, refBudget, "budgetGrant matches reference");
+        assertEq(r.userAmount, refUser, "userAmount matches reference");
+        assertEq(r.poolAmount, refPool, "poolAmount matches reference");
+        assertEq(r.budgetGrant, refBudget, "budgetGrant matches reference");
 
         bytes32 refHash = FeeSplitMath.receiptHash(
             bridge.deploymentId(),
@@ -716,7 +721,7 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
             refBudget,
             0
         );
-        assertEq(hash, refHash, "receiptHash matches reference");
+        assertEq(r.receiptHash, refHash, "receiptHash matches reference");
     }
 
     /// @notice A fuzzed out-of-range fee always reverts (never silently
@@ -733,45 +738,6 @@ contract BridgeFeeSplitTest is Test, DepositEventDecoder {
         bridge.depositETHWithFee{value: v}(feeBps);
     }
 
-    // ------------------------------------------------------------------
-    // Event-decoding helper
-    // ------------------------------------------------------------------
-
-    /// @notice Locate and decode the single `DepositWithFeeInitiated`
-    ///         entry in a recorded-log array.  Reverts if absent.
-    function _findEvent(Vm.Log[] memory logs)
-        internal
-        pure
-        returns (
-            uint256 userAmount,
-            uint256 poolAmount,
-            uint64 budgetGrant,
-            uint64 nonce,
-            bytes32 receiptHash,
-            address sender,
-            uint64 resourceId,
-            address token
-        )
-    {
-        bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
-        );
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
-                sender = address(uint160(uint256(logs[i].topics[1])));
-                resourceId = uint64(uint256(logs[i].topics[2]));
-                token = address(uint160(uint256(logs[i].topics[3])));
-                // GP.11.2: data is (userAmount, poolAmount, ammSeedAmount,
-                // budgetGrant, nonce, receiptHash); the AMM seed is 0 in this
-                // AMM-disabled suite and skipped here.
-                (userAmount, poolAmount,, budgetGrant, nonce, receiptHash) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
-                return
-                    (userAmount, poolAmount, budgetGrant, nonce, receiptHash, sender, resourceId, token);
-            }
-        }
-        revert("DepositWithFeeInitiated not found");
-    }
 }
 
 /// @notice Minimal migration mock whose `activated()` returns true.
