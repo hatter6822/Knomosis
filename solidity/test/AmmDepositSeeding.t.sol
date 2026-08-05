@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
+import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -34,7 +35,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         `testFuzz_seed_conservation_acrossRatios`, plus the stateful
 ///         `AmmDepositSeedingInvariantTest` (reserve == sum-of-seeds,
 ///         reserves a subset of TVL).
-contract AmmDepositSeedingTest is Test, BoldTestSupport {
+contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
 
@@ -156,33 +157,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport {
         );
     }
 
-    /// @notice Mint `amount` BOLD to `user` and approve `bridge`.
-    /// @notice Locate + decode the single canonical `DepositWithFeeInitiated`
-    ///         entry in a recorded-log array.  Reverts if absent.
-    function _decodeDepositWithFee(Vm.Log[] memory logs)
-        internal
-        pure
-        returns (
-            uint256 userAmount,
-            uint256 poolAmount,
-            uint256 ammSeedAmount,
-            uint64 budgetGrant,
-            uint64 nonce,
-            bytes32 receiptHash
-        )
-    {
-        bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
-        );
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
-                (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
-                return (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash);
-            }
-        }
-        revert("DepositWithFeeInitiated not found");
-    }
 
     // ------------------------------------------------------------------
     // Core ETH-leg seeding + the canonical event's ammSeedAmount field

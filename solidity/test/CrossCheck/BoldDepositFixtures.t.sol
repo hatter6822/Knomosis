@@ -5,6 +5,7 @@
 //
 pragma solidity ^0.8.20;
 
+import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -40,7 +41,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         `lake test`.  The Lean generator wraps the corpus metadata
 ///         under a top-level `header` object, so all metadata reads use
 ///         `.header.<field>`.
-contract BoldDepositFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
+contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecoder, BoldTestSupport {
     /// @dev Fixture file name under `test/CrossCheck/fixtures/`.
     string internal constant FIXTURE_NAME = "bold_deposit.json";
 
@@ -355,7 +356,10 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
                     string.concat("depositBoldWithFee reverted ", describeRevert(err)));
                 continue;
             }
-            (uint256 u, uint256 p, uint64 b) =
+            // The shared decoder returns all six fields; this suite
+            // asserts three.  Ignoring the rest beats a second, narrower
+            // decoder that would need updating alongside this one.
+            (uint256 u, uint256 p, , uint64 b, , ) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
             checkEq(u, e.userAmount, "live bold userAmount != fixture");
             checkEq(p, e.poolAmount, "live bold poolAmount != fixture");
@@ -391,7 +395,10 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
                     string.concat("depositETHWithFee reverted ", describeRevert(err)));
                 continue;
             }
-            (uint256 u, uint256 p, uint64 b) =
+            // The shared decoder returns all six fields; this suite
+            // asserts three.  Ignoring the rest beats a second, narrower
+            // decoder that would need updating alongside this one.
+            (uint256 u, uint256 p, , uint64 b, , ) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
             checkEq(u, e.userAmount, "live eth userAmount != fixture");
             checkEq(p, e.poolAmount, "live eth poolAmount != fixture");
@@ -543,28 +550,6 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
         return _deployBridge(1, boldRate);
     }
 
-    /// @notice Locate + decode the single `DepositWithFeeInitiated` entry
-    ///         in a recorded-log array (skips any BOLD `Transfer` event).
-    function _decodeDepositWithFee(Vm.Log[] memory logs)
-        internal
-        pure
-        returns (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant)
-    {
-        bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
-        );
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
-                // GP.11.2: data is (userAmount, poolAmount, ammSeedAmount,
-                // budgetGrant, nonce, receiptHash); this corpus is
-                // AMM-disabled (ammSeedAmount == 0), so the seed is skipped.
-                (userAmount, poolAmount,, budgetGrant,,) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
-                return (userAmount, poolAmount, budgetGrant);
-            }
-        }
-        revert("DepositWithFeeInitiated not found");
-    }
 
     /* ------------------------------------------------------------------ */
     /* Revert tolerance                                                   */

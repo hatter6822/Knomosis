@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
+import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -41,7 +42,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         contract-vs-Lean equivalence with no `FeeSplitMath`
 ///         intermediary, plus an on-chain real-keccak256 check of the
 ///         receiptHash recipe.
-contract DepositFeeSplitCrossCheck is CrossCheckFramework, BoldTestSupport {
+contract DepositFeeSplitCrossCheck is CrossCheckFramework, DepositEventDecoder, BoldTestSupport {
     string internal constant FIXTURE_NAME = "deposit_fee_split.json";
 
     address internal constant BOLD_BREAKER = address(0xB12E6B6E);
@@ -421,32 +422,6 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework, BoldTestSupport {
         );
     }
 
-    /// @notice Locate + decode the single `DepositWithFeeInitiated`
-    ///         entry in a recorded-log array.
-    function _decodeDepositWithFee(Vm.Log[] memory logs)
-        internal
-        pure
-        returns (
-            uint256 userAmount,
-            uint256 poolAmount,
-            uint256 ammSeedAmount,
-            uint64 budgetGrant,
-            uint64 nonce,
-            bytes32 receiptHash
-        )
-    {
-        bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
-        );
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
-                (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
-                return (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash);
-            }
-        }
-        revert("DepositWithFeeInitiated not found");
-    }
 
     /* ------------------------------------------------------------------ */
     /* Revert tolerance                                                   */
