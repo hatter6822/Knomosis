@@ -1065,17 +1065,23 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     // Modifiers
     // ------------------------------------------------------------------
 
-    /// @notice The four §9.1.4 automatic circuit breakers.  Applied
-    ///         to every state-shaping entry point.  Pure-state
-    ///         predicates; no privileged caller required to
-    ///         "trip" them.
-    modifier circuitOpen() {
-        // (a) AttestationStale
+    /// @dev The `AttestationStale` breaker, as its own predicate so
+    ///      `submitStateRoot` can be exempted from THIS arm while still
+    ///      carrying the other three.
+    function _requireAttestationFresh() internal view {
         if (
             latestStateRootSubmittedAtBlock != 0
                 && block.number
                     > uint256(latestStateRootSubmittedAtBlock) + uint256(maxAttestationStaleBlocks)
         ) revert AttestationStale();
+    }
+
+    /// @dev Breaker arms (b), (c) and (d) — the three that apply to EVERY
+    ///      guarded entry point, `submitStateRoot` included.  Factored out
+    ///      so `circuitOpen` and `circuitOpenExceptStaleness` share one
+    ///      body and cannot drift apart: the exemption below is a single
+    ///      arm, and that has to stay true as arms are added.
+    function _requireOperationalBreakersOpen() internal view {
         // (b) DisputeCooldown
         if (
             lastUpheldDisputeBlock != 0
@@ -1089,6 +1095,45 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (migration != address(0) && IKnomosisMigration(migration).activated()) {
             revert MigrationActivated();
         }
+    }
+
+    /// @notice The `circuitOpen` breakers MINUS the attestation-staleness
+    ///         arm — for `submitStateRoot`, the one call that can clear it.
+    ///
+    /// @dev    The breaker is SELF-CLEARING, and this is what makes that
+    ///         possible.  `latestStateRootSubmittedAtBlock` is written by
+    ///         `submitStateRoot` and nowhere else, so gating that call on
+    ///         attestation freshness made the breaker absorbing: one
+    ///         missed window and no fresh root could ever be submitted,
+    ///         no later call could refresh the timestamp, and the bridge
+    ///         was bricked permanently with no recovery path short of
+    ///         redeploying.
+    ///
+    ///         Submitting a fresh, attestor-signed state root IS the
+    ///         recovery action, so it is the one thing staleness must not
+    ///         block.  Everything else the breaker guards — deposits,
+    ///         withdrawals, the fee-split paths — stays blocked while the
+    ///         attestation is stale, and unblocks automatically the moment
+    ///         a fresh root lands.  No governance action, no human in the
+    ///         loop.
+    ///
+    ///         The other three arms still apply here: an upheld dispute's
+    ///         cooldown, the TVL cap and an activated migration are all
+    ///         reasons a new root should NOT be accepted, and none of them
+    ///         is cleared by accepting one.
+    modifier circuitOpenExceptStaleness() {
+        _requireOperationalBreakersOpen();
+        _;
+    }
+
+    /// @notice The four §9.1.4 automatic circuit breakers.  Applied
+    ///         to every state-shaping entry point.  Pure-state
+    ///         predicates; no privileged caller required to
+    ///         "trip" them.
+    modifier circuitOpen() {
+        // (a) AttestationStale
+        _requireAttestationFresh();
+        _requireOperationalBreakersOpen();
         _;
     }
 
@@ -1935,7 +1980,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
     function submitStateRoot(bytes32 root, uint64 logIndexHigh, bytes calldata attestorSig)
         external
-        circuitOpen
+        circuitOpenExceptStaleness
     {
         if (logIndexHigh <= latestSubmittedLogIndexHigh) revert NonMonotonic();
         if (attestorSig.length != 65) revert InvalidSignatureLength();
