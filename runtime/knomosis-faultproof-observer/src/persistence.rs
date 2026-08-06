@@ -152,6 +152,46 @@ pub struct ResponseRecord {
     /// the idempotency check "have we already submitted at this
     /// pivot?").
     pub pivot_idx: Option<u64>,
+    /// Which KIND of move this response was.
+    ///
+    /// Load-bearing, not bookkeeping.  The de-dup key used to be
+    /// `(game_id, pivot_idx)` alone, and a `Respond` and a
+    /// `TerminateOnSingleStep` collide on it: a response keys on the
+    /// pending midpoint `m`, and disagreeing with the lower half
+    /// narrows the range so that `range.high.idx` IS `m` — which is
+    /// exactly what the terminal move keys on.  The de-dup therefore
+    /// swallowed the honest party's terminate in the normal
+    /// adversarial trace, and it lost by timeout having played
+    /// correctly the whole way.
+    ///
+    /// `#[serde(default)]` so records persisted before this field
+    /// existed still load; they deserialise as `Unknown`, which is
+    /// distinct from every real kind and so cannot re-create the
+    /// collision for a resumed game.
+    #[serde(default)]
+    pub move_kind: MoveKind,
+}
+
+/// The kind of honest move a [`ResponseRecord`] records.
+///
+/// Mirrors `strategy::HonestMove`'s variants without its payloads —
+/// the de-dup key needs to tell the variants APART, not carry them.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum MoveKind {
+    /// A record written before this field existed.  Distinct from
+    /// every real kind, so an old record never aliases a new one.
+    #[default]
+    Unknown,
+    /// `HonestMove::Submit` — a midpoint submission.
+    Submit,
+    /// `HonestMove::RespondAgree` / `RespondDisagree`.
+    ///
+    /// The two agree/disagree arms share one kind deliberately: they
+    /// are the same move at the same pivot with opposite verdicts, and
+    /// submitting both would be a double-submit.
+    Respond,
+    /// `HonestMove::TerminateOnSingleStep` — the terminal step.
+    Terminate,
 }
 
 /// Serializable mirror of `knomosis_l1_ingest::reorg::BlockHeader`
@@ -687,8 +727,9 @@ fn parse_hex_tx_hash(hex_str: &str) -> Result<[u8; 32], PersistenceError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        GameRecord, PersistBatch, Persistence, PersistenceError, ResponseRecord, ResponseStatus,
-        CURSOR_KEY, GAME_PREFIX, IDENTIFIER_KEY, OBSERVER_IDENTIFIER, RESPONSE_PREFIX,
+        GameRecord, MoveKind, PersistBatch, Persistence, PersistenceError, ResponseRecord,
+        ResponseStatus, CURSOR_KEY, GAME_PREFIX, IDENTIFIER_KEY, OBSERVER_IDENTIFIER,
+        RESPONSE_PREFIX,
     };
     use crate::game::{Claim, DisputedRange, GameState, GameStatus, TurnSide};
     use knomosis_storage::storage::Storage;
@@ -735,6 +776,7 @@ mod tests {
             submitted_at_block: 100,
             depth: 1,
             pivot_idx: Some(32),
+            move_kind: MoveKind::Respond,
         }
     }
 

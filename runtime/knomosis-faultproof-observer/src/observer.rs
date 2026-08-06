@@ -69,7 +69,8 @@ use crate::game::{
     GameTransition, TurnSide,
 };
 use crate::persistence::{
-    GameRecord, PersistBatch, PersistedHeader, Persistence, ResponseRecord, ResponseStatus,
+    GameRecord, MoveKind, PersistBatch, PersistedHeader, Persistence, ResponseRecord,
+    ResponseStatus,
 };
 use crate::state_reader::GameStateReader;
 use crate::strategy::{
@@ -153,7 +154,7 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// previous O(N)-per-call `list_responses` scan with a
     /// constant-time lookup, defending against unbounded growth
     /// over the daemon's lifetime.
-    submitted_pivots: std::collections::HashSet<(u128, Option<u64>)>,
+    submitted_pivots: std::collections::HashSet<(u128, MoveKind, Option<u64>)>,
     /// Per-iteration ROLLBACK SET — pivots inserted into
     /// `submitted_pivots` during the current iteration.  If
     /// `commit_batch` fails, these entries are rolled back so
@@ -163,7 +164,7 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// pass-4-round-3 fix: previously a `commit_batch` failure
     /// cleared `pending_broadcasts` but left `submitted_pivots`
     /// populated, making the move un-retry-able in this process.
-    iteration_pivot_inserts: Vec<(u128, Option<u64>)>,
+    iteration_pivot_inserts: Vec<(u128, MoveKind, Option<u64>)>,
     /// Per-iteration queue of prepared transactions awaiting
     /// L1 broadcast.  `maybe_play_move` enqueues; `run_iteration`
     /// drains AFTER `commit_batch` succeeds so the persistence
@@ -254,10 +255,11 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 e.to_string(),
             ))
         })?;
-        let submitted_pivots: std::collections::HashSet<(u128, Option<u64>)> = response_records
-            .iter()
-            .map(|r| (r.game_id, r.pivot_idx))
-            .collect();
+        let submitted_pivots: std::collections::HashSet<(u128, MoveKind, Option<u64>)> =
+            response_records
+                .iter()
+                .map(|r| (r.game_id, r.move_kind, r.pivot_idx))
+                .collect();
         info!(
             cursor = ?cursor,
             game_count = games.len(),
@@ -1417,7 +1419,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // this pivot?  The pivot for `Submit` is the
         // midpoint_idx; for `Respond` the pending_midpoint.idx.
         let pivot_idx = pivot_for_move(&rec.state, mv);
-        if self.has_submitted_for_pivot(rec.game_id, pivot_idx) {
+        let move_kind = move_kind_of(mv);
+        if self.has_submitted_for_pivot(rec.game_id, move_kind, pivot_idx) {
             debug!(
                 game_id = %rec.game_id,
                 pivot_idx = ?pivot_idx,
@@ -1455,6 +1458,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             submitted_at_block: block_number,
             depth: rec.state.depth,
             pivot_idx,
+            move_kind,
         };
         batch.upsert_response(resp);
         // Insert into the in-memory pivot-dedup cache so a
@@ -1465,7 +1469,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // also record the insert in `iteration_pivot_inserts`
         // so we can roll it back if `commit_batch` fails (would
         // otherwise permanently lock the pivot in this process).
-        let pivot_key = (rec.game_id, pivot_idx);
+        let pivot_key = (rec.game_id, move_kind, pivot_idx);
         if self.submitted_pivots.insert(pivot_key) {
             self.iteration_pivot_inserts.push(pivot_key);
         }
@@ -1492,13 +1496,29 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         Ok(Some(true))
     }
 
-    /// Check whether we've already submitted a response for the
-    /// given (`game_id`, `pivot_idx`) pair.  Used by the
-    /// deduplication discipline.  Constant-time lookup against
-    /// the in-memory cache, populated at startup from persisted
-    /// response records.
-    fn has_submitted_for_pivot(&self, game_id: u128, pivot_idx: Option<u64>) -> bool {
-        self.submitted_pivots.contains(&(game_id, pivot_idx))
+    /// Check whether we've already submitted this KIND of move for
+    /// the given (`game_id`, `pivot_idx`) pair.
+    ///
+    /// The move kind is part of the key, and that is the whole point.
+    /// Keyed on `(game_id, pivot_idx)` alone, a `Respond` and a
+    /// `TerminateOnSingleStep` collide: a response keys on the pending
+    /// midpoint `m`, and disagreeing with the lower half narrows the
+    /// range so `range.high.idx` becomes `m` — which is what the
+    /// terminal move keys on.  The honest party's terminate was
+    /// therefore skipped as a duplicate of its own preceding response,
+    /// and it lost the game by timeout having played correctly
+    /// throughout.
+    ///
+    /// Distinguishing the kinds keeps what the de-dup is FOR — never
+    /// broadcast the same move twice — without conflating two
+    /// different moves that happen to share an index.
+    fn has_submitted_for_pivot(
+        &self,
+        game_id: u128,
+        move_kind: MoveKind,
+        pivot_idx: Option<u64>,
+    ) -> bool {
+        self.submitted_pivots.contains(&(game_id, move_kind, pivot_idx))
     }
 
     /// Workstream SVC.5 helper: build the L1 calldata bytes for
@@ -1669,6 +1689,18 @@ fn interruptible_sleep(duration: Duration, stop: &AtomicBool) {
 ///   * For `TerminateOnSingleStep`: `Some(range.high.idx)` —
 ///     the single-step's high index.
 ///   * For `NoMove`: `None`.
+fn move_kind_of(mv: HonestMove) -> MoveKind {
+    match mv {
+        // `NoMove` never reaches the de-dup (it returns earlier), but
+        // the match is total so a new variant is a compile error here
+        // rather than a silent `Unknown` that aliases old records.
+        HonestMove::NoMove => MoveKind::Unknown,
+        HonestMove::Submit(_) => MoveKind::Submit,
+        HonestMove::RespondAgree | HonestMove::RespondDisagree => MoveKind::Respond,
+        HonestMove::TerminateOnSingleStep { .. } => MoveKind::Terminate,
+    }
+}
+
 fn pivot_for_move(state: &GameState, mv: HonestMove) -> Option<u64> {
     match mv {
         HonestMove::NoMove => None,
@@ -1714,7 +1746,7 @@ mod tests {
     use crate::events::{GameEvent, GameEventTopic};
     use crate::game::{Claim, DisputedRange, GameState, GameStatus, StateCommit, TurnSide};
     use crate::persistence::{
-        GameRecord, PersistBatch, Persistence, ResponseRecord, ResponseStatus,
+        GameRecord, MoveKind, PersistBatch, Persistence, ResponseRecord, ResponseStatus,
     };
     use crate::strategy::{HonestMove, MemoryTruthOracle};
     use crate::submitter::mock::MockSubmitter;
@@ -1989,6 +2021,7 @@ mod tests {
                 submitted_at_block: 100,
                 depth: 0,
                 pivot_idx: Some(32),
+                move_kind: MoveKind::Respond,
             };
             persistence.store_response(&resp).unwrap();
         }
@@ -2006,10 +2039,27 @@ mod tests {
         };
         let cfg = ObserverConfig::new(watcher_cfg, [0u8; 32]);
         let obs = Observer::new(cfg, source, submitter, oracle, persistence).unwrap();
-        // Cache populated from persistence: hit on (7, Some(32)).
-        assert!(obs.has_submitted_for_pivot(7, Some(32)));
-        assert!(!obs.has_submitted_for_pivot(7, Some(64)));
-        assert!(!obs.has_submitted_for_pivot(99, Some(32)));
+        // Cache populated from persistence: hit on
+        // (7, Respond, Some(32)).
+        assert!(obs.has_submitted_for_pivot(7, MoveKind::Respond, Some(32)));
+        assert!(!obs.has_submitted_for_pivot(7, MoveKind::Respond, Some(64)));
+        assert!(!obs.has_submitted_for_pivot(99, MoveKind::Respond, Some(32)));
+        // THE REGRESSION.  A terminate at the SAME index is a
+        // different move and must not be swallowed as a duplicate of
+        // the response above.  Keyed on `(game_id, pivot_idx)` alone
+        // this asserted `true`, and the honest party's terminal move
+        // was skipped — losing a game it had played correctly, because
+        // disagreeing with the lower half makes `range.high.idx` equal
+        // the midpoint the response already keyed on.
+        assert!(
+            !obs.has_submitted_for_pivot(7, MoveKind::Terminate, Some(32)),
+            "a terminate must not dedup against a response at the same index"
+        );
+        // ...and the converse, so the widening is not one-sided.
+        assert!(
+            !obs.has_submitted_for_pivot(7, MoveKind::Submit, Some(32)),
+            "a midpoint submission must not dedup against a response"
+        );
     }
 
     /// In-memory dedup cache is updated atomically with each
@@ -2018,12 +2068,12 @@ mod tests {
     #[test]
     fn pivot_dedup_in_memory_cache_blocks_resubmission() {
         let (mut obs, _dir) = fresh_observer();
-        assert!(!obs.has_submitted_for_pivot(42, Some(16)));
+        assert!(!obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(16)));
         // Insert directly into the in-memory cache (mirrors
         // what `maybe_play_move` does after a successful submit).
-        obs.submitted_pivots.insert((42, Some(16)));
-        assert!(obs.has_submitted_for_pivot(42, Some(16)));
-        assert!(!obs.has_submitted_for_pivot(42, Some(32)));
+        obs.submitted_pivots.insert((42, MoveKind::Respond, Some(16)));
+        assert!(obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(16)));
+        assert!(!obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(32)));
     }
 
     /// A [`crate::state_reader::GameStateReader`] that answers from a
@@ -2438,6 +2488,7 @@ mod tests {
             submitted_at_block: 100,
             depth: 0,
             pivot_idx: Some(16),
+            move_kind: MoveKind::Respond,
         };
         obs.persistence().store_response(&intent_rec).unwrap();
         // Run an iteration; recover_intent_records should fire
@@ -2473,6 +2524,7 @@ mod tests {
             submitted_at_block: 100,
             depth: 0,
             pivot_idx: Some(8),
+            move_kind: MoveKind::Respond,
         };
         obs.persistence().store_response(&intent_rec).unwrap();
         // Configure the mock submitter to reject the broadcast.
@@ -2512,8 +2564,8 @@ mod tests {
     fn iteration_pivot_rollback_clears_cache_on_failed_iteration() {
         let (mut obs, _dir) = fresh_observer();
         // Pre-populate the iteration rollback set + cache.
-        obs.submitted_pivots.insert((42, Some(7)));
-        obs.iteration_pivot_inserts.push((42, Some(7)));
+        obs.submitted_pivots.insert((42, MoveKind::Respond, Some(7)));
+        obs.iteration_pivot_inserts.push((42, MoveKind::Respond, Some(7)));
         // Simulate the run_iteration outer wrapper's error-path
         // rollback by invoking the same logic directly.
         let pivots = std::mem::take(&mut obs.iteration_pivot_inserts);
@@ -2522,7 +2574,7 @@ mod tests {
         }
         // Cache must be empty post-rollback.
         assert!(
-            !obs.submitted_pivots.contains(&(42, Some(7))),
+            !obs.submitted_pivots.contains(&(42, MoveKind::Respond, Some(7))),
             "pivot should be rolled back after failed iteration",
         );
         // The rollback set is also drained.
