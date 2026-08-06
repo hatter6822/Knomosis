@@ -37,7 +37,16 @@ Workstreams A – G complete (Lean side); Workstream LP (actor-scoped
 policies) complete; Workstream LX milestones M1 / M2 / M3 complete;
 Workstream H (fault-proof migration) complete (Lean + Rust RH-G),
 including the terminal step's adjudication and the deduplicating
-pre-root multiproof it folds.
+pre-root multiproof it folds.  Workstream SB (batched state-root
+submission + the user-facing L2 AMM) complete: one L1 record per
+batch `[prevEnd, end)` with a per-batch actions-root SMT, the game
+anchored inside the batch, the terminal action authenticated by
+inclusion proof (~239 gas of amortised L1 per action at B=1000);
+`Laws.reserveSwap` (Action 25, Events 23/24) priced in-kernel by
+`AmmMath` over the reserve actor's live balances, funded by the
+deposit fee-split's seed leg under the L2-primary pool topology;
+plus the R1/R3/R4 revert recovery and the R6 game-to-bridge revert
+forwarding, fixing two pre-existing defects.
 Phase 7 (Advanced Capabilities) is the next scoped work.  See
 `docs/GENESIS_PLAN.md` §12 / §15B / §15D and the relevant plan
 documents under `docs/planning/` for per-phase deliverables.
@@ -254,7 +263,7 @@ knomosis/
 │   │                             deposit, withdraw, replaceKey, registerIdentity,
 │   │                             depositWithFee, topUpActionBudget,
 │   │                             topUpActionBudgetFor, claimBudgetRefund,
-│   │                             ammSwap, reclaimAmmReserves, dispute
+│   │                             ammSwap, reclaimAmmReserves, reserveSwap, dispute
 │   │                             pipeline, local-policy laws) plus
 │   │                             AmountBound (the shared credit ceiling)
 │   ├── Authority/             -- Crypto, Action, Identity, Nonce, LocalPolicy,
@@ -773,6 +782,7 @@ work units.  Status:
 | LX-M1–M3 | Lex language (3 milestones) | Complete |
 | H | Fault-proof migration | **Complete.**  The terminal step authenticates its action against the log-entry chain AND adjudicates the state transition: `terminateOnSingleStep` calls `executeStepToRootMulti`, which returns a state ROOT computed by folding the step's derived cell writes into the pre-root from a deduplicating pre-root multiproof.  Both the bespoke `stepVMHash` recipe and the chained fold that replaced it are retired.  See the Workstream H section below |
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
+| SB | Batched submission + user-facing L2 AMM | **Complete** (SB.0–SB.12, v0.14.0).  One L1 record per batch `[prevEnd, end)`: structural prev-hash (R5), one chain-link fold per batch over the batch's actions-root SMT (R8; leaf binds the 65-byte signature, R7), revert recovery (R1/R3/R4), game anchored at the batch start (R2), terminal action authenticated by inclusion proof, settlement forwarded game→V2→bridge (R6).  Measured ~239 gas of amortised L1 per action at B=1000 (`gas_pool_runbook.md` §9.5).  `Laws.reserveSwap` (Action 25; Events 23/24) is the user-signed L2 swap priced in-kernel over the reserve actor's live balances, `user = signer` bound at the AuthorityPolicy; the deposit fee-split's seed leg is credited on L2 (`depositWithFee` gained the appended `seedAmount`; the L1 `ammReserve*` books hold pre-existing liquidity only — L2-primary topology); `knomosis-l1-ingest` materialises deposits opt-in (`--materialise-deposits`, content-derived deposit ids).  Recorded follow-ups: on-chain signature verification at terminate; the Lean game-model actions-root anchor (audit-22 MAJOR, narrowed by `actionProof_binds_action`); the L1→L2 swap-mirror ingest is a deliberate non-goal.  See GENESIS_PLAN §15E.12 + amendment 1.33 |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
 | FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B + C complete; D documented; GP.8.5 v2 receipt-verified claim **built** — both legs (Lean gate + theorems, Rust builders/verifiers) — and OQ-GP-8b closed (BOLD-leg ETH→BOLD oracle + independent-observer receipt-fetch), but **not yet wired into a production admission path**: `receiptGatedAdmissibleUnified` has no non-test caller and `ConsumedReceipts` has no home in `BridgeState`, so the `min(cap, L1 wei cost)` bound is proved and available, not enforced.  Wiring it is workstream F1 (`docs/audits/19-findings-and-followups.md`) |
@@ -780,7 +790,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only + submit + events tracks complete; G4 hardening complete (G4.1–G4.7).  **The gateway owns its WHOLE HTTP stack** — the transport-neutral `http::conn` handler over the workspace rustls 0.23, **no `tiny_http`**: one thread per connection on both the plaintext and native-TLS listeners, each with a socket-owned timeout + a per-request read deadline; this closed OQ-GW-14 (concurrent-SSE ceiling = `--sse-max-streams`) and OQ-GW-15 (the `--sse-write-timeout-ms` write deadline now honoured on both transports).  The §9.2 surface is complete incl. `--mtls-crl` (mTLS revocation), `--cors-origin` (+ OPTIONS preflight), `--log-format`, `--dev` (in-process mock upstreams), and `--upstream-subscriptions`.  G3.2c cross-stack pin shipped: the Lean `Encodable Event` (`Encoding/Event.lean`) is the byte authority, pinned byte-for-byte by `knomosis-indexer` and lifted to the gateway §6.2 envelope by `knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=22).  Only G2.1c submit pipelining deferred — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only + submit + events tracks complete; G4 hardening complete (G4.1–G4.7).  **The gateway owns its WHOLE HTTP stack** — the transport-neutral `http::conn` handler over the workspace rustls 0.23, **no `tiny_http`**: one thread per connection on both the plaintext and native-TLS listeners, each with a socket-owned timeout + a per-request read deadline; this closed OQ-GW-14 (concurrent-SSE ceiling = `--sse-max-streams`) and OQ-GW-15 (the `--sse-write-timeout-ms` write deadline now honoured on both transports).  The §9.2 surface is complete incl. `--mtls-crl` (mTLS revocation), `--cors-origin` (+ OPTIONS preflight), `--log-format`, `--dev` (in-process mock upstreams), and `--upstream-subscriptions`.  G3.2c cross-stack pin shipped: the Lean `Encodable Event` (`Encoding/Event.lean`) is the byte authority, pinned byte-for-byte by `knomosis-indexer` and lifted to the gateway §6.2 envelope by `knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=24).  Only G2.1c submit pipelining deferred — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -831,7 +841,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.13.0`) — the single
+the `lakefile.lean` `version` field (currently `0.14.0`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the
@@ -845,11 +855,11 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 234 | 167 | `lake test` |
-| Rust | ~2 378 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~929 passed | 65 forge suites | `cd solidity && forge test` |
+| Lean | ~3 288 | 171 | `lake test` |
+| Rust | ~2 433 | across 12 crates | `cargo test --workspace` |
+| Solidity | ~968 passed | 71 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **929 passed / 0 failed / 0 skipped** — the
+`forge test` runs **968 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -870,8 +880,8 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 929 / 0 / 0.  It is not redundant: a bare `lake test`
-runs on the FALLBACK hash, where 25 Lean cross-stack assertions report
+reports the same 968 / 0 / 0.  It is not redundant: a bare `lake test`
+runs on the FALLBACK hash, where 10 Lean cross-stack assertions report
 `SKIPPED` rather than comparing anything.  Under the keccak lane that
 count is **zero** — every corpus is checked against real keccak256 on
 both sides.
@@ -1144,7 +1154,7 @@ subscriber, `logging.rs`), `--dev` (in-process mock upstreams, `dev.rs`), and
 ring).  The G3.2c cross-stack pin is **shipped**: the Lean `Encodable Event`
 (`Encoding/Event.lean`) is the byte authority, pinned byte-for-byte by
 `knomosis-indexer` and lifted to the gateway §6.2 envelope by
-`knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=22).
+`knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=24).
 The only remaining gateway item is the G2.1c submit pipelining (modest
 optimisation).
 Design invariants: the gateway owns its whole HTTP stack (thread per
@@ -1175,7 +1185,7 @@ Plan: `docs/planning/rust_host_runtime_plan.md`
 | RH-A.2 | `knomosis-hash-keccak256` | Complete | Keccak-256 cdylib; 51-record .cxsf corpus |
 | RH-B | `knomosis-l1-ingest` | Complete | L1 event watcher; hand-rolled ABI decoder; re-org tolerance; raw-TCP submitter with opt-in signer hints |
 | RH-C | `knomosis-host` | Complete | TCP/TLS/Unix listener; `MockKernel` + `CommandKernel`; bounded queue; two-tier DRR fair scheduler (default-OFF `--scheduler drr`); `--persistent-connections` pipelined mode |
-| RH-D | `knomosis-event-subscribe` | Complete | Log-tail reader; `SubprocessExtractor` → `knomosis extract-events`; bounded-lag subscriber eviction; event-type registry (tags 0..22) |
+| RH-D | `knomosis-event-subscribe` | Complete | Log-tail reader; `SubprocessExtractor` → `knomosis extract-events`; bounded-lag subscriber eviction; event-type registry (tags 0..24) |
 | RH-E.0 | `knomosis-storage` | Complete | `Storage` trait; `SqliteStorage` (WAL, bundled rusqlite); migration framework |
 | RH-E.1 | `knomosis-indexer` | Complete | Per-(actor, resource) balance view; budget/pool views; two-pass dispatch; epoch resets |
 | RH-F | `knomosis-bench` | Complete | Deterministic fixture; concurrent driver; histogram; JSON report + regression check; ~7.5k ops/sec observed |

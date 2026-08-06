@@ -216,6 +216,8 @@ real BOLD token, use `make deploy-local` (a live anvil node) or
 | `KNOMOSIS_SLASH_BPS` | 5000 | sequencer-stake slash ratio |
 | `KNOMOSIS_STATE_ROOT_BOND` / `_STATE_ROOT_DISPUTE_WINDOW` / `_WITHDRAWAL_WINDOW_BLOCKS` | 1e / 216 000 / 216 000 | state-root submission |
 | `KNOMOSIS_MIN_SUBMISSION_INTERVAL` / `_MAX_OUTSTANDING_ROOTS` | 100 / 100 | submission cadence + cap |
+| `KNOMOSIS_GENESIS_STATE_COMMIT` | **required** (no default on a real deploy) | the registry's genesis anchor (SB ruling R5): `commitExtendedState` of the ratified L2 genesis — `knomosis export-batch` emits it; a mismatch makes the first honest batch indefensible |
+| `KNOMOSIS_MAX_ACTIONS_PER_BATCH` | 65 536 | operational ceiling on one batch's span (SB ruling R10; see `deployment_parameters.md` §3) |
 | `KNOMOSIS_BISECTION_TIMEOUT_BLOCKS` / `_MIN_CHALLENGE_BOND` / `_MIN_BISECTION_STEP_INTERVAL` | 21 600 / 0.05e / 5 | fault-proof game (`bond > 0`, `timeout > stepInterval`) |
 | `KNOMOSIS_MANIFEST_OUT` | `deployments/<network>.json` | manifest output path |
 
@@ -245,7 +247,7 @@ in the repo consumed contract addresses from a file before):
     "KnomosisDisputeVerifier": "0x…",
     "KnomosisSequencerStake": "0x…",
     "KnomosisAmmDisasterRecoveryMultisig": "0x…",
-    "KnomosisStepVM": "0x…",
+    "KnomosisStepVMRoot": "0x…",
     "KnomosisStateRootSubmission": "0x…",
     "KnomosisDisputeVerifierV2": "0x…",
     "KnomosisFaultProofGame": "0x…"

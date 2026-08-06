@@ -142,6 +142,38 @@ real L1 gas spent (§2.9 of the GP.8 plan).
   MAX_FEE_BPS`), so the *deployer* cannot extract via a high default and
   a malicious *user* paying a high fee only gifts the sequencer.
 
+### 5.1 Two-venue arbitrage (Workstream SB)
+
+The L2-primary topology runs **two constant-product venues with
+independent prices**: the L1 embedded AMM over pre-existing L1-local
+reserves (deposits no longer grow them) and the user-facing L2
+`reserveSwap` over the reserve actor's live balances, funded by the
+deposit fee-split's seed leg.  Economic properties:
+
+- **No protocol-level price oracle, no equalisation mechanism.**
+  Divergence between the two spot prices is closed by ARBITRAGE, and
+  the arbitrage is safe for the protocol on both legs: each venue's
+  k-non-decrease is enforced independently (Solidity invariant suite
+  on L1; `reserveSwap_k_nondecreasing` on L2), so an arbitrageur
+  extracts only the divergence, never reserves.
+- **The cost asymmetry directs flow to L2.**  An L2 swap carries
+  ≈239 gas of amortised L1 (batched submission, runbook §9.5) versus
+  ~66k+ gas for an L1 `ammSwap`, so price discovery migrates to the
+  L2 venue and the L1 pool degrades gracefully into a
+  gas-denominated fallback.  This is the intended equilibrium, not a
+  failure mode.
+- **The persistent-gap bound is a monitoring signal.**  The
+  no-arbitrage band is one bridge round trip (deposit + withdrawal)
+  plus both 30-bps swap fees; a persistent gap wider than that means
+  arbitrage is blocked (deposits halted, circuit closed) and should
+  alert — see runbook §9.6.
+- **The swap cannot be delegated or spoofed.**  The
+  `AuthorityPolicy` binds `user = signer` for tag 25
+  (`reserveSwapUserBinding`), and both deny lists keep the
+  pool/reserve keys unable to SIGN a swap — a compromised
+  reserve-actor key cannot trade against itself to drain via
+  price manipulation.
+
 ## 6. Cross-cutting economic risks & recommendations
 
 | # | Risk | Status / recommendation |

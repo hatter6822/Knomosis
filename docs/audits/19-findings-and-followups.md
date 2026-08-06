@@ -1206,6 +1206,18 @@ bypasses `ingest` entirely.
 **Impact:** Documented but worth knowing; reviewers
 looking at the `ingest` function might be surprised.
 
+**SB.9 update — the operational gap is closed.**  The Lean
+`ingest` observation stands (it remains the Lean-mirror default),
+but the production pipeline now materialises deposits: the Rust
+translator's opt-in `preview_ingest_materialising`
+(`knomosis-l1-ingest`, `--materialise-deposits`) constructs the
+bridge-signed `Deposit` / `DepositWithFee` actions from the two L1
+deposit events, with a content-derived deposit id (the receipt
+hash's first 8 bytes, so re-orgs/restarts re-derive the same id and
+the kernel's `consumed`-set conjuncts refuse replays), a
+reject-never-truncate amount range-check, and fresh-id assignment
+for unregistered depositors.  See `docs/abi.md` §16.7.
+
 ### m-16 — §7.6.4 / §7.6.5 chain-level accounting theorems deferred to runtime cross-stack verification
 
 **Where:** `LegalKernel/Bridge/Accounting.lean` (Bridge
@@ -1805,4 +1817,54 @@ the machinery that carried it has changed.  The current statements are:
 See `docs/planning/state_root_merkleisation_plan.md` M9e for the
 retirement's scope and the two declarations reclassified against the
 original list.
+
+## Close-out: Workstream SB (batched submission + user L2 AMM)
+
+Workstream SB rebuilt the submission pipeline around batches (one L1
+record per batch `[prevEnd, end)`, a per-batch actions-root SMT, the
+bisection game anchored inside one batch, the terminal step
+authenticated by inclusion proof) and landed the user-signed L2 swap
+(`Laws.reserveSwap`, Action 25) funded by the deposit fee-split's
+seed leg.  Three audit-relevant records:
+
+**Two pre-existing defects were found during the workstream's
+research and FIXED in scope**, each with a regression test that
+fails on the old code (`solidity/test/CrossCheck/BatchGame.t.sol`):
+
+  1. **The revert path was a dead end.**  Reverted indices were
+     permanently unresubmittable (the chain extended straight
+     through reverted entries, and the contract docstring described
+     a recovery that was impossible).  Closed by rulings R1/R3/R4:
+     the `lastRevertAtBlock` stamp makes post-revert resubmissions
+     readable as canonical, an overwrite of a reverted key requires
+     its bond out, and `reclaimRevertedBond` returns a reverted
+     undisputed record's bond.
+  2. **A challenger win never reached the bridge.**  The registry's
+     revert marking had zero on-chain readers — the runbook's "user
+     funds protected" claim was untrue of the shipped wiring.
+     Closed by ruling R6: game → `KnomosisDisputeVerifierV2.
+     finaliseFromFaultProof` → `bridge.revertToPriorRoot` (the
+     verifier is the bridge's second immutable
+     `faultProofRollbackAuthority`), end-to-end-tested on the real
+     contract quadruple.
+
+**Recorded follow-ups (not built in SB):**
+
+  * **On-chain signature verification at terminate.**  The batch
+    leaf BINDS the 65-byte signature
+    (`hash(kind ‖ uint64BE signer ‖ fields ‖ sig)`, ruling R7), so
+    the terminal step authenticates the signature bytes by
+    inclusion; VERIFYING the signature on-chain needs an L1
+    actorId→key resolution surface that does not exist yet.
+  * **The Lean game-model chain binding** (the standing audit-22
+    MAJOR): `actionProof_binds_action`
+    (`FaultProof/ActionsRoot.lean`) gives the authentication
+    primitive a proven Lean counterpart, but `GameState` still
+    carries no actions-root anchor and the Settlement theorems are
+    stated over the unanchored model.  Narrowed, not closed — see
+    the annotation in `22-full-codebase-sweep.md`.
+  * **The L1→L2 swap-mirror ingest is deliberately unbuilt** under
+    the L2-primary pool topology (deposits stopped accruing the L1
+    `ammReserve*` books; the two AMM venues price independently and
+    arbitrage closes divergence — `gas_pool_runbook.md` §9.6).
 

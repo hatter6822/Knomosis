@@ -219,10 +219,23 @@ argument above and is tracked as future work.
 
 ## 6. Why witness-state cell proofs (vs Merkle-path SMT)?
 
+**Status: the SMT form SHIPPED and the witness-state form is
+retired.**  Workstreams SC.1–SC.3 landed the sparse-Merkle-tree
+cell proofs (`FaultProof/Smt.lean`, `SmtCellVerifier.sol`),
+`commitExtendedState` became the SMT cell root, the wire carries
+`proofData` (bitmask ‖ siblings) with no witness state, and the
+`witnessCommit` word was deleted from all three stacks (it was a
+claim only a holder of the whole `ExtendedState` could check and a
+responder could set freely).  The cross-stack soundness gap this
+section describes below is therefore CLOSED — the L1 verifies each
+opening against the running root instead of trusting a `cellValue`
+field.  The section is kept as the design rationale for why the
+witness-state form came first.
+
 The plan §12.2 specifies SMT-based cell commitments for L1
-gas optimisation.  The first-pass implementation uses
-**witness-state cell proofs**: each `CellProof` carries the
-full witness `ExtendedState`, and the Lean verifier re-hashes
+gas optimisation.  The first-pass implementation used
+**witness-state cell proofs**: each `CellProof` carried the
+full witness `ExtendedState`, and the Lean verifier re-hashed
 the witness to compare against the public commit.
 
 **Why witness-state first?**
@@ -298,24 +311,69 @@ for the full deployment checklist.
 
 ## 8. Future work
 
-Items not in Workstream H's scope, tracked separately:
+Items originally outside Workstream H's scope.  Two of the three
+have since shipped:
 
-  * **Off-chain Rust observer crate (H.10.5)** — the Lean
-    reference specification (`LegalKernel.FaultProof.Observer`)
-    ships in this workstream; the Rust port is tracked as a
-    runtime-adaptor follow-up, mirroring how the Phase-5 Rust
-    host (WUs 5.4 / 5.7 / 5.8 / 5.11) was tracked separately
-    from the Lean specification.
-  * **SMT-form cell proofs** — production gas optimisation.
-    The current witness-state cell-proof form is mathematically
-    sound (theorem #221 / #222) and structurally simpler; the
-    SMT form is a deployment-layer cost optimisation and is
-    structurally compatible with the existing soundness
-    arguments.  `StepVMMerkle.sol` is the bridge skeleton.
-  * **Cross-stack fixture corpus expansion** — F.1.8 (~344
-    fixtures), F.1.9 (~38 fixtures), F.1.10 (~8 scenarios)
-    ship with seed corpora; deployment-time runs typically
-    extend these with deployment-specific traffic patterns.
+  * **Off-chain Rust observer crate (H.10.5)** — **shipped**
+    (Workstream RH-G, `runtime/knomosis-faultproof-observer`:
+    game state machine, honest strategy, L1 watcher, EIP-1559
+    submitter, persistence, chaos suite, 50-trace cross-stack
+    corpus; batch-aware since Workstream SB).
+  * **SMT-form cell proofs** — **shipped** (SC.1–SC.3 + the
+    deduplicating pre-root multiproof; see §6's status note).
+  * **Cross-stack fixture corpus expansion** — the seed corpora
+    grew into the 278-entry step-VM corpus + the multiproof /
+    actions-root / batch-chain corpora; deployment-time runs
+    typically extend these with deployment-specific traffic
+    patterns.
+
+---
+
+## 9. Batched submission (Workstream SB): the design rationale
+
+The original registry accepted one record per L2 action — one bond,
+one chain-link fold, ~239k gas each — which priced an L2 action at
+~$21.5 of L1 gas and pinned throughput to the submission cadence.  A
+rollup's economics are division; the batching cutover makes the
+divisor real:
+
+  * **One record per batch** `[prevEnd, end)`, keyed by `end`, with
+    the previous chain hash read STRUCTURALLY from the parent record
+    (ruling R5) — the caller cannot mis-link the chain, and the
+    genesis anchor is written by the constructor.
+  * **The chain folds one `actionsRoot` per batch** (R8) — the
+    cell-SMT family reused verbatim (soundness and completeness were
+    already proved; the on-chain verifier already existed), with the
+    leaf binding the action's 65-byte signature (R7) so the terminal
+    step authenticates what was actually signed, not just what was
+    claimed.
+  * **The game bisects INSIDE the batch** (R2): `initiateChallenge`
+    anchors at the batch start, and the already-proved
+    range-narrowing theorems cover the interior — the intermediate
+    per-action roots are never submitted to L1, which is the whole
+    point.
+  * **Reverts are recoverable** (R1/R3/R4): the retired design's
+    reverted range was a dead end.  A revert stamps
+    `lastRevertAtBlock` and lowers `canonicalTip` to the batch
+    start; a corrected batch resubmits at the same key once the
+    bond is out and reads canonical.
+  * **A challenger win reaches the bridge** (R6): the game forwards
+    settlements to `KnomosisDisputeVerifierV2`, which calls
+    `bridge.revertToPriorRoot` as the bridge's
+    `faultProofRollbackAuthority` — closing the shipped wiring's
+    gap where the registry's revert marking had zero on-chain
+    readers.
+
+Measured (`gas_pool_runbook.md` §9.5): 238 963 gas per batch
+submission ⇒ ≈239 gas (~2.2¢) of amortised L1 per action at a
+batch of 1 000; the dispute path (1 019 177-gas terminate incl. the
+inclusion proof) is paid only when a batch is disputed, by the
+party the bond economics already price.
+
+Deferred by design: on-chain signature VERIFICATION at terminate
+(the leaf binds the bytes; verification needs an L1 actorId→key
+surface), and the Lean game model's actions-root anchor (the
+standing audit-22 MAJOR, narrowed by `actionProof_binds_action`).
 
 ---
 

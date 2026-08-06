@@ -268,6 +268,7 @@ Action.topUpActionBudgetFor := 21 -- Workstream GP (delegated top-up; GP.3.4)
 Action.claimBudgetRefund    := 22 -- Workstream GP (budget refund; GP.9.1)
 Action.ammSwap              := 23 -- Workstream GP (constant-product swap; GP.11.4)
 Action.reclaimAmmReserves   := 24 -- Workstream GP (post-disable sweep; GP.11.10)
+Action.reserveSwap          := 25 -- Workstream SB (user-signed L2 AMM swap)
 ```
 
 Each Action is encoded as `<constructor uint> :: <fields>`.  For
@@ -308,11 +309,11 @@ Action.registerIdentity actor pk  →
 
 Action.deposit r recipient amount depositId  →
   CBE-uint(13) ++ CBE-uint(r) ++ CBE-uint(recipient) ++
-  CBE-uint(amount) ++ CBE-uint(depositId)
+  CBE-amount(amount) ++ CBE-uint(depositId)
 
 Action.withdraw r sender amount recipientL1  →
   CBE-uint(14) ++ CBE-uint(r) ++ CBE-uint(sender) ++
-  CBE-uint(amount) ++ CBE-bstr(recipientL1)
+  CBE-amount(amount) ++ CBE-bstr(recipientL1)
 
 Action.declareLocalPolicy policy  →
   CBE-uint(15) ++ CBE-encode(policy : LocalPolicy)
@@ -328,31 +329,48 @@ Action.faultProofResolution bindingHash gameId winner revertFromIdx  →
   CBE-uint(18) ++ CBE-bstr(bindingHash) ++ CBE-uint(gameId) ++
   CBE-uint(winner) ++ CBE-uint(revertFromIdx)
 
-Action.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId  →
+Action.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount  →
   CBE-uint(19) ++ CBE-uint(r) ++ CBE-uint(recipient) ++
-  CBE-uint(poolActor) ++ CBE-uint(userAmount) ++
-  CBE-uint(poolAmount) ++ CBE-uint(budgetGrant) ++ CBE-uint(depositId)
+  CBE-uint(poolActor) ++ CBE-amount(userAmount) ++
+  CBE-amount(poolAmount) ++ CBE-uint(budgetGrant) ++
+  CBE-uint(depositId) ++ CBE-amount(seedAmount)
 
 Action.topUpActionBudget gasResource gasAmount budgetIncrement poolActor  →
-  CBE-uint(20) ++ CBE-uint(gasResource) ++ CBE-uint(gasAmount) ++
+  CBE-uint(20) ++ CBE-uint(gasResource) ++ CBE-amount(gasAmount) ++
   CBE-uint(budgetIncrement) ++ CBE-uint(poolActor)
 
 Action.topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor  →
   CBE-uint(21) ++ CBE-uint(recipient) ++ CBE-uint(gasResource) ++
-  CBE-uint(gasAmount) ++ CBE-uint(budgetIncrement) ++ CBE-uint(poolActor)
+  CBE-amount(gasAmount) ++ CBE-uint(budgetIncrement) ++ CBE-uint(poolActor)
 
 Action.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor  →
   CBE-uint(22) ++ CBE-uint(gasResource) ++ CBE-uint(budgetUnits) ++
-  CBE-uint(weiPerBudgetUnit) ++ CBE-uint(poolActor)
+  CBE-amount(weiPerBudgetUnit) ++ CBE-uint(poolActor)
 
 Action.ammSwap fromResource toResource amountIn amountOut ammReserveActor  →
   CBE-uint(23) ++ CBE-uint(fromResource) ++ CBE-uint(toResource) ++
-  CBE-uint(amountIn) ++ CBE-uint(amountOut) ++ CBE-uint(ammReserveActor)
+  CBE-amount(amountIn) ++ CBE-amount(amountOut) ++ CBE-uint(ammReserveActor)
 
 Action.reclaimAmmReserves r amount reserveActor poolActor  →
   CBE-uint(24) ++ CBE-uint(r) ++ CBE-amount(amount) ++
   CBE-uint(reserveActor) ++ CBE-uint(poolActor)
+
+Action.reserveSwap fromResource toResource user amountIn minAmountOut reserveActor  →
+  CBE-uint(25) ++ CBE-uint(fromResource) ++ CBE-uint(toResource) ++
+  CBE-uint(user) ++ CBE-amount(amountIn) ++ CBE-amount(minAmountOut) ++
+  CBE-uint(reserveActor)
 ```
+
+`Action.depositWithFee`'s `seedAmount` (Workstream SB) is the
+APPENDED bridge-attested slice of the pool leg the L2 law credits to
+the AMM reserve actor (the deposit fee-split's seed leg); every
+pre-existing field keeps its offset.  `Action.reserveSwap` (25,
+Workstream SB) is the USER-signed L2 swap: the kernel law computes
+`amountOut = AmmMath.getAmountOut amountIn rFrom rTo swapFeeBps`
+over the reserve actor's live balances and requires
+`amountOut ≥ max 1 minAmountOut`; the deployment's `AuthorityPolicy`
+binds `user = signer` (`reserveSwapUserBinding`), and both deny
+lists keep the pool/reserve keys unable to SIGN tag 25.
 
 The `Action.withdraw` `recipientL1` field is encoded as a
 **lossless 20-byte CBE bytestring** (the big-endian byte form of
@@ -474,6 +492,8 @@ Event.delegatedActionBudgetTopUp := 19 -- GP.3.4 (delegated top-up)
 Event.budgetConsumed             := 20 -- GP.6.4 (per-action budget debit)
 Event.ammSwapExecuted            := 21 -- GP.11.4 (constant-product swap)
 Event.ammReservesReclaimed       := 22 -- GP.11.10 (post-disable sweep)
+Event.reserveSwapExecuted        := 23 -- Workstream SB (user L2 swap)
+Event.reserveSeeded              := 24 -- Workstream SB (deposit seed leg)
 ```
 
 Field layouts (mirrored from `LegalKernel/Events/Types.lean`, each
@@ -488,6 +508,8 @@ field a CBE uint head):
 | 20  | `budgetConsumed`             | `actor, amount`                                                              |
 | 21  | `ammSwapExecuted`            | `fromResource, toResource, amountIn, amountOut, ammReserveActor`             |
 | 22  | `ammReservesReclaimed`       | `resource, amount, reserveActor, poolActor`                                  |
+| 23  | `reserveSwapExecuted`        | `fromResource, toResource, user, amountIn, amountOut, reserveActor`          |
+| 24  | `reserveSeeded`              | `resource, amount, reserveActor, depositId`                                  |
 
 `depositWithFeeCredited` (16) is emitted IN ADDITION to the
 kernel-level `balanceChanged` (0) on a fee-split deposit, so an
@@ -1731,8 +1753,9 @@ tag set keeps working against a newer server (forward
 compatibility).  The Rust-side tag catalogue lives in
 `runtime/knomosis-event-subscribe/src/event_type.rs`
 (`EventType` / `peek_event_tag` / `EventClass::classify`), which
-mirrors the frozen `Event.tag` indices `0..=22` (the
-GP.11.10 `ammReservesReclaimed` at tag 22 included).
+mirrors the frozen `Event.tag` indices `0..=24` (the
+Workstream-SB `reserveSwapExecuted` / `reserveSeeded` at tags
+23/24 included).
 
 ### 11.2 Frame kind table
 
@@ -1965,8 +1988,9 @@ graceful drain.
   * Engineering plan:
     `docs/planning/rust_host_runtime_plan.md` §RH-D; gas-pool
     event variants: `docs/planning/unified_gas_pool_plan.md` §GP.6.3.
-  * Event constructor table (frozen indices 0..22, including the
-    Workstream-GP gas-pool family 16..22):
+  * Event constructor table (frozen indices 0..24, including the
+    Workstream-GP gas-pool family 16..22 and the Workstream-SB
+    pair 23/24):
     `LegalKernel/Events/Types.lean` + §5.3.
   * Event-extraction reference function:
     `LegalKernel/Events/Extract.lean::extractEvents`.
@@ -2062,8 +2086,8 @@ The layout is byte-for-byte the format `knomosis-indexer::decoder`
 decodes — notably tag 11 (`localPolicyDeclared`) encodes its `policy`
 as a CBE byte string (opaque bytes wrapping the structured policy),
 matching the indexer's `read_byte_string`.  The Lean↔indexer
-byte-equivalence is mechanically pinned for all 23 tags
-(0..=22) by `knomosis-indexer/tests/cross_stack_lean_event.rs`
+byte-equivalence is mechanically pinned for all 25 tags
+(0..=24) by `knomosis-indexer/tests/cross_stack_lean_event.rs`
 (a Lean→`decode_event`→`encode_event` round-trip against the
 real `event_subscribe_cbe.json` bytes).  GP.6.4 widened the
 indexer's `Event` mirror to cover the Workstream-GP gas-pool
@@ -2212,7 +2236,7 @@ budget balance — see the `remaining_this_epoch` docstring in
 
 ### 11A.5 Event dispatch table
 
-For each `Event` (frozen tags 0..22 per §5.3–5.4), the indexer
+For each `Event` (frozen tags 0..24 per §5.3–5.4), the indexer
 applies the following balance-view and budget-table operations,
 ALL inside ONE `SqliteCombinedTransaction` (§11A.6).
 

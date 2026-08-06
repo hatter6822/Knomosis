@@ -1275,6 +1275,27 @@ used for `CollisionFreeOn`.
 
 *Where:* `LegalKernel/FaultProof/Game.lean:336` — Lean sweep, verifier confidence high
 
+> **Workstream SB status (applies to this finding and the next): the
+> gap is NARROWED, not closed.**  The batching cutover replaced the
+> per-action mechanism this finding describes: the L1 no longer
+> re-derives `_requireActionInLogChain` /
+> `LogChain.actionCommit`-per-entry — `terminateOnSingleStep` now
+> authenticates the disputed action by INCLUSION PROOF against the
+> disputed batch's submitted `actionsRoot`
+> (`_requireActionInBatch` / `ActionNotInBatch`, ruling R7), and
+> that authentication primitive DOES have a proven Lean counterpart:
+> `LegalKernel.FaultProof.ActionsRoot.actionProof_binds_action`
+> (under collision-freeness, a verifying opening at the action's key
+> determines the signature-bound leaf commitment, hence the
+> `(kind, signer, fields, sig)` tuple).  What remains open is
+> exactly what this finding's remediation asks for: the Lean GAME
+> MODEL's `GameState` still carries no actions-root anchor and its
+> `.terminateOnSingleStep` arm does not gate on
+> `actionProof_binds_action`, so the Settlement theorems are still
+> stated over the weaker model.  This is the standing "Lean
+> game-model chain binding" follow-up in
+> `19-findings-and-followups.md`'s SB close-out.
+
 `applyTransition gs (.terminateOnSingleStep step)` calls
 `kernelStepApply step` and compares the result against
 `gs.range.high.commit`, but nothing anywhere in the Lean model
