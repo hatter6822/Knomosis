@@ -400,9 +400,10 @@ contract AmmStorageTest is Test, BoldTestSupport {
         assertEq(
             bridge.totalLockedValue(),
             value,
-            "TVL grows by the FULL deposit (the seed is reclassified, not new value)"
+            "TVL grows by the FULL deposit (the L2-bound seed stays in escrow)"
         );
-        assertEq(bridge.ammReserveEth(), ammSeed, "AMM ETH reserve seeded at GP.11.2");
+        assertEq(bridge.ammReserveEth(), 0,
+            "L1 ETH reserve untouched (SB L2-primary: the seed is credited on L2)");
         assertEq(bridge.ammReserveBold(), 0, "AMM BOLD reserve untouched by an ETH deposit");
     }
 
@@ -454,7 +455,8 @@ contract AmmStorageTest is Test, BoldTestSupport {
         );
         assertEq(disabled.totalLockedValue(), value, "TVL == full deposit on both");
         assertEq(disabled.ammReserveEth(), 0, "disabled never seeds the reserve");
-        assertEq(maxSeed.ammReserveEth(), maxSeedAmount, "max-seed seeds 80% of the pool fee");
+        assertEq(maxSeed.ammReserveEth(), 0,
+            "max-seed leaves the L1 reserve untouched too (the 80% split rides the event to L2)");
         assertEq(
             disabled.depositNonce(alice), maxSeed.depositNonce(alice), "identical nonce advance"
         );
@@ -489,7 +491,8 @@ contract AmmStorageTest is Test, BoldTestSupport {
         }
 
         assertEq(bridge.ammSeedRatioBps(), 5000, "seed ratio immutable across deposits");
-        assertEq(bridge.ammReserveEth(), 3 * seedPerDeposit, "ETH reserve == 3 cumulative seeds");
+        assertEq(bridge.ammReserveEth(), 0,
+            "L1 ETH reserve stays zero across all three deposits (L2-primary)");
         assertEq(bridge.ammReserveBold(), 0, "BOLD reserve untouched by ETH deposits");
         assertEq(bridge.totalLockedValue(), 3 ether, "three deposits all credited to TVL");
     }
@@ -598,7 +601,8 @@ contract AmmStorageTest is Test, BoldTestSupport {
 
         assertEq(bridge.totalLockedValue(), amount, "BOLD deposit credits the full global TVL");
         assertEq(bridge.boldTotalLockedValue(), amount, "BOLD deposit credits the per-BOLD TVL");
-        assertEq(bridge.ammReserveBold(), ammSeed, "BOLD reserve seeded at GP.11.2");
+        assertEq(bridge.ammReserveBold(), 0,
+            "L1 BOLD reserve untouched (the seed is credited on L2)");
         assertEq(bridge.ammReserveEth(), 0, "ETH reserve untouched by a BOLD deposit");
     }
 

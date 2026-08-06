@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "19e100f73e3ea3bed3fbb247dae0a1d1935e7e083ace21627844ef0e6f0b60a3"
+    "source_digest": "a3236a54fcdb53df992fe5c8ac1511609e4b1cec781aa30741f2a35cdb80d1cc"
   },
   "summary": {
     "module_count": 108,
-    "declaration_count": 2230
+    "declaration_count": 2232
   },
   "modules": [
     {
@@ -798,13 +798,13 @@
         {
           "kind": "function",
           "name": "resourceToken",
-          "line": 692,
+          "line": 695,
           "called": []
         },
         {
           "kind": "function",
           "name": "hasOpenDisputeOlderThan",
-          "line": 708,
+          "line": 711,
           "called": [
             "disputeWindowBlocks",
             "latestStateRootSubmittedAtBlock"
@@ -813,7 +813,7 @@
         {
           "kind": "struct",
           "name": "ConstructorArgs",
-          "line": 724,
+          "line": 727,
           "called": [
             "attestor",
             "disputeVerifier",
@@ -825,25 +825,25 @@
         {
           "kind": "error",
           "name": "ZeroSequencerStake",
-          "line": 803,
+          "line": 806,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroDisputeWindow",
-          "line": 808,
+          "line": 811,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroMaxAttestationStaleBlocks",
-          "line": 813,
+          "line": 816,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 815,
+          "line": 818,
           "called": [
             "AmmDisasterRecoveryRequired",
             "AmmRoleIsBridge",
@@ -884,7 +884,7 @@
         {
           "kind": "function",
           "name": "_requireAttestationFresh",
-          "line": 1090,
+          "line": 1093,
           "called": [
             "AttestationStale",
             "latestStateRootSubmittedAtBlock"
@@ -893,7 +893,7 @@
         {
           "kind": "function",
           "name": "_requireOperationalBreakersOpen",
-          "line": 1103,
+          "line": 1106,
           "called": [
             "DisputeCooldown",
             "IKnomosisMigration",
@@ -908,7 +908,7 @@
         {
           "kind": "modifier",
           "name": "circuitOpenExceptStaleness",
-          "line": 1143,
+          "line": 1146,
           "called": [
             "_requireOperationalBreakersOpen"
           ]
@@ -916,7 +916,7 @@
         {
           "kind": "modifier",
           "name": "circuitOpen",
-          "line": 1152,
+          "line": 1155,
           "called": [
             "_requireAttestationFresh",
             "_requireOperationalBreakersOpen"
@@ -925,13 +925,13 @@
         {
           "kind": "modifier",
           "name": "withdrawalOpen",
-          "line": 1164,
+          "line": 1167,
           "called": []
         },
         {
           "kind": "modifier",
           "name": "boldCircuitOpen",
-          "line": 1174,
+          "line": 1177,
           "called": [
             "BoldDepositPaused"
           ]
@@ -939,7 +939,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldCircuitBreaker",
-          "line": 1183,
+          "line": 1186,
           "called": [
             "NotBoldCircuitBreaker"
           ]
@@ -947,7 +947,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldAdmin",
-          "line": 1191,
+          "line": 1194,
           "called": [
             "NotBoldAdmin"
           ]
@@ -955,7 +955,7 @@
         {
           "kind": "modifier",
           "name": "onlyAmmDisasterRecovery",
-          "line": 1202,
+          "line": 1205,
           "called": [
             "NotAmmDisasterRecovery"
           ]
@@ -963,7 +963,7 @@
         {
           "kind": "modifier",
           "name": "ammActive",
-          "line": 1211,
+          "line": 1214,
           "called": [
             "AmmIsDisabled",
             "ammDisabled"
@@ -972,7 +972,7 @@
         {
           "kind": "event",
           "name": "DepositInitiated",
-          "line": 1220,
+          "line": 1223,
           "called": [
             "receiptHash"
           ]
@@ -980,7 +980,7 @@
         {
           "kind": "function",
           "name": "depositETH",
-          "line": 1231,
+          "line": 1234,
           "called": [
             "_registerDeposit",
             "circuitOpen"
@@ -989,7 +989,7 @@
         {
           "kind": "function",
           "name": "depositERC20",
-          "line": 1242,
+          "line": 1245,
           "called": [
             "BoldDepositViaFeeSplitOnly",
             "TransferAmountMismatch",
@@ -1001,7 +1001,7 @@
         {
           "kind": "function",
           "name": "_registerDeposit",
-          "line": 1289,
+          "line": 1292,
           "called": [
             "DepositInitiated",
             "TvlCapReached",
@@ -1013,7 +1013,7 @@
         {
           "kind": "event",
           "name": "DepositWithFeeInitiated",
-          "line": 1335,
+          "line": 1338,
           "called": [
             "receiptHash"
           ]
@@ -1021,7 +1021,7 @@
         {
           "kind": "function",
           "name": "depositETHWithFee",
-          "line": 1357,
+          "line": 1360,
           "called": [
             "FeeBpsAboveMax",
             "FeeBpsBelowMin",
@@ -1033,7 +1033,7 @@
         {
           "kind": "function",
           "name": "depositBoldWithFee",
-          "line": 1424,
+          "line": 1427,
           "called": [
             "BoldNotEnabled",
             "BoldTransferAmountMismatch",
@@ -1048,12 +1048,12 @@
         {
           "kind": "function",
           "name": "_registerDepositWithFee",
-          "line": 1521,
+          "line": 1526,
           "called": [
             "BoldTvlCapReached",
             "DepositWithFeeInitiated",
             "TvlCapReached",
-            "_seedAmmReserves",
+            "_ammSeedSplit",
             "deploymentId",
             "receiptHash",
             "totalLockedValue"
@@ -1061,8 +1061,8 @@
         },
         {
           "kind": "function",
-          "name": "_seedAmmReserves",
-          "line": 1631,
+          "name": "_ammSeedSplit",
+          "line": 1644,
           "called": [
             "ammDisabled"
           ]
@@ -1070,121 +1070,121 @@
         {
           "kind": "event",
           "name": "AmmSwapExecuted",
-          "line": 1684,
+          "line": 1691,
           "called": []
         },
         {
           "kind": "error",
           "name": "SwapDeadlineExpired",
-          "line": 1696,
+          "line": 1703,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroSwapInput",
-          "line": 1698,
+          "line": 1705,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroSwapOutput",
-          "line": 1702,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "EthAmountMismatch",
-          "line": 1704,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "UnexpectedEth",
-          "line": 1706,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "UnsupportedSwapResource",
           "line": 1709,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AmmEmpty",
+          "name": "EthAmountMismatch",
+          "line": 1711,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnexpectedEth",
           "line": 1713,
           "called": []
         },
         {
           "kind": "error",
+          "name": "UnsupportedSwapResource",
+          "line": 1716,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmEmpty",
+          "line": 1720,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "AmmBelowMinimumLiquidity",
-          "line": 1719,
+          "line": 1726,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmWouldBreachMinimumLiquidity",
-          "line": 1725,
+          "line": 1732,
           "called": []
         },
         {
           "kind": "error",
           "name": "SlippageExceeded",
-          "line": 1728,
+          "line": 1735,
           "called": []
         },
         {
           "kind": "error",
           "name": "ReserveExhausted",
-          "line": 1733,
+          "line": 1740,
           "called": []
         },
         {
           "kind": "error",
           "name": "EthTransferFailed",
-          "line": 1736,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmmKInvariantViolated",
           "line": 1743,
           "called": []
         },
         {
           "kind": "error",
+          "name": "AmmKInvariantViolated",
+          "line": 1750,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "AmmIsDisabled",
-          "line": 1746,
+          "line": 1753,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmPausedByBoldCircuit",
-          "line": 1749,
+          "line": 1756,
           "called": []
         },
         {
           "kind": "error",
           "name": "NotAmmDisasterRecovery",
-          "line": 1752,
+          "line": 1759,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmAlreadyDisabled",
-          "line": 1755,
+          "line": 1762,
           "called": []
         },
         {
           "kind": "event",
           "name": "AmmDisabled",
-          "line": 1760,
+          "line": 1767,
           "called": []
         },
         {
           "kind": "function",
           "name": "emergencyDisableAmm",
-          "line": 1775,
+          "line": 1783,
           "called": [
             "AmmAlreadyDisabled",
             "AmmDisabled",
@@ -1195,7 +1195,7 @@
         {
           "kind": "function",
           "name": "ammSwap",
-          "line": 1837,
+          "line": 1845,
           "called": [
             "AmmBelowMinimumLiquidity",
             "AmmEmpty",
@@ -1223,13 +1223,13 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 1993,
+          "line": 2001,
           "called": []
         },
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 2000,
+          "line": 2008,
           "called": [
             "InvalidSignatureLength",
             "NonMonotonic",
@@ -1246,13 +1246,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 2039,
+          "line": 2047,
           "called": []
         },
         {
           "kind": "function",
           "name": "stateRootAt",
-          "line": 2046,
+          "line": 2054,
           "called": [
             "StateRootRecord",
             "isStateRootReverted"
@@ -1261,7 +1261,7 @@
         {
           "kind": "function",
           "name": "isStateRootFinalised",
-          "line": 2052,
+          "line": 2060,
           "called": [
             "StateRootRecord",
             "disputeWindowBlocks",
@@ -1271,25 +1271,25 @@
         {
           "kind": "event",
           "name": "WithdrawalRedeemed",
-          "line": 2063,
+          "line": 2071,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PendingWithdrawal",
-          "line": 2093,
+          "line": 2101,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WithdrawalProof",
-          "line": 2107,
+          "line": 2115,
           "called": []
         },
         {
           "kind": "function",
           "name": "withdrawWithProof",
-          "line": 2113,
+          "line": 2121,
           "called": [
             "AlreadyRedeemed",
             "BridgeAccountingMismatch",
@@ -1313,7 +1313,7 @@
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
-          "line": 2207,
+          "line": 2215,
           "called": [
             "PendingWithdrawal"
           ]
@@ -1321,7 +1321,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 2221,
+          "line": 2229,
           "called": [
             "InvalidProof"
           ]
@@ -1329,13 +1329,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 2259,
+          "line": 2267,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 2263,
+          "line": 2271,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -1346,31 +1346,31 @@
         {
           "kind": "event",
           "name": "BoldCircuitClosed",
-          "line": 2313,
+          "line": 2321,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitOpened",
-          "line": 2316,
+          "line": 2324,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitClosedByAutoTrigger",
-          "line": 2322,
+          "line": 2330,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldTvlCapUpdated",
-          "line": 2327,
+          "line": 2335,
           "called": []
         },
         {
           "kind": "function",
           "name": "closeBoldCircuit",
-          "line": 2334,
+          "line": 2342,
           "called": [
             "BoldCircuitClosed",
             "onlyBoldCircuitBreaker"
@@ -1379,7 +1379,7 @@
         {
           "kind": "function",
           "name": "openBoldCircuit",
-          "line": 2343,
+          "line": 2351,
           "called": [
             "BoldCircuitOpened",
             "onlyBoldCircuitBreaker"
@@ -1388,7 +1388,7 @@
         {
           "kind": "function",
           "name": "closeBoldCircuitIfAnyLiquityBranchShutdown",
-          "line": 2372,
+          "line": 2380,
           "called": [
             "AutoCircuitTriggerDisabled",
             "BoldCircuitClosedByAutoTrigger",
@@ -1399,7 +1399,7 @@
         {
           "kind": "function",
           "name": "_readLiquityShutdownTime",
-          "line": 2422,
+          "line": 2430,
           "called": [
             "LiquityV2ReadFailed"
           ]
@@ -1407,7 +1407,7 @@
         {
           "kind": "function",
           "name": "setBoldTvlCap",
-          "line": 2445,
+          "line": 2453,
           "called": [
             "BoldTvlCapExceedsGlobal",
             "BoldTvlCapUpdated",
@@ -1417,7 +1417,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 2457,
+          "line": 2465,
           "called": []
         }
       ]
@@ -5393,7 +5393,7 @@
         {
           "kind": "contract",
           "name": "AmmDepositSeedingTest",
-          "line": 37,
+          "line": 43,
           "called": [
             "BoldTestSupport",
             "DepositEventDecoder"
@@ -5402,7 +5402,7 @@
         {
           "kind": "event",
           "name": "DepositWithFeeInitiated",
-          "line": 52,
+          "line": 58,
           "called": [
             "receiptHash"
           ]
@@ -5410,7 +5410,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 64,
+          "line": 70,
           "called": [
             "_etchBold"
           ]
@@ -5418,7 +5418,7 @@
         {
           "kind": "function",
           "name": "_deploy",
-          "line": 83,
+          "line": 89,
           "called": [
             "KnomosisBridge",
             "_deployWithCap"
@@ -5427,7 +5427,7 @@
         {
           "kind": "function",
           "name": "_deployWithCap",
-          "line": 90,
+          "line": 96,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -5440,7 +5440,7 @@
         {
           "kind": "function",
           "name": "_deployBoldEnabled",
-          "line": 128,
+          "line": 134,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -5453,7 +5453,7 @@
         {
           "kind": "function",
           "name": "test_ethDeposit_seedsReserve_andEventCarriesSplit",
-          "line": 171,
+          "line": 179,
           "called": [
             "DepositWithFeeInitiated",
             "KnomosisBridge",
@@ -5464,7 +5464,7 @@
         {
           "kind": "function",
           "name": "test_ethDeposit_seedsReserve_atMaxRatio",
-          "line": 212,
+          "line": 221,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -5475,7 +5475,7 @@
         {
           "kind": "function",
           "name": "test_ethDeposit_eventAmmSeedZero_whenDisabled",
-          "line": 233,
+          "line": 243,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -5486,7 +5486,7 @@
         {
           "kind": "function",
           "name": "test_ethDeposit_eventAmmSeedZero_whenPoolFeeZero",
-          "line": 248,
+          "line": 258,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -5497,7 +5497,7 @@
         {
           "kind": "function",
           "name": "test_ethDeposit_eventAmmSeedZero_whenDustFloors",
-          "line": 265,
+          "line": 275,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -5508,7 +5508,7 @@
         {
           "kind": "function",
           "name": "test_receiptHash_bindsAmmSeedAmount",
-          "line": 288,
+          "line": 298,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -5519,7 +5519,7 @@
         {
           "kind": "function",
           "name": "test_boldReceiptHash_bindsAmmSeedAmount",
-          "line": 320,
+          "line": 330,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -5532,13 +5532,13 @@
         {
           "kind": "function",
           "name": "test_ammSeedSplit_knownVectors",
-          "line": 352,
+          "line": 362,
           "called": []
         },
         {
           "kind": "function",
-          "name": "test_seedAmmReserves_offLeg_seedsNothing",
-          "line": 385,
+          "name": "test_ammSeedSplit_offLeg_splitsNothing",
+          "line": 395,
           "called": [
             "SeedHarness",
             "_deploySeedHarness"
@@ -5547,7 +5547,7 @@
         {
           "kind": "function",
           "name": "_deploySeedHarness",
-          "line": 407,
+          "line": 416,
           "called": [
             "SeedHarness",
             "attestor",
@@ -5560,7 +5560,7 @@
         {
           "kind": "function",
           "name": "test_boldDeposit_seedsBoldReserveOnly",
-          "line": 447,
+          "line": 456,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -5573,9 +5573,10 @@
         {
           "kind": "function",
           "name": "test_legs_seededIndependently",
-          "line": 472,
+          "line": 483,
           "called": [
             "KnomosisBridge",
+            "_decodeDepositWithFee",
             "_deployBoldEnabled",
             "_etchBold",
             "_mintApprove",
@@ -5585,9 +5586,10 @@
         {
           "kind": "function",
           "name": "test_reserve_accumulatesMonotonically",
-          "line": 499,
+          "line": 519,
           "called": [
             "KnomosisBridge",
+            "_decodeDepositWithFee",
             "_deployBoldEnabled",
             "_etchBold",
             "bridge"
@@ -5596,7 +5598,7 @@
         {
           "kind": "function",
           "name": "test_reserves_areSubsetOfTvl",
-          "line": 531,
+          "line": 548,
           "called": [
             "KnomosisBridge",
             "_deployBoldEnabled",
@@ -5608,9 +5610,10 @@
         {
           "kind": "function",
           "name": "test_cappedDeposit_revertsAndDoesNotSeed",
-          "line": 558,
+          "line": 576,
           "called": [
             "KnomosisBridge",
+            "_decodeDepositWithFee",
             "_deployWithCap",
             "bridge"
           ]
@@ -5618,7 +5621,7 @@
         {
           "kind": "function",
           "name": "test_plainDepositETH_doesNotSeed",
-          "line": 581,
+          "line": 600,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -5628,7 +5631,7 @@
         {
           "kind": "function",
           "name": "test_gas_seedingOverhead",
-          "line": 604,
+          "line": 623,
           "called": [
             "_deploy",
             "_warmDepositGas"
@@ -5637,7 +5640,7 @@
         {
           "kind": "function",
           "name": "_warmDepositGas",
-          "line": 618,
+          "line": 637,
           "called": [
             "KnomosisBridge",
             "bridge"
@@ -5646,7 +5649,7 @@
         {
           "kind": "function",
           "name": "testFuzz_ethSeed_conservation",
-          "line": 635,
+          "line": 654,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -5657,9 +5660,10 @@
         {
           "kind": "function",
           "name": "testFuzz_boldSeed_conservation",
-          "line": 658,
+          "line": 677,
           "called": [
             "KnomosisBridge",
+            "_decodeDepositWithFee",
             "_deployBoldEnabled",
             "_etchBold",
             "_mintApprove",
@@ -5669,9 +5673,10 @@
         {
           "kind": "function",
           "name": "testFuzz_seed_conservation_acrossRatios",
-          "line": 680,
+          "line": 702,
           "called": [
             "KnomosisBridge",
+            "_decodeDepositWithFee",
             "_deploy",
             "bridge"
           ]
@@ -5679,7 +5684,7 @@
         {
           "kind": "contract",
           "name": "AmmSeedingHandler",
-          "line": 711,
+          "line": 736,
           "called": [
             "BoldTestSupport",
             "KnomosisBridge",
@@ -5689,7 +5694,7 @@
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 721,
+          "line": 746,
           "called": [
             "KnomosisBridge",
             "bridge"
@@ -5698,13 +5703,13 @@
         {
           "kind": "function",
           "name": "depositEth",
-          "line": 727,
+          "line": 752,
           "called": []
         },
         {
           "kind": "function",
           "name": "depositBold",
-          "line": 741,
+          "line": 766,
           "called": [
             "MockBold",
             "approve",
@@ -5715,7 +5720,7 @@
         {
           "kind": "contract",
           "name": "AmmDepositSeedingInvariantTest",
-          "line": 764,
+          "line": 794,
           "called": [
             "AmmSeedingHandler",
             "BoldTestSupport",
@@ -5726,53 +5731,56 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 774,
+          "line": 809,
           "called": [
+            "AmmLiquidityHarness",
             "AmmSeedingHandler",
-            "KnomosisBridge",
             "MockBold",
+            "approve",
             "attestor",
             "bridge",
             "disputeVerifier",
             "disputeWindowBlocks",
+            "harnessInstallLegacyLiquidity",
             "migration",
+            "mint",
             "sequencerStake"
           ]
         },
         {
           "kind": "function",
-          "name": "invariant_ethReserveEqualsSumSeeded",
-          "line": 820,
+          "name": "invariant_ethReserveNeverGrownByDeposits",
+          "line": 863,
           "called": []
         },
         {
           "kind": "function",
-          "name": "invariant_boldReserveEqualsSumSeeded",
-          "line": 829,
+          "name": "invariant_boldReserveNeverGrownByDeposits",
+          "line": 872,
           "called": []
         },
         {
           "kind": "function",
           "name": "invariant_reservesSubsetOfTvl",
-          "line": 838,
+          "line": 881,
           "called": []
         },
         {
           "kind": "function",
           "name": "invariant_boldReserveSubsetOfBoldTvl",
-          "line": 851,
+          "line": 894,
           "called": []
         },
         {
           "kind": "function",
           "name": "invariant_ethReserveWithinEthTvl",
-          "line": 865,
+          "line": 908,
           "called": []
         },
         {
           "kind": "function",
           "name": "invariant_ethReserveBackedByRealEth",
-          "line": 881,
+          "line": 924,
           "called": [
             "bridge"
           ]
@@ -5780,7 +5788,7 @@
         {
           "kind": "function",
           "name": "invariant_boldReserveBackedByRealBold",
-          "line": 891,
+          "line": 934,
           "called": [
             "MockBold",
             "balanceOf",
@@ -5790,7 +5798,7 @@
         {
           "kind": "contract",
           "name": "SeedHarness",
-          "line": 906,
+          "line": 949,
           "called": [
             "KnomosisBridge"
           ]
@@ -5798,17 +5806,17 @@
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 907,
+          "line": 950,
           "called": [
             "KnomosisBridge"
           ]
         },
         {
           "kind": "function",
-          "name": "exposed_seedAmmReserves",
-          "line": 910,
+          "name": "exposed_ammSeedSplit",
+          "line": 953,
           "called": [
-            "_seedAmmReserves"
+            "_ammSeedSplit"
           ]
         }
       ]
@@ -5907,7 +5915,7 @@
         {
           "kind": "function",
           "name": "invariant_someSwapsExecuted",
-          "line": 128,
+          "line": 129,
           "called": []
         }
       ]
@@ -6024,6 +6032,7 @@
           "name": "test_ammDisabled_withdrawStillWorks_bothLegs",
           "line": 183,
           "called": [
+            "AmmLiquidityHarness",
             "KnomosisBridge",
             "MockBold",
             "_boldEnabledArgs",
@@ -6087,6 +6096,7 @@
           "name": "test_swap_freezesAfterMigration",
           "line": 305,
           "called": [
+            "AmmLiquidityHarness",
             "KnomosisBridge",
             "MockToggleMigration",
             "_boldEnabledArgs",
@@ -6829,7 +6839,7 @@
         {
           "kind": "function",
           "name": "test_coreSplit_ratioInvariant_butAmmSeedScales",
-          "line": 419,
+          "line": 420,
           "called": [
             "KnomosisBridge",
             "_deployBoldEnabled",
@@ -6840,7 +6850,7 @@
         {
           "kind": "function",
           "name": "test_ammSeedRatio_immutable_reservesGrowAcrossDeposits",
-          "line": 473,
+          "line": 475,
           "called": [
             "KnomosisBridge",
             "_deployBoldEnabled",
@@ -6851,7 +6861,7 @@
         {
           "kind": "function",
           "name": "testFuzz_constructor_withinCap_accepted",
-          "line": 503,
+          "line": 506,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -6861,7 +6871,7 @@
         {
           "kind": "function",
           "name": "testFuzz_constructor_aboveCap_reverts",
-          "line": 514,
+          "line": 517,
           "called": [
             "_deploy"
           ]
@@ -6869,7 +6879,7 @@
         {
           "kind": "function",
           "name": "test_ammState_hasNoSetterSurface",
-          "line": 540,
+          "line": 543,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -6879,7 +6889,7 @@
         {
           "kind": "function",
           "name": "test_boldDeposit_seedsReserve",
-          "line": 583,
+          "line": 586,
           "called": [
             "KnomosisBridge",
             "_deployBoldEnabled",
@@ -6891,7 +6901,7 @@
         {
           "kind": "function",
           "name": "test_constructor_guardOrdering_feeBeforeAmm",
-          "line": 614,
+          "line": 618,
           "called": [
             "_deployFull"
           ]
@@ -6901,7 +6911,7 @@
     {
       "module": "AmmSwap.t",
       "path": "solidity/test/AmmSwap.t.sol",
-      "declaration_count": 24,
+      "declaration_count": 23,
       "declarations": [
         {
           "kind": "contract",
@@ -6998,18 +7008,20 @@
         {
           "kind": "function",
           "name": "test_swap_revertsAmmEmpty_oneLegSeeded",
-          "line": 176,
+          "line": 179,
           "called": [
+            "AmmLiquidityHarness",
             "KnomosisBridge",
             "_deploySeededReady",
             "_farDeadline",
-            "bridge"
+            "bridge",
+            "harnessInstallLegacyLiquidity"
           ]
         },
         {
           "kind": "function",
           "name": "test_swap_revertsAmmEmpty_whenBoldDisabled",
-          "line": 190,
+          "line": 193,
           "called": [
             "KnomosisBridge",
             "_deployBoldDisabled",
@@ -7020,7 +7032,7 @@
         {
           "kind": "function",
           "name": "test_swap_revertsZeroInput",
-          "line": 201,
+          "line": 204,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -7032,7 +7044,7 @@
         {
           "kind": "function",
           "name": "test_swap_revertsUnsupportedResource",
-          "line": 210,
+          "line": 213,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -7044,7 +7056,7 @@
         {
           "kind": "function",
           "name": "test_swap_revertsEthAmountMismatch",
-          "line": 220,
+          "line": 223,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -7056,7 +7068,7 @@
         {
           "kind": "function",
           "name": "test_swap_revertsUnexpectedEth",
-          "line": 233,
+          "line": 236,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -7069,7 +7081,7 @@
         {
           "kind": "function",
           "name": "test_swap_revertsZeroSwapOutput_onDustInput",
-          "line": 248,
+          "line": 251,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -7083,7 +7095,7 @@
         {
           "kind": "function",
           "name": "test_swap_revertsEthTransferFailed_whenRecipientRejectsEth",
-          "line": 264,
+          "line": 267,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -7099,7 +7111,7 @@
         {
           "kind": "function",
           "name": "test_swap_calibrationParity_moduloFee",
-          "line": 286,
+          "line": 289,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -7112,7 +7124,7 @@
         {
           "kind": "function",
           "name": "test_swap_feeAccrual_exactKGrowth",
-          "line": 314,
+          "line": 317,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -7125,9 +7137,8 @@
         {
           "kind": "function",
           "name": "test_composition_seedSwapSeedSwap",
-          "line": 334,
+          "line": 339,
           "called": [
-            "FeeSplitMath_split",
             "KnomosisBridge",
             "MockBold",
             "_deploySeededReady",
@@ -7140,14 +7151,8 @@
         },
         {
           "kind": "function",
-          "name": "FeeSplitMath_split",
-          "line": 364,
-          "called": []
-        },
-        {
-          "kind": "function",
           "name": "testFuzz_swapEthToBold_invariants",
-          "line": 384,
+          "line": 376,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -7162,7 +7167,7 @@
         {
           "kind": "function",
           "name": "testFuzz_swapBoldToEth_invariants",
-          "line": 417,
+          "line": 409,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -7178,7 +7183,7 @@
         {
           "kind": "function",
           "name": "test_gas_swapWarm",
-          "line": 446,
+          "line": 438,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -7190,7 +7195,7 @@
         {
           "kind": "contract",
           "name": "RejectsEth",
-          "line": 465,
+          "line": 457,
           "called": [
             "BoldTestSupport"
           ]
@@ -7198,7 +7203,7 @@
         {
           "kind": "function",
           "name": "doBoldToEthSwap",
-          "line": 468,
+          "line": 460,
           "called": [
             "KnomosisBridge",
             "approve",
@@ -7237,7 +7242,7 @@
         {
           "kind": "function",
           "name": "_bench",
-          "line": 174,
+          "line": 176,
           "called": [
             "_calldataGas",
             "name"
@@ -7246,13 +7251,13 @@
         {
           "kind": "function",
           "name": "_calldataGas",
-          "line": 191,
+          "line": 193,
           "called": []
         },
         {
           "kind": "function",
           "name": "_etchMocks",
-          "line": 207,
+          "line": 209,
           "called": [
             "MockBoldOz",
             "MockLiquityV2TroveManager"
@@ -7261,7 +7266,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 227,
+          "line": 229,
           "called": [
             "KnomosisBridge",
             "_deployBridgeWithRecovery"
@@ -7270,7 +7275,7 @@
         {
           "kind": "function",
           "name": "_deployBridgeWithRecovery",
-          "line": 234,
+          "line": 236,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -7283,7 +7288,7 @@
         {
           "kind": "function",
           "name": "_mintApprove",
-          "line": 272,
+          "line": 274,
           "called": [
             "KnomosisBridge",
             "MockBoldOz",
@@ -7294,7 +7299,7 @@
         {
           "kind": "function",
           "name": "_seedPool",
-          "line": 287,
+          "line": 298,
           "called": [
             "KnomosisBridge",
             "_mintApprove"
@@ -7303,13 +7308,13 @@
         {
           "kind": "function",
           "name": "_farDeadline",
-          "line": 297,
+          "line": 314,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3DepositsTest",
-          "line": 310,
+          "line": 327,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7317,7 +7322,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 320,
+          "line": 337,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -7331,7 +7336,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETH_reference",
-          "line": 361,
+          "line": 378,
           "called": [
             "_bench",
             "bridge"
@@ -7340,7 +7345,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_firstDeposit",
-          "line": 373,
+          "line": 390,
           "called": [
             "_bench",
             "bridge"
@@ -7349,7 +7354,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_repeatDeposit",
-          "line": 385,
+          "line": 402,
           "called": [
             "_bench",
             "bridge"
@@ -7358,7 +7363,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositBoldWithFee_firstDeposit",
-          "line": 398,
+          "line": 415,
           "called": [
             "_bench",
             "bridge"
@@ -7367,7 +7372,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositBoldWithFee_repeatDeposit",
-          "line": 410,
+          "line": 427,
           "called": [
             "_bench",
             "bridge"
@@ -7376,7 +7381,7 @@
         {
           "kind": "function",
           "name": "test_gas_boldApprove_fresh",
-          "line": 424,
+          "line": 441,
           "called": [
             "_bench",
             "bridge"
@@ -7385,7 +7390,7 @@
         {
           "kind": "function",
           "name": "test_sanity_depositScenarioAssumptions",
-          "line": 438,
+          "line": 455,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -7396,7 +7401,7 @@
         {
           "kind": "function",
           "name": "test_sanity_depositEffects",
-          "line": 471,
+          "line": 488,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -7407,7 +7412,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3SwapsTest",
-          "line": 516,
+          "line": 533,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7415,7 +7420,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 526,
+          "line": 543,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -7429,7 +7434,7 @@
         {
           "kind": "function",
           "name": "_swapData",
-          "line": 552,
+          "line": 569,
           "called": [
             "_farDeadline"
           ]
@@ -7437,7 +7442,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_firstBoldRecipient",
-          "line": 558,
+          "line": 575,
           "called": [
             "_bench",
             "_swapData",
@@ -7447,7 +7452,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_repeatRecipient",
-          "line": 571,
+          "line": 588,
           "called": [
             "_bench",
             "_swapData",
@@ -7457,7 +7462,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_boldToEth_exactApproval",
-          "line": 584,
+          "line": 601,
           "called": [
             "_bench",
             "_swapData",
@@ -7467,7 +7472,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_boldToEth_infiniteApproval",
-          "line": 598,
+          "line": 615,
           "called": [
             "_bench",
             "_swapData",
@@ -7477,7 +7482,7 @@
         {
           "kind": "function",
           "name": "test_sanity_swapScenarioAssumptions",
-          "line": 611,
+          "line": 628,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -7488,7 +7493,7 @@
         {
           "kind": "function",
           "name": "test_sanity_swapEffects",
-          "line": 645,
+          "line": 662,
           "called": [
             "MockBoldOz",
             "_farDeadline",
@@ -7500,7 +7505,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3MigrationWiredTest",
-          "line": 688,
+          "line": 705,
           "called": [
             "BenchmarkGasV1_3Base",
             "InactiveMigration",
@@ -7510,7 +7515,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 696,
+          "line": 713,
           "called": [
             "InactiveMigration",
             "MockBoldOz",
@@ -7525,7 +7530,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_repeat_migrationWired",
-          "line": 717,
+          "line": 734,
           "called": [
             "_bench",
             "bridge"
@@ -7534,7 +7539,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_repeat_migrationWired",
-          "line": 732,
+          "line": 749,
           "called": [
             "_bench",
             "_farDeadline",
@@ -7544,7 +7549,7 @@
         {
           "kind": "function",
           "name": "test_sanity_migrationWiredAssumptions",
-          "line": 744,
+          "line": 761,
           "called": [
             "MockBoldOz",
             "balanceOf",
@@ -7554,7 +7559,7 @@
         {
           "kind": "function",
           "name": "test_sanity_migrationWiredEffects",
-          "line": 757,
+          "line": 775,
           "called": [
             "_farDeadline"
           ]
@@ -7562,7 +7567,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3BreakerTest",
-          "line": 774,
+          "line": 792,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7570,7 +7575,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 775,
+          "line": 793,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -7580,7 +7585,7 @@
         {
           "kind": "function",
           "name": "test_gas_closeBoldCircuit",
-          "line": 781,
+          "line": 799,
           "called": [
             "_bench",
             "bridge"
@@ -7589,7 +7594,7 @@
         {
           "kind": "function",
           "name": "test_gas_setBoldTvlCap",
-          "line": 794,
+          "line": 812,
           "called": [
             "_bench",
             "bridge"
@@ -7598,7 +7603,7 @@
         {
           "kind": "function",
           "name": "test_gas_emergencyDisableAmm",
-          "line": 806,
+          "line": 824,
           "called": [
             "_bench",
             "bridge"
@@ -7607,13 +7612,13 @@
         {
           "kind": "function",
           "name": "test_sanity_breakerEffects",
-          "line": 818,
+          "line": 836,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3BreakerReopenTest",
-          "line": 840,
+          "line": 858,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7621,7 +7626,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 841,
+          "line": 859,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -7631,7 +7636,7 @@
         {
           "kind": "function",
           "name": "test_gas_openBoldCircuit",
-          "line": 849,
+          "line": 867,
           "called": [
             "_bench",
             "bridge"
@@ -7640,13 +7645,13 @@
         {
           "kind": "function",
           "name": "test_sanity_reopenEffects",
-          "line": 861,
+          "line": 879,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerFirstBranchTest",
-          "line": 873,
+          "line": 891,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7654,7 +7659,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 877,
+          "line": 895,
           "called": [
             "MockLiquityV2TroveManager",
             "_deployBridge",
@@ -7666,7 +7671,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerClose_firstBranch",
-          "line": 885,
+          "line": 903,
           "called": [
             "_bench",
             "bridge"
@@ -7675,7 +7680,7 @@
         {
           "kind": "function",
           "name": "test_sanity_firstBranchEffects",
-          "line": 897,
+          "line": 915,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -7684,7 +7689,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerLastBranchTest",
-          "line": 911,
+          "line": 929,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7692,7 +7697,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 915,
+          "line": 933,
           "called": [
             "MockLiquityV2TroveManager",
             "_deployBridge",
@@ -7704,7 +7709,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerClose_lastBranch",
-          "line": 923,
+          "line": 941,
           "called": [
             "_bench",
             "bridge"
@@ -7713,7 +7718,7 @@
         {
           "kind": "function",
           "name": "test_sanity_lastBranchEffects",
-          "line": 935,
+          "line": 953,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -7722,7 +7727,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerNoShutdownTest",
-          "line": 952,
+          "line": 970,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7730,7 +7735,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 956,
+          "line": 974,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -7740,7 +7745,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerProbe_noShutdown",
-          "line": 963,
+          "line": 981,
           "called": [
             "_bench",
             "bridge"
@@ -7749,7 +7754,7 @@
         {
           "kind": "function",
           "name": "test_sanity_noShutdownEffects",
-          "line": 975,
+          "line": 993,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -7758,7 +7763,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3WithdrawalsTest",
-          "line": 1002,
+          "line": 1020,
           "called": [
             "BenchmarkGasV1_3Base",
             "WithdrawalFlowHarness"
@@ -7767,7 +7772,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1019,
+          "line": 1037,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -7783,7 +7788,7 @@
         {
           "kind": "function",
           "name": "test_gas_withdrawWithProof_eth",
-          "line": 1064,
+          "line": 1082,
           "called": [
             "_bench",
             "bridge"
@@ -7792,7 +7797,7 @@
         {
           "kind": "function",
           "name": "test_gas_withdrawWithProof_bold",
-          "line": 1077,
+          "line": 1095,
           "called": [
             "_bench",
             "bridge"
@@ -7801,7 +7806,7 @@
         {
           "kind": "function",
           "name": "test_sanity_withdrawalScenarioAssumptions",
-          "line": 1091,
+          "line": 1109,
           "called": [
             "MockBoldOz",
             "balanceOf"
@@ -7810,7 +7815,7 @@
         {
           "kind": "function",
           "name": "test_sanity_withdrawalEffects",
-          "line": 1115,
+          "line": 1133,
           "called": [
             "MockBoldOz",
             "balanceOf"
@@ -7819,7 +7824,7 @@
         {
           "kind": "function",
           "name": "_signStateRoot",
-          "line": 1149,
+          "line": 1167,
           "called": [
             "_signStateRootAs",
             "bridge"
@@ -7828,7 +7833,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3DisasterRecoveryTest",
-          "line": 1163,
+          "line": 1181,
           "called": [
             "BenchmarkGasV1_3Base",
             "KnomosisAmmDisasterRecoveryMultisig"
@@ -7837,7 +7842,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1172,
+          "line": 1190,
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "_deployBridgeWithRecovery",
@@ -7850,7 +7855,7 @@
         {
           "kind": "function",
           "name": "test_gas_confirmDisable_nonFinal",
-          "line": 1198,
+          "line": 1216,
           "called": [
             "_bench"
           ]
@@ -7858,7 +7863,7 @@
         {
           "kind": "function",
           "name": "test_gas_confirmDisable_executes",
-          "line": 1215,
+          "line": 1233,
           "called": [
             "_bench"
           ]
@@ -7866,13 +7871,13 @@
         {
           "kind": "function",
           "name": "test_sanity_disasterRecoveryScenarioAssumptions",
-          "line": 1232,
+          "line": 1250,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3StepVMRootTest",
-          "line": 1273,
+          "line": 1291,
           "called": [
             "BenchmarkGasV1_3Base",
             "KnomosisStepVMRoot",
@@ -7882,7 +7887,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1286,
+          "line": 1304,
           "called": [
             "KnomosisStepVMRoot",
             "_requireKeccakLinked",
@@ -7893,7 +7898,7 @@
         {
           "kind": "function",
           "name": "test_gas_executeStepToRootMulti_distinctCells",
-          "line": 1305,
+          "line": 1323,
           "called": [
             "_bench",
             "encodeMultiProbeCall",
@@ -7903,7 +7908,7 @@
         {
           "kind": "function",
           "name": "test_gas_executeStepToRootMulti_duplicateCell",
-          "line": 1325,
+          "line": 1343,
           "called": [
             "_bench",
             "encodeMultiProbeCall",
@@ -7913,7 +7918,7 @@
         {
           "kind": "function",
           "name": "test_sanity_stepVMRootMultiScenarioAssumptions",
-          "line": 1343,
+          "line": 1361,
           "called": [
             "_runMulti",
             "loadOpenedCells",
@@ -7924,7 +7929,7 @@
         {
           "kind": "function",
           "name": "_runMulti",
-          "line": 1385,
+          "line": 1403,
           "called": [
             "ProbeInput",
             "encodeMultiProbeCall",
@@ -9859,7 +9864,7 @@
         {
           "kind": "function",
           "name": "test_e2e_ammReserveSurvivesBoldWithdrawal",
-          "line": 862,
+          "line": 864,
           "called": [
             "KnomosisBridge",
             "_deployKeyedAttestorBold",
@@ -9873,7 +9878,7 @@
         {
           "kind": "function",
           "name": "_signStateRoot",
-          "line": 914,
+          "line": 911,
           "called": [
             "KnomosisBridge",
             "_stateRootDigest",
@@ -9883,7 +9888,7 @@
         {
           "kind": "function",
           "name": "testFuzz_conservation_and_reference",
-          "line": 930,
+          "line": 927,
           "called": [
             "DepositReceipt",
             "KnomosisBridge",
@@ -9896,7 +9901,7 @@
         {
           "kind": "function",
           "name": "testFuzz_differential_acrossRate",
-          "line": 956,
+          "line": 953,
           "called": [
             "DepositReceipt",
             "KnomosisBridge",
@@ -9909,7 +9914,7 @@
         {
           "kind": "function",
           "name": "testFuzz_outOfRangeFee_reverts",
-          "line": 983,
+          "line": 980,
           "called": [
             "KnomosisBridge",
             "_deployLeg",
@@ -9920,13 +9925,13 @@
         {
           "kind": "contract",
           "name": "MockActivatedMigration",
-          "line": 997,
+          "line": 994,
           "called": []
         },
         {
           "kind": "function",
           "name": "activated",
-          "line": 998,
+          "line": 995,
           "called": []
         }
       ]
@@ -10662,7 +10667,7 @@
         {
           "kind": "contract",
           "name": "AmmSwapFixturesCrossCheck",
-          "line": 28,
+          "line": 29,
           "called": [
             "BoldTestSupport",
             "CrossCheckFramework"
@@ -10671,25 +10676,25 @@
         {
           "kind": "struct",
           "name": "Entry",
-          "line": 36,
+          "line": 37,
           "called": []
         },
         {
           "kind": "function",
           "name": "_gridCount",
-          "line": 59,
+          "line": 60,
           "called": []
         },
         {
           "kind": "function",
           "name": "_cornerCount",
-          "line": 63,
+          "line": 64,
           "called": []
         },
         {
           "kind": "function",
           "name": "_loadEntry",
-          "line": 67,
+          "line": 68,
           "called": [
             "Entry"
           ]
@@ -10697,7 +10702,7 @@
         {
           "kind": "function",
           "name": "test_header_shape",
-          "line": 91,
+          "line": 92,
           "called": [
             "_cornerCount",
             "_gridCount",
@@ -10710,7 +10715,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_getAmountOut_matchesLean",
-          "line": 135,
+          "line": 136,
           "called": [
             "Entry",
             "_loadEntry",
@@ -10727,7 +10732,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_noDrain",
-          "line": 164,
+          "line": 165,
           "called": [
             "Entry",
             "_loadEntry",
@@ -10742,7 +10747,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_kNonDecreasing",
-          "line": 186,
+          "line": 187,
           "called": [
             "Entry",
             "_loadEntry",
@@ -10757,7 +10762,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_slippageConsistency",
-          "line": 205,
+          "line": 206,
           "called": [
             "Entry",
             "_loadEntry",
@@ -10772,13 +10777,13 @@
         {
           "kind": "function",
           "name": "test_handVectors_knownGroundTruth",
-          "line": 225,
+          "line": 226,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cbeByteLength",
-          "line": 239,
+          "line": 240,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -10791,7 +10796,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_postSwapReserves",
-          "line": 265,
+          "line": 266,
           "called": [
             "Entry",
             "_loadEntry",
@@ -10806,7 +10811,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_l2BalanceDeltas",
-          "line": 286,
+          "line": 287,
           "called": [
             "Entry",
             "_loadEntry",
@@ -10821,7 +10826,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_cbeTagByte",
-          "line": 309,
+          "line": 310,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -10834,8 +10839,9 @@
         {
           "kind": "function",
           "name": "test_liveContract_ammSwapMatchesFormula",
-          "line": 335,
+          "line": 337,
           "called": [
+            "AmmLiquidityHarness",
             "KnomosisBridge",
             "MockBold",
             "approve",
@@ -10843,6 +10849,7 @@
             "bridge",
             "disputeVerifier",
             "disputeWindowBlocks",
+            "harnessInstallLegacyLiquidity",
             "migration",
             "mint",
             "sequencerStake"
@@ -11487,7 +11494,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 394,
+          "line": 395,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -11500,7 +11507,7 @@
         {
           "kind": "function",
           "name": "splitAllExternal",
-          "line": 445,
+          "line": 446,
           "called": []
         }
       ]
@@ -11633,7 +11640,7 @@
         {
           "kind": "function",
           "name": "test_clamp_corners",
-          "line": 369,
+          "line": 371,
           "called": [
             "_assertClampCorner",
             "fixtureExists",
@@ -11643,13 +11650,13 @@
         {
           "kind": "function",
           "name": "_assertClampCorner",
-          "line": 377,
+          "line": 379,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_zeroFee_corner",
-          "line": 396,
+          "line": 398,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11658,7 +11665,7 @@
         {
           "kind": "function",
           "name": "_deployBoldBridge",
-          "line": 420,
+          "line": 422,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -11671,7 +11678,7 @@
         {
           "kind": "function",
           "name": "splitAllExternal",
-          "line": 471,
+          "line": 473,
           "called": []
         }
       ]
@@ -18292,12 +18299,38 @@
     {
       "module": "AmmTestBase",
       "path": "solidity/test/utils/AmmTestBase.sol",
-      "declaration_count": 10,
+      "declaration_count": 13,
       "declarations": [
+        {
+          "kind": "contract",
+          "name": "AmmLiquidityHarness",
+          "line": 21,
+          "called": [
+            "KnomosisBridge"
+          ]
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 22,
+          "called": [
+            "ConstructorArgs",
+            "KnomosisBridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "harnessInstallLegacyLiquidity",
+          "line": 32,
+          "called": [
+            "totalLockedValue",
+            "transferFrom"
+          ]
+        },
         {
           "kind": "abstract_contract",
           "name": "AmmTestBase",
-          "line": 18,
+          "line": 56,
           "called": [
             "BoldTestSupport"
           ]
@@ -18305,19 +18338,19 @@
         {
           "kind": "event",
           "name": "AmmSwapExecuted",
-          "line": 36,
+          "line": 74,
           "called": []
         },
         {
           "kind": "function",
           "name": "setUp",
-          "line": 46,
+          "line": 84,
           "called": []
         },
         {
           "kind": "function",
           "name": "_boldEnabledArgs",
-          "line": 61,
+          "line": 99,
           "called": [
             "attestor",
             "disputeVerifier",
@@ -18329,8 +18362,9 @@
         {
           "kind": "function",
           "name": "_deployBoldEnabled",
-          "line": 94,
+          "line": 135,
           "called": [
+            "AmmLiquidityHarness",
             "KnomosisBridge",
             "_boldEnabledArgs"
           ]
@@ -18338,7 +18372,7 @@
         {
           "kind": "function",
           "name": "_deploySeededReady",
-          "line": 99,
+          "line": 140,
           "called": [
             "KnomosisBridge",
             "_deployBoldEnabled",
@@ -18349,7 +18383,7 @@
         {
           "kind": "function",
           "name": "_deployBoldDisabled",
-          "line": 105,
+          "line": 146,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -18362,8 +18396,9 @@
         {
           "kind": "function",
           "name": "_seedBothLegs",
-          "line": 142,
+          "line": 188,
           "called": [
+            "AmmLiquidityHarness",
             "KnomosisBridge",
             "_mintApprove",
             "bridge"
@@ -18372,13 +18407,13 @@
         {
           "kind": "function",
           "name": "_refOut",
-          "line": 163,
+          "line": 207,
           "called": []
         },
         {
           "kind": "function",
           "name": "_farDeadline",
-          "line": 173,
+          "line": 217,
           "called": []
         }
       ]
@@ -18655,6 +18690,7 @@
           "name": "_deployWired",
           "line": 42,
           "called": [
+            "AmmLiquidityHarness",
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
             "_boldEnabledArgs",
@@ -18666,7 +18702,7 @@
         {
           "kind": "function",
           "name": "_deployMiswired",
-          "line": 65,
+          "line": 68,
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",

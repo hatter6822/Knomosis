@@ -8,6 +8,7 @@ pragma solidity ^0.8.36;
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {AmmMath} from "src/lib/AmmMath.sol";
+import {AmmLiquidityHarness} from "test/utils/AmmTestBase.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {MockBold} from "test/utils/MockBold.sol";
 
@@ -329,10 +330,11 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
     // Live contract execution
     // ------------------------------------------------------------------
 
-    /// @notice Deploy a BOLD-enabled bridge with AMM, seed reserves via
-    ///         real deposits, and perform ETH->BOLD and BOLD->ETH swaps
-    ///         verifying that the live contract's output matches
-    ///         `AmmMath.getAmountOut`.
+    /// @notice Deploy a BOLD-enabled bridge with AMM, install
+    ///         pre-existing L1 reserves (SB L2-primary topology:
+    ///         deposits no longer grow the L1 books), and perform
+    ///         ETH->BOLD and BOLD->ETH swaps verifying that the live
+    ///         contract's output matches `AmmMath.getAmountOut`.
     function test_liveContract_ammSwapMatchesFormula() public {
         address BOLD_BREAKER = address(0xB12E6B6E);
         address BOLD_ADMIN = address(0xAD814);
@@ -349,7 +351,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
         // Deploy BOLD-enabled, AMM-enabled bridge (80% seed ratio)
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
-        KnomosisBridge bridge = new KnomosisBridge(
+        KnomosisBridge bridge = new AmmLiquidityHarness(
             KnomosisBridge.ConstructorArgs({
                 knomosisVersionTag: keccak256("knomosis-amm-crosscheck"),
                 attestor: address(0xA11CE),
@@ -378,22 +380,20 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
             })
         );
 
-        // Seed ETH reserve via depositETHWithFee
+        // Install pre-existing L1 liquidity (the same 40 ETH /
+        // 120 000 BOLD the retired deposit-driven staging produced).
+        uint256 boldAmount = 120_000 ether;
+        MockBold(BOLD).mint(lp, boldAmount);
         vm.prank(lp);
-        bridge.depositETHWithFee{value: 100 ether}(5000);
-
-        // Seed BOLD reserve via depositBoldWithFee
-        uint256 boldDeposit = 300_000 ether;
-        MockBold(BOLD).mint(lp, boldDeposit);
+        MockBold(BOLD).approve(address(bridge), boldAmount);
         vm.prank(lp);
-        MockBold(BOLD).approve(address(bridge), boldDeposit);
-        vm.prank(lp);
-        bridge.depositBoldWithFee(boldDeposit, 5000);
+        AmmLiquidityHarness(payable(address(bridge)))
+            .harnessInstallLegacyLiquidity{value: 40 ether}(boldAmount);
 
         uint256 rEth = bridge.ammReserveEth();
         uint256 rBold = bridge.ammReserveBold();
-        assertGt(rEth, 0, "ETH reserve seeded");
-        assertGt(rBold, 0, "BOLD reserve seeded");
+        assertGt(rEth, 0, "ETH reserve installed");
+        assertGt(rBold, 0, "BOLD reserve installed");
 
         // ETH -> BOLD swap: verify output matches AmmMath.getAmountOut
         uint256 amountIn = 1 ether;

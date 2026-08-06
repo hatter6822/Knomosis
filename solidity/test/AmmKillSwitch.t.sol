@@ -4,7 +4,7 @@ pragma solidity ^0.8.36;
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
 import {MockBold} from "test/utils/MockBold.sol";
-import {AmmTestBase} from "test/utils/AmmTestBase.sol";
+import {AmmLiquidityHarness, AmmTestBase} from "test/utils/AmmTestBase.sol";
 import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 
 /// @title AmmKillSwitchTest
@@ -187,7 +187,7 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         _etchBold();
         KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
         args.attestor = vm.addr(ATTESTOR_PK);
-        KnomosisBridge bridge = new KnomosisBridge(args);
+        KnomosisBridge bridge = new AmmLiquidityHarness(args);
         _seedBothLegs(bridge); // funds the escrow on both legs
 
         vm.prank(AMM_DR);
@@ -308,7 +308,7 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         _etchBold();
         KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
         args.migration = address(mig);
-        KnomosisBridge bridge = new KnomosisBridge(args);
+        KnomosisBridge bridge = new AmmLiquidityHarness(args);
         _seedBothLegs(bridge);
 
         // Pre-migration: swaps work (the migration mock is inactive).

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.36;
 
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
-import {Test} from "forge-std/Test.sol";
+import {stdStorage, StdStorage, Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -102,6 +102,8 @@ contract InactiveMigration {
 ///         from the mocks (larger dispatch tables, recipient checks) —
 ///         a few hundred gas, not thousands.
 abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
+    using stdStorage for StdStorage;
+
     /// @dev The snapshot group: all benchmarks across all scenario
     ///      contracts aggregate into `snapshots/BenchmarkGasV1_3.json`
     ///      (forge scratch output; the committed copy is the baseline).
@@ -280,11 +282,20 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
     }
 
     /// @notice Pre-warm `b` to its steady-state shape: the LP's two
-    ///         max-fee deposits make `totalLockedValue`,
-    ///         `boldTotalLockedValue`, `ammReserveEth`, and
-    ///         `ammReserveBold` all non-zero, so the benchmarked deposits
-    ///         and swaps measure the recurring (non-first-write) storage
-    ///         costs of a live deployment.
+    ///         max-fee deposits make `totalLockedValue` and
+    ///         `boldTotalLockedValue` non-zero, and the staging then
+    ///         installs the steady-state L1 AMM reserves (15 ETH /
+    ///         45 000 BOLD — exactly what the pre-topology LP deposits
+    ///         used to accrue) DIRECTLY: under the SB L2-primary
+    ///         topology a deposit no longer grows the L1 books, and a
+    ///         live deployment's reserves are pre-existing liquidity.
+    ///         Storage writes in staging leave the deployed contract
+    ///         the EXACT production bytecode, so no benchmarked call's
+    ///         gas is perturbed by a harness shape — and the reserve
+    ///         values match the retired deposit-driven staging
+    ///         byte-for-byte, so the swap benchmarks' operand shapes
+    ///         are unchanged.  The deposits above already escrow the
+    ///         backing (100 ETH / 300 000 BOLD ≥ the books).
     function _seedPool(KnomosisBridge b) internal {
         vm.deal(lp, LP_ETH_DEPOSIT);
         vm.prank(lp);
@@ -292,6 +303,12 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
         _mintApprove(b, lp, LP_BOLD_DEPOSIT);
         vm.prank(lp);
         b.depositBoldWithFee(LP_BOLD_DEPOSIT, LP_FEE_BPS);
+        stdstore.target(address(b)).sig("ammReserveEth()").checked_write(
+            uint256(15 ether)
+        );
+        stdstore.target(address(b)).sig("ammReserveBold()").checked_write(
+            uint256(45_000 ether)
+        );
     }
 
     /// @notice A deadline comfortably in the future for the swap benchmarks.
@@ -747,9 +764,10 @@ contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
         assertFalse(successor.activated(), "successor not activated");
         assertEq(bridge.depositNonce(bob), 1, "bob is a repeat depositor");
         assertGt(MockBoldOz(BOLD).balanceOf(ethSwapperRepeat), 0, "repeat swapper holds BOLD");
-        // LP seed (15 ETH) + bob's staging deposit's seed
-        // (1 ETH x 1% fee x 30% seed = 0.003 ETH).
-        assertEq(bridge.ammReserveEth(), 15.003 ether, "ETH reserve == 15.003");
+        // The staged steady-state reserves (SB L2-primary): bob's
+        // staging deposit does NOT grow the L1 book — its 0.003 ETH
+        // seed rides the event to the L2 reserve actor instead.
+        assertEq(bridge.ammReserveEth(), 15 ether, "ETH reserve == 15");
         assertEq(bridge.ammReserveBold(), 45_000 ether, "BOLD reserve == 45 000");
     }
 

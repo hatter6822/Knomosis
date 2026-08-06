@@ -114,13 +114,14 @@ contract AmmInvariantsTest is AmmTestBase {
 
     /// @notice The swap accounting never touches the TVL counters: a swap is
     ///         a self-contained reserve rearrangement.  `totalLockedValue`
-    ///         stays exactly at the seeded value across the whole run.
+    ///         stays exactly at the installed value across the whole run.
     function invariant_tvlUntouchedBySwaps() public view {
-        // Seeding deposited 100 ETH + 300000 BOLD; swaps must not move TVL.
+        // The harness installed 40 ETH + 120000 BOLD of legacy liquidity
+        // (books and backing together); swaps must not move TVL.
         assertEq(
-            bridge.totalLockedValue(), 100 ether + 300_000 ether, "swaps never change global TVL"
+            bridge.totalLockedValue(), 40 ether + 120_000 ether, "swaps never change global TVL"
         );
-        assertEq(bridge.boldTotalLockedValue(), 300_000 ether, "swaps never change per-BOLD TVL");
+        assertEq(bridge.boldTotalLockedValue(), 120_000 ether, "swaps never change per-BOLD TVL");
     }
 
     /// @notice Sanity: the random sequence actually executed swaps (so the

@@ -6,7 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {MockBold} from "test/utils/MockBold.sol";
-import {AmmTestBase} from "test/utils/AmmTestBase.sol";
+import {AmmLiquidityHarness, AmmTestBase} from "test/utils/AmmTestBase.sol";
 
 /// @title AmmSwapTest
 /// @notice Workstream GP.11.3.b / GP.11.3.c — the embedded ETH<->BOLD AMM
@@ -173,12 +173,15 @@ contract AmmSwapTest is AmmTestBase {
         bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
     }
 
-    /// @notice If only one leg is seeded, swaps still revert `AmmEmpty`.
+    /// @notice If only one leg holds liquidity, swaps still revert
+    ///         `AmmEmpty`.  The single leg is installed as pre-existing
+    ///         L1 liquidity (SB L2-primary topology: deposits no longer
+    ///         grow the L1 books).
     function test_swap_revertsAmmEmpty_oneLegSeeded() public {
         KnomosisBridge bridge = _deploySeededReady();
-        vm.prank(lp);
-        bridge.depositETHWithFee{value: 100 ether}(5000);
-        assertGt(bridge.ammReserveEth(), 0, "ETH leg seeded");
+        AmmLiquidityHarness(payable(address(bridge)))
+            .harnessInstallLegacyLiquidity{value: 40 ether}(0);
+        assertGt(bridge.ammReserveEth(), 0, "ETH leg holds liquidity");
         assertEq(bridge.ammReserveBold(), 0, "BOLD leg empty");
 
         vm.expectRevert(KnomosisBridge.AmmEmpty.selector);
@@ -329,9 +332,11 @@ contract AmmSwapTest is AmmTestBase {
         assertGt(kAfter, kBefore, "and strictly more than before (fee accrued)");
     }
 
-    /// @notice Composition: deposits (seeding) and swaps interleave correctly —
-    ///         a deposit after a swap adds its seed ON TOP of the post-swap
-    ///         reserve, and the real-token backing holds throughout.
+    /// @notice Composition: deposits and swaps interleave under the SB
+    ///         L2-primary topology — a fee-split deposit AFTER a swap
+    ///         leaves the L1 reserves exactly where the swap put them
+    ///         (the seed leg is credited on L2, not here), and the
+    ///         real-token backing holds throughout.
     function test_composition_seedSwapSeedSwap() public {
         KnomosisBridge bridge = _deploySeededReady();
         _seedBothLegs(bridge);
@@ -341,13 +346,12 @@ contract AmmSwapTest is AmmTestBase {
         bridge.ammSwap{value: 3 ether}(NATIVE_ETH, 3 ether, 0, _farDeadline());
         uint256 ethAfterSwap = bridge.ammReserveEth();
 
-        // Deposit more ETH: seeds floor(poolAmount * 80%) ON TOP of the
-        // post-swap reserve.
-        (, uint256 poolAmount,) = FeeSplitMath_split(20 ether, 5000);
-        uint256 newSeed = (poolAmount * 8000) / 10_000;
+        // Deposit more ETH: the L1 reserve is UNTOUCHED — the deposit's
+        // seed split rides the event to the L2 reserve actor instead.
         vm.prank(lp);
         bridge.depositETHWithFee{value: 20 ether}(5000);
-        assertEq(bridge.ammReserveEth(), ethAfterSwap + newSeed, "deposit seeds on top of post-swap reserve");
+        assertEq(bridge.ammReserveEth(), ethAfterSwap,
+            "a deposit leaves the post-swap L1 reserve untouched");
 
         // Swap again (BOLD -> ETH) and confirm real-token backing throughout.
         _mintApprove(bridge, swapper, 5000 ether);
@@ -357,18 +361,6 @@ contract AmmSwapTest is AmmTestBase {
         assertLe(
             bridge.ammReserveBold(), MockBold(BOLD).balanceOf(address(bridge)), "BOLD reserve backed"
         );
-    }
-
-    /// @dev Inline mirror of `depositETHWithFee`'s pool split (avoids a
-    ///      FeeSplitMath import for this one composition assertion):
-    ///      poolAmount = floor(v * feeBps / 10000).
-    function FeeSplitMath_split(uint256 v, uint16 feeBps)
-        internal
-        pure
-        returns (uint256, uint256, uint64)
-    {
-        uint256 poolAmount = (v * feeBps) / 10_000;
-        return (v - poolAmount, poolAmount, 0);
     }
 
     // ------------------------------------------------------------------

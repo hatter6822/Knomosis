@@ -4,8 +4,46 @@ pragma solidity ^0.8.36;
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {MockBold} from "test/utils/MockBold.sol";
+
+/// @title AmmLiquidityHarness
+/// @notice `KnomosisBridge` plus a test-only installer for
+///         PRE-EXISTING L1 AMM liquidity.  Under the Workstream SB
+///         L2-primary pool topology, deposits no longer accrue the L1
+///         `ammReserve*` books (the seed leg is credited on L2); a
+///         live deployment keeps whatever L1 liquidity it already
+///         held, and the swap suites test THAT state.  The installer
+///         moves books and backing TOGETHER — ETH rides `msg.value`,
+///         BOLD is pulled from the caller — so the bridge's escrow
+///         stays honest and balance-based invariant checks hold.
+contract AmmLiquidityHarness is KnomosisBridge {
+    constructor(ConstructorArgs memory args) KnomosisBridge(args) {}
+
+    /// @notice Install legacy L1 reserves: `msg.value` of ETH plus
+    ///         `boldAmount` of BOLD (pulled from the caller, who must
+    ///         have approved this contract).  The books mirror how a
+    ///         real deployment accrued them — reserves were carved out
+    ///         of fee-split deposits, whose FULL value counted into
+    ///         `totalLockedValue` (and `boldTotalLockedValue` on the
+    ///         BOLD leg) — so the escrow-accounting checks on the
+    ///         withdrawal path hold over the modeled state.
+    function harnessInstallLegacyLiquidity(uint256 boldAmount) external payable {
+        ammReserveEth += msg.value;
+        totalLockedValue += msg.value;
+        if (boldAmount > 0) {
+            require(
+                IERC20(boldToken).transferFrom(msg.sender, address(this), boldAmount),
+                "harness BOLD pull failed"
+            );
+            ammReserveBold += boldAmount;
+            totalLockedValue += boldAmount;
+            boldTotalLockedValue += boldAmount;
+        }
+    }
+}
 
 /// @title AmmTestBase
 /// @notice Shared scaffolding for the Workstream GP.11.3 embedded-AMM swap
@@ -90,10 +128,13 @@ abstract contract AmmTestBase is Test, BoldTestSupport {
         });
     }
 
-    /// @notice A BOLD-enabled bridge at the max seed ratio (80%), so deposits
-    ///         seed the reserves generously.  Requires `_etchBold()` first.
+    /// @notice A BOLD-enabled bridge at the max seed ratio (80%),
+    ///         deployed as the `AmmLiquidityHarness` so a suite can
+    ///         install pre-existing L1 liquidity (deposits no longer
+    ///         grow the L1 books under the SB L2-primary topology).
+    ///         Requires `_etchBold()` first.
     function _deployBoldEnabled() internal returns (KnomosisBridge) {
-        return new KnomosisBridge(_boldEnabledArgs());
+        return new AmmLiquidityHarness(_boldEnabledArgs());
     }
 
     /// @notice Etch BOLD then deploy a BOLD-enabled bridge in the right order.
@@ -136,26 +177,29 @@ abstract contract AmmTestBase is Test, BoldTestSupport {
         );
     }
 
-    /// @notice Mint `amount` BOLD to `user` and approve `bridge`.
-    /// @notice Seed both AMM reserves to a realistic ~1 ETH : 3000 BOLD ratio.
-    ///         100 ETH at 50% fee -> pool 50 -> 80% seed = 40 ETH;
-    ///         300000 BOLD at 50% fee -> pool 150000 -> 80% seed = 120000 BOLD.
+    /// @notice Install both L1 legs at a realistic ~1 ETH : 3000 BOLD
+    ///         ratio (40 ETH : 120000 BOLD — the same figures the
+    ///         retired deposit-driven seeding produced from 100 ETH /
+    ///         300000 BOLD at a 50% fee and the 80% ratio).  Models a
+    ///         deployment that ALREADY HELD L1 AMM liquidity when the
+    ///         SB L2-primary topology landed: deposits no longer grow
+    ///         the L1 books, so the swap suites install the
+    ///         pre-existing state through the harness — books and
+    ///         backing move together.
     function _seedBothLegs(KnomosisBridge bridge)
         internal
         returns (uint256 reserveEth, uint256 reserveBold)
     {
+        AmmLiquidityHarness h = AmmLiquidityHarness(payable(address(bridge)));
+        uint256 boldAmount = 120_000 ether;
+        _mintApprove(bridge, lp, boldAmount);
         vm.prank(lp);
-        bridge.depositETHWithFee{value: 100 ether}(5000);
-
-        uint256 boldDeposit = 300_000 ether;
-        _mintApprove(bridge, lp, boldDeposit);
-        vm.prank(lp);
-        bridge.depositBoldWithFee(boldDeposit, 5000);
+        h.harnessInstallLegacyLiquidity{value: 40 ether}(boldAmount);
 
         reserveEth = bridge.ammReserveEth();
         reserveBold = bridge.ammReserveBold();
-        assertGt(reserveEth, 0, "ETH reserve seeded");
-        assertGt(reserveBold, 0, "BOLD reserve seeded");
+        assertGt(reserveEth, 0, "ETH reserve installed");
+        assertGt(reserveBold, 0, "BOLD reserve installed");
     }
 
     /// @notice Independent constant-product output reference (NOT via the
