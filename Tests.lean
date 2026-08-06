@@ -167,6 +167,7 @@ import LegalKernel.Test.FaultProof.Smt
 import LegalKernel.Test.FaultProof.Commit
 import LegalKernel.Test.FaultProof.AmmCommit
 import LegalKernel.Test.FaultProof.StateCells
+import LegalKernel.Test.FaultProof.ActionsRoot
 import LegalKernel.Test.FaultProof.SmtInjective
 import LegalKernel.Test.FaultProof.StateCellsInjective
 import LegalKernel.Test.FaultProof.CellWrites
@@ -222,7 +223,7 @@ open LegalKernel.Test
 -- LP and LX add their suites.  An alternative would be to split
 -- the chain into multiple `def`s, but the linear-chain form is
 -- clearer and the bump is harmless.
-set_option maxRecDepth 1024
+set_option maxRecDepth 2048
 
 /-- Test-driver entry point.  Returns `0` when every suite passes,
     `1` when any test fails. -/
@@ -433,6 +434,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.AmmCommit.tests)
   failed := failed + (← runAll "faultproof-state-cells"
                                     LegalKernel.Test.FaultProof.StateCells.tests)
+  failed := failed + (← runAll "faultproof-actions-root"
+                                    LegalKernel.Test.FaultProof.ActionsRoot.tests)
   failed := failed + (← runAll "faultproof-smt-injective"
                                     LegalKernel.Test.FaultProof.SmtInjective.tests)
   failed := failed + (← runAll "faultproof-state-cells-injective"

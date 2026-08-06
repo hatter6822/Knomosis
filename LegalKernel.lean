@@ -320,6 +320,7 @@ import LegalKernel.FaultProof.Observer
 import LegalKernel.FaultProof.SubStep
 import LegalKernel.FaultProof.KeyDerivation
 import LegalKernel.FaultProof.StateCells
+import LegalKernel.FaultProof.ActionsRoot
 import LegalKernel.FaultProof.SmtInjective
 import LegalKernel.FaultProof.StateCellsInjective
 import LegalKernel.FaultProof.ProductionApply

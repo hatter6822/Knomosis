@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0c830f6d2052a95d57b2e888a9e336fd1915c0f142d4687db3f1cadabd9932ea"
+    "source_digest": "038143b1a0e842869e0fea567f82f15c07901e8b73a37361c9a2ead3838f2603"
   },
   "summary": {
-    "module_count": 192,
-    "declaration_count": 6052
+    "module_count": 193,
+    "declaration_count": 6099
   },
   "modules": [
     {
@@ -7542,7 +7542,8 @@
             "HARD_MAX_CONCURRENT_CONNECTIONS",
             "_",
             "load",
-            "min"
+            "min",
+            "observed"
           ]
         },
         {
@@ -10188,37 +10189,37 @@
         {
           "kind": "const",
           "name": "DEFAULT_POLL_INTERVAL_MS",
-          "line": 57,
+          "line": 59,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_CONFIRMATION_DEPTH",
-          "line": 60,
+          "line": 62,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_REORG_WINDOW",
-          "line": 63,
+          "line": 65,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_BLOCKS_PER_ITER",
-          "line": 66,
+          "line": 68,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_LOG_LEVEL",
-          "line": 69,
+          "line": 71,
           "called": []
         },
         {
           "kind": "struct",
           "name": "CliConfig",
-          "line": 74,
+          "line": 76,
           "called": [
             "EthAddress",
             "TurnSide",
@@ -10228,7 +10229,7 @@
         {
           "kind": "enum",
           "name": "CliError",
-          "line": 140,
+          "line": 146,
           "called": [
             "error",
             "reason"
@@ -10237,13 +10238,13 @@
         {
           "kind": "impl",
           "name": "CliConfig",
-          "line": 166,
+          "line": 172,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_args",
-          "line": 176,
+          "line": 182,
           "called": [
             "CliError",
             "DEFAULT_BLOCKS_PER_ITER",
@@ -10272,7 +10273,7 @@
         {
           "kind": "fn",
           "name": "validate",
-          "line": 318,
+          "line": 330,
           "called": [
             "CliError",
             "Err",
@@ -10283,7 +10284,7 @@
         {
           "kind": "fn",
           "name": "read_value",
-          "line": 413,
+          "line": 436,
           "called": [
             "CliError",
             "args",
@@ -10294,7 +10295,7 @@
         {
           "kind": "fn",
           "name": "parse_address",
-          "line": 423,
+          "line": 446,
           "called": [
             "CliError",
             "EthAddress",
@@ -10306,7 +10307,7 @@
         {
           "kind": "fn",
           "name": "parse_32_byte_hex",
-          "line": 436,
+          "line": 459,
           "called": [
             "CliError",
             "Err",
@@ -10318,7 +10319,7 @@
         {
           "kind": "fn",
           "name": "parse_turn_side",
-          "line": 454,
+          "line": 477,
           "called": [
             "CliError",
             "Err",
@@ -10330,7 +10331,7 @@
         {
           "kind": "fn",
           "name": "parse_u32",
-          "line": 466,
+          "line": 489,
           "called": [
             "CliError",
             "parse",
@@ -10340,7 +10341,7 @@
         {
           "kind": "fn",
           "name": "parse_u64",
-          "line": 474,
+          "line": 497,
           "called": [
             "CliError",
             "parse",
@@ -10350,19 +10351,19 @@
         {
           "kind": "fn",
           "name": "print_help",
-          "line": 482,
+          "line": 505,
           "called": []
         },
         {
           "kind": "fn",
           "name": "print_version",
-          "line": 544,
+          "line": 575,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 553,
+          "line": 584,
           "called": [
             "CliConfig",
             "CliError",
@@ -10376,7 +10377,7 @@
         {
           "kind": "fn",
           "name": "args",
-          "line": 561,
+          "line": 592,
           "called": [
             "iter"
           ]
@@ -10384,7 +10385,7 @@
         {
           "kind": "fn",
           "name": "help_short_and_long",
-          "line": 569,
+          "line": 600,
           "called": [
             "args"
           ]
@@ -10392,7 +10393,7 @@
         {
           "kind": "fn",
           "name": "version_short_and_long",
-          "line": 578,
+          "line": 609,
           "called": [
             "args"
           ]
@@ -10400,7 +10401,7 @@
         {
           "kind": "fn",
           "name": "parse_address_happy",
-          "line": 587,
+          "line": 618,
           "called": [
             "addr",
             "parse_address"
@@ -10409,7 +10410,7 @@
         {
           "kind": "fn",
           "name": "parse_address_wrong_length",
-          "line": 595,
+          "line": 626,
           "called": [
             "parse_address"
           ]
@@ -10417,7 +10418,7 @@
         {
           "kind": "fn",
           "name": "parse_address_invalid_hex",
-          "line": 602,
+          "line": 633,
           "called": [
             "parse_address"
           ]
@@ -10425,7 +10426,7 @@
         {
           "kind": "fn",
           "name": "parse_address_no_0x_prefix",
-          "line": 609,
+          "line": 640,
           "called": [
             "addr",
             "parse_address"
@@ -10434,7 +10435,7 @@
         {
           "kind": "fn",
           "name": "parse_32_byte_hex_happy",
-          "line": 616,
+          "line": 647,
           "called": [
             "parse_32_byte_hex"
           ]
@@ -10442,7 +10443,7 @@
         {
           "kind": "fn",
           "name": "parse_32_byte_hex_wrong_length",
-          "line": 623,
+          "line": 654,
           "called": [
             "parse_32_byte_hex"
           ]
@@ -10450,7 +10451,7 @@
         {
           "kind": "fn",
           "name": "parse_turn_side_happy",
-          "line": 630,
+          "line": 661,
           "called": [
             "parse_turn_side"
           ]
@@ -10458,7 +10459,7 @@
         {
           "kind": "fn",
           "name": "parse_turn_side_rejects_unknown",
-          "line": 639,
+          "line": 670,
           "called": [
             "parse_turn_side"
           ]
@@ -10466,7 +10467,7 @@
         {
           "kind": "fn",
           "name": "parse_integers_happy",
-          "line": 646,
+          "line": 677,
           "called": [
             "parse_u32",
             "parse_u64"
@@ -10475,7 +10476,7 @@
         {
           "kind": "fn",
           "name": "parse_integers_reject_negatives",
-          "line": 653,
+          "line": 684,
           "called": [
             "parse_u32",
             "parse_u64"
@@ -10484,7 +10485,7 @@
         {
           "kind": "fn",
           "name": "full_parse_happy",
-          "line": 660,
+          "line": 691,
           "called": [
             "args"
           ]
@@ -10492,7 +10493,7 @@
         {
           "kind": "fn",
           "name": "missing_required_flag",
-          "line": 684,
+          "line": 715,
           "called": [
             "args"
           ]
@@ -10500,7 +10501,7 @@
         {
           "kind": "fn",
           "name": "unknown_flag",
-          "line": 704,
+          "line": 735,
           "called": [
             "_",
             "args"
@@ -10509,7 +10510,7 @@
         {
           "kind": "fn",
           "name": "missing_value_after_flag",
-          "line": 711,
+          "line": 742,
           "called": [
             "args"
           ]
@@ -10517,7 +10518,7 @@
         {
           "kind": "fn",
           "name": "cross_flag_validation_rejects_inconsistent",
-          "line": 718,
+          "line": 749,
           "called": [
             "_",
             "args"
@@ -10526,7 +10527,7 @@
         {
           "kind": "fn",
           "name": "chain_id_without_truth_oracle_rejected",
-          "line": 746,
+          "line": 777,
           "called": [
             "args"
           ]
@@ -10534,7 +10535,7 @@
         {
           "kind": "fn",
           "name": "chain_id_with_truth_oracle_accepted",
-          "line": 773,
+          "line": 804,
           "called": [
             "args",
             "knomosis_binary"
@@ -10543,7 +10544,7 @@
         {
           "kind": "fn",
           "name": "custom_options_override_defaults",
-          "line": 808,
+          "line": 839,
           "called": [
             "args"
           ]
@@ -10551,7 +10552,7 @@
         {
           "kind": "fn",
           "name": "zero_confirmation_depth_rejected",
-          "line": 849,
+          "line": 880,
           "called": [
             "_",
             "args"
@@ -10560,7 +10561,7 @@
         {
           "kind": "fn",
           "name": "chain_id_parses_decimal_value",
-          "line": 874,
+          "line": 905,
           "called": [
             "args"
           ]
@@ -10568,7 +10569,7 @@
         {
           "kind": "fn",
           "name": "chain_id_omitted_defaults_to_none",
-          "line": 904,
+          "line": 935,
           "called": [
             "args"
           ]
@@ -10576,7 +10577,7 @@
         {
           "kind": "fn",
           "name": "chain_id_zero_rejected_per_eip155",
-          "line": 924,
+          "line": 955,
           "called": [
             "_",
             "args"
@@ -10585,7 +10586,7 @@
         {
           "kind": "fn",
           "name": "chain_id_hex_rejected_decimal_only_parser",
-          "line": 949,
+          "line": 980,
           "called": [
             "args"
           ]
@@ -10593,15 +10594,6 @@
         {
           "kind": "fn",
           "name": "knomosis_binary_and_log_parse_together",
-          "line": 978,
-          "called": [
-            "args",
-            "knomosis_binary"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "knomosis_binary_and_log_omitted_defaults_to_none",
           "line": 1009,
           "called": [
             "args",
@@ -10610,8 +10602,17 @@
         },
         {
           "kind": "fn",
+          "name": "knomosis_binary_and_log_omitted_defaults_to_none",
+          "line": 1040,
+          "called": [
+            "args",
+            "knomosis_binary"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "knomosis_binary_without_log_rejected",
-          "line": 1030,
+          "line": 1061,
           "called": [
             "args"
           ]
@@ -10619,7 +10620,7 @@
         {
           "kind": "fn",
           "name": "knomosis_log_without_binary_rejected",
-          "line": 1056,
+          "line": 1087,
           "called": [
             "args"
           ]
@@ -13000,6 +13001,7 @@
             "Err",
             "_",
             "as_bytes",
+            "body",
             "clone",
             "find_double_crlf",
             "flush",
@@ -13422,7 +13424,7 @@
         {
           "kind": "fn",
           "name": "build_state_reader",
-          "line": 275,
+          "line": 276,
           "called": [
             "CliConfig",
             "GameStateReader",
@@ -13434,7 +13436,7 @@
         {
           "kind": "fn",
           "name": "build_truth_oracle",
-          "line": 304,
+          "line": 305,
           "called": [
             "CliConfig",
             "TruthOracle",
@@ -13447,7 +13449,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_bundle_oracle",
-          "line": 334,
+          "line": 335,
           "called": [
             "CliConfig",
             "TerminateBundleOracle",
@@ -13460,7 +13462,7 @@
         {
           "kind": "fn",
           "name": "parse_tracing_level",
-          "line": 350,
+          "line": 351,
           "called": [
             "as_str"
           ]
@@ -13470,7 +13472,7 @@
     {
       "module": "runtime::knomosis-faultproof-observer::src::observer",
       "path": "runtime/knomosis-faultproof-observer/src/observer.rs",
-      "declaration_count": 91,
+      "declaration_count": 110,
       "declarations": [
         {
           "kind": "const",
@@ -13489,16 +13491,23 @@
           ]
         },
         {
+          "kind": "const",
+          "name": "DEFAULT_MAX_BROADCAST_ATTEMPTS",
+          "line": 123,
+          "called": []
+        },
+        {
           "kind": "impl",
           "name": "ObserverConfig",
-          "line": 104,
+          "line": 125,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 107,
+          "line": 128,
           "called": [
+            "DEFAULT_MAX_BROADCAST_ATTEMPTS",
             "DEFAULT_POLL_INTERVAL",
             "WatcherConfig",
             "watcher"
@@ -13507,7 +13516,7 @@
         {
           "kind": "struct",
           "name": "Observer",
-          "line": 127,
+          "line": 149,
           "called": [
             "GameRecord",
             "GameStateReader",
@@ -13532,15 +13541,26 @@
         {
           "kind": "struct",
           "name": "PendingBroadcast",
-          "line": 181,
+          "line": 211,
           "called": [
+            "MoveKind",
+            "game_id"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "QueuedCall",
+          "line": 232,
+          "called": [
+            "MoveKind",
+            "depth",
             "game_id"
           ]
         },
         {
           "kind": "impl",
           "name": "Observer<S, Sub, T>",
-          "line": 196,
+          "line": 244,
           "called": [
             "L1Source",
             "Observer",
@@ -13551,12 +13571,13 @@
         {
           "kind": "fn",
           "name": "new",
-          "line": 204,
+          "line": 252,
           "called": [
             "MoveKind",
             "ObserverConfig",
             "ObserverError",
             "Persistence",
+            "_",
             "clone",
             "config",
             "cursor",
@@ -13564,7 +13585,7 @@
             "games",
             "insert",
             "is_empty",
-            "iter",
+            "key",
             "len",
             "list_games",
             "list_responses",
@@ -13585,7 +13606,7 @@
         {
           "kind": "fn",
           "name": "with_terminate_bundle_oracle",
-          "line": 302,
+          "line": 376,
           "called": [
             "TerminateBundleOracle"
           ]
@@ -13593,7 +13614,7 @@
         {
           "kind": "fn",
           "name": "with_state_reader",
-          "line": 335,
+          "line": 409,
           "called": [
             "GameStateReader",
             "state_reader"
@@ -13602,7 +13623,7 @@
         {
           "kind": "fn",
           "name": "config",
-          "line": 342,
+          "line": 416,
           "called": [
             "ObserverConfig"
           ]
@@ -13610,7 +13631,7 @@
         {
           "kind": "fn",
           "name": "games",
-          "line": 349,
+          "line": 423,
           "called": [
             "GameRecord"
           ]
@@ -13618,7 +13639,7 @@
         {
           "kind": "fn",
           "name": "stop_signal",
-          "line": 356,
+          "line": 430,
           "called": [
             "clone",
             "stop"
@@ -13627,7 +13648,7 @@
         {
           "kind": "fn",
           "name": "request_stop",
-          "line": 361,
+          "line": 435,
           "called": [
             "stop"
           ]
@@ -13635,13 +13656,13 @@
         {
           "kind": "fn",
           "name": "submitter",
-          "line": 367,
+          "line": 441,
           "called": []
         },
         {
           "kind": "fn",
           "name": "watcher",
-          "line": 374,
+          "line": 448,
           "called": [
             "Watcher"
           ]
@@ -13649,7 +13670,7 @@
         {
           "kind": "fn",
           "name": "watcher_mut",
-          "line": 383,
+          "line": 457,
           "called": [
             "Watcher",
             "watcher"
@@ -13658,7 +13679,7 @@
         {
           "kind": "fn",
           "name": "set_start_block",
-          "line": 400,
+          "line": 474,
           "called": [
             "clear_reorg_window",
             "last_confirmed_block",
@@ -13669,11 +13690,11 @@
         {
           "kind": "fn",
           "name": "mark_state_known",
-          "line": 481,
+          "line": 555,
           "called": [
             "Err",
             "GameRecord",
-            "GameState",
+            "ObservedGame",
             "ObserverError",
             "block_number",
             "clone",
@@ -13685,6 +13706,7 @@
             "insert",
             "is_in_progress",
             "is_terminal",
+            "observed",
             "persistence",
             "range",
             "rec",
@@ -13695,7 +13717,7 @@
         {
           "kind": "fn",
           "name": "hydrate_cold_start_games",
-          "line": 566,
+          "line": 642,
           "called": [
             "Err",
             "GameStateReader",
@@ -13708,6 +13730,7 @@
             "id",
             "iter",
             "mark_state_known",
+            "observed",
             "read_and_validate",
             "rec"
           ]
@@ -13715,7 +13738,7 @@
         {
           "kind": "fn",
           "name": "persistence",
-          "line": 622,
+          "line": 698,
           "called": [
             "Persistence"
           ]
@@ -13723,7 +13746,7 @@
         {
           "kind": "fn",
           "name": "run_iteration",
-          "line": 632,
+          "line": 708,
           "called": [
             "IterationOutcome",
             "ObserverError",
@@ -13734,7 +13757,7 @@
         {
           "kind": "fn",
           "name": "run_iteration_inner",
-          "line": 664,
+          "line": 740,
           "called": [
             "Err",
             "IterationOutcome",
@@ -13761,6 +13784,8 @@
             "set_reorg_window",
             "snapshot",
             "state_reader",
+            "sweep_owed_moves",
+            "sweep_timeout_claims",
             "take",
             "watcher",
             "window_snapshot"
@@ -13769,7 +13794,7 @@
         {
           "kind": "fn",
           "name": "recover_intent_records",
-          "line": 796,
+          "line": 881,
           "called": [
             "Err",
             "ObserverError",
@@ -13787,7 +13812,7 @@
         {
           "kind": "fn",
           "name": "broadcast_and_update_status",
-          "line": 881,
+          "line": 967,
           "called": [
             "Err",
             "ObserverError",
@@ -13797,14 +13822,27 @@
             "invalidate_nonce_cache",
             "load_response",
             "persistence",
+            "release_pivot_after_broadcast_failure",
             "store_response",
             "submitter"
           ]
         },
         {
           "kind": "fn",
+          "name": "release_pivot_after_broadcast_failure",
+          "line": 1051,
+          "called": [
+            "PendingBroadcast",
+            "config",
+            "error",
+            "game_id",
+            "key"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "handle_event",
-          "line": 948,
+          "line": 1084,
           "called": [
             "EventHandling",
             "GameEvent",
@@ -13824,7 +13862,7 @@
         {
           "kind": "fn",
           "name": "handle_game_opened",
-          "line": 1025,
+          "line": 1161,
           "called": [
             "Claim",
             "DisputedRange",
@@ -13851,7 +13889,7 @@
         {
           "kind": "fn",
           "name": "handle_midpoint_submitted",
-          "line": 1106,
+          "line": 1244,
           "called": [
             "Claim",
             "Err",
@@ -13879,7 +13917,7 @@
         {
           "kind": "fn",
           "name": "handle_response_submitted",
-          "line": 1211,
+          "line": 1358,
           "called": [
             "Err",
             "EventHandling",
@@ -13905,7 +13943,7 @@
         {
           "kind": "fn",
           "name": "handle_game_settled",
-          "line": 1315,
+          "line": 1471,
           "called": [
             "Err",
             "EventHandling",
@@ -13928,37 +13966,101 @@
         {
           "kind": "fn",
           "name": "maybe_play_move",
-          "line": 1369,
+          "line": 1534,
           "called": [
             "Err",
             "GameRecord",
             "ObserverError",
-            "PendingBroadcast",
             "PersistBatch",
-            "ResponseRecord",
+            "QueuedCall",
             "block_number",
-            "build_and_sign",
             "build_calldata_for_move",
             "compute_next_move",
             "depth",
-            "error",
             "game_id",
             "has_submitted_for_pivot",
-            "insert",
             "is_in_progress",
             "move_kind_of",
             "pivot_for_move",
-            "push",
+            "queue_l1_call",
             "rec",
-            "state",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "queue_l1_call",
+          "line": 1622,
+          "called": [
+            "Err",
+            "PendingBroadcast",
+            "PersistBatch",
+            "QueuedCall",
+            "ResponseRecord",
+            "block_number",
+            "build_and_sign",
+            "call",
+            "clone",
+            "depth",
+            "error",
+            "game_id",
+            "insert",
+            "push",
             "submitter",
             "upsert_response"
           ]
         },
         {
           "kind": "fn",
+          "name": "sweep_owed_moves",
+          "line": 1733,
+          "called": [
+            "GameRecord",
+            "ObserverError",
+            "PersistBatch",
+            "games",
+            "is_in_progress",
+            "last_confirmed_block",
+            "maybe_play_move",
+            "rec",
+            "state",
+            "watcher"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "sweep_timeout_claims",
+          "line": 1783,
+          "called": [
+            "Err",
+            "PersistBatch",
+            "QueuedCall",
+            "clone",
+            "config",
+            "depth",
+            "error",
+            "game_id",
+            "games",
+            "get",
+            "has_submitted_for_pivot",
+            "is_empty",
+            "is_in_progress",
+            "last_confirmed_block",
+            "observed",
+            "queue_l1_call",
+            "read_and_validate",
+            "rec",
+            "state",
+            "state_reader",
+            "take",
+            "upsert_game",
+            "watcher"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "has_submitted_for_pivot",
-          "line": 1514,
+          "line": 1893,
           "called": [
             "MoveKind",
             "game_id"
@@ -13967,7 +14069,7 @@
         {
           "kind": "fn",
           "name": "build_calldata_for_move",
-          "line": 1528,
+          "line": 1908,
           "called": [
             "Err",
             "GameRecord",
@@ -13982,7 +14084,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata",
-          "line": 1549,
+          "line": 1929,
           "called": [
             "Err",
             "GameRecord",
@@ -14000,7 +14102,7 @@
         {
           "kind": "fn",
           "name": "run",
-          "line": 1620,
+          "line": 2000,
           "called": [
             "Err",
             "ObserverError",
@@ -14017,7 +14119,7 @@
         {
           "kind": "fn",
           "name": "seed_watcher_for_tests",
-          "line": 1660,
+          "line": 2040,
           "called": [
             "L1Source",
             "Observer",
@@ -14030,7 +14132,7 @@
         {
           "kind": "fn",
           "name": "interruptible_sleep",
-          "line": 1669,
+          "line": 2049,
           "called": [
             "load",
             "min",
@@ -14040,7 +14142,7 @@
         {
           "kind": "fn",
           "name": "move_kind_of",
-          "line": 1691,
+          "line": 2071,
           "called": [
             "HonestMove",
             "MoveKind",
@@ -14050,7 +14152,7 @@
         {
           "kind": "fn",
           "name": "pivot_for_move",
-          "line": 1703,
+          "line": 2083,
           "called": [
             "GameState",
             "HonestMove",
@@ -14061,19 +14163,19 @@
         {
           "kind": "enum",
           "name": "EventHandling",
-          "line": 1716,
+          "line": 2096,
           "called": []
         },
         {
           "kind": "struct",
           "name": "IterationOutcome",
-          "line": 1728,
+          "line": 2108,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1742,
+          "line": 2122,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14100,7 +14202,7 @@
         {
           "kind": "fn",
           "name": "make_contract_addr",
-          "line": 1761,
+          "line": 2142,
           "called": [
             "EthAddress",
             "seed"
@@ -14109,7 +14211,7 @@
         {
           "kind": "fn",
           "name": "make_block_hash",
-          "line": 1767,
+          "line": 2148,
           "called": [
             "TopicHash",
             "seed"
@@ -14118,7 +14220,7 @@
         {
           "kind": "fn",
           "name": "commit",
-          "line": 1774,
+          "line": 2155,
           "called": [
             "StateCommit",
             "seed"
@@ -14127,7 +14229,7 @@
         {
           "kind": "fn",
           "name": "header",
-          "line": 1780,
+          "line": 2161,
           "called": [
             "BlockHeader",
             "TopicHash",
@@ -14137,7 +14239,7 @@
         {
           "kind": "fn",
           "name": "topic_from_u128",
-          "line": 1788,
+          "line": 2169,
           "called": [
             "TopicHash"
           ]
@@ -14145,7 +14247,7 @@
         {
           "kind": "fn",
           "name": "topic_from_u64",
-          "line": 1794,
+          "line": 2175,
           "called": [
             "TopicHash"
           ]
@@ -14153,7 +14255,7 @@
         {
           "kind": "fn",
           "name": "fresh_observer",
-          "line": 1804,
+          "line": 2185,
           "called": [
             "InMemoryL1Source",
             "MemoryTruthOracle",
@@ -14170,7 +14272,7 @@
         {
           "kind": "fn",
           "name": "iteration_no_op_on_empty_source",
-          "line": 1828,
+          "line": 2209,
           "called": [
             "fresh_observer",
             "run_iteration"
@@ -14179,7 +14281,7 @@
         {
           "kind": "fn",
           "name": "adopt_game_opened_event",
-          "line": 1844,
+          "line": 2225,
           "called": [
             "RawLog",
             "block_number",
@@ -14209,7 +14311,7 @@
         {
           "kind": "fn",
           "name": "cold_start_midpoint_event_on_settled_game_skipped",
-          "line": 1899,
+          "line": 2280,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14233,7 +14335,7 @@
         {
           "kind": "fn",
           "name": "cold_start_response_event_on_settled_game_skipped",
-          "line": 1952,
+          "line": 2334,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14257,7 +14359,7 @@
         {
           "kind": "fn",
           "name": "pivot_dedup_helper_populates_from_persistence_at_startup",
-          "line": 2006,
+          "line": 2389,
           "called": [
             "ResponseRecord",
             "WatcherConfig",
@@ -14275,7 +14377,7 @@
         {
           "kind": "fn",
           "name": "pivot_dedup_in_memory_cache_blocks_resubmission",
-          "line": 2068,
+          "line": 2451,
           "called": [
             "fresh_observer",
             "has_submitted_for_pivot",
@@ -14283,9 +14385,110 @@
           ]
         },
         {
+          "kind": "fn",
+          "name": "insert_owed_game",
+          "line": 2466,
+          "called": [
+            "GameRecord",
+            "InMemoryL1Source",
+            "MemoryTruthOracle",
+            "MockSubmitter",
+            "Observer",
+            "config",
+            "game_id",
+            "games",
+            "hydratable_state",
+            "insert",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "an_owed_move_is_played_with_no_event_to_react_to",
+          "line": 2498,
+          "called": [
+            "commit",
+            "fresh_observer",
+            "has_submitted_for_pivot",
+            "insert",
+            "insert_owed_game",
+            "len",
+            "run_iteration",
+            "submissions",
+            "submitter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "a_deferred_move_is_retried_once_its_reason_clears",
+          "line": 2525,
+          "called": [
+            "commit",
+            "fresh_observer",
+            "has_submitted_for_pivot",
+            "insert",
+            "insert_owed_game",
+            "run_iteration"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "a_failed_broadcast_does_not_consume_the_move",
+          "line": 2555,
+          "called": [
+            "commit",
+            "fresh_observer",
+            "has_submitted_for_pivot",
+            "insert",
+            "insert_owed_game",
+            "is_empty",
+            "len",
+            "run_iteration",
+            "set_next_reject",
+            "submissions",
+            "submitter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "the_broadcast_retry_budget_is_bounded",
+          "line": 2590,
+          "called": [
+            "commit",
+            "config",
+            "fresh_observer",
+            "has_submitted_for_pivot",
+            "insert",
+            "insert_owed_game",
+            "is_empty",
+            "run_iteration",
+            "set_next_reject",
+            "submissions",
+            "submitter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "startup_does_not_treat_a_failed_record_as_submitted",
+          "line": 2622,
+          "called": [
+            "ResponseRecord",
+            "WatcherConfig",
+            "depth",
+            "game_id",
+            "get",
+            "has_submitted_for_pivot",
+            "make_contract_addr",
+            "path",
+            "persistence",
+            "seed",
+            "store_response"
+          ]
+        },
+        {
           "kind": "struct",
           "name": "MapStateReader",
-          "line": 2081,
+          "line": 2695,
           "called": [
             "GameState"
           ]
@@ -14293,21 +14496,27 @@
         {
           "kind": "impl",
           "name": "MapStateReader",
-          "line": 2085,
+          "line": 2703,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 2086,
+          "line": 2704,
           "called": [
             "GameState"
           ]
         },
         {
+          "kind": "fn",
+          "name": "with_turn_deadline",
+          "line": 2711,
+          "called": []
+        },
+        {
           "kind": "impl",
           "name": "crate::state_reader::GameStateReader for MapStateReader",
-          "line": 2091,
+          "line": 2717,
           "called": [
             "MapStateReader"
           ]
@@ -14315,19 +14524,114 @@
         {
           "kind": "fn",
           "name": "read_and_validate",
-          "line": 2092,
+          "line": 2718,
           "called": [
             "Err",
             "GameState",
+            "ObservedGame",
             "clone",
             "game_id",
-            "get"
+            "get",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "observed",
+          "line": 2739,
+          "called": [
+            "GameState",
+            "ObservedGame",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "observer_awaiting_opponent",
+          "line": 2750,
+          "called": [
+            "GameRecord",
+            "InMemoryL1Source",
+            "MemoryTruthOracle",
+            "MockSubmitter",
+            "Observer",
+            "fresh_observer",
+            "game_id",
+            "games",
+            "hydratable_state",
+            "insert",
+            "state",
+            "with_state_reader",
+            "with_turn_deadline"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "a_lapsed_opponent_deadline_is_claimed",
+          "line": 2791,
+          "called": [
+            "has_submitted_for_pivot",
+            "len",
+            "observer_awaiting_opponent",
+            "run_iteration",
+            "set_start_block",
+            "submissions",
+            "submitter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "a_live_opponent_deadline_is_not_claimed",
+          "line": 2815,
+          "called": [
+            "games",
+            "is_empty",
+            "observer_awaiting_opponent",
+            "run_iteration",
+            "set_start_block",
+            "submissions",
+            "submitter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "our_own_lapsed_deadline_is_never_claimed",
+          "line": 2833,
+          "called": [
+            "GameRecord",
+            "config",
+            "fresh_observer",
+            "game_id",
+            "games",
+            "has_submitted_for_pivot",
+            "hydratable_state",
+            "insert",
+            "run_iteration",
+            "set_start_block",
+            "state",
+            "with_state_reader",
+            "with_turn_deadline"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "a_game_that_stays_unhydrated_is_not_claimed",
+          "line": 2880,
+          "called": [
+            "fresh_observer",
+            "games",
+            "has_submitted_for_pivot",
+            "insert_cold_start_game",
+            "run_iteration",
+            "set_start_block",
+            "with_state_reader",
+            "with_turn_deadline"
           ]
         },
         {
           "kind": "fn",
           "name": "hydratable_state",
-          "line": 2110,
+          "line": 2898,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14340,7 +14644,7 @@
         {
           "kind": "fn",
           "name": "insert_cold_start_game",
-          "line": 2136,
+          "line": 2924,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14362,7 +14666,7 @@
         {
           "kind": "fn",
           "name": "run_iteration_hydrates_cold_start_games",
-          "line": 2186,
+          "line": 2975,
           "called": [
             "fresh_observer",
             "games",
@@ -14378,7 +14682,7 @@
         {
           "kind": "fn",
           "name": "run_iteration_without_state_reader_is_a_noop_not_an_error",
-          "line": 2215,
+          "line": 3004,
           "called": [
             "fresh_observer",
             "games",
@@ -14389,7 +14693,7 @@
         {
           "kind": "fn",
           "name": "hydration_read_failure_does_not_halt_the_iteration",
-          "line": 2227,
+          "line": 3016,
           "called": [
             "fresh_observer",
             "games",
@@ -14401,7 +14705,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_transitions_cold_start_game",
-          "line": 2240,
+          "line": 3029,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14417,6 +14721,7 @@
             "insert",
             "load_game",
             "mark_state_known",
+            "observed",
             "persistence",
             "range",
             "rec",
@@ -14426,7 +14731,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_unknown_game_is_noop",
-          "line": 2311,
+          "line": 3103,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14435,13 +14740,14 @@
             "depth",
             "fresh_observer",
             "mark_state_known",
+            "observed",
             "range"
           ]
         },
         {
           "kind": "fn",
           "name": "mark_state_known_rejects_mismatched_deployment_id",
-          "line": 2343,
+          "line": 3137,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14456,6 +14762,7 @@
             "get",
             "insert",
             "mark_state_known",
+            "observed",
             "range",
             "rec",
             "state"
@@ -14464,7 +14771,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_refuses_to_resurrect_settled_game",
-          "line": 2411,
+          "line": 3208,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14479,6 +14786,7 @@
             "get",
             "insert",
             "mark_state_known",
+            "observed",
             "range",
             "rec",
             "state"
@@ -14487,7 +14795,7 @@
         {
           "kind": "fn",
           "name": "h1_intent_record_recovery_re_broadcasts",
-          "line": 2477,
+          "line": 3277,
           "called": [
             "ResponseRecord",
             "_",
@@ -14506,7 +14814,7 @@
         {
           "kind": "fn",
           "name": "h1_intent_record_recovery_marks_failed_on_broadcast_error",
-          "line": 2516,
+          "line": 3316,
           "called": [
             "ResponseRecord",
             "_",
@@ -14525,7 +14833,7 @@
         {
           "kind": "fn",
           "name": "iteration_pivot_rollback_clears_cache_on_failed_iteration",
-          "line": 2563,
+          "line": 3363,
           "called": [
             "fresh_observer",
             "insert",
@@ -14536,7 +14844,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_is_idempotent",
-          "line": 2587,
+          "line": 3390,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14551,6 +14859,7 @@
             "get",
             "insert",
             "mark_state_known",
+            "observed",
             "range",
             "state"
           ]
@@ -14558,7 +14867,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_rejects_degenerate_range",
-          "line": 2655,
+          "line": 3463,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14572,6 +14881,7 @@
             "games",
             "insert",
             "mark_state_known",
+            "observed",
             "range",
             "state"
           ]
@@ -14579,7 +14889,7 @@
         {
           "kind": "fn",
           "name": "stop_signal_halts_run_loop",
-          "line": 2714,
+          "line": 3525,
           "called": [
             "config",
             "fresh_observer",
@@ -14592,13 +14902,13 @@
         {
           "kind": "fn",
           "name": "iteration_outcome_fields",
-          "line": 2731,
+          "line": 3542,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_settled_updates_state",
-          "line": 2747,
+          "line": 3558,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14621,7 +14931,7 @@
         {
           "kind": "fn",
           "name": "settled_for_unknown_game_skipped",
-          "line": 2798,
+          "line": 3610,
           "called": [
             "block_number",
             "event",
@@ -14633,7 +14943,7 @@
         {
           "kind": "fn",
           "name": "midpoint_for_unknown_game_skipped",
-          "line": 2817,
+          "line": 3629,
           "called": [
             "block_number",
             "commit",
@@ -14646,7 +14956,7 @@
         {
           "kind": "fn",
           "name": "response_for_unknown_game_skipped",
-          "line": 2836,
+          "line": 3648,
           "called": [
             "block_number",
             "event",
@@ -14658,7 +14968,7 @@
         {
           "kind": "fn",
           "name": "state_root_submitted_skipped",
-          "line": 2854,
+          "line": 3666,
           "called": [
             "block_number",
             "commit",
@@ -14670,7 +14980,7 @@
         {
           "kind": "fn",
           "name": "resume_from_persistence",
-          "line": 2872,
+          "line": 3684,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14698,7 +15008,7 @@
         {
           "kind": "fn",
           "name": "duplicate_game_opened_idempotent",
-          "line": 2941,
+          "line": 3754,
           "called": [
             "block_number",
             "commit",
@@ -14711,7 +15021,7 @@
         {
           "kind": "fn",
           "name": "pivot_for_move_correct",
-          "line": 2962,
+          "line": 3775,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14725,7 +15035,7 @@
         {
           "kind": "fn",
           "name": "interruptible_sleep_responds_to_stop",
-          "line": 3021,
+          "line": 3834,
           "called": [
             "MemoryTerminateBundleOracle",
             "TerminateBundle",
@@ -14737,7 +15047,7 @@
         {
           "kind": "fn",
           "name": "make_terminate_bundle",
-          "line": 3045,
+          "line": 3858,
           "called": [
             "TerminateBundle",
             "commit",
@@ -14747,7 +15057,7 @@
         {
           "kind": "fn",
           "name": "observer_attaches_terminate_bundle_oracle",
-          "line": 3066,
+          "line": 3879,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14767,7 +15077,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_without_oracle_defers",
-          "line": 3116,
+          "line": 3930,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14786,7 +15096,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_with_matching_bundle_succeeds",
-          "line": 3155,
+          "line": 3970,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14810,7 +15120,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_refuses_on_commit_mismatch",
-          "line": 3213,
+          "line": 4029,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14832,7 +15142,7 @@
         {
           "kind": "fn",
           "name": "build_calldata_for_move_delegates_non_terminate",
-          "line": 3261,
+          "line": 4078,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14917,7 +15227,7 @@
         {
           "kind": "struct",
           "name": "ResponseRecord",
-          "line": 125,
+          "line": 138,
           "called": [
             "MoveKind",
             "ResponseStatus",
@@ -14929,7 +15239,7 @@
         {
           "kind": "enum",
           "name": "MoveKind",
-          "line": 179,
+          "line": 192,
           "called": [
             "default"
           ]
@@ -14937,7 +15247,7 @@
         {
           "kind": "struct",
           "name": "PersistedHeader",
-          "line": 202,
+          "line": 224,
           "called": [
             "hash"
           ]
@@ -14945,7 +15255,7 @@
         {
           "kind": "impl",
           "name": "From<knomosis_l1_ingest::reorg::BlockHeader> for PersistedHeader",
-          "line": 211,
+          "line": 233,
           "called": [
             "PersistedHeader"
           ]
@@ -14953,7 +15263,7 @@
         {
           "kind": "fn",
           "name": "from",
-          "line": 212,
+          "line": 234,
           "called": [
             "hash"
           ]
@@ -14961,7 +15271,7 @@
         {
           "kind": "impl",
           "name": "From<PersistedHeader> for knomosis_l1_ingest::reorg::BlockHeader",
-          "line": 221,
+          "line": 243,
           "called": [
             "PersistedHeader"
           ]
@@ -14969,7 +15279,7 @@
         {
           "kind": "fn",
           "name": "from",
-          "line": 222,
+          "line": 244,
           "called": [
             "PersistedHeader",
             "hash"
@@ -14978,13 +15288,13 @@
         {
           "kind": "enum",
           "name": "ResponseStatus",
-          "line": 247,
+          "line": 269,
           "called": []
         },
         {
           "kind": "enum",
           "name": "PersistenceError",
-          "line": 274,
+          "line": 296,
           "called": [
             "Storage",
             "StorageError",
@@ -14995,7 +15305,7 @@
         {
           "kind": "impl",
           "name": "From<serde_json::Error> for PersistenceError",
-          "line": 310,
+          "line": 332,
           "called": [
             "PersistenceError"
           ]
@@ -15003,13 +15313,13 @@
         {
           "kind": "fn",
           "name": "from",
-          "line": 311,
+          "line": 333,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Persistence",
-          "line": 318,
+          "line": 340,
           "called": [
             "SqliteStorage",
             "storage"
@@ -15018,13 +15328,13 @@
         {
           "kind": "impl",
           "name": "Persistence",
-          "line": 322,
+          "line": 344,
           "called": []
         },
         {
           "kind": "fn",
           "name": "open",
-          "line": 332,
+          "line": 354,
           "called": [
             "PersistenceError",
             "storage",
@@ -15034,7 +15344,7 @@
         {
           "kind": "fn",
           "name": "verify_or_initialise_identifier",
-          "line": 352,
+          "line": 374,
           "called": [
             "CURSOR_KEY",
             "Err",
@@ -15056,7 +15366,7 @@
         {
           "kind": "fn",
           "name": "read_cursor",
-          "line": 400,
+          "line": 422,
           "called": [
             "CURSOR_KEY",
             "Err",
@@ -15070,7 +15380,7 @@
         {
           "kind": "fn",
           "name": "write_cursor",
-          "line": 421,
+          "line": 443,
           "called": [
             "CURSOR_KEY",
             "PersistenceError",
@@ -15081,7 +15391,7 @@
         {
           "kind": "fn",
           "name": "read_reorg_window",
-          "line": 435,
+          "line": 457,
           "called": [
             "PersistedHeader",
             "PersistenceError",
@@ -15094,7 +15404,7 @@
         {
           "kind": "const",
           "name": "MAX_REORG_CELL_BYTES",
-          "line": 446,
+          "line": 468,
           "called": [
             "Err",
             "PersistedHeader",
@@ -15105,7 +15415,7 @@
         {
           "kind": "fn",
           "name": "write_reorg_window",
-          "line": 477,
+          "line": 499,
           "called": [
             "PersistedHeader",
             "PersistenceError",
@@ -15118,7 +15428,7 @@
         {
           "kind": "fn",
           "name": "load_game",
-          "line": 489,
+          "line": 511,
           "called": [
             "GameRecord",
             "PersistenceError",
@@ -15134,7 +15444,7 @@
         {
           "kind": "fn",
           "name": "store_game",
-          "line": 507,
+          "line": 529,
           "called": [
             "GameRecord",
             "PersistenceError",
@@ -15150,7 +15460,7 @@
         {
           "kind": "fn",
           "name": "list_games",
-          "line": 519,
+          "line": 541,
           "called": [
             "GAME_PREFIX",
             "GameRecord",
@@ -15165,7 +15475,7 @@
         {
           "kind": "fn",
           "name": "load_response",
-          "line": 534,
+          "line": 556,
           "called": [
             "PersistenceError",
             "ResponseRecord",
@@ -15180,7 +15490,7 @@
         {
           "kind": "fn",
           "name": "store_response",
-          "line": 553,
+          "line": 575,
           "called": [
             "PersistenceError",
             "ResponseRecord",
@@ -15197,7 +15507,7 @@
         {
           "kind": "fn",
           "name": "list_responses",
-          "line": 574,
+          "line": 596,
           "called": [
             "PersistenceError",
             "RESPONSE_PREFIX",
@@ -15212,7 +15522,7 @@
         {
           "kind": "fn",
           "name": "commit_batch",
-          "line": 592,
+          "line": 614,
           "called": [
             "CURSOR_KEY",
             "PersistBatch",
@@ -15238,7 +15548,7 @@
         {
           "kind": "fn",
           "name": "storage",
-          "line": 625,
+          "line": 647,
           "called": [
             "SqliteStorage"
           ]
@@ -15246,7 +15556,7 @@
         {
           "kind": "struct",
           "name": "PersistBatch",
-          "line": 633,
+          "line": 655,
           "called": [
             "GameRecord",
             "PersistedHeader",
@@ -15258,19 +15568,19 @@
         {
           "kind": "impl",
           "name": "PersistBatch",
-          "line": 647,
+          "line": 669,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 650,
+          "line": 672,
           "called": []
         },
         {
           "kind": "fn",
           "name": "upsert_game",
-          "line": 655,
+          "line": 677,
           "called": [
             "GameRecord",
             "games",
@@ -15281,7 +15591,7 @@
         {
           "kind": "fn",
           "name": "upsert_response",
-          "line": 660,
+          "line": 682,
           "called": [
             "ResponseRecord",
             "push",
@@ -15291,7 +15601,7 @@
         {
           "kind": "fn",
           "name": "set_cursor",
-          "line": 666,
+          "line": 688,
           "called": [
             "cursor"
           ]
@@ -15299,7 +15609,7 @@
         {
           "kind": "fn",
           "name": "set_reorg_window",
-          "line": 673,
+          "line": 695,
           "called": [
             "PersistedHeader"
           ]
@@ -15307,7 +15617,7 @@
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 679,
+          "line": 701,
           "called": [
             "cursor",
             "games"
@@ -15316,7 +15626,7 @@
         {
           "kind": "fn",
           "name": "game_key",
-          "line": 690,
+          "line": 712,
           "called": [
             "GAME_PREFIX",
             "game_id"
@@ -15325,7 +15635,7 @@
         {
           "kind": "fn",
           "name": "response_key",
-          "line": 700,
+          "line": 722,
           "called": [
             "RESPONSE_PREFIX"
           ]
@@ -15333,7 +15643,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_tx_hash",
-          "line": 708,
+          "line": 730,
           "called": [
             "Err",
             "PersistenceError",
@@ -15344,7 +15654,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 727,
+          "line": 749,
           "called": [
             "CURSOR_KEY",
             "Claim",
@@ -15368,7 +15678,7 @@
         {
           "kind": "fn",
           "name": "sample_game",
-          "line": 737,
+          "line": 759,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15384,7 +15694,7 @@
         {
           "kind": "fn",
           "name": "sample_response",
-          "line": 768,
+          "line": 791,
           "called": [
             "ResponseRecord",
             "depth",
@@ -15394,7 +15704,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 784,
+          "line": 807,
           "called": [
             "CURSOR_KEY",
             "GAME_PREFIX",
@@ -15407,7 +15717,7 @@
         {
           "kind": "fn",
           "name": "identifier_first_open_then_verify",
-          "line": 794,
+          "line": 817,
           "called": [
             "IDENTIFIER_KEY",
             "OBSERVER_IDENTIFIER",
@@ -15421,7 +15731,7 @@
         {
           "kind": "fn",
           "name": "identifier_mismatch_typed_error",
-          "line": 808,
+          "line": 831,
           "called": [
             "IDENTIFIER_KEY",
             "b",
@@ -15434,7 +15744,7 @@
         {
           "kind": "fn",
           "name": "cursor_round_trip",
-          "line": 823,
+          "line": 846,
           "called": [
             "path",
             "read_cursor",
@@ -15444,7 +15754,7 @@
         {
           "kind": "fn",
           "name": "cursor_malformed_typed_error",
-          "line": 838,
+          "line": 861,
           "called": [
             "CURSOR_KEY",
             "b",
@@ -15457,7 +15767,7 @@
         {
           "kind": "fn",
           "name": "game_record_round_trip",
-          "line": 850,
+          "line": 873,
           "called": [
             "load_game",
             "path",
@@ -15469,7 +15779,7 @@
         {
           "kind": "fn",
           "name": "load_game_returns_none_for_missing",
-          "line": 862,
+          "line": 885,
           "called": [
             "load_game",
             "path"
@@ -15478,7 +15788,7 @@
         {
           "kind": "fn",
           "name": "list_games_enumerates_all",
-          "line": 871,
+          "line": 894,
           "called": [
             "_",
             "game_id",
@@ -15495,7 +15805,7 @@
         {
           "kind": "fn",
           "name": "response_record_round_trip",
-          "line": 891,
+          "line": 914,
           "called": [
             "depth",
             "game_id",
@@ -15510,7 +15820,7 @@
         {
           "kind": "fn",
           "name": "list_responses_enumerates_only_responses",
-          "line": 916,
+          "line": 939,
           "called": [
             "len",
             "list_responses",
@@ -15525,7 +15835,7 @@
         {
           "kind": "fn",
           "name": "commit_batch_atomic_apply",
-          "line": 930,
+          "line": 953,
           "called": [
             "commit_batch",
             "len",
@@ -15543,7 +15853,7 @@
         {
           "kind": "fn",
           "name": "persist_batch_is_empty",
-          "line": 947,
+          "line": 970,
           "called": [
             "is_empty",
             "set_cursor"
@@ -15552,7 +15862,7 @@
         {
           "kind": "fn",
           "name": "persist_batch_cursor_overwrite",
-          "line": 957,
+          "line": 980,
           "called": [
             "cursor",
             "set_cursor"
@@ -15561,7 +15871,7 @@
         {
           "kind": "fn",
           "name": "malformed_tx_hash_hex_errors",
-          "line": 966,
+          "line": 989,
           "called": [
             "_",
             "path",
@@ -15573,7 +15883,7 @@
         {
           "kind": "fn",
           "name": "wrong_length_tx_hash_hex_errors",
-          "line": 978,
+          "line": 1001,
           "called": [
             "_",
             "path",
@@ -15585,7 +15895,7 @@
         {
           "kind": "fn",
           "name": "tx_hash_hex_accepts_0x_prefix",
-          "line": 994,
+          "line": 1017,
           "called": [
             "load_response",
             "path",
@@ -15597,7 +15907,7 @@
         {
           "kind": "fn",
           "name": "tx_hash_hex_uppercase_canonicalised_to_lowercase",
-          "line": 1012,
+          "line": 1035,
           "called": [
             "load_response",
             "path",
@@ -15609,7 +15919,7 @@
         {
           "kind": "fn",
           "name": "tx_hash_hex_surface_drift_canonicalised",
-          "line": 1027,
+          "line": 1050,
           "called": [
             "clone",
             "load_response",
@@ -15621,7 +15931,7 @@
         {
           "kind": "fn",
           "name": "game_state_full_persistence_round_trip",
-          "line": 1051,
+          "line": 1074,
           "called": [
             "Claim",
             "commit",
@@ -15638,7 +15948,7 @@
         {
           "kind": "fn",
           "name": "commit_batch_rolls_back_on_error",
-          "line": 1079,
+          "line": 1102,
           "called": [
             "_",
             "commit_batch",
@@ -15655,7 +15965,7 @@
         {
           "kind": "fn",
           "name": "commit_batch_empty_is_noop",
-          "line": 1101,
+          "line": 1124,
           "called": [
             "commit_batch",
             "is_empty",
@@ -15669,7 +15979,7 @@
     {
       "module": "runtime::knomosis-faultproof-observer::src::state_reader",
       "path": "runtime/knomosis-faultproof-observer/src/state_reader.rs",
-      "declaration_count": 52,
+      "declaration_count": 53,
       "declarations": [
         {
           "kind": "trait",
@@ -15682,15 +15992,24 @@
           "name": "read_and_validate",
           "line": 85,
           "called": [
-            "GameState",
             "GameStateReadError",
+            "ObservedGame",
             "game_id"
           ]
         },
         {
           "kind": "struct",
+          "name": "ObservedGame",
+          "line": 105,
+          "called": [
+            "GameState",
+            "state"
+          ]
+        },
+        {
+          "kind": "struct",
           "name": "OwnedContractGameReader",
-          "line": 100,
+          "line": 122,
           "called": [
             "JsonRpcL1Source",
             "rpc"
@@ -15699,13 +16018,13 @@
         {
           "kind": "impl",
           "name": "OwnedContractGameReader",
-          "line": 105,
+          "line": 127,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 109,
+          "line": 131,
           "called": [
             "JsonRpcL1Source",
             "rpc"
@@ -15714,7 +16033,7 @@
         {
           "kind": "impl",
           "name": "GameStateReader for OwnedContractGameReader",
-          "line": 114,
+          "line": 136,
           "called": [
             "GameStateReader",
             "OwnedContractGameReader"
@@ -15723,10 +16042,10 @@
         {
           "kind": "fn",
           "name": "read_and_validate",
-          "line": 115,
+          "line": 137,
           "called": [
-            "GameState",
             "GameStateReadError",
+            "ObservedGame",
             "game_id",
             "rpc"
           ]
@@ -15734,7 +16053,7 @@
         {
           "kind": "impl",
           "name": "GameStateReader for ContractGameReader<'_>",
-          "line": 125,
+          "line": 147,
           "called": [
             "ContractGameReader",
             "GameStateReader",
@@ -15744,23 +16063,23 @@
         {
           "kind": "fn",
           "name": "read_and_validate",
-          "line": 126,
+          "line": 148,
           "called": [
-            "GameState",
             "GameStateReadError",
+            "ObservedGame",
             "game_id"
           ]
         },
         {
           "kind": "const",
           "name": "GAMES_RESPONSE_SLOTS",
-          "line": 136,
+          "line": 158,
           "called": []
         },
         {
           "kind": "const",
           "name": "GAMES_RESPONSE_BYTES",
-          "line": 139,
+          "line": 161,
           "called": [
             "GAMES_RESPONSE_SLOTS"
           ]
@@ -15768,13 +16087,13 @@
         {
           "kind": "const",
           "name": "GAMES_SELECTOR",
-          "line": 143,
+          "line": 165,
           "called": []
         },
         {
           "kind": "enum",
           "name": "GameStateReadError",
-          "line": 147,
+          "line": 169,
           "called": [
             "error"
           ]
@@ -15782,7 +16101,7 @@
         {
           "kind": "struct",
           "name": "ContractGameReader",
-          "line": 225,
+          "line": 247,
           "called": [
             "JsonRpcL1Source",
             "rpc"
@@ -15791,7 +16110,7 @@
         {
           "kind": "impl",
           "name": "ContractGameReader<'a>",
-          "line": 230,
+          "line": 252,
           "called": [
             "ContractGameReader"
           ]
@@ -15799,7 +16118,7 @@
         {
           "kind": "fn",
           "name": "new",
-          "line": 236,
+          "line": 258,
           "called": [
             "JsonRpcL1Source",
             "rpc"
@@ -15808,7 +16127,7 @@
         {
           "kind": "fn",
           "name": "read_game",
-          "line": 257,
+          "line": 279,
           "called": [
             "Err",
             "GameState",
@@ -15825,17 +16144,18 @@
         {
           "kind": "fn",
           "name": "read_and_validate",
-          "line": 297,
+          "line": 319,
           "called": [
             "Err",
-            "GameState",
             "GameStateReadError",
+            "ObservedGame",
             "bytes",
             "decode_game_state_with_addresses",
             "decode_hex_response",
             "encode_games_calldata",
             "game_id",
             "json",
+            "observed",
             "range",
             "rpc",
             "state"
@@ -15844,7 +16164,7 @@
         {
           "kind": "fn",
           "name": "encode_games_calldata",
-          "line": 365,
+          "line": 388,
           "called": [
             "GAMES_SELECTOR",
             "game_id"
@@ -15853,7 +16173,7 @@
         {
           "kind": "fn",
           "name": "compute_selector",
-          "line": 377,
+          "line": 400,
           "called": [
             "as_bytes",
             "finalize",
@@ -15863,7 +16183,7 @@
         {
           "kind": "fn",
           "name": "decode_hex_response",
-          "line": 386,
+          "line": 409,
           "called": [
             "Err",
             "GAMES_RESPONSE_BYTES",
@@ -15874,19 +16194,20 @@
         {
           "kind": "fn",
           "name": "decode_game_state",
-          "line": 421,
+          "line": 444,
           "called": [
             "GameState",
             "GameStateReadError",
             "_",
             "bytes",
-            "decode_game_state_with_addresses"
+            "decode_game_state_with_addresses",
+            "state"
           ]
         },
         {
           "kind": "fn",
           "name": "decode_game_state_with_addresses",
-          "line": 440,
+          "line": 463,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15894,6 +16215,7 @@
             "GAMES_RESPONSE_BYTES",
             "GameState",
             "GameStateReadError",
+            "ObservedGame",
             "_",
             "b",
             "bytes",
@@ -15906,13 +16228,14 @@
             "read_full_address_from_slot",
             "read_strict_bool_from_slot",
             "read_u128_from_slot",
-            "read_u64_from_slot"
+            "read_u64_from_slot",
+            "state"
           ]
         },
         {
           "kind": "fn",
           "name": "read_u64_from_slot",
-          "line": 543,
+          "line": 569,
           "called": [
             "len"
           ]
@@ -15920,7 +16243,7 @@
         {
           "kind": "fn",
           "name": "read_u128_from_slot",
-          "line": 551,
+          "line": 577,
           "called": [
             "len"
           ]
@@ -15928,7 +16251,7 @@
         {
           "kind": "fn",
           "name": "read_address_as_actor_id",
-          "line": 564,
+          "line": 590,
           "called": [
             "len"
           ]
@@ -15936,7 +16259,7 @@
         {
           "kind": "fn",
           "name": "read_full_address_from_slot",
-          "line": 578,
+          "line": 604,
           "called": [
             "len"
           ]
@@ -15944,7 +16267,7 @@
         {
           "kind": "fn",
           "name": "read_strict_bool_from_slot",
-          "line": 593,
+          "line": 619,
           "called": [
             "Err",
             "b",
@@ -15955,13 +16278,13 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 608,
+          "line": 634,
           "called": []
         },
         {
           "kind": "fn",
           "name": "selector_matches_solidity_inspector_output",
-          "line": 612,
+          "line": 638,
           "called": [
             "GAMES_SELECTOR",
             "compute_selector"
@@ -15970,7 +16293,7 @@
         {
           "kind": "fn",
           "name": "calldata_layout_is_36_bytes",
-          "line": 621,
+          "line": 647,
           "called": [
             "GAMES_SELECTOR",
             "encode_games_calldata",
@@ -15980,7 +16303,7 @@
         {
           "kind": "fn",
           "name": "calldata_preserves_full_u128_range",
-          "line": 631,
+          "line": 657,
           "called": [
             "encode_games_calldata",
             "len"
@@ -15989,7 +16312,7 @@
         {
           "kind": "fn",
           "name": "synth_response_bytes",
-          "line": 638,
+          "line": 664,
           "called": [
             "GAMES_RESPONSE_BYTES"
           ]
@@ -15997,7 +16320,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_rejects_short_response",
-          "line": 679,
+          "line": 705,
           "called": [
             "Err",
             "GAMES_RESPONSE_BYTES",
@@ -16008,7 +16331,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_rejects_long_response",
-          "line": 692,
+          "line": 718,
           "called": [
             "Err",
             "GAMES_RESPONSE_BYTES",
@@ -16019,7 +16342,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_decodes_typical_response",
-          "line": 699,
+          "line": 725,
           "called": [
             "Claim",
             "bytes",
@@ -16033,7 +16356,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_handles_no_pending_midpoint",
-          "line": 724,
+          "line": 750,
           "called": [
             "bytes",
             "decode_game_state",
@@ -16043,7 +16366,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_rejects_invalid_turn",
-          "line": 733,
+          "line": 759,
           "called": [
             "Err",
             "bytes",
@@ -16054,7 +16377,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_rejects_invalid_status",
-          "line": 741,
+          "line": 767,
           "called": [
             "Err",
             "bytes",
@@ -16065,7 +16388,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_decodes_every_valid_status",
-          "line": 749,
+          "line": 775,
           "called": [
             "_",
             "bytes",
@@ -16076,7 +16399,7 @@
         {
           "kind": "fn",
           "name": "decode_hex_response_strips_prefix",
-          "line": 766,
+          "line": 792,
           "called": [
             "bytes",
             "decode_hex_response"
@@ -16085,7 +16408,7 @@
         {
           "kind": "fn",
           "name": "decode_hex_response_rejects_odd_length",
-          "line": 774,
+          "line": 800,
           "called": [
             "Err",
             "_",
@@ -16095,7 +16418,7 @@
         {
           "kind": "fn",
           "name": "read_helpers_extract_expected_widths",
-          "line": 780,
+          "line": 806,
           "called": [
             "Err",
             "read_strict_bool_from_slot",
@@ -16106,7 +16429,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_rejects_non_canonical_bool",
-          "line": 808,
+          "line": 834,
           "called": [
             "Err",
             "_",
@@ -16118,7 +16441,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_rejects_non_canonical_turn",
-          "line": 817,
+          "line": 843,
           "called": [
             "Err",
             "_",
@@ -16130,7 +16453,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_rejects_non_canonical_status",
-          "line": 826,
+          "line": 852,
           "called": [
             "Err",
             "_",
@@ -16142,7 +16465,7 @@
         {
           "kind": "fn",
           "name": "decode_game_state_rejects_overflowing_depth",
-          "line": 835,
+          "line": 861,
           "called": [
             "Err",
             "_",
@@ -16154,7 +16477,7 @@
         {
           "kind": "fn",
           "name": "decode_hex_response_rejects_oversize_string",
-          "line": 844,
+          "line": 870,
           "called": [
             "Err",
             "GAMES_RESPONSE_BYTES",
@@ -16164,7 +16487,7 @@
         {
           "kind": "fn",
           "name": "read_address_uses_low_8_bytes",
-          "line": 852,
+          "line": 878,
           "called": [
             "read_address_as_actor_id"
           ]
@@ -16172,7 +16495,7 @@
         {
           "kind": "fn",
           "name": "games_response_bytes_constant_is_576",
-          "line": 860,
+          "line": 886,
           "called": [
             "GAMES_RESPONSE_BYTES",
             "GAMES_RESPONSE_SLOTS"
@@ -16181,7 +16504,7 @@
         {
           "kind": "fn",
           "name": "read_full_address_extracts_all_20_bytes",
-          "line": 871,
+          "line": 897,
           "called": [
             "addr",
             "read_full_address_from_slot"
@@ -16190,11 +16513,12 @@
         {
           "kind": "fn",
           "name": "decode_game_state_with_addresses_accepts_low_8_zero_address",
-          "line": 895,
+          "line": 921,
           "called": [
             "b",
             "bytes",
             "decode_game_state_with_addresses",
+            "state",
             "synth_response_bytes"
           ]
         }
@@ -16456,7 +16780,8 @@
           "line": 593,
           "called": [
             "LogIndex",
-            "error"
+            "error",
+            "observed"
           ]
         },
         {
@@ -16523,7 +16848,8 @@
             "TerminateBundle",
             "TerminateBundleError",
             "json",
-            "len"
+            "len",
+            "observed"
           ]
         },
         {
@@ -16695,6 +17021,7 @@
             "TerminateBundleError",
             "build_bundle_command",
             "len",
+            "observed",
             "parse_terminate_bundle_json",
             "spawn",
             "take",
@@ -19093,7 +19420,7 @@
         {
           "kind": "fn",
           "name": "make_contract_addr",
-          "line": 31,
+          "line": 32,
           "called": [
             "EthAddress",
             "seed"
@@ -19102,7 +19429,7 @@
         {
           "kind": "fn",
           "name": "make_block_hash",
-          "line": 37,
+          "line": 38,
           "called": [
             "TopicHash",
             "seed"
@@ -19111,7 +19438,7 @@
         {
           "kind": "fn",
           "name": "commit",
-          "line": 44,
+          "line": 45,
           "called": [
             "StateCommit",
             "seed"
@@ -19120,7 +19447,7 @@
         {
           "kind": "fn",
           "name": "header",
-          "line": 50,
+          "line": 51,
           "called": [
             "BlockHeader",
             "TopicHash",
@@ -19130,7 +19457,7 @@
         {
           "kind": "fn",
           "name": "topic_from_u128",
-          "line": 58,
+          "line": 59,
           "called": [
             "TopicHash"
           ]
@@ -19138,7 +19465,7 @@
         {
           "kind": "fn",
           "name": "topic_from_u64",
-          "line": 64,
+          "line": 65,
           "called": [
             "TopicHash"
           ]
@@ -19146,19 +19473,19 @@
         {
           "kind": "fn",
           "name": "word_from_u8",
-          "line": 70,
+          "line": 71,
           "called": []
         },
         {
           "kind": "fn",
           "name": "word_from_u128",
-          "line": 76,
+          "line": 77,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_opened_log",
-          "line": 84,
+          "line": 85,
           "called": [
             "EthAddress",
             "RawLog",
@@ -19172,7 +19499,7 @@
         {
           "kind": "fn",
           "name": "game_settled_log",
-          "line": 113,
+          "line": 114,
           "called": [
             "EthAddress",
             "RawLog",
@@ -19188,7 +19515,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_game_lifecycle",
-          "line": 144,
+          "line": 145,
           "called": [
             "WatcherConfig",
             "commit",
@@ -19218,7 +19545,7 @@
         {
           "kind": "fn",
           "name": "persistence_survives_restart",
-          "line": 218,
+          "line": 219,
           "called": [
             "WatcherConfig",
             "_",
@@ -19246,7 +19573,7 @@
         {
           "kind": "fn",
           "name": "iteration_idempotent_on_no_new_blocks",
-          "line": 291,
+          "line": 292,
           "called": [
             "WatcherConfig",
             "head",
@@ -19267,7 +19594,7 @@
         {
           "kind": "fn",
           "name": "cold_start_skips_settled_unknown_game",
-          "line": 333,
+          "line": 334,
           "called": [
             "WatcherConfig",
             "_",
@@ -19292,7 +19619,7 @@
         {
           "kind": "fn",
           "name": "missing_truth_oracle_defers_move",
-          "line": 386,
+          "line": 387,
           "called": [
             "WatcherConfig",
             "commit",
@@ -19319,19 +19646,19 @@
         {
           "kind": "trait",
           "name": "ObserverTestExt",
-          "line": 449,
+          "line": 450,
           "called": []
         },
         {
           "kind": "fn",
           "name": "watcher_mut_seed_for_test",
-          "line": 450,
+          "line": 451,
           "called": []
         },
         {
           "kind": "impl",
           "name": "ObserverTestExt for knomosis_faultproof_observer::observer::Observer<S, Sub, T>",
-          "line": 453,
+          "line": 454,
           "called": [
             "ObserverTestExt"
           ]
@@ -19339,13 +19666,13 @@
         {
           "kind": "fn",
           "name": "watcher_mut_seed_for_test",
-          "line": 459,
+          "line": 460,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_state_persists_through_sqlite",
-          "line": 468,
+          "line": 469,
           "called": [
             "Claim",
             "DisputedRange",
@@ -19366,7 +19693,7 @@
         {
           "kind": "fn",
           "name": "settlement_composes_with_state_machine",
-          "line": 509,
+          "line": 511,
           "called": [
             "Claim",
             "DisputedRange",
@@ -19381,7 +19708,7 @@
         {
           "kind": "fn",
           "name": "cold_start_game_blocks_move_submission",
-          "line": 541,
+          "line": 543,
           "called": [
             "WatcherConfig",
             "commit",
@@ -19410,7 +19737,7 @@
         {
           "kind": "fn",
           "name": "watcher_config_rejects_oversize_reorg_window",
-          "line": 608,
+          "line": 610,
           "called": [
             "Err",
             "WatcherConfig",
@@ -19424,11 +19751,12 @@
         {
           "kind": "fn",
           "name": "cold_start_lifecycle_with_mark_state_known",
-          "line": 647,
+          "line": 649,
           "called": [
             "Claim",
             "DisputedRange",
             "GameState",
+            "ObservedGame",
             "WatcherConfig",
             "commit",
             "depth",
@@ -19460,11 +19788,12 @@
         {
           "kind": "fn",
           "name": "integration_mark_state_known_rejects_degenerate_range",
-          "line": 767,
+          "line": 778,
           "called": [
             "Claim",
             "DisputedRange",
             "GameState",
+            "ObservedGame",
             "WatcherConfig",
             "commit",
             "depth",
@@ -19474,13 +19803,14 @@
             "persistence",
             "range",
             "source",
+            "state",
             "submitter"
           ]
         },
         {
           "kind": "fn",
           "name": "reorg_window_persists_across_restart",
-          "line": 823,
+          "line": 843,
           "called": [
             "WatcherConfig",
             "_",
@@ -20659,6 +20989,7 @@
           "called": [
             "_",
             "as_bytes",
+            "body",
             "captured",
             "clone",
             "flush",
@@ -23902,6 +24233,7 @@
           "name": "RequestPayload",
           "line": 41,
           "called": [
+            "body",
             "idempotency_key"
           ]
         },
@@ -23920,6 +24252,7 @@
           "line": 58,
           "called": [
             "RequestPayload",
+            "body",
             "idempotency_key"
           ]
         },
@@ -24036,6 +24369,7 @@
           "name": "health_is_text_200",
           "line": 238,
           "called": [
+            "body",
             "dispatch",
             "is_empty",
             "state"
@@ -24046,6 +24380,7 @@
           "name": "info_dispatches_to_typed_view",
           "line": 247,
           "called": [
+            "body",
             "dispatch",
             "state"
           ]
@@ -24055,6 +24390,7 @@
           "name": "ready_dispatches_to_readiness_probe",
           "line": 259,
           "called": [
+            "body",
             "dispatch",
             "state"
           ]
@@ -24074,6 +24410,7 @@
           "name": "not_found_is_problem_json_404_with_path",
           "line": 277,
           "called": [
+            "body",
             "dispatch",
             "path",
             "state"
@@ -24096,6 +24433,7 @@
           "name": "events_route_without_upstream_is_503",
           "line": 316,
           "called": [
+            "body",
             "dispatch",
             "state"
           ]
@@ -24105,6 +24443,7 @@
           "name": "bad_request_is_problem_json_400",
           "line": 335,
           "called": [
+            "body",
             "dispatch",
             "state"
           ]
@@ -24118,6 +24457,7 @@
             "Config",
             "INDEXER_IDENTIFIER",
             "action_cost",
+            "body",
             "clone",
             "combined_transaction",
             "commit",
@@ -27304,6 +27644,7 @@
           "name": "ParsedRequest",
           "line": 701,
           "called": [
+            "body",
             "idempotency_key",
             "path"
           ]
@@ -27329,6 +27670,7 @@
           "line": 739,
           "called": [
             "ParsedRequest",
+            "body",
             "idempotency_key",
             "path"
           ]
@@ -27463,6 +27805,7 @@
             "Err",
             "RequestError",
             "_",
+            "body",
             "kind",
             "len",
             "min",
@@ -27509,6 +27852,7 @@
           "called": [
             "RouteOutcome",
             "as_bytes",
+            "body",
             "flush",
             "header_is_safe",
             "len",
@@ -27583,6 +27927,7 @@
           "line": 1284,
           "called": [
             "RequestError",
+            "body",
             "head",
             "into_request",
             "read_body",
@@ -27604,6 +27949,7 @@
           "line": 1298,
           "called": [
             "b",
+            "body",
             "is_empty",
             "parse",
             "path",
@@ -27628,6 +27974,7 @@
           "line": 1326,
           "called": [
             "b",
+            "body",
             "parse",
             "req"
           ]
@@ -27689,6 +28036,7 @@
           "line": 1416,
           "called": [
             "b",
+            "body",
             "parse"
           ]
         },
@@ -27909,6 +28257,7 @@
             "RouteOutcome",
             "apply_conditional",
             "auth",
+            "body",
             "clone",
             "config",
             "cors",
@@ -27919,6 +28268,7 @@
             "path",
             "policy",
             "read_body",
+            "respond",
             "state"
           ]
         },
@@ -27929,6 +28279,7 @@
           "called": [
             "REQUEST_ID_HEADER",
             "RouteOutcome",
+            "body",
             "push"
           ]
         },
@@ -27954,6 +28305,7 @@
           "name": "finalize_stamps_request_id_header_and_problem_instance",
           "line": 209,
           "called": [
+            "body",
             "finalize",
             "into_outcome",
             "iter",
@@ -28139,7 +28491,9 @@
           "kind": "struct",
           "name": "RouteOutcome",
           "line": 127,
-          "called": []
+          "called": [
+            "body"
+          ]
         },
         {
           "kind": "const",
@@ -28176,7 +28530,8 @@
           "name": "text",
           "line": 150,
           "called": [
-            "TEXT_PLAIN"
+            "TEXT_PLAIN",
+            "body"
           ]
         },
         {
@@ -28184,7 +28539,8 @@
           "name": "no_content",
           "line": 162,
           "called": [
-            "TEXT_PLAIN"
+            "TEXT_PLAIN",
+            "body"
           ]
         },
         {
@@ -28192,7 +28548,8 @@
           "name": "event_stream_head",
           "line": 174,
           "called": [
-            "TEXT_EVENT_STREAM"
+            "TEXT_EVENT_STREAM",
+            "body"
           ]
         },
         {
@@ -28200,7 +28557,8 @@
           "name": "json",
           "line": 184,
           "called": [
-            "APPLICATION_JSON"
+            "APPLICATION_JSON",
+            "body"
           ]
         },
         {
@@ -28208,7 +28566,8 @@
           "name": "problem",
           "line": 195,
           "called": [
-            "APPLICATION_PROBLEM_JSON"
+            "APPLICATION_PROBLEM_JSON",
+            "body"
           ]
         },
         {
@@ -28227,6 +28586,7 @@
           "called": [
             "RouteOutcome",
             "_",
+            "body",
             "clone",
             "iter",
             "name"
@@ -28567,6 +28927,7 @@
           "line": 830,
           "called": [
             "apply_conditional",
+            "body",
             "clone",
             "is_empty",
             "iter",
@@ -29439,7 +29800,8 @@
           "line": 142,
           "called": [
             "RouteOutcome",
-            "_"
+            "_",
+            "body"
           ]
         },
         {
@@ -29457,6 +29819,7 @@
           "line": 159,
           "called": [
             "as_str",
+            "body",
             "get",
             "into_outcome"
           ]
@@ -29466,6 +29829,7 @@
           "name": "method_not_allowed_shape",
           "line": 174,
           "called": [
+            "body",
             "into_outcome"
           ]
         },
@@ -29474,6 +29838,7 @@
           "name": "extension_members_serialize_with_camel_case_keys",
           "line": 184,
           "called": [
+            "body",
             "oldest_seq"
           ]
         }
@@ -29688,6 +30053,7 @@
           "called": [
             "RouteOutcome",
             "_",
+            "body",
             "with_header"
           ]
         },
@@ -29741,6 +30107,7 @@
           "line": 198,
           "called": [
             "actor_balance",
+            "body",
             "drop",
             "iter",
             "reads",
@@ -29753,6 +30120,7 @@
           "line": 215,
           "called": [
             "actor_balance",
+            "body",
             "drop",
             "reads",
             "seeded"
@@ -29767,6 +30135,7 @@
             "as_str",
             "b",
             "balances",
+            "body",
             "drop",
             "iter",
             "len",
@@ -29780,6 +30149,7 @@
           "line": 253,
           "called": [
             "actor_balances",
+            "body",
             "drop",
             "len",
             "reads",
@@ -29830,6 +30200,7 @@
             "_",
             "action_cost",
             "actor",
+            "body",
             "combined_read_transaction",
             "free_tier",
             "get_actor_budget_current_epoch_consumed",
@@ -29886,6 +30257,7 @@
           "line": 142,
           "called": [
             "actor_budget",
+            "body",
             "drop",
             "iter",
             "reads",
@@ -29898,6 +30270,7 @@
           "line": 164,
           "called": [
             "actor_budget",
+            "body",
             "drop",
             "reads",
             "seeded"
@@ -29911,6 +30284,7 @@
             "CURSOR_KEY",
             "ReadState",
             "actor_budget",
+            "body",
             "combined_transaction",
             "commit",
             "credit_actor_budget_current_epoch_consumed",
@@ -29986,6 +30360,7 @@
             "_",
             "b",
             "balance",
+            "body",
             "combined_read_transaction",
             "get_pool_bold",
             "get_pool_eth",
@@ -30042,6 +30417,7 @@
           "name": "eth_pool_renders_contract_shape_with_net",
           "line": 139,
           "called": [
+            "body",
             "drop",
             "iter",
             "pool_view",
@@ -30054,6 +30430,7 @@
           "name": "bold_pool_selects_bold_ledger_gross",
           "line": 159,
           "called": [
+            "body",
             "drop",
             "pool_view",
             "reads",
@@ -30065,6 +30442,7 @@
           "name": "absent_pool_is_zero",
           "line": 171,
           "called": [
+            "body",
             "drop",
             "pool_view",
             "reads",
@@ -30076,6 +30454,7 @@
           "name": "unsupported_resource_is_bad_request",
           "line": 183,
           "called": [
+            "body",
             "drop",
             "pool_view",
             "reads",
@@ -30133,6 +30512,7 @@
             "RequestPayload",
             "RouteOutcome",
             "_",
+            "body",
             "config",
             "error_response",
             "handle_one",
@@ -30260,6 +30640,7 @@
             "RequestPayload",
             "RouteOutcome",
             "as_bytes",
+            "body",
             "handle",
             "idempotency_key",
             "state"
@@ -30271,6 +30652,7 @@
           "line": 317,
           "called": [
             "AppState",
+            "body",
             "raw_call",
             "state"
           ]
@@ -30373,6 +30755,7 @@
           "name": "oversized_batch_is_rejected_without_per_element_work",
           "line": 420,
           "called": [
+            "body",
             "call",
             "state_with_chain_id"
           ]
@@ -30383,6 +30766,7 @@
           "line": 436,
           "called": [
             "as_str",
+            "body",
             "call",
             "len",
             "state_with_chain_id"
@@ -30393,6 +30777,7 @@
           "name": "a_body_at_the_cap_is_still_served",
           "line": 463,
           "called": [
+            "body",
             "call",
             "len",
             "state_with_chain_id"
@@ -30403,6 +30788,7 @@
           "name": "notification_gets_no_reply",
           "line": 474,
           "called": [
+            "body",
             "is_empty",
             "raw_call",
             "state_with_chain_id"
@@ -30413,6 +30799,7 @@
           "name": "all_notification_batch_gets_no_reply",
           "line": 486,
           "called": [
+            "body",
             "is_empty",
             "raw_call",
             "state_with_chain_id"
@@ -30712,6 +31099,7 @@
             "ResponseError",
             "VerdictResponse",
             "_",
+            "body",
             "bytes",
             "decode_reason_len",
             "decode_verdict",
@@ -30899,10 +31287,14 @@
             "Err",
             "RequestPayload",
             "RouteOutcome",
+            "_",
             "action",
             "as_str",
+            "body",
             "config",
             "decode_body",
+            "fingerprint",
+            "fp",
             "get",
             "idempotency",
             "idempotency_key",
@@ -30922,11 +31314,12 @@
         {
           "kind": "fn",
           "name": "decode_body",
-          "line": 88,
+          "line": 107,
           "called": [
             "ActionSubmission",
             "Err",
             "RouteOutcome",
+            "body",
             "encoding",
             "into_outcome",
             "next",
@@ -30939,13 +31332,13 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 131,
+          "line": 150,
           "called": []
         },
         {
           "kind": "fn",
           "name": "octet_stream_is_the_raw_body",
-          "line": 135,
+          "line": 154,
           "called": [
             "b",
             "bytes",
@@ -30955,25 +31348,27 @@
         {
           "kind": "fn",
           "name": "json_body_base64_decodes_signed_action",
-          "line": 149,
+          "line": 168,
           "called": [
             "b",
+            "body",
             "decode_body"
           ]
         },
         {
           "kind": "fn",
           "name": "malformed_json_or_base64_is_400",
-          "line": 162,
+          "line": 181,
           "called": [
             "b",
+            "body",
             "decode_body"
           ]
         },
         {
           "kind": "fn",
           "name": "unsupported_or_absent_content_type_is_415",
-          "line": 185,
+          "line": 204,
           "called": [
             "b",
             "decode_body"
@@ -30984,20 +31379,37 @@
     {
       "module": "runtime::knomosis-gateway::src::submit::idempotency",
       "path": "runtime/knomosis-gateway/src/submit/idempotency.rs",
-      "declaration_count": 27,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "struct",
           "name": "Entry",
-          "line": 51,
+          "line": 58,
+          "called": [
+            "RouteOutcome",
+            "fingerprint"
+          ]
+        },
+        {
+          "kind": "enum",
+          "name": "Lookup",
+          "line": 68,
           "called": [
             "RouteOutcome"
           ]
         },
         {
+          "kind": "fn",
+          "name": "fingerprint",
+          "line": 88,
+          "called": [
+            "body"
+          ]
+        },
+        {
           "kind": "struct",
           "name": "IdempotencyCache",
-          "line": 58,
+          "line": 96,
           "called": [
             "Entry"
           ]
@@ -31005,7 +31417,7 @@
         {
           "kind": "impl",
           "name": "std::fmt::Debug for IdempotencyCache",
-          "line": 69,
+          "line": 107,
           "called": [
             "IdempotencyCache"
           ]
@@ -31013,7 +31425,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 70,
+          "line": 108,
           "called": [
             "_"
           ]
@@ -31021,7 +31433,7 @@
         {
           "kind": "fn",
           "name": "is_cacheable",
-          "line": 83,
+          "line": 121,
           "called": [
             "RouteOutcome"
           ]
@@ -31029,7 +31441,7 @@
         {
           "kind": "fn",
           "name": "scoped_key",
-          "line": 99,
+          "line": 137,
           "called": [
             "key"
           ]
@@ -31037,19 +31449,19 @@
         {
           "kind": "impl",
           "name": "IdempotencyCache",
-          "line": 106,
+          "line": 144,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 110,
+          "line": 148,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_ttl",
-          "line": 118,
+          "line": 156,
           "called": [
             "max"
           ]
@@ -31057,17 +31469,18 @@
         {
           "kind": "fn",
           "name": "is_enabled",
-          "line": 129,
+          "line": 167,
           "called": []
         },
         {
           "kind": "fn",
           "name": "get",
-          "line": 138,
+          "line": 176,
           "called": [
-            "RouteOutcome",
+            "Lookup",
             "_",
             "clone",
+            "fingerprint",
             "is_enabled",
             "key",
             "lock",
@@ -31077,12 +31490,13 @@
         {
           "kind": "fn",
           "name": "put",
-          "line": 162,
+          "line": 206,
           "called": [
             "Entry",
             "RouteOutcome",
             "_",
             "clone",
+            "fingerprint",
             "insert",
             "is_cacheable",
             "is_enabled",
@@ -31096,7 +31510,7 @@
         {
           "kind": "fn",
           "name": "len",
-          "line": 197,
+          "line": 248,
           "called": [
             "lock"
           ]
@@ -31104,7 +31518,7 @@
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 203,
+          "line": 254,
           "called": [
             "len"
           ]
@@ -31112,7 +31526,7 @@
         {
           "kind": "fn",
           "name": "lock",
-          "line": 209,
+          "line": 260,
           "called": [
             "Entry",
             "_"
@@ -31121,40 +31535,75 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 217,
+          "line": 268,
           "called": [
             "IdempotencyCache",
+            "Lookup",
+            "fingerprint",
             "scoped_key"
           ]
         },
         {
           "kind": "const",
           "name": "CRED_A",
-          "line": 222,
+          "line": 273,
           "called": []
         },
         {
           "kind": "const",
           "name": "CRED_B",
-          "line": 223,
+          "line": 274,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok",
-          "line": 225,
+          "line": 276,
           "called": [
-            "RouteOutcome"
+            "RouteOutcome",
+            "body"
           ]
         },
         {
           "kind": "fn",
+          "name": "fp",
+          "line": 282,
+          "called": [
+            "b",
+            "fingerprint"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Lookup",
+          "line": 286,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "body",
+          "line": 287,
+          "called": [
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_miss",
+          "line": 294,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "key_is_scoped_per_credential",
-          "line": 234,
+          "line": 304,
           "called": [
             "CRED_A",
             "CRED_B",
+            "body",
+            "fp",
             "get",
+            "is_miss",
             "ok",
             "put"
           ]
@@ -31162,7 +31611,7 @@
         {
           "kind": "fn",
           "name": "scoped_key_namespaces_cannot_be_forged_by_the_suffix",
-          "line": 262,
+          "line": 338,
           "called": [
             "CRED_A",
             "CRED_B",
@@ -31171,11 +31620,51 @@
         },
         {
           "kind": "fn",
-          "name": "hit_returns_cached_response",
-          "line": 278,
+          "name": "the_same_key_with_a_different_body_conflicts",
+          "line": 362,
           "called": [
             "CRED_A",
+            "b",
+            "body",
+            "fingerprint",
             "get",
+            "ok",
+            "put"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "a_conflict_does_not_refresh_recency",
+          "line": 387,
+          "called": [
+            "CRED_A",
+            "b",
+            "fingerprint",
+            "get",
+            "is_miss",
+            "ok",
+            "put"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "the_fingerprint_separates_near_identical_bodies",
+          "line": 412,
+          "called": [
+            "b",
+            "fingerprint"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "hit_returns_cached_response",
+          "line": 419,
+          "called": [
+            "CRED_A",
+            "body",
+            "fp",
+            "get",
+            "is_miss",
             "len",
             "ok",
             "put"
@@ -31184,12 +31673,14 @@
         {
           "kind": "fn",
           "name": "disabled_cache_never_stores",
-          "line": 288,
+          "line": 429,
           "called": [
             "CRED_A",
+            "fp",
             "get",
             "is_empty",
             "is_enabled",
+            "is_miss",
             "ok",
             "put"
           ]
@@ -31197,21 +31688,25 @@
         {
           "kind": "fn",
           "name": "transient_5xx_is_not_cached",
-          "line": 297,
+          "line": 438,
           "called": [
             "CRED_A",
+            "fp",
             "get",
+            "is_miss",
             "put"
           ]
         },
         {
           "kind": "fn",
           "name": "entries_expire_after_ttl",
-          "line": 307,
+          "line": 461,
           "called": [
             "CRED_A",
+            "fp",
             "get",
             "is_empty",
+            "is_miss",
             "ok",
             "put"
           ]
@@ -31219,10 +31714,12 @@
         {
           "kind": "fn",
           "name": "bounded_with_lru_eviction",
-          "line": 319,
+          "line": 479,
           "called": [
             "CRED_A",
+            "fp",
             "get",
+            "is_miss",
             "len",
             "ok",
             "put"
@@ -31231,9 +31728,10 @@
         {
           "kind": "fn",
           "name": "unique_keys_do_not_grow_past_cap",
-          "line": 334,
+          "line": 497,
           "called": [
             "CRED_A",
+            "fp",
             "len",
             "ok",
             "put"
@@ -31732,7 +32230,8 @@
           "called": [
             "RouteOutcome",
             "VerdictDto",
-            "_"
+            "_",
+            "body"
           ]
         },
         {
@@ -31751,6 +32250,7 @@
           "called": [
             "SubmitError",
             "VerdictResponse",
+            "body",
             "clone",
             "iter",
             "map_submit_result"
@@ -31875,6 +32375,7 @@
             "_",
             "action_cost",
             "as_str",
+            "body",
             "budget_policy",
             "clone",
             "config",
@@ -31908,6 +32409,7 @@
             "ReadinessDto",
             "RouteOutcome",
             "_",
+            "body",
             "config",
             "indexer",
             "probe_indexer",
@@ -31997,6 +32499,7 @@
           "line": 239,
           "called": [
             "action_cost",
+            "body",
             "config",
             "drop",
             "epoch_length",
@@ -32014,6 +32517,7 @@
           "name": "info_without_indexer_reports_zero_seq_and_finalized_default",
           "line": 280,
           "called": [
+            "body",
             "config",
             "drop",
             "info_view",
@@ -32025,6 +32529,7 @@
           "name": "readyz_with_no_upstreams_is_ready",
           "line": 297,
           "called": [
+            "body",
             "config",
             "drop",
             "readyz",
@@ -32036,6 +32541,7 @@
           "name": "readyz_probes_configured_indexer",
           "line": 312,
           "called": [
+            "body",
             "config",
             "drop",
             "path",
@@ -32049,6 +32555,7 @@
           "name": "readyz_live_host_probe_succeeds_dead_one_fails",
           "line": 326,
           "called": [
+            "body",
             "config",
             "drop",
             "listener",
@@ -32184,7 +32691,7 @@
     {
       "module": "runtime::knomosis-gateway::tests::integration",
       "path": "runtime/knomosis-gateway/tests/integration.rs",
-      "declaration_count": 62,
+      "declaration_count": 63,
       "declarations": [
         {
           "kind": "const",
@@ -32297,7 +32804,9 @@
           "kind": "struct",
           "name": "Resp",
           "line": 183,
-          "called": []
+          "called": [
+            "body"
+          ]
         },
         {
           "kind": "impl",
@@ -32320,7 +32829,9 @@
           "kind": "fn",
           "name": "json",
           "line": 199,
-          "called": []
+          "called": [
+            "body"
+          ]
         },
         {
           "kind": "fn",
@@ -32346,6 +32857,7 @@
           "called": [
             "Resp",
             "addr",
+            "body",
             "http_post_full",
             "path"
           ]
@@ -32357,6 +32869,7 @@
           "called": [
             "Resp",
             "addr",
+            "body",
             "http_post_full",
             "path"
           ]
@@ -32369,6 +32882,7 @@
             "Resp",
             "_",
             "addr",
+            "body",
             "bytes",
             "head",
             "len",
@@ -32399,6 +32913,7 @@
           "called": [
             "Resp",
             "_",
+            "body",
             "head",
             "iter",
             "len",
@@ -32457,6 +32972,7 @@
             "TOKEN",
             "addr",
             "as_str",
+            "body",
             "get",
             "header",
             "http_get",
@@ -32581,6 +33097,7 @@
           "called": [
             "TOKEN",
             "addr",
+            "body",
             "http_post",
             "json",
             "mock",
@@ -32644,6 +33161,7 @@
             "TOKEN",
             "addr",
             "b",
+            "body",
             "http_post_idem",
             "json",
             "load",
@@ -32653,11 +33171,28 @@
         },
         {
           "kind": "fn",
+          "name": "a_reused_idempotency_key_with_a_different_body_is_refused",
+          "line": 691,
+          "called": [
+            "TOKEN",
+            "addr",
+            "b",
+            "body",
+            "header",
+            "http_post_idem",
+            "load",
+            "mock",
+            "start_harness_full"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "rate_limit_returns_429_with_retry_after",
-          "line": 682,
+          "line": 734,
           "called": [
             "_",
             "addr",
+            "body",
             "get",
             "header",
             "http_get",
@@ -32668,7 +33203,7 @@
         {
           "kind": "fn",
           "name": "event_frame",
-          "line": 714,
+          "line": 766,
           "called": [
             "KIND_EVENT",
             "actor",
@@ -32680,7 +33215,7 @@
         {
           "kind": "struct",
           "name": "MockEventSubscribe",
-          "line": 734,
+          "line": 786,
           "called": [
             "addr",
             "handle",
@@ -32690,13 +33225,13 @@
         {
           "kind": "impl",
           "name": "MockEventSubscribe",
-          "line": 740,
+          "line": 792,
           "called": []
         },
         {
           "kind": "fn",
           "name": "start",
-          "line": 741,
+          "line": 793,
           "called": [
             "Err",
             "_",
@@ -32715,7 +33250,7 @@
         {
           "kind": "impl",
           "name": "Drop for MockEventSubscribe",
-          "line": 782,
+          "line": 834,
           "called": [
             "MockEventSubscribe"
           ]
@@ -32723,7 +33258,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 783,
+          "line": 835,
           "called": [
             "_",
             "handle",
@@ -32734,7 +33269,7 @@
         {
           "kind": "fn",
           "name": "events_backfill_endpoint_serves_a_group_complete_page",
-          "line": 792,
+          "line": 844,
           "called": [
             "addr",
             "event_frame",
@@ -32751,7 +33286,7 @@
         {
           "kind": "fn",
           "name": "events_backfill_requires_auth_and_validates_query",
-          "line": 820,
+          "line": 872,
           "called": [
             "addr",
             "event_frame",
@@ -32765,7 +33300,7 @@
         {
           "kind": "struct",
           "name": "SseHarness",
-          "line": 838,
+          "line": 890,
           "called": [
             "AppState",
             "addr",
@@ -32775,7 +33310,7 @@
         {
           "kind": "impl",
           "name": "Drop for SseHarness",
-          "line": 845,
+          "line": 897,
           "called": [
             "SseHarness"
           ]
@@ -32783,7 +33318,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 846,
+          "line": 898,
           "called": [
             "_",
             "handle",
@@ -32794,7 +33329,7 @@
         {
           "kind": "fn",
           "name": "start_sse_harness",
-          "line": 859,
+          "line": 911,
           "called": [
             "SseHarness",
             "start_sse_harness_cfg"
@@ -32803,7 +33338,7 @@
         {
           "kind": "fn",
           "name": "start_sse_harness_cfg",
-          "line": 863,
+          "line": 915,
           "called": [
             "Config",
             "SseConfig",
@@ -32831,7 +33366,7 @@
         {
           "kind": "fn",
           "name": "ring_len",
-          "line": 921,
+          "line": 973,
           "called": [
             "SseHarness",
             "fanout",
@@ -32844,7 +33379,7 @@
         {
           "kind": "fn",
           "name": "event_stream_serves_live_records_over_sse",
-          "line": 933,
+          "line": 985,
           "called": [
             "Err",
             "_",
@@ -32862,9 +33397,10 @@
         {
           "kind": "fn",
           "name": "event_stream_without_upstream_is_503",
-          "line": 1001,
+          "line": 1053,
           "called": [
             "addr",
+            "body",
             "get",
             "header",
             "r",
@@ -32874,7 +33410,7 @@
         {
           "kind": "fn",
           "name": "responses_carry_a_request_id_and_problem_instance",
-          "line": 1012,
+          "line": 1064,
           "called": [
             "addr",
             "get",
@@ -32887,7 +33423,7 @@
         {
           "kind": "fn",
           "name": "open_sse_stream",
-          "line": 1041,
+          "line": 1093,
           "called": [
             "addr",
             "as_bytes",
@@ -32897,7 +33433,7 @@
         {
           "kind": "fn",
           "name": "read_until",
-          "line": 1056,
+          "line": 1108,
           "called": [
             "Err",
             "_",
@@ -32909,7 +33445,7 @@
         {
           "kind": "fn",
           "name": "active_streams",
-          "line": 1075,
+          "line": 1127,
           "called": [
             "SseHarness",
             "load",
@@ -32919,7 +33455,7 @@
         {
           "kind": "fn",
           "name": "wait_active_streams",
-          "line": 1080,
+          "line": 1132,
           "called": [
             "SseHarness",
             "active_streams",
@@ -32929,7 +33465,7 @@
         {
           "kind": "fn",
           "name": "wait_ring_len",
-          "line": 1092,
+          "line": 1144,
           "called": [
             "SseHarness",
             "end",
@@ -32939,7 +33475,7 @@
         {
           "kind": "fn",
           "name": "concurrent_sse_clients_all_receive_the_fan_out",
-          "line": 1104,
+          "line": 1156,
           "called": [
             "_",
             "active_streams",
@@ -32957,7 +33493,7 @@
         {
           "kind": "fn",
           "name": "repeated_stream_open_close_releases_every_slot_no_leak",
-          "line": 1131,
+          "line": 1183,
           "called": [
             "SseConfig",
             "_",
@@ -33123,6 +33659,7 @@
           "called": [
             "addr",
             "as_bytes",
+            "body",
             "handle",
             "head",
             "is_empty",
@@ -38911,6 +39448,7 @@
             "HEADER_LEN",
             "SIGNER_HINT_LEN",
             "b",
+            "body",
             "cursor",
             "encode_frame",
             "encode_hinted_frame",
@@ -38951,6 +39489,7 @@
             "KNH2_PREAMBLE",
             "LEGACY_SIGNER_HINT",
             "b",
+            "body",
             "encode_frame",
             "encode_hinted_frame",
             "read_request",
@@ -39013,6 +39552,7 @@
             "KNH2_PREAMBLE",
             "LEGACY_SIGNER_HINT",
             "b",
+            "body",
             "bytes",
             "cursor",
             "encode_frame",
@@ -40802,6 +41342,7 @@
             "bytes",
             "events",
             "kernel",
+            "observed",
             "ok_admission_stage",
             "push",
             "r",
@@ -41189,7 +41730,8 @@
             "HARD_MAX_CONCURRENT_CONNECTIONS",
             "_",
             "load",
-            "min"
+            "min",
+            "observed"
           ]
         },
         {
@@ -49952,6 +50494,7 @@
             "_",
             "apply_batch",
             "get_actor_budget",
+            "observed",
             "push",
             "signer",
             "storage",
@@ -57222,6 +57765,7 @@
             "RpcError",
             "RpcRequest",
             "RpcResponse",
+            "body",
             "error",
             "http_post",
             "id",
@@ -57239,6 +57783,7 @@
             "_",
             "addr",
             "as_bytes",
+            "body",
             "find_double_crlf",
             "flush",
             "header",
@@ -57438,7 +57983,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 858,
+          "line": 878,
           "called": [
             "find_double_crlf",
             "hex_digit",
@@ -57453,7 +57998,7 @@
         {
           "kind": "fn",
           "name": "url_parse_simple",
-          "line": 865,
+          "line": 885,
           "called": [
             "parse_http_url",
             "path"
@@ -57462,7 +58007,7 @@
         {
           "kind": "fn",
           "name": "url_parse_with_path",
-          "line": 873,
+          "line": 893,
           "called": [
             "parse_http_url",
             "path"
@@ -57471,7 +58016,7 @@
         {
           "kind": "fn",
           "name": "url_parse_no_port_defaults_to_80",
-          "line": 881,
+          "line": 901,
           "called": [
             "parse_http_url"
           ]
@@ -57479,7 +58024,7 @@
         {
           "kind": "fn",
           "name": "url_parse_rejects_https",
-          "line": 887,
+          "line": 907,
           "called": [
             "parse_http_url"
           ]
@@ -57487,7 +58032,7 @@
         {
           "kind": "fn",
           "name": "url_parse_rejects_empty",
-          "line": 892,
+          "line": 912,
           "called": [
             "parse_http_url"
           ]
@@ -57495,7 +58040,7 @@
         {
           "kind": "fn",
           "name": "url_parse_rejects_bad_port",
-          "line": 898,
+          "line": 918,
           "called": [
             "parse_http_url"
           ]
@@ -57503,7 +58048,7 @@
         {
           "kind": "fn",
           "name": "find_double_crlf_basic",
-          "line": 903,
+          "line": 923,
           "called": [
             "b",
             "find_double_crlf"
@@ -57512,7 +58057,7 @@
         {
           "kind": "fn",
           "name": "find_double_crlf_missing",
-          "line": 910,
+          "line": 930,
           "called": [
             "b",
             "find_double_crlf"
@@ -57521,7 +58066,7 @@
         {
           "kind": "fn",
           "name": "parse_http_status_ok",
-          "line": 915,
+          "line": 935,
           "called": [
             "parse_http_status"
           ]
@@ -57529,7 +58074,7 @@
         {
           "kind": "fn",
           "name": "parse_http_status_malformed",
-          "line": 921,
+          "line": 941,
           "called": [
             "parse_http_status"
           ]
@@ -57537,7 +58082,7 @@
         {
           "kind": "fn",
           "name": "header_chunked_encoding_detected",
-          "line": 928,
+          "line": 948,
           "called": [
             "header_has_chunked_encoding"
           ]
@@ -57545,7 +58090,7 @@
         {
           "kind": "fn",
           "name": "header_chunked_encoding_negative_cases",
-          "line": 950,
+          "line": 970,
           "called": [
             "header_has_chunked_encoding"
           ]
@@ -57553,7 +58098,7 @@
         {
           "kind": "fn",
           "name": "hex_digit_all_cases",
-          "line": 966,
+          "line": 986,
           "called": [
             "hex_digit"
           ]
@@ -57561,7 +58106,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_u64_basic",
-          "line": 980,
+          "line": 1000,
           "called": [
             "parse_hex_u64"
           ]
@@ -57569,7 +58114,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_u64_malformed",
-          "line": 988,
+          "line": 1008,
           "called": [
             "parse_hex_u64"
           ]
@@ -57577,7 +58122,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_32_basic",
-          "line": 995,
+          "line": 1015,
           "called": [
             "parse_hex_32"
           ]
@@ -57585,7 +58130,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_32_wrong_length",
-          "line": 1002,
+          "line": 1022,
           "called": [
             "parse_hex_32"
           ]
@@ -57593,7 +58138,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_20_basic",
-          "line": 1009,
+          "line": 1029,
           "called": [
             "parse_hex_20"
           ]
@@ -57601,7 +58146,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_bytes_empty",
-          "line": 1016,
+          "line": 1036,
           "called": [
             "parse_hex_bytes"
           ]
@@ -57609,7 +58154,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_bytes_odd_length",
-          "line": 1021,
+          "line": 1041,
           "called": [
             "parse_hex_bytes"
           ]
@@ -57617,7 +58162,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1028,
+          "line": 1048,
           "called": [
             "L1Source",
             "SourceError"
@@ -57626,7 +58171,7 @@
         {
           "kind": "fn",
           "name": "empty_source",
-          "line": 1036,
+          "line": 1056,
           "called": [
             "Err",
             "block_header_by_number",
@@ -57636,7 +58181,7 @@
         {
           "kind": "fn",
           "name": "push_and_read",
-          "line": 1047,
+          "line": 1067,
           "called": [
             "BlockHeader",
             "block_header_by_number",
@@ -57648,7 +58193,7 @@
         {
           "kind": "fn",
           "name": "explicit_latest",
-          "line": 1061,
+          "line": 1081,
           "called": [
             "BlockHeader",
             "hash",
@@ -57660,7 +58205,7 @@
         {
           "kind": "fn",
           "name": "logs_in_block_by_hash_finds_logs",
-          "line": 1075,
+          "line": 1095,
           "called": [
             "BlockHeader",
             "RawLog",
@@ -57676,7 +58221,7 @@
         {
           "kind": "fn",
           "name": "logs_in_block_by_hash_returns_empty_for_other_contract",
-          "line": 1103,
+          "line": 1123,
           "called": [
             "BlockHeader",
             "RawLog",
@@ -57691,7 +58236,7 @@
         {
           "kind": "fn",
           "name": "logs_in_block_by_hash_rejects_unknown_hash",
-          "line": 1131,
+          "line": 1151,
           "called": [
             "Err",
             "_",
@@ -57701,7 +58246,7 @@
         {
           "kind": "fn",
           "name": "logs_in_block_by_hash_filters_by_block_number",
-          "line": 1146,
+          "line": 1166,
           "called": [
             "BlockHeader",
             "RawLog",
@@ -57716,7 +58261,7 @@
         {
           "kind": "fn",
           "name": "rewrite_chain_replaces_blocks_at_or_after_start",
-          "line": 1177,
+          "line": 1197,
           "called": [
             "BlockHeader",
             "Err",
@@ -57730,7 +58275,7 @@
         {
           "kind": "fn",
           "name": "push_block_rejects_non_monotone",
-          "line": 1220,
+          "line": 1240,
           "called": [
             "BlockHeader",
             "hash",
@@ -58646,6 +59191,7 @@
             "_",
             "addr",
             "as_bytes",
+            "body",
             "encode",
             "flush",
             "len",
@@ -58735,6 +59281,7 @@
             "SignedActionForSubmit",
             "SubmitError",
             "_",
+            "body",
             "encode",
             "len",
             "signed",
@@ -58891,6 +59438,7 @@
           "line": 766,
           "called": [
             "action",
+            "body",
             "build_request",
             "emits_hints",
             "encode",
@@ -58906,6 +59454,7 @@
           "called": [
             "action",
             "b",
+            "body",
             "build_request",
             "emits_hints",
             "encode",
@@ -61558,6 +62107,7 @@
           "called": [
             "KNH2_PREAMBLE",
             "action",
+            "body",
             "build_request",
             "encode",
             "encode_frame",
@@ -61645,6 +62195,206 @@
             "stop",
             "submit",
             "with_emit_hints"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-l1-ingest::tests::rpc_log_filter",
+      "path": "runtime/knomosis-l1-ingest/tests/rpc_log_filter.rs",
+      "declaration_count": 17,
+      "declarations": [
+        {
+          "kind": "struct",
+          "name": "MockRpc",
+          "line": 35,
+          "called": [
+            "handle",
+            "stop",
+            "url"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "MockRpc",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "spawn",
+          "line": 43,
+          "called": [
+            "Err",
+            "_",
+            "clone",
+            "handle",
+            "kind",
+            "listener",
+            "load",
+            "local_addr",
+            "lock",
+            "r",
+            "respond",
+            "stop",
+            "stream",
+            "url"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "set_result",
+          "line": 85,
+          "called": [
+            "lock"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Drop for MockRpc",
+          "line": 90,
+          "called": [
+            "MockRpc"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "drop",
+          "line": 91,
+          "called": [
+            "_",
+            "handle",
+            "stop",
+            "take"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "respond",
+          "line": 103,
+          "called": [
+            "_",
+            "b",
+            "body",
+            "end",
+            "flush",
+            "json",
+            "len",
+            "ok",
+            "parse",
+            "position",
+            "r",
+            "read",
+            "stream",
+            "write"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "REQUESTED",
+          "line": 142,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "IMPOSTOR",
+          "line": 143,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "BLOCK_HASH",
+          "line": 144,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "OTHER_BLOCK",
+          "line": 145,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "log_entry",
+          "line": 149,
+          "called": [
+            "block_hash",
+            "json"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_logs",
+          "line": 161,
+          "called": [
+            "BLOCK_HASH",
+            "EthAddress",
+            "MockRpc",
+            "REQUESTED",
+            "SourceError",
+            "logs_in_block_by_hash",
+            "server",
+            "url"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "an_honest_providers_log_is_accepted",
+          "line": 170,
+          "called": [
+            "BLOCK_HASH",
+            "EthAddress",
+            "REQUESTED",
+            "json",
+            "len",
+            "log_entry",
+            "read_logs",
+            "server",
+            "set_result"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "a_log_from_another_contract_is_refused",
+          "line": 186,
+          "called": [
+            "BLOCK_HASH",
+            "IMPOSTOR",
+            "REQUESTED",
+            "json",
+            "log_entry",
+            "read_logs",
+            "server",
+            "set_result"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "one_impostor_rejects_the_whole_batch",
+          "line": 203,
+          "called": [
+            "BLOCK_HASH",
+            "IMPOSTOR",
+            "REQUESTED",
+            "json",
+            "log_entry",
+            "read_logs",
+            "server",
+            "set_result"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "a_log_from_another_block_is_refused",
+          "line": 216,
+          "called": [
+            "OTHER_BLOCK",
+            "REQUESTED",
+            "json",
+            "log_entry",
+            "read_logs",
+            "server",
+            "set_result"
           ]
         }
       ]

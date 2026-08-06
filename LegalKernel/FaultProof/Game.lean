@@ -398,6 +398,160 @@ instance instDecidablePendingMidpointInRange (gs : GameState) :
   unfold pendingMidpointInRange
   cases gs.pendingMidpoint <;> exact inferInstance
 
+/-! ## Turn–pending alignment (Workstream SB)
+
+The L1 contract's terminate obligation lands on the SEQUENCER in
+every reachable game, and the property is EMERGENT there: a game
+opens `(turn = sequencer, pending = none)`, `submitMidpoint` is the
+only writer of a pending midpoint and flips the turn, and
+`respondToMidpoint` is the only clearer and flips it back — so the
+reachable set of `(turn, pendingMidpoint.isSome)` is exactly
+`{(sequencer, false), (challenger, true)}` and the challenger's only
+obligation, ever, is a response.  Nothing pinned that: no contract
+test asserted it, no Lean theorem stated it, and the model has no
+actor gate at all (`wrongTurn` is declared and never emitted), so a
+future transition flipping the turn an odd number of times would
+silently hand the challenger a terminate obligation it cannot always
+meet.  These lemmas are the pin: the alignment is an invariant of
+`applyTransition`, and `Settlement.honest_challenger_wins_of_turn_aligned`
+consumes it in place of a bare turn hypothesis. -/
+
+/-- Turn–pending alignment: no midpoint is pending exactly when it
+    is the sequencer's turn.  The `↔` (not a one-way implication) is
+    what the preservation induction needs — the respond arms consume
+    the `some → challenger` direction. -/
+def turnAlignedWithPending (gs : GameState) : Prop :=
+  gs.pendingMidpoint = none ↔ gs.turn = .sequencer
+
+instance instDecidableTurnAlignedWithPending (gs : GameState) :
+    Decidable (turnAlignedWithPending gs) := by
+  unfold turnAlignedWithPending
+  have : Decidable (gs.pendingMidpoint = none) :=
+    decidable_of_iff (gs.pendingMidpoint.isNone = true)
+      Option.isNone_iff_eq_none
+  exact inferInstance
+
+/-- Alignment holds at the L1 starting state: `initiateChallenge`
+    opens every game with the sequencer to move and nothing
+    pending. -/
+theorem turn_aligned_of_start (gs : GameState)
+    (h_p : gs.pendingMidpoint = none) (h_t : gs.turn = .sequencer) :
+    turnAlignedWithPending gs :=
+  ⟨fun _ => h_t, fun _ => h_p⟩
+
+/-- **Alignment is preserved by every legal transition.**  The
+    submit arm installs a midpoint and flips sequencer→challenger;
+    the respond arms clear it and flip back; the terminal arms touch
+    neither field.  With `turn_aligned_of_start` this makes the
+    alignment an invariant of every L1-reachable game. -/
+theorem turn_aligned_preserved {gs gs' : GameState}
+    {t : GameTransition}
+    (h : applyTransition gs t = .ok gs')
+    (h_inv : turnAlignedWithPending gs) :
+    turnAlignedWithPending gs' := by
+  cases t with
+  | submitMidpoint c =>
+    cases hpm : gs.pendingMidpoint with
+    | some mp =>
+      -- A pending midpoint makes every submit arm an error.
+      simp only [applyTransition, hpm, Option.isSome_some, if_true] at h
+      split at h
+      · exact absurd h (by simp)
+      · exact absurd h (by simp)
+    | none =>
+      -- The guard passed, so alignment gives `turn = sequencer`;
+      -- the update installs `some` and flips to the challenger.
+      have ht : gs.turn = .sequencer := h_inv.mp hpm
+      simp only [applyTransition, hpm, Option.isSome_none,
+                 Bool.false_eq_true, if_false] at h
+      split at h
+      · exact absurd h (by simp)
+      · split at h
+        · exact absurd h (by simp)
+        · split at h
+          · exact absurd h (by simp)
+          · injection h with h_gs
+            subst h_gs
+            unfold turnAlignedWithPending
+            simp [ht, TurnSide.flip]
+  | respondAgree =>
+    cases hpm : gs.pendingMidpoint with
+    | none =>
+      -- Nothing pending: every respond arm is an error.
+      simp only [applyTransition, hpm] at h
+      split at h
+      · exact absurd h (by simp)
+      · split at h
+        · exact absurd h (by simp)
+        · exact absurd h (by simp)
+    | some mp =>
+      -- A pending midpoint forces the challenger's turn (the `mpr`
+      -- direction of the alignment); the update clears it and
+      -- flips back to the sequencer.
+      have ht : gs.turn = .challenger := by
+        cases h_t : gs.turn with
+        | sequencer => exact absurd (h_inv.mpr h_t) (by simp [hpm])
+        | challenger => rfl
+      simp only [applyTransition, hpm] at h
+      split at h
+      · exact absurd h (by simp)
+      · split at h
+        · exact absurd h (by simp)
+        · injection h with h_gs
+          subst h_gs
+          unfold turnAlignedWithPending
+          simp [ht, TurnSide.flip]
+  | respondDisagree =>
+    cases hpm : gs.pendingMidpoint with
+    | none =>
+      simp only [applyTransition, hpm] at h
+      split at h
+      · exact absurd h (by simp)
+      · split at h
+        · exact absurd h (by simp)
+        · exact absurd h (by simp)
+    | some mp =>
+      have ht : gs.turn = .challenger := by
+        cases h_t : gs.turn with
+        | sequencer => exact absurd (h_inv.mpr h_t) (by simp [hpm])
+        | challenger => rfl
+      simp only [applyTransition, hpm] at h
+      split at h
+      · exact absurd h (by simp)
+      · split at h
+        · exact absurd h (by simp)
+        · injection h with h_gs
+          subst h_gs
+          unfold turnAlignedWithPending
+          simp [ht, TurnSide.flip]
+  | terminateOnSingleStep step =>
+    -- Every terminal arm is `{ gs with status := … }`: the pending
+    -- midpoint and the turn both survive unchanged, so the record
+    -- projections the invariant reads are definitionally `gs`'s.
+    simp only [applyTransition] at h
+    repeat' split at h
+    all_goals
+      first
+        | (injection h with h_gs; subst h_gs; exact h_inv)
+        | exact absurd h (by simp)
+  | timeoutLoss =>
+    simp only [applyTransition] at h
+    repeat' split at h
+    all_goals
+      first
+        | (injection h with h_gs; subst h_gs; exact h_inv)
+        | exact absurd h (by simp)
+
+/-- The terminate obligation is the sequencer's: on any aligned game
+    with no pending midpoint — the only shape
+    `terminateOnSingleStep` accepts — the turn is the sequencer's.
+    The Lean pin of the L1 parity argument. -/
+theorem terminate_owner_is_sequencer {gs : GameState}
+    (h_inv : turnAlignedWithPending gs)
+    (h_p : gs.pendingMidpoint = none) :
+    gs.turn = .sequencer :=
+  h_inv.mp h_p
+
 /-- Well-formedness predicate for a game state.  A game is
     well-formed iff:
       * The disputed range has `low.idx < high.idx` (else the

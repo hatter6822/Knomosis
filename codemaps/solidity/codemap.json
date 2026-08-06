@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c9c7a91194f9db5e05ae242a41b824c9a8e4519a1a86a31ac4a60241d9848d18"
+    "source_digest": "5d325fcb0554c1dfd48aa2098aeedaef66eea5486abf17dcfc68366ee6ce4303"
   },
   "summary": {
     "module_count": 103,
-    "declaration_count": 2130
+    "declaration_count": 2135
   },
   "modules": [
     {
@@ -453,7 +453,7 @@
     {
       "module": "KnomosisBridge",
       "path": "solidity/src/contracts/KnomosisBridge.sol",
-      "declaration_count": 121,
+      "declaration_count": 124,
       "declarations": [
         {
           "kind": "contract",
@@ -882,32 +882,56 @@
           ]
         },
         {
-          "kind": "modifier",
-          "name": "circuitOpen",
-          "line": 1071,
+          "kind": "function",
+          "name": "_requireAttestationFresh",
+          "line": 1070,
           "called": [
             "AttestationStale",
+            "latestStateRootSubmittedAtBlock"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_requireOperationalBreakersOpen",
+          "line": 1083,
+          "called": [
             "DisputeCooldown",
             "IKnomosisMigration",
             "MigrationActivated",
             "TvlCapReached",
             "activated",
             "lastUpheldDisputeBlock",
-            "latestStateRootSubmittedAtBlock",
             "migration",
             "totalLockedValue"
           ]
         },
         {
           "kind": "modifier",
+          "name": "circuitOpenExceptStaleness",
+          "line": 1123,
+          "called": [
+            "_requireOperationalBreakersOpen"
+          ]
+        },
+        {
+          "kind": "modifier",
+          "name": "circuitOpen",
+          "line": 1132,
+          "called": [
+            "_requireAttestationFresh",
+            "_requireOperationalBreakersOpen"
+          ]
+        },
+        {
+          "kind": "modifier",
           "name": "withdrawalOpen",
-          "line": 1099,
+          "line": 1144,
           "called": []
         },
         {
           "kind": "modifier",
           "name": "boldCircuitOpen",
-          "line": 1109,
+          "line": 1154,
           "called": [
             "BoldDepositPaused"
           ]
@@ -915,7 +939,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldCircuitBreaker",
-          "line": 1118,
+          "line": 1163,
           "called": [
             "NotBoldCircuitBreaker"
           ]
@@ -923,7 +947,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldAdmin",
-          "line": 1126,
+          "line": 1171,
           "called": [
             "NotBoldAdmin"
           ]
@@ -931,7 +955,7 @@
         {
           "kind": "modifier",
           "name": "onlyAmmDisasterRecovery",
-          "line": 1137,
+          "line": 1182,
           "called": [
             "NotAmmDisasterRecovery"
           ]
@@ -939,7 +963,7 @@
         {
           "kind": "modifier",
           "name": "ammActive",
-          "line": 1146,
+          "line": 1191,
           "called": [
             "AmmIsDisabled",
             "ammDisabled"
@@ -948,7 +972,7 @@
         {
           "kind": "event",
           "name": "DepositInitiated",
-          "line": 1155,
+          "line": 1200,
           "called": [
             "receiptHash"
           ]
@@ -956,7 +980,7 @@
         {
           "kind": "function",
           "name": "depositETH",
-          "line": 1166,
+          "line": 1211,
           "called": [
             "_registerDeposit",
             "circuitOpen"
@@ -965,7 +989,7 @@
         {
           "kind": "function",
           "name": "depositERC20",
-          "line": 1177,
+          "line": 1222,
           "called": [
             "BoldDepositViaFeeSplitOnly",
             "TransferAmountMismatch",
@@ -977,7 +1001,7 @@
         {
           "kind": "function",
           "name": "_registerDeposit",
-          "line": 1224,
+          "line": 1269,
           "called": [
             "DepositInitiated",
             "TvlCapReached",
@@ -989,7 +1013,7 @@
         {
           "kind": "event",
           "name": "DepositWithFeeInitiated",
-          "line": 1270,
+          "line": 1315,
           "called": [
             "receiptHash"
           ]
@@ -997,7 +1021,7 @@
         {
           "kind": "function",
           "name": "depositETHWithFee",
-          "line": 1292,
+          "line": 1337,
           "called": [
             "FeeBpsAboveMax",
             "FeeBpsBelowMin",
@@ -1009,7 +1033,7 @@
         {
           "kind": "function",
           "name": "depositBoldWithFee",
-          "line": 1359,
+          "line": 1404,
           "called": [
             "BoldNotEnabled",
             "BoldTransferAmountMismatch",
@@ -1024,7 +1048,7 @@
         {
           "kind": "function",
           "name": "_registerDepositWithFee",
-          "line": 1456,
+          "line": 1501,
           "called": [
             "BoldTvlCapReached",
             "DepositWithFeeInitiated",
@@ -1038,7 +1062,7 @@
         {
           "kind": "function",
           "name": "_seedAmmReserves",
-          "line": 1566,
+          "line": 1611,
           "called": [
             "ammDisabled"
           ]
@@ -1046,121 +1070,121 @@
         {
           "kind": "event",
           "name": "AmmSwapExecuted",
-          "line": 1619,
+          "line": 1664,
           "called": []
         },
         {
           "kind": "error",
           "name": "SwapDeadlineExpired",
-          "line": 1631,
+          "line": 1676,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroSwapInput",
-          "line": 1633,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "ZeroSwapOutput",
-          "line": 1637,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "EthAmountMismatch",
-          "line": 1639,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "UnexpectedEth",
-          "line": 1641,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "UnsupportedSwapResource",
-          "line": 1644,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmmEmpty",
-          "line": 1648,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmmBelowMinimumLiquidity",
-          "line": 1654,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmmWouldBreachMinimumLiquidity",
-          "line": 1660,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "SlippageExceeded",
-          "line": 1663,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "ReserveExhausted",
-          "line": 1668,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "EthTransferFailed",
-          "line": 1671,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmmKInvariantViolated",
           "line": 1678,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AmmIsDisabled",
-          "line": 1681,
+          "name": "ZeroSwapOutput",
+          "line": 1682,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AmmPausedByBoldCircuit",
+          "name": "EthAmountMismatch",
           "line": 1684,
           "called": []
         },
         {
           "kind": "error",
+          "name": "UnexpectedEth",
+          "line": 1686,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnsupportedSwapResource",
+          "line": 1689,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmEmpty",
+          "line": 1693,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmBelowMinimumLiquidity",
+          "line": 1699,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmWouldBreachMinimumLiquidity",
+          "line": 1705,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SlippageExceeded",
+          "line": 1708,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ReserveExhausted",
+          "line": 1713,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EthTransferFailed",
+          "line": 1716,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmKInvariantViolated",
+          "line": 1723,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmIsDisabled",
+          "line": 1726,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmPausedByBoldCircuit",
+          "line": 1729,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "NotAmmDisasterRecovery",
-          "line": 1687,
+          "line": 1732,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmAlreadyDisabled",
-          "line": 1690,
+          "line": 1735,
           "called": []
         },
         {
           "kind": "event",
           "name": "AmmDisabled",
-          "line": 1695,
+          "line": 1740,
           "called": []
         },
         {
           "kind": "function",
           "name": "emergencyDisableAmm",
-          "line": 1710,
+          "line": 1755,
           "called": [
             "AmmAlreadyDisabled",
             "AmmDisabled",
@@ -1171,7 +1195,7 @@
         {
           "kind": "function",
           "name": "ammSwap",
-          "line": 1772,
+          "line": 1817,
           "called": [
             "AmmBelowMinimumLiquidity",
             "AmmEmpty",
@@ -1199,13 +1223,13 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 1928,
+          "line": 1973,
           "called": []
         },
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 1935,
+          "line": 1980,
           "called": [
             "InvalidSignatureLength",
             "NonMonotonic",
@@ -1213,7 +1237,7 @@
             "StateRootRecord",
             "StateRootSubmitted",
             "attestor",
-            "circuitOpen",
+            "circuitOpenExceptStaleness",
             "deploymentId",
             "digest",
             "latestStateRootSubmittedAtBlock"
@@ -1222,13 +1246,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 1974,
+          "line": 2019,
           "called": []
         },
         {
           "kind": "function",
           "name": "stateRootAt",
-          "line": 1981,
+          "line": 2026,
           "called": [
             "StateRootRecord",
             "isStateRootReverted"
@@ -1237,7 +1261,7 @@
         {
           "kind": "function",
           "name": "isStateRootFinalised",
-          "line": 1987,
+          "line": 2032,
           "called": [
             "StateRootRecord",
             "disputeWindowBlocks",
@@ -1247,25 +1271,25 @@
         {
           "kind": "event",
           "name": "WithdrawalRedeemed",
-          "line": 1998,
+          "line": 2043,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PendingWithdrawal",
-          "line": 2028,
+          "line": 2073,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WithdrawalProof",
-          "line": 2042,
+          "line": 2087,
           "called": []
         },
         {
           "kind": "function",
           "name": "withdrawWithProof",
-          "line": 2048,
+          "line": 2093,
           "called": [
             "AlreadyRedeemed",
             "BridgeAccountingMismatch",
@@ -1289,7 +1313,7 @@
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
-          "line": 2142,
+          "line": 2187,
           "called": [
             "PendingWithdrawal"
           ]
@@ -1297,7 +1321,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 2156,
+          "line": 2201,
           "called": [
             "InvalidProof"
           ]
@@ -1305,13 +1329,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 2194,
+          "line": 2239,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 2198,
+          "line": 2243,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -1322,31 +1346,31 @@
         {
           "kind": "event",
           "name": "BoldCircuitClosed",
-          "line": 2241,
+          "line": 2286,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitOpened",
-          "line": 2244,
+          "line": 2289,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitClosedByAutoTrigger",
-          "line": 2250,
+          "line": 2295,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldTvlCapUpdated",
-          "line": 2255,
+          "line": 2300,
           "called": []
         },
         {
           "kind": "function",
           "name": "closeBoldCircuit",
-          "line": 2262,
+          "line": 2307,
           "called": [
             "BoldCircuitClosed",
             "onlyBoldCircuitBreaker"
@@ -1355,7 +1379,7 @@
         {
           "kind": "function",
           "name": "openBoldCircuit",
-          "line": 2271,
+          "line": 2316,
           "called": [
             "BoldCircuitOpened",
             "onlyBoldCircuitBreaker"
@@ -1364,7 +1388,7 @@
         {
           "kind": "function",
           "name": "closeBoldCircuitIfAnyLiquityBranchShutdown",
-          "line": 2300,
+          "line": 2345,
           "called": [
             "AutoCircuitTriggerDisabled",
             "BoldCircuitClosedByAutoTrigger",
@@ -1375,7 +1399,7 @@
         {
           "kind": "function",
           "name": "_readLiquityShutdownTime",
-          "line": 2350,
+          "line": 2395,
           "called": [
             "LiquityV2ReadFailed"
           ]
@@ -1383,7 +1407,7 @@
         {
           "kind": "function",
           "name": "setBoldTvlCap",
-          "line": 2373,
+          "line": 2418,
           "called": [
             "BoldTvlCapExceedsGlobal",
             "BoldTvlCapUpdated",
@@ -1393,7 +1417,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 2385,
+          "line": 2430,
           "called": []
         }
       ]
@@ -4037,7 +4061,7 @@
         {
           "kind": "function",
           "name": "readUint256LE",
-          "line": 134,
+          "line": 144,
           "called": [
             "CBEUnexpectedEof"
           ]
@@ -4045,7 +4069,7 @@
         {
           "kind": "function",
           "name": "readHead",
-          "line": 161,
+          "line": 174,
           "called": [
             "CBEInvalidMajorType",
             "CBEUnexpectedEof",
@@ -4055,7 +4079,7 @@
         {
           "kind": "function",
           "name": "readUint",
-          "line": 177,
+          "line": 190,
           "called": [
             "readHead"
           ]
@@ -4063,7 +4087,7 @@
         {
           "kind": "function",
           "name": "readAmount",
-          "line": 191,
+          "line": 204,
           "called": [
             "CBEInvalidMajorType",
             "CBEUnexpectedEof",
@@ -4073,7 +4097,7 @@
         {
           "kind": "function",
           "name": "readBytes",
-          "line": 208,
+          "line": 221,
           "called": [
             "CBEInvalidLength",
             "readHead"
@@ -4082,7 +4106,7 @@
         {
           "kind": "function",
           "name": "readBytesExact",
-          "line": 230,
+          "line": 255,
           "called": [
             "CBESizeMismatch",
             "readBytes"
@@ -4091,23 +4115,27 @@
         {
           "kind": "function",
           "name": "readBytes32Exact",
-          "line": 243,
+          "line": 268,
           "called": [
-            "readBytesExact"
+            "CBEInvalidLength",
+            "CBESizeMismatch",
+            "readHead"
           ]
         },
         {
           "kind": "function",
           "name": "readAddressExact",
-          "line": 260,
+          "line": 295,
           "called": [
-            "readBytesExact"
+            "CBEInvalidLength",
+            "CBESizeMismatch",
+            "readHead"
           ]
         },
         {
           "kind": "function",
           "name": "readArrayHead",
-          "line": 279,
+          "line": 322,
           "called": [
             "readHead"
           ]
@@ -4115,7 +4143,7 @@
         {
           "kind": "function",
           "name": "readMapHead",
-          "line": 289,
+          "line": 332,
           "called": [
             "readHead"
           ]
@@ -4123,7 +4151,7 @@
         {
           "kind": "function",
           "name": "peekTag",
-          "line": 304,
+          "line": 347,
           "called": [
             "CBEUnexpectedEof"
           ]
@@ -4131,7 +4159,7 @@
         {
           "kind": "function",
           "name": "assertFullyConsumed",
-          "line": 317,
+          "line": 360,
           "called": [
             "CBEInvalidLength"
           ]
@@ -13497,7 +13525,7 @@
     {
       "module": "KnomosisBridge.t",
       "path": "solidity/test/KnomosisBridge.t.sol",
-      "declaration_count": 46,
+      "declaration_count": 48,
       "declarations": [
         {
           "kind": "contract",
@@ -13694,20 +13722,36 @@
         },
         {
           "kind": "function",
-          "name": "test_breaker_DisputeCooldown_blocks_deposit",
+          "name": "test_breaker_AttestationStale_is_self_clearing",
           "line": 319,
+          "called": [
+            "_signStateRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_still_carries_the_other_breakers",
+          "line": 342,
+          "called": [
+            "_signStateRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_breaker_DisputeCooldown_blocks_deposit",
+          "line": 358,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_revertToPriorRoot_only_disputeVerifier",
-          "line": 342,
+          "line": 381,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_revertToPriorRoot_marks_records_reverted",
-          "line": 347,
+          "line": 386,
           "called": [
             "_signStateRoot"
           ]
@@ -13715,7 +13759,7 @@
         {
           "kind": "function",
           "name": "test_revertToPriorRoot_idempotent",
-          "line": 363,
+          "line": 402,
           "called": [
             "_signStateRoot"
           ]
@@ -13723,19 +13767,19 @@
         {
           "kind": "function",
           "name": "test_revertToPriorRoot_trips_cooldown",
-          "line": 375,
+          "line": 414,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_hasOpenDisputeOlderThan_initial",
-          "line": 388,
+          "line": 427,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_hasOpenDisputeOlderThan_after_root_within_window",
-          "line": 392,
+          "line": 431,
           "called": [
             "_signStateRoot"
           ]
@@ -13743,7 +13787,7 @@
         {
           "kind": "function",
           "name": "test_hasOpenDisputeOlderThan_after_window",
-          "line": 398,
+          "line": 437,
           "called": [
             "_signStateRoot"
           ]
@@ -13751,7 +13795,7 @@
         {
           "kind": "function",
           "name": "_stateRootDigest",
-          "line": 408,
+          "line": 447,
           "called": [
             "bridge"
           ]
@@ -13759,7 +13803,7 @@
         {
           "kind": "function",
           "name": "_signStateRoot",
-          "line": 423,
+          "line": 462,
           "called": [
             "_stateRootDigest",
             "digest"
@@ -13768,13 +13812,13 @@
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_initial_floor_is_max",
-          "line": 435,
+          "line": 474,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_lowers_floor",
-          "line": 439,
+          "line": 478,
           "called": [
             "StateRootRangeReverted",
             "_signStateRoot"
@@ -13783,7 +13827,7 @@
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_idempotent_at_same_floor",
-          "line": 458,
+          "line": 497,
           "called": [
             "_signStateRoot"
           ]
@@ -13791,7 +13835,7 @@
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_floor_only_decreases",
-          "line": 469,
+          "line": 508,
           "called": [
             "_signStateRoot"
           ]
@@ -13799,7 +13843,7 @@
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_O1_with_huge_gap",
-          "line": 487,
+          "line": 526,
           "called": [
             "_signStateRoot"
           ]
@@ -13807,7 +13851,7 @@
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_blocks_withdrawal_for_reverted_indices",
-          "line": 513,
+          "line": 552,
           "called": [
             "_signStateRoot"
           ]
@@ -13815,13 +13859,13 @@
         {
           "kind": "function",
           "name": "test_audit_BridgeAccountingMismatch_is_distinct_error_selector",
-          "line": 529,
+          "line": 568,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit2_post_revert_submission_is_not_auto_reverted",
-          "line": 541,
+          "line": 580,
           "called": [
             "_signStateRoot"
           ]
@@ -13829,7 +13873,7 @@
         {
           "kind": "function",
           "name": "test_audit2_double_revert_extends_ceiling",
-          "line": 564,
+          "line": 603,
           "called": [
             "_signStateRoot"
           ]
@@ -13837,7 +13881,7 @@
         {
           "kind": "function",
           "name": "test_audit2_revert_lowers_floor_only",
-          "line": 585,
+          "line": 624,
           "called": [
             "_signStateRoot"
           ]
@@ -13845,7 +13889,7 @@
         {
           "kind": "function",
           "name": "test_audit2_constructor_reverts_on_zero_sequencerStake",
-          "line": 608,
+          "line": 647,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -13858,7 +13902,7 @@
         {
           "kind": "function",
           "name": "test_audit2_depositERC20_rejects_fee_on_transfer_token",
-          "line": 645,
+          "line": 684,
           "called": [
             "Deployer",
             "FeeOnTransferMockERC20",
@@ -13870,7 +13914,7 @@
         {
           "kind": "function",
           "name": "test_audit2_constructor_reverts_on_duplicate_tokens",
-          "line": 684,
+          "line": 723,
           "called": [
             "KnomosisBridge",
             "attestor",

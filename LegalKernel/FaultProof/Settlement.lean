@@ -230,6 +230,38 @@ theorem honest_challenger_wins_against_invalid_state_root
               h_kernel_truthful h_mismatch h_apply
   rw [h, h_turn]
 
+/-- `honest_challenger_wins_against_invalid_state_root` with the bare
+    turn hypothesis replaced by the turn–pending ALIGNMENT invariant
+    (Workstream SB).
+
+    The bare `h_turn` was load-bearing and unpinned: it happened to
+    match the L1 deployment because the contract's turn discipline
+    makes the sequencer the only party ever obligated to terminate,
+    but nothing tied the hypothesis to that discipline — a transition
+    flipping the turn an odd number of times would have silently
+    unmoored the theorem from the deployment.  Here the turn is
+    DERIVED: `turnAlignedWithPending` is preserved by every legal
+    transition (`turn_aligned_preserved`) from the L1 starting shape
+    (`turn_aligned_of_start`), and at the only game shape terminate
+    accepts — no pending midpoint — it forces `turn = sequencer`. -/
+theorem honest_challenger_wins_of_turn_aligned
+    (truth : LogIndex → StateCommit)
+    (gs gs' : GameState) (step : KernelStep)
+    (h_status : gs.status = .inProgress)
+    (h_single_step : gs.range.isSingleStep)
+    (h_no_pending : gs.pendingMidpoint = none)
+    (h_prestate : step.preStateCommit = gs.range.low.commit)
+    (h_aligned : turnAlignedWithPending gs)
+    (h_disagree : settlementDisagreement truth gs)
+    (h_kernel_truthful :
+        kernelStepApply step = some (truth gs.range.high.idx))
+    (h_apply : applyTransition gs (.terminateOnSingleStep step) = .ok gs') :
+    gs'.status = .challengerWon :=
+  honest_challenger_wins_against_invalid_state_root truth gs gs' step
+    h_status h_single_step h_no_pending h_prestate
+    (terminate_owner_is_sequencer h_aligned h_no_pending)
+    h_disagree h_kernel_truthful h_apply
+
 /-! ## Trace-level composition with `disagreement_persists_along_trace`
 
 The composite theorem above operates at single-step termination.

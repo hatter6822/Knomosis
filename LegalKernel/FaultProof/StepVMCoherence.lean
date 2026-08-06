@@ -241,6 +241,53 @@ theorem uint64BE_size (n : Nat) : (uint64BE n).size = 8 := by
   unfold uint64BE
   rfl
 
+set_option maxHeartbeats 1000000 in
+/-- `uint64BE` is injective below `2 ^ 64`.
+
+    Proof strategy: byte-equality of the two encodings yields the
+    eight big-endian byte equations; rewriting shifts as division and
+    the `0xFF` mask as `% 256` turns them into linear div/mod facts
+    `omega` can combine with the width bounds to conclude `n₁ = n₂`.
+
+    The bound is not decorative — `uint64BE` truncates above it
+    (`uint64BE (2 ^ 64) = uint64BE 0`), which is exactly why every
+    consumer either carries a `< 2 ^ 64` hypothesis or reads the
+    value out of a `UInt64`. -/
+theorem uint64BE_inj {n₁ n₂ : Nat} (h₁ : n₁ < 2 ^ 64) (h₂ : n₂ < 2 ^ 64)
+    (h : uint64BE n₁ = uint64BE n₂) : n₁ = n₂ := by
+  -- ByteArray → Array → List → per-byte equations.
+  unfold uint64BE at h
+  injection h with harr
+  have hlist := congrArg Array.toList harr
+  simp only [List.cons.injEq, and_true] at hlist
+  obtain ⟨e7, e6, e5, e4, e3, e2, e1, e0⟩ := hlist
+  -- UInt8 equality → Nat-mod equality per byte.
+  have toNat8 : ∀ {a b : Nat}, a.toUInt8 = b.toUInt8 → a % 256 = b % 256 := by
+    intro a b hab
+    have := congrArg UInt8.toNat hab
+    simpa [Nat.toUInt8, UInt8.toNat_ofNat] using this
+  have m7 := toNat8 e7
+  have m6 := toNat8 e6
+  have m5 := toNat8 e5
+  have m4 := toNat8 e4
+  have m3 := toNat8 e3
+  have m2 := toNat8 e2
+  have m1 := toNat8 e1
+  have m0 := toNat8 e0
+  -- Stage 1: shifts → division; mask → mod (`0xFF = 2 ^ 8 - 1`).
+  -- Kept SEPARATE from the pow-reduction stage: in one pass the
+  -- `Nat.reducePow` simproc rewrites `2 ^ 8 - 1` straight back to a
+  -- numeral before the mask lemma can see the `&&& (2 ^ 8 - 1)`
+  -- shape, the `&&&`s survive, and `omega` silently drops every
+  -- hypothesis containing one.
+  simp only [Nat.shiftRight_eq_div_pow,
+             show (0xFF : Nat) = 2 ^ 8 - 1 from rfl,
+             Nat.and_two_pow_sub_one_eq_mod] at m7 m6 m5 m4 m3 m2 m1 m0
+  -- Stage 2: pows → numerals so `omega` sees plain div/mod facts.
+  simp only [Nat.reducePow] at m7 m6 m5 m4 m3 m2 m1 m0 h₁ h₂
+  -- Eight base-256 digit equations + the width bounds pin the value.
+  omega
+
 /-- Size of `uint256BE` is exactly 32. -/
 theorem uint256BE_size (n : Nat) : (uint256BE n).size = 32 := by
   unfold uint256BE
