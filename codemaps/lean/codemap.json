@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "36d8fdf02b24fb30a78184b6fb6ff288ebae6b42abd624975a58fdaee9d9e9a6"
+    "source_digest": "d880dba5248283826a6f094a10f2559d0e4a6b5595b3dc585eadd7efe2a4695f"
   },
   "summary": {
     "module_count": 349,
@@ -50881,12 +50881,14 @@
             "ActorId",
             "BalanceMap",
             "ExtendedState",
+            "KeyRegistry",
             "ResourceId",
             "SignedAction",
             "actionFieldsForL1",
             "actionKindByte",
             "ammSwap",
             "base",
+            "buildStateCellProof",
             "burn",
             "canonicalAbsentValue",
             "cellLeaf",
@@ -50898,6 +50900,7 @@
             "es",
             "fixtureBase",
             "freezeResource",
+            "getCellValue",
             "mint",
             "multiGapLevels",
             "opened",
@@ -50909,6 +50912,7 @@
             "smtDepth",
             "stepMultiBundle",
             "stepMultiPostRoot",
+            "toWireBytes",
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "transfer",
@@ -50918,7 +50922,7 @@
         {
           "kind": "def",
           "name": "writeSetGoldens",
-          "line": 1945,
+          "line": 1988,
           "called": [
             "Action",
             "ActorId",
@@ -50950,7 +50954,7 @@
         {
           "kind": "def",
           "name": "absentValueProbeTags",
-          "line": 2003,
+          "line": 2046,
           "called": [
             "CellTag"
           ]
@@ -50958,7 +50962,7 @@
         {
           "kind": "def",
           "name": "absentValueGoldens",
-          "line": 2012,
+          "line": 2055,
           "called": [
             "canonicalAbsentValue"
           ]
@@ -50966,7 +50970,7 @@
         {
           "kind": "def",
           "name": "variant21TailGolden",
-          "line": 2027,
+          "line": 2070,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -50975,7 +50979,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 2044,
+          "line": 2087,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "absentValueGoldens",

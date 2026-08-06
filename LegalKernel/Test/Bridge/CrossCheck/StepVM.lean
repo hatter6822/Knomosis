@@ -1833,13 +1833,25 @@ than trusted.
     frontier's cells with their proven pre-values in path order, the
     shared wire, and the two roots the wire serves. -/
 def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
+  -- The probe signer's REGISTERED key: the SEC1-compressed secp256k1
+  -- verifying key for secret scalar `0x01…01` — the same key the
+  -- `knomosis verify-check` self-test vector uses.  Registered so the
+  -- game consumers (`BatchGame.t.sol`, `KnomosisFaultProofGame.t.sol`)
+  -- can sign the probe's canonical digest IN-TEST with `vm.sign` and
+  -- drive the F-A signature gate's honest path; the probes' pre/post
+  -- roots include the registry cell accordingly.
+  let signerPk : ByteArray := ByteArray.mk
+    #[0x03,0x1b,0x84,0xc5,0x56,0x7b,0x12,0x64,0x40,0x99,0x5d,0x3e,0xd5,0xaa,0xba,0x05,
+      0x65,0xd7,0x1e,0x18,0x34,0x60,0x48,0x19,0xff,0x9c,0x17,0xf5,0xe9,0xd5,0xdd,0x07,0x8f]
   let es : ExtendedState :=
     let base : LegalKernel.State :=
       { balances :=
           ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
              ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
              ((∅ : BalanceMap).insert 9 60) }
-    { fixtureBase with base := base }
+    { fixtureBase with
+        base := base
+        registry := (∅ : KeyRegistry).insert 7 signerPk }
   let signer : ActorId := 7
   let hx := Test.Bridge.CrossCheck.hexFromBytes
   let probes : List (String × Action) :=
@@ -1867,7 +1879,20 @@ def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
     , ("replaceKey", .replaceKey 8 (ByteArray.mk #[0xAA, 0xBB]))
     , ("declareLocalPolicy", .declareLocalPolicy Authority.LocalPolicy.empty)
     , ("revokeLocalPolicy", .revokeLocalPolicy) ]
-  probes.filterMap (fun (name, action) =>
+  -- The F-A negative control: the SAME transfer over a state whose
+  -- signer is UNREGISTERED (the registry cell is absent).  The game
+  -- consumers drive it to a ChallengerWon settlement — no key can
+  -- have authorised the entry — while `executeStepToRootMulti`
+  -- treats it like any other probe (the signature gate lives in the
+  -- game, not the step VM).
+  let esUnregistered : ExtendedState :=
+    let base : LegalKernel.State :=
+      { balances :=
+          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
+             ((∅ : BalanceMap).insert 9 60) }
+    { fixtureBase with base := base }
+  let mkGolden := fun (es : ExtendedState) (name : String) (action : Action) =>
     let st : SignedAction :=
       { action, signer, nonce := 0, sig := ByteArray.empty }
     match stepMultiPostRoot es st 0 with
@@ -1891,6 +1916,21 @@ def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
         , ("actionKindByte", .num (actionKindByte action).toNat)
         , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
         , ("signerNat", .num signer.toNat)
+          -- The pre-state's expected nonce for the signer — the only
+          -- value the admission gate accepts a signature over, and
+          -- what the F-A digest recomputation uses.  Redundant with
+          -- the frontier's nonce cell; emitted so a consumer can sign
+          -- the digest without first decoding the cell.
+        , ("signerNonceNat", .num (Authority.expectsNonce es signer))
+          -- F-A: the signer's registry cell — its pre-value (empty =
+          -- canonically absent, the unregistered case) and its
+          -- single-cell opening against the PRE-state root, on the
+          -- `bitmask(32) ‖ siblings` wire the game's
+          -- `terminateOnSingleStep` consumes.
+        , ("registryValueHex",
+           .str (hx (getCellValue es (.registry signer))))
+        , ("registryProofHex",
+           .str (hx (buildStateCellProof es (.registry signer)).toWireBytes))
         , ("l2LogIndex", .num 0)
           -- The gap count, so the consumer's own derivation from the
           -- key set is checked against Lean's rather than against
@@ -1923,7 +1963,10 @@ def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
                  , ("preLeafPreimageHex",
                     .str (hx (encodeAsBytes (smtCellKey t) ++ encodeAsBytes v)))
                  , ("isAbsent", .bool (decide (v = canonicalAbsentValue t))) ])))
-        ]))
+        ])
+  probes.filterMap (fun (name, action) => mkGolden es name action) ++
+    (mkGolden esUnregistered "transferUnregistered"
+      (.transfer 1 signer 8 30)).toList
 
 /-! ### The write SET, per variant
 

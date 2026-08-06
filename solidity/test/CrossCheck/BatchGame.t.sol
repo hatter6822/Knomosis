@@ -12,6 +12,7 @@ import {KnomosisDisputeVerifierV2} from "src/contracts/KnomosisDisputeVerifierV2
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
+import {SignedActionProbe} from "../utils/SignedActionProbe.sol";
 import {WithdrawalFlowHarness} from "../utils/WithdrawalFlowHarness.sol";
 import {CrossCheckFramework} from "./Framework.t.sol";
 
@@ -42,7 +43,8 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 ///         registry's reverted range was a dead end (reverted indices
 ///         could never be resubmitted), so no test could ever drive a
 ///         real challenger win THROUGH to a corrected chain.
-contract BatchGameCrossCheck is CrossCheckFramework, WithdrawalFlowHarness {
+contract BatchGameCrossCheck is
+    CrossCheckFramework, WithdrawalFlowHarness, SignedActionProbe {
     KnomosisStepVMRoot private stepVM;
     KnomosisStateRootSubmission private registry;
     KnomosisFaultProofGame private game;
@@ -76,6 +78,11 @@ contract BatchGameCrossCheck is CrossCheckFramework, WithdrawalFlowHarness {
     KnomosisStepVMRoot.OpenedCell[] private probeCells;
     bytes private probeGapMask;
     bytes private probeSiblings;
+    /// @dev F-A: the signer's pre-state nonce and registry cell +
+    ///      opening, which terminate resolves the public key from.
+    uint64 private probeSignerNonce;
+    bytes private probeRegistryValue;
+    bytes private probeRegistryProof;
 
     /// @dev Load `multiProofGoldens[0]` (a `transfer`): a real
     ///      (pre-root, action, frontier, wire, post-root) quintuple.
@@ -95,6 +102,12 @@ contract BatchGameCrossCheck is CrossCheckFramework, WithdrawalFlowHarness {
             uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat")));
         probeGapMask = vm.parseJsonBytes(raw, string.concat(base, ".gapMaskHex"));
         probeSiblings = vm.parseJsonBytes(raw, string.concat(base, ".siblingsHex"));
+        probeSignerNonce = uint64(
+            vm.parseJsonUint(raw, string.concat(base, ".signerNonceNat")));
+        probeRegistryValue =
+            vm.parseJsonBytes(raw, string.concat(base, ".registryValueHex"));
+        probeRegistryProof =
+            vm.parseJsonBytes(raw, string.concat(base, ".registryProofHex"));
         uint256 n = vm.parseJsonUint(raw, string.concat(base, ".cellCount"));
         for (uint256 i = 0; i < n; i++) {
             string memory c = string.concat(base, ".cells[", vm.toString(i), "]");
@@ -208,14 +221,14 @@ contract BatchGameCrossCheck is CrossCheckFramework, WithdrawalFlowHarness {
         for (uint256 i = 0; i < out.length; i++) out[i] = probeCells[i];
     }
 
-    /// @dev The suite's fixed 65-byte action signature (hashed into
-    ///      the leaf per ruling R7; nothing verifies it on-chain yet).
-    function _testSig() private pure returns (bytes memory sig) {
-        sig = new bytes(65);
-        for (uint256 i = 0; i < 65; i++) {
-            // forge-lint: disable-next-line(unsafe-typecast)
-            sig[i] = bytes1(uint8(i + 1));
-        }
+    /// @dev The probe action's REAL 65-byte wire signature
+    ///      `(r ‖ s ‖ v)` — hashed into the leaf per ruling R7 AND
+    ///      verified by the F-A gate at terminate, under the key the
+    ///      corpus's pre-state registers for the probe signer.
+    function _testSig() private view returns (bytes memory) {
+        return signAction(
+            probeKind, probeFields, probeSigner, probeSignerNonce,
+            DEPLOYMENT_ID);
     }
 
     /// @dev `keccak256(kind ‖ uint64BE signer ‖ fields ‖ sig)` — the
@@ -337,14 +350,16 @@ contract BatchGameCrossCheck is CrossCheckFramework, WithdrawalFlowHarness {
         game.terminateOnSingleStep(
             gameId, probeKind, probeFields, probeSigner,
             otherSig, _singleEntryProof(),
-            _cells(), probeGapMask, probeSiblings);
+            _cells(), probeGapMask, probeSiblings,
+            probeRegistryValue, probeRegistryProof);
 
         // The batch-bound signed action adjudicates and wins.
         vm.prank(sequencer);
         game.terminateOnSingleStep(
             gameId, probeKind, probeFields, probeSigner,
             _testSig(), _singleEntryProof(),
-            _cells(), probeGapMask, probeSiblings);
+            _cells(), probeGapMask, probeSiblings,
+            probeRegistryValue, probeRegistryProof);
 
         // Registry effects of the sequencer win: cleared (not
         // slashed), bond intact, tip unmoved, nothing reverted.
@@ -418,7 +433,8 @@ contract BatchGameCrossCheck is CrossCheckFramework, WithdrawalFlowHarness {
         game.terminateOnSingleStep(
             gameId, probeKind, probeFields, probeSigner,
             _testSig(), _singleEntryProof(),
-            _cells(), probeGapMask, probeSiblings);
+            _cells(), probeGapMask, probeSiblings,
+            probeRegistryValue, probeRegistryProof);
 
         // Registry effects of the challenger win: slashed, reverted,
         // tip lowered to the batch start.

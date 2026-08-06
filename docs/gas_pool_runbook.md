@@ -517,7 +517,7 @@ round trip (see §9.3).
 | `executeStepToRootMulti` (terminal step, 4 distinct cells + policy) | 764 819 | 9 368 | ~$68.8 |
 | `executeStepToRootMulti` (terminal step, one cell deduped to four) | 633 257 | 8 656 | ~$57.0 |
 | `submitStateRoot` (one batched record; amortise over the batch size) | 238 963 | 1 368 | ~$21.5 |
-| `terminateOnSingleStep` (action inclusion proof + adjudicated step) | 1 019 177 | 10 756 | ~$91.7 |
+| `terminateOnSingleStep` (action inclusion proof + adjudicated step) | 1 206 393 | 13 192 | ~$108.6 |
 <!-- END GP.11.9 GENERATED BASELINE TABLE -->
 
 ### 9.3 Cost-structure observations
@@ -629,15 +629,29 @@ concentrate more actions under one bond.
 
 **The dispute path is priced separately and paid only when a batch is
 disputed.**  The measured `terminateOnSingleStep_withInclusion` row —
-1 019 177 gas ≈ $91.7 — is the terminal transaction of a batch
+1 206 393 gas ≈ $108.6 — is the terminal transaction of a batch
 dispute: the disputed action re-derived as its signature-bound leaf,
-verified by inclusion against the batch's submitted actions root, and
-adjudicated on the step VM's deduplicating multiproof.  Bisection
+verified by inclusion against the batch's submitted actions root, its
+SIGNATURE verified against the signer's registered key, and the whole
+step adjudicated on the step VM's deduplicating multiproof.  Bisection
 moves before it are small fixed-cost calls (a midpoint store, an
 agree/disagree flag).  On the honest path nobody pays any of this;
 the game's bond economics (§`deployment_parameters.md`) make the
 loser fund the winner, so the expected cost of DEFENDING a correct
 batch is the bond's opportunity cost, not the gas.
+
+The row moved +187 216 gas (+18.4%) when Workstream F-A added the
+signature check, and the increase is the check itself rather than
+overhead around it: a 256-level SMT walk opening the signer's
+registry cell against the disputed range's pre-root, a MODEXP call
+decompressing the SEC1 key, `ecrecover` over the digest, and the
+canonical §8.8.5 sign-input rebuilt on-chain from the packed action
+fields.  It buys the property the fault proof was missing — before
+it, a batch could commit an action nobody signed and the terminal
+step would DEFEND it, because the step VM cannot evaluate the
+signature scheme.  The cost lands on a path taken only under dispute
+and funded by the losing party's bond, so it does not touch the
+per-action amortised figure above.
 
 ### 9.6 L1/L2 AMM price independence
 

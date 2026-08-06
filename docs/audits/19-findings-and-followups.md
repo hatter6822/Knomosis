@@ -1850,12 +1850,26 @@ fails on the old code (`solidity/test/CrossCheck/BatchGame.t.sol`):
 
 **Recorded follow-ups (not built in SB):**
 
-  * **On-chain signature verification at terminate.**  The batch
-    leaf BINDS the 65-byte signature
-    (`hash(kind ‖ uint64BE signer ‖ fields ‖ sig)`, ruling R7), so
-    the terminal step authenticates the signature bytes by
-    inclusion; VERIFYING the signature on-chain needs an L1
-    actorId→key resolution surface that does not exist yet.
+  * **On-chain signature verification at terminate** — **BUILT**
+    (Workstream F-A).  The batch leaf BINDS the 65-byte signature
+    (`hash(kind ‖ uint64BE signer ‖ fields ‖ sig)`, ruling R7) and
+    the terminal step now VERIFIES it: `SignInput.sol` rebuilds the
+    canonical §8.8.5 digest on-chain from the packed action fields,
+    the signer's registered key is resolved by a single-cell opening
+    of its registry cell against the disputed range's pre-root
+    (`Secp256k1.sol` decompresses the SEC1 form to an address), and
+    `ecrecover` must land on it — low-s and `v ∈ {27,28}` mirrored
+    from the L2 adaptor so the L1 never defends a signature the L2
+    would have refused.  An invalid signature makes the entry
+    INADMISSIBLE, so the adjudicated root is the PRE-root: the full
+    no-op, and a sequencer defending an unauthorised entry loses.
+    The L1 actorId→key surface the original note called missing is
+    the registry cell itself, opened against the state root the game
+    already anchors.  Phase FA.0 additionally corrected a latent
+    production defect found while scoping this: the Lean admission
+    conjunct, the L2 wire and the linked verify adaptor did not share
+    a signature convention, so a production-linked deployment
+    rejected every signed action (`docs/abi.md` §7.1).
   * **The Lean game-model chain binding** (the standing audit-22
     MAJOR): **closed at the model level** in the follow-up pass.
     `GameState.actionsRoot` anchors the disputed batch's actions

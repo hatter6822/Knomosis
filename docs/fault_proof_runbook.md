@@ -106,9 +106,20 @@ per BATCH (ruling R8) instead of one `actionCommit` per action, and
 signer, 65-byte signature)` tuple it is handed by INCLUSION PROOF
 against the disputed batch's submitted root (ruling R7; the batch is
 read from the game's immutable `disputedLogIndex`, never from the
-caller).  The signature is BOUND in the leaf but not yet verified
-on-chain — on-chain signature verification at terminate is a recorded
-follow-up requiring L1 actorId→key resolution.
+caller).  The signature is BOUND in the leaf and VERIFIED at
+terminate (Workstream F-A): the signer's registered key is resolved
+by a single-cell opening of its registry cell against the disputed
+range's pre-state root, the canonical §8.8.5 digest is recomputed
+on-chain from the packed action fields, and `ecrecover` must land on
+that key's address.  An entry whose signature does not verify is
+INADMISSIBLE, so its truthful post-state is the pre-state — the
+terminal step adjudicates against `g.low.commit` rather than
+reverting, and a sequencer defending an unauthorised entry loses.
+The operator-visible consequence: a terminate needs the registry
+opening in its bundle (`registry_value_hex` / `registry_proof_hex`,
+emitted by `knomosis export-terminate-bundle`); the observer fails
+closed with `MissingRegistryOpening` rather than broadcasting
+calldata that would revert.
 
 ---
 

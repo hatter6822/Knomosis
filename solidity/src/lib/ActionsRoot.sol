@@ -63,8 +63,10 @@ library ActionsRoot {
     ///         `ActionsRoot.actionLeafValue`.
     ///
     /// @dev    The signature is HASHED, not verified — on-chain
-    ///         signature verification at terminate is a recorded
-    ///         follow-up needing L1 actorId→key resolution.  Binding
+    ///         signature is VERIFIED separately at terminate
+    ///         (Workstream F-A: the signer's registered key is
+    ///         resolved by a registry-cell opening against the
+    ///         pre-root, and `ecrecover` must land on it).  Binding
     ///         it now means the leaf already commits to what that
     ///         follow-up will check.
     function actionLeafCommit(

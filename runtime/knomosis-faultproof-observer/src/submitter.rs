@@ -144,7 +144,7 @@ impl MethodSelector {
             // `runtime/tests/cross-stack/method_selectors.json`, so a
             // signature drift breaks the build rather than the game.
             Self::TerminateOnSingleStepFull => {
-                "terminateOnSingleStep(uint256,uint8,bytes,uint64,bytes,bytes,(uint8,uint256,uint256,bytes)[],bytes,bytes)"
+                "terminateOnSingleStep(uint256,uint8,bytes,uint64,bytes,bytes,(uint8,uint256,uint256,bytes)[],bytes,bytes,bytes,bytes)"
             }
             Self::ClaimTimeout => "claimTimeout(uint256)",
         }
@@ -204,6 +204,19 @@ pub enum SubmitError {
          it — re-export the bundle with the batch bounds"
     )]
     MissingBatchBinding,
+
+    /// The terminate bundle carries no registry opening (F-A).  The
+    /// game resolves the disputed action's signer to a public key by
+    /// opening the signer's registry cell against the disputed
+    /// range's pre-root, so calldata built without one reverts
+    /// `RegistryOpeningInvalid` on-chain.  Note the VALUE may
+    /// legitimately be empty — an unregistered signer is an
+    /// adjudicable state, and its opening proves the absence — so
+    /// this fires on a missing PROOF, not a missing value.
+    #[error(
+        "terminate bundle carries no registry opening; the F-A          signature gate needs the signer's registry cell proof          against the pre-root — re-export the bundle"
+    )]
+    MissingRegistryOpening,
 
     /// Submission was rejected by the L1 RPC (e.g., invalid
     /// nonce, out-of-gas estimate).
@@ -319,6 +332,18 @@ pub fn encode_calldata_with_bundle(
             else {
                 return Err(SubmitError::MissingBatchBinding);
             };
+            // F-A: the signer's registry opening against the disputed
+            // range's pre-root.  REQUIRED for the same fail-closed
+            // reason as the batch binding — without it the contract
+            // reverts `RegistryOpeningInvalid`, and a broadcast that
+            // cannot settle burns the responsible party's turn window.
+            // The VALUE may legitimately be empty (an unregistered
+            // signer is a real, adjudicable state), so only the proof
+            // is probed for presence.
+            let Some(registry_proof) = &b.registry_proof else {
+                return Err(SubmitError::MissingRegistryOpening);
+            };
+            let registry_value = b.registry_value.as_deref().unwrap_or(&[]);
             // The L1 takes ONE `bytes actionProof` — the standard
             // SMT wire `bitmask(32) ‖ siblings` that
             // `ActionsRoot.verifyActionInclusion` consumes.
@@ -336,6 +361,8 @@ pub fn encode_calldata_with_bundle(
                 &b.opened_cells,
                 &b.gap_mask,
                 &b.siblings,
+                registry_value,
+                registry_proof,
             ))
         }
         (mv, _) => encode_calldata(game_id, mv),
@@ -826,17 +853,25 @@ pub fn encode_terminate_full_calldata(
     opened: &[OpenedCell],
     gap_mask: &[u8],
     siblings: &[u8],
+    registry_value: &[u8],
+    registry_proof: &[u8],
 ) -> Vec<u8> {
-    // Head layout (9 head words, 32 bytes each = 288 bytes):
-    //   word 0: gameId              (uint256)
-    //   word 1: actionKind          (uint8 in uint256 slot)
-    //   word 2: actionFields offset (relative to start of args)
-    //   word 3: signer              (uint64 in uint256 slot)
-    //   word 4: actionSig offset    (bytes — SB ruling R7)
-    //   word 5: actionProof offset  (bytes — bitmask ‖ siblings)
-    //   word 6: opened offset       (OpenedCell[])
-    //   word 7: gapMask offset      (bytes)
-    //   word 8: siblings offset     (bytes)
+    // Head layout (11 head words, 32 bytes each = 352 bytes):
+    //   word  0: gameId              (uint256)
+    //   word  1: actionKind          (uint8 in uint256 slot)
+    //   word  2: actionFields offset (relative to start of args)
+    //   word  3: signer              (uint64 in uint256 slot)
+    //   word  4: actionSig offset    (bytes — SB ruling R7)
+    //   word  5: actionProof offset  (bytes — bitmask ‖ siblings)
+    //   word  6: opened offset       (OpenedCell[])
+    //   word  7: gapMask offset      (bytes)
+    //   word  8: siblings offset     (bytes)
+    //   word  9: registryValue offset (bytes — F-A: the signer's
+    //            registry cell pre-value; EMPTY when the signer is
+    //            unregistered, which is an adjudicable state rather
+    //            than a malformed call)
+    //   word 10: registryProof offset (bytes — its single-cell
+    //            opening against the disputed range's pre-root)
     //
     // The chained form carried a `policyOpening` struct and a
     // `writeOpenings` array of six-word tuples.  Under a multiproof
@@ -848,7 +883,7 @@ pub fn encode_terminate_full_calldata(
     // recomputes the post-commit and compares it against the on-chain
     // `g.high.commit`.  It rides the bundle only to feed the caller's
     // `BundleCommitMismatch` cross-oracle check.
-    const HEAD_WORDS: usize = 9;
+    const HEAD_WORDS: usize = 11;
     const WORD: usize = 32;
     let head_bytes: usize = HEAD_WORDS * WORD;
 
@@ -858,6 +893,8 @@ pub fn encode_terminate_full_calldata(
     let opened_tail = encode_opened_cell_array(opened);
     let gap_mask_tail = encode_dynamic_bytes(gap_mask);
     let siblings_tail = encode_dynamic_bytes(siblings);
+    let registry_value_tail = encode_dynamic_bytes(registry_value);
+    let registry_proof_tail = encode_dynamic_bytes(registry_proof);
 
     let action_fields_offset: u128 = head_bytes as u128;
     let action_sig_offset: u128 = action_fields_offset + action_fields_tail.len() as u128;
@@ -865,6 +902,8 @@ pub fn encode_terminate_full_calldata(
     let opened_offset: u128 = action_proof_offset + action_proof_tail.len() as u128;
     let gap_mask_offset: u128 = opened_offset + opened_tail.len() as u128;
     let siblings_offset: u128 = gap_mask_offset + gap_mask_tail.len() as u128;
+    let registry_value_offset: u128 = siblings_offset + siblings_tail.len() as u128;
+    let registry_proof_offset: u128 = registry_value_offset + registry_value_tail.len() as u128;
 
     let mut out = Vec::with_capacity(
         4 + head_bytes
@@ -873,7 +912,9 @@ pub fn encode_terminate_full_calldata(
             + action_proof_tail.len()
             + opened_tail.len()
             + gap_mask_tail.len()
-            + siblings_tail.len(),
+            + siblings_tail.len()
+            + registry_value_tail.len()
+            + registry_proof_tail.len(),
     );
     out.extend_from_slice(&MethodSelector::TerminateOnSingleStepFull.selector());
     out.extend_from_slice(&u256_be(game_id));
@@ -885,12 +926,16 @@ pub fn encode_terminate_full_calldata(
     out.extend_from_slice(&u256_be(opened_offset));
     out.extend_from_slice(&u256_be(gap_mask_offset));
     out.extend_from_slice(&u256_be(siblings_offset));
+    out.extend_from_slice(&u256_be(registry_value_offset));
+    out.extend_from_slice(&u256_be(registry_proof_offset));
     out.extend_from_slice(&action_fields_tail);
     out.extend_from_slice(&action_sig_tail);
     out.extend_from_slice(&action_proof_tail);
     out.extend_from_slice(&opened_tail);
     out.extend_from_slice(&gap_mask_tail);
     out.extend_from_slice(&siblings_tail);
+    out.extend_from_slice(&registry_value_tail);
+    out.extend_from_slice(&registry_proof_tail);
     out
 }
 
@@ -1457,6 +1502,10 @@ mod tests {
         let action_proof = vec![0xDDu8; 64]; // bitmask(32) ‖ 1 sibling
         let gap_mask = vec![0u8; 33];
         let siblings = vec![0xEEu8; 64];
+        // F-A: a registered 33-byte key on its CBE byte-string head
+        // (9 + 33 = 42 bytes) and a one-sibling registry opening.
+        let registry_value = vec![0x77u8; 42];
+        let registry_proof = vec![0x88u8; 64];
         let bytes = encode_terminate_full_calldata(
             123_u128,
             ActionKind::Transfer as u8,
@@ -1467,17 +1516,24 @@ mod tests {
             std::slice::from_ref(&cell),
             &gap_mask,
             &siblings,
+            &registry_value,
+            &registry_proof,
         );
 
-        // 4-byte selector + 9×32-byte head (288) + tails:
+        // 4-byte selector + 11×32-byte head (352) + tails:
         //   actionFields:  32 (length) + 32 (4 bytes padded)      =  64
         //   actionSig:     32 (length) + 96 (65 bytes padded)     = 128
         //   actionProof:   32 (length) + 64                       =  96
         //   opened:        32 (length) + 32 (1 pointer) + 192     = 256
         //     per cell:    4×32 head + 32 (length) + 32 (padded)  = 192
         //   gapMask:       32 (length) + 64 (33 bytes padded)     =  96
+        //   registryValue: 32 (length) + 64 (42 bytes padded)     =  96
+        //   registryProof: 32 (length) + 64                       =  96
         //   siblings:      32 (length) + 64                       =  96
-        assert_eq!(bytes.len(), 4 + 288 + 64 + 128 + 96 + 256 + 96 + 96);
+        assert_eq!(
+            bytes.len(),
+            4 + 352 + 64 + 128 + 96 + 256 + 96 + 96 + 96 + 96
+        );
 
         assert_eq!(
             &bytes[0..4],
@@ -1501,27 +1557,37 @@ mod tests {
             v
         };
         let args = &bytes[4..];
-        assert_eq!(word(2), 288, "actionFields offset is the head size");
-        assert_eq!(word(4), 288 + 64, "actionSig offset follows actionFields");
+        assert_eq!(word(2), 352, "actionFields offset is the head size");
+        assert_eq!(word(4), 352 + 64, "actionSig offset follows actionFields");
         assert_eq!(
             word(5),
-            288 + 64 + 128,
+            352 + 64 + 128,
             "actionProof offset follows actionSig"
         );
         assert_eq!(
             word(6),
-            288 + 64 + 128 + 96,
+            352 + 64 + 128 + 96,
             "opened offset follows actionProof"
         );
         assert_eq!(
             word(7),
-            288 + 64 + 128 + 96 + 256,
+            352 + 64 + 128 + 96 + 256,
             "gapMask offset follows opened"
         );
         assert_eq!(
             word(8),
-            288 + 64 + 128 + 96 + 256 + 96,
+            352 + 64 + 128 + 96 + 256 + 96,
             "siblings offset follows gapMask"
+        );
+        assert_eq!(
+            word(9),
+            352 + 64 + 128 + 96 + 256 + 96 + 96,
+            "registryValue offset follows siblings"
+        );
+        assert_eq!(
+            word(10),
+            352 + 64 + 128 + 96 + 256 + 96 + 96 + 96,
+            "registryProof offset follows registryValue"
         );
         let len_at = |off: usize| -> usize {
             let mut v = 0usize;
@@ -1536,11 +1602,16 @@ mod tests {
         assert_eq!(len_at(word(6)), 1, "opened length");
         assert_eq!(len_at(word(7)), 33, "gapMask length");
         assert_eq!(len_at(word(8)), 64, "siblings length");
+        assert_eq!(len_at(word(9)), 42, "registryValue length");
+        assert_eq!(len_at(word(10)), 64, "registryProof length");
         // ...and the dynamic payloads survive the round trip: the
-        // signature (padded to 96), the proof, and the siblings.
+        // signature (padded to 96), the proof, the siblings, and the
+        // two F-A registry words.
         assert_eq!(&args[word(4) + 32..word(4) + 97], &action_sig[..]);
         assert_eq!(&args[word(5) + 32..word(5) + 96], &action_proof[..]);
         assert_eq!(&args[word(8) + 32..word(8) + 96], &siblings[..]);
+        assert_eq!(&args[word(9) + 32..word(9) + 74], &registry_value[..]);
+        assert_eq!(&args[word(10) + 32..word(10) + 96], &registry_proof[..]);
     }
 
     /// `MethodSelector::TerminateOnSingleStepFull` produces a
@@ -2087,6 +2158,8 @@ mod tests {
             action_sig: Some(vec![0x11; 65]),
             action_gap_mask: Some(vec![0u8; 32]),
             action_siblings: Some(vec![0xBB; 32]),
+            registry_value: Some(vec![0x02; 42]),
+            registry_proof: Some(vec![0u8; 32]),
         }
     }
 

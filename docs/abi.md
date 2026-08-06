@@ -3024,8 +3024,9 @@ All contracts immutable per Workstream-E §20 discipline.
     leaf commit
     `keccak256(actionKind ‖ uint64BE signer ‖ actionFields ‖ actionSig)`
     (the 65-byte signature is HASHED, not verified — on-chain
-    verification is the recorded follow-up needing L1 actorId→key
-    resolution) must open at absolute index `g.low.idx` — the
+    verification happens at terminate (Workstream F-A: the signer's
+    registered key is resolved by a registry-cell opening against the
+    pre-root)) must open at absolute index `g.low.idx` — the
     disputed step's own index under the entry-count convention —
     under the DISPUTED batch record's `actionsRoot`, read via the
     game's immutable `g.disputedLogIndex`, never a caller-supplied

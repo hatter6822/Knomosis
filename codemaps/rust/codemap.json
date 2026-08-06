@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "980f90c50f12cf80fddf67d61d264abfb685ea2a62bd763af6daf9fad2383022"
+    "source_digest": "bc3046e38e6a2513945d25d888ca0e02524e9d3144c92d9ff5243e182bc06fe7"
   },
   "summary": {
     "module_count": 193,
-    "declaration_count": 6188
+    "declaration_count": 6189
   },
   "modules": [
     {
@@ -15084,7 +15084,7 @@
         {
           "kind": "fn",
           "name": "observer_attaches_terminate_bundle_oracle",
-          "line": 4047,
+          "line": 4049,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15104,7 +15104,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_without_oracle_defers",
-          "line": 4100,
+          "line": 4102,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15123,7 +15123,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_with_matching_bundle_succeeds",
-          "line": 4143,
+          "line": 4145,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15148,7 +15148,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_refuses_on_commit_mismatch",
-          "line": 4216,
+          "line": 4218,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15171,7 +15171,7 @@
         {
           "kind": "fn",
           "name": "terminate_record_for_batch_tests",
-          "line": 4278,
+          "line": 4280,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15187,7 +15187,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_defers_without_disputed_index",
-          "line": 4312,
+          "line": 4314,
           "called": [
             "block_number",
             "build_terminate_calldata",
@@ -15203,7 +15203,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_defers_without_batch_record",
-          "line": 4340,
+          "line": 4342,
           "called": [
             "build_terminate_calldata",
             "commit",
@@ -15218,7 +15218,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_defers_on_bounds_mismatch",
-          "line": 4357,
+          "line": 4359,
           "called": [
             "block_number",
             "build_terminate_calldata",
@@ -15234,7 +15234,7 @@
         {
           "kind": "fn",
           "name": "build_calldata_for_move_delegates_non_terminate",
-          "line": 4386,
+          "line": 4388,
           "called": [
             "Claim",
             "DisputedRange",
@@ -16753,7 +16753,7 @@
     {
       "module": "runtime::knomosis-faultproof-observer::src::strategy",
       "path": "runtime/knomosis-faultproof-observer/src/strategy.rs",
-      "declaration_count": 121,
+      "declaration_count": 122,
       "declarations": [
         {
           "kind": "trait",
@@ -16970,37 +16970,43 @@
         {
           "kind": "impl",
           "name": "TerminateBundle",
-          "line": 637,
+          "line": 665,
           "called": []
         },
         {
           "kind": "fn",
           "name": "has_batch_binding",
-          "line": 643,
+          "line": 671,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "has_registry_opening",
+          "line": 679,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_JSON_BYTES",
-          "line": 656,
+          "line": 692,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES",
-          "line": 664,
+          "line": 700,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_OPENED_CELLS",
-          "line": 674,
+          "line": 710,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_GAP_MASK_BYTES",
-          "line": 680,
+          "line": 716,
           "called": [
             "MAX_TERMINATE_BUNDLE_OPENED_CELLS"
           ]
@@ -17008,7 +17014,7 @@
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_SIBLINGS_BYTES",
-          "line": 684,
+          "line": 720,
           "called": [
             "MAX_TERMINATE_BUNDLE_GAP_MASK_BYTES"
           ]
@@ -17016,19 +17022,19 @@
         {
           "kind": "const",
           "name": "TERMINATE_BUNDLE_ACTION_SIG_BYTES",
-          "line": 692,
+          "line": 728,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_ACTION_WIRE_BYTES",
-          "line": 702,
+          "line": 738,
           "called": []
         },
         {
           "kind": "enum",
           "name": "TerminateBundleError",
-          "line": 706,
+          "line": 742,
           "called": [
             "LogIndex",
             "error",
@@ -17038,13 +17044,13 @@
         {
           "kind": "fn",
           "name": "serialize_bytes_hex_lower",
-          "line": 741,
+          "line": 777,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_bytes_hex_or_array",
-          "line": 750,
+          "line": 786,
           "called": [
             "_"
           ]
@@ -17052,7 +17058,7 @@
         {
           "kind": "enum",
           "name": "HexOrArray",
-          "line": 757,
+          "line": 793,
           "called": [
             "Err",
             "MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES",
@@ -17063,13 +17069,13 @@
         {
           "kind": "fn",
           "name": "serialize_bytes32_hex_lower",
-          "line": 789,
+          "line": 825,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_bytes32_hex_or_array",
-          "line": 798,
+          "line": 834,
           "called": [
             "_"
           ]
@@ -17077,7 +17083,7 @@
         {
           "kind": "enum",
           "name": "HexOrArray",
-          "line": 805,
+          "line": 841,
           "called": [
             "Err",
             "_",
@@ -17088,19 +17094,19 @@
         {
           "kind": "fn",
           "name": "serialize_opt_bytes_hex_lower",
-          "line": 838,
+          "line": 874,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serialize_opt_bytes32_hex_lower",
-          "line": 851,
+          "line": 887,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_opt_bytes32_hex_or_array",
-          "line": 864,
+          "line": 900,
           "called": [
             "deserialize_bytes32_hex_or_array"
           ]
@@ -17108,7 +17114,7 @@
         {
           "kind": "fn",
           "name": "deserialize_opt_action_wire_hex",
-          "line": 876,
+          "line": 912,
           "called": [
             "_"
           ]
@@ -17116,7 +17122,7 @@
         {
           "kind": "enum",
           "name": "HexOrArray",
-          "line": 883,
+          "line": 919,
           "called": [
             "Err",
             "MAX_TERMINATE_BUNDLE_ACTION_WIRE_BYTES",
@@ -17127,7 +17133,7 @@
         {
           "kind": "fn",
           "name": "parse_terminate_bundle_json",
-          "line": 930,
+          "line": 966,
           "called": [
             "Err",
             "LogIndex",
@@ -17146,7 +17152,7 @@
         {
           "kind": "fn",
           "name": "validate_batch_binding",
-          "line": 1005,
+          "line": 1041,
           "called": [
             "Err",
             "LogIndex",
@@ -17161,13 +17167,13 @@
         {
           "kind": "trait",
           "name": "TerminateBundleOracle",
-          "line": 1092,
+          "line": 1128,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 1108,
+          "line": 1144,
           "called": [
             "LogIndex",
             "TerminateBundle",
@@ -17177,7 +17183,7 @@
         {
           "kind": "impl",
           "name": "TerminateBundleOracle for Box<T>",
-          "line": 1120,
+          "line": 1156,
           "called": [
             "TerminateBundleOracle"
           ]
@@ -17185,7 +17191,7 @@
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 1121,
+          "line": 1157,
           "called": [
             "LogIndex",
             "TerminateBundle",
@@ -17195,7 +17201,7 @@
         {
           "kind": "struct",
           "name": "MemoryTerminateBundleOracle",
-          "line": 1135,
+          "line": 1171,
           "called": [
             "LogIndex",
             "TerminateBundle"
@@ -17204,19 +17210,19 @@
         {
           "kind": "impl",
           "name": "MemoryTerminateBundleOracle",
-          "line": 1139,
+          "line": 1175,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 1142,
+          "line": 1178,
           "called": []
         },
         {
           "kind": "fn",
           "name": "insert",
-          "line": 1148,
+          "line": 1184,
           "called": [
             "LogIndex",
             "TerminateBundle"
@@ -17225,19 +17231,19 @@
         {
           "kind": "fn",
           "name": "len",
-          "line": 1154,
+          "line": 1190,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 1160,
+          "line": 1196,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TerminateBundleOracle for MemoryTerminateBundleOracle",
-          "line": 1165,
+          "line": 1201,
           "called": [
             "MemoryTerminateBundleOracle",
             "TerminateBundleOracle"
@@ -17246,7 +17252,7 @@
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 1169,
+          "line": 1205,
           "called": [
             "LogIndex",
             "TerminateBundle",
@@ -17257,13 +17263,13 @@
         {
           "kind": "impl",
           "name": "SubprocessTruthOracle",
-          "line": 1181,
+          "line": 1217,
           "called": []
         },
         {
           "kind": "fn",
           "name": "spawn_bundle_drain_thread",
-          "line": 1187,
+          "line": 1223,
           "called": [
             "Err",
             "_",
@@ -17276,7 +17282,7 @@
         {
           "kind": "fn",
           "name": "wait_for_bundle_child",
-          "line": 1215,
+          "line": 1251,
           "called": [
             "Err",
             "_",
@@ -17286,7 +17292,7 @@
         {
           "kind": "fn",
           "name": "join_bundle_drain",
-          "line": 1244,
+          "line": 1280,
           "called": [
             "DRAIN_POLL",
             "DRAIN_TIMEOUT",
@@ -17299,7 +17305,7 @@
         {
           "kind": "fn",
           "name": "build_bundle_command",
-          "line": 1274,
+          "line": 1310,
           "called": [
             "LogIndex",
             "end",
@@ -17310,7 +17316,7 @@
         {
           "kind": "impl",
           "name": "TerminateBundleOracle for SubprocessTruthOracle",
-          "line": 1305,
+          "line": 1341,
           "called": [
             "SubprocessTruthOracle",
             "TerminateBundleOracle"
@@ -17319,7 +17325,7 @@
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 1317,
+          "line": 1353,
           "called": [
             "Err",
             "LogIndex",
@@ -17338,7 +17344,7 @@
         {
           "kind": "enum",
           "name": "HonestMoveError",
-          "line": 1365,
+          "line": 1401,
           "called": [
             "LogIndex",
             "error"
@@ -17347,7 +17353,7 @@
         {
           "kind": "enum",
           "name": "HonestMove",
-          "line": 1380,
+          "line": 1416,
           "called": [
             "Claim",
             "StateCommit"
@@ -17356,13 +17362,13 @@
         {
           "kind": "impl",
           "name": "HonestMove",
-          "line": 1404,
+          "line": 1440,
           "called": []
         },
         {
           "kind": "fn",
           "name": "to_transition",
-          "line": 1409,
+          "line": 1445,
           "called": [
             "GameTransition",
             "commit"
@@ -17371,7 +17377,7 @@
         {
           "kind": "fn",
           "name": "compute_next_move",
-          "line": 1441,
+          "line": 1477,
           "called": [
             "Claim",
             "GameState",
@@ -17390,7 +17396,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1509,
+          "line": 1545,
           "called": [
             "Claim",
             "DisputedRange",
@@ -17408,7 +17414,7 @@
         {
           "kind": "fn",
           "name": "commit",
-          "line": 1513,
+          "line": 1549,
           "called": [
             "StateCommit",
             "seed"
@@ -17417,7 +17423,7 @@
         {
           "kind": "fn",
           "name": "commit_at_retrying",
-          "line": 1529,
+          "line": 1565,
           "called": [
             "StateCommit",
             "_",
@@ -17427,7 +17433,7 @@
         {
           "kind": "fn",
           "name": "fresh_game",
-          "line": 1539,
+          "line": 1575,
           "called": [
             "Claim",
             "DisputedRange",
@@ -17441,7 +17447,7 @@
         {
           "kind": "fn",
           "name": "no_move_when_not_in_progress",
-          "line": 1566,
+          "line": 1602,
           "called": [
             "compute_next_move",
             "fresh_game"
@@ -17450,7 +17456,7 @@
         {
           "kind": "fn",
           "name": "no_move_when_not_my_turn",
-          "line": 1576,
+          "line": 1612,
           "called": [
             "compute_next_move",
             "fresh_game"
@@ -17459,7 +17465,7 @@
         {
           "kind": "fn",
           "name": "submit_truthful_midpoint",
-          "line": 1585,
+          "line": 1621,
           "called": [
             "commit",
             "compute_next_move",
@@ -17470,7 +17476,7 @@
         {
           "kind": "fn",
           "name": "submit_truth_missing_errors",
-          "line": 1601,
+          "line": 1637,
           "called": [
             "compute_next_move",
             "fresh_game"
@@ -17479,7 +17485,7 @@
         {
           "kind": "fn",
           "name": "respond_agree_when_midpoint_truthful",
-          "line": 1613,
+          "line": 1649,
           "called": [
             "Claim",
             "commit",
@@ -17491,7 +17497,7 @@
         {
           "kind": "fn",
           "name": "respond_disagree_when_midpoint_wrong",
-          "line": 1627,
+          "line": 1663,
           "called": [
             "Claim",
             "commit",
@@ -17503,7 +17509,7 @@
         {
           "kind": "fn",
           "name": "respond_truth_missing_errors",
-          "line": 1641,
+          "line": 1677,
           "called": [
             "Claim",
             "commit",
@@ -17514,7 +17520,7 @@
         {
           "kind": "fn",
           "name": "terminate_on_single_step",
-          "line": 1658,
+          "line": 1694,
           "called": [
             "commit",
             "compute_next_move",
@@ -17525,7 +17531,7 @@
         {
           "kind": "fn",
           "name": "terminate_truth_missing_errors",
-          "line": 1675,
+          "line": 1711,
           "called": [
             "compute_next_move",
             "fresh_game"
@@ -17534,7 +17540,7 @@
         {
           "kind": "fn",
           "name": "honest_move_to_transition_projection",
-          "line": 1684,
+          "line": 1720,
           "called": [
             "Claim",
             "_",
@@ -17545,7 +17551,7 @@
         {
           "kind": "fn",
           "name": "memory_oracle_round_trip",
-          "line": 1714,
+          "line": 1750,
           "called": [
             "commit",
             "commit_at",
@@ -17557,7 +17563,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_honest_challenger_narrows_against_invalid_root",
-          "line": 1734,
+          "line": 1770,
           "called": [
             "Claim",
             "DisputedRange",
@@ -17577,7 +17583,7 @@
         {
           "kind": "fn",
           "name": "truth_oracle_is_object_safe",
-          "line": 1805,
+          "line": 1841,
           "called": [
             "TruthOracle",
             "commit",
@@ -17588,7 +17594,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_parses_mock_knomosis_output",
-          "line": 1816,
+          "line": 1852,
           "called": [
             "b",
             "commit_at_retrying",
@@ -17600,7 +17606,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_returns_none_on_failure",
-          "line": 1854,
+          "line": 1890,
           "called": [
             "b",
             "commit_at",
@@ -17612,7 +17618,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_returns_none_for_missing_binary",
-          "line": 1879,
+          "line": 1915,
           "called": [
             "commit_at"
           ]
@@ -17620,7 +17626,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_with_flag_passes_through",
-          "line": 1893,
+          "line": 1929,
           "called": [
             "b",
             "clone",
@@ -17634,7 +17640,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_timeout_kills_hung_knomosis",
-          "line": 1939,
+          "line": 1975,
           "called": [
             "b",
             "commit_at",
@@ -17648,7 +17654,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_stdout_cap_rejects_oversize_output",
-          "line": 1986,
+          "line": 2022,
           "called": [
             "b",
             "commit_at",
@@ -17662,7 +17668,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_does_not_deadlock_on_large_stdout",
-          "line": 2039,
+          "line": 2075,
           "called": [
             "b",
             "commit_at",
@@ -17675,7 +17681,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_drain_timeout_handles_orphan_pipe",
-          "line": 2090,
+          "line": 2126,
           "called": [
             "b",
             "commit_at",
@@ -17687,7 +17693,7 @@
         {
           "kind": "mod",
           "name": "terminate_bundle_tests",
-          "line": 2136,
+          "line": 2172,
           "called": [
             "MAX_TERMINATE_BUNDLE_JSON_BYTES",
             "MemoryTerminateBundleOracle",
@@ -17701,7 +17707,7 @@
         {
           "kind": "fn",
           "name": "sample_bundle",
-          "line": 2144,
+          "line": 2180,
           "called": [
             "OpenedCell",
             "TerminateBundle",
@@ -17711,7 +17717,7 @@
         {
           "kind": "fn",
           "name": "batch_bound_bundle",
-          "line": 2168,
+          "line": 2204,
           "called": [
             "TerminateBundle",
             "sample_bundle"
@@ -17720,7 +17726,7 @@
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_missed_default",
-          "line": 2186,
+          "line": 2222,
           "called": [
             "Err",
             "terminate_bundle_at"
@@ -17729,7 +17735,7 @@
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_roundtrip",
-          "line": 2198,
+          "line": 2234,
           "called": [
             "clone",
             "insert",
@@ -17742,7 +17748,7 @@
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_overwrite",
-          "line": 2211,
+          "line": 2247,
           "called": [
             "clone",
             "insert",
@@ -17754,7 +17760,7 @@
         {
           "kind": "fn",
           "name": "box_dyn_terminate_oracle_dispatches",
-          "line": 2226,
+          "line": 2262,
           "called": [
             "TerminateBundleOracle",
             "clone",
@@ -17766,7 +17772,7 @@
         {
           "kind": "fn",
           "name": "parse_minimal_bundle_round_trip",
-          "line": 2237,
+          "line": 2273,
           "called": [
             "json",
             "parse_terminate_bundle_json",
@@ -17776,7 +17782,7 @@
         {
           "kind": "fn",
           "name": "parse_batch_bound_bundle_round_trip",
-          "line": 2247,
+          "line": 2283,
           "called": [
             "batch_bound_bundle",
             "has_batch_binding",
@@ -17787,7 +17793,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_partial_batch_binding",
-          "line": 2259,
+          "line": 2295,
           "called": [
             "batch_bound_bundle",
             "json",
@@ -17797,7 +17803,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_wrong_signature_width",
-          "line": 2273,
+          "line": 2309,
           "called": [
             "batch_bound_bundle",
             "json",
@@ -17807,7 +17813,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_wrong_action_gap_mask_width",
-          "line": 2286,
+          "line": 2322,
           "called": [
             "batch_bound_bundle",
             "json",
@@ -17817,7 +17823,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_ragged_action_siblings",
-          "line": 2299,
+          "line": 2335,
           "called": [
             "batch_bound_bundle",
             "json",
@@ -17827,7 +17833,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_batch_idx_out_of_range_or_mismatched",
-          "line": 2314,
+          "line": 2350,
           "called": [
             "Err",
             "batch_bound_bundle",
@@ -17838,7 +17844,7 @@
         {
           "kind": "fn",
           "name": "subprocess_bundle_command_carries_batch_bounds",
-          "line": 2336,
+          "line": 2372,
           "called": [
             "args",
             "build_bundle_command"
@@ -17847,7 +17853,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_oversize_json",
-          "line": 2365,
+          "line": 2401,
           "called": [
             "MAX_TERMINATE_BUNDLE_JSON_BYTES",
             "parse_terminate_bundle_json"
@@ -17856,7 +17862,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_malformed_json",
-          "line": 2373,
+          "line": 2409,
           "called": [
             "parse_terminate_bundle_json"
           ]
@@ -17864,7 +17870,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_missing_fields",
-          "line": 2380,
+          "line": 2416,
           "called": [
             "json",
             "parse_terminate_bundle_json"
@@ -17873,7 +17879,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_action_fields",
-          "line": 2388,
+          "line": 2424,
           "called": [
             "json",
             "parse_terminate_bundle_json"
@@ -17882,7 +17888,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_oversize_opened_cell_count",
-          "line": 2417,
+          "line": 2453,
           "called": [
             "OpenedCell",
             "TerminateBundle",
@@ -17897,7 +17903,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_ragged_sibling_region",
-          "line": 2455,
+          "line": 2491,
           "called": [
             "TerminateBundle",
             "json",
@@ -17908,7 +17914,7 @@
         {
           "kind": "fn",
           "name": "serde_round_trip_equality",
-          "line": 2477,
+          "line": 2513,
           "called": [
             "TerminateBundle",
             "json",
@@ -17918,7 +17924,7 @@
         {
           "kind": "fn",
           "name": "lean_emitted_json_compatible_with_rust_construction",
-          "line": 2487,
+          "line": 2523,
           "called": [
             "len",
             "parse_terminate_bundle_json",
@@ -17971,7 +17977,7 @@
         {
           "kind": "fn",
           "name": "encode_calldata",
-          "line": 248,
+          "line": 261,
           "called": [
             "Err",
             "HonestMove",
@@ -17985,7 +17991,7 @@
         {
           "kind": "fn",
           "name": "encode_calldata_with_bundle",
-          "line": 288,
+          "line": 301,
           "called": [
             "Err",
             "HonestMove",
@@ -18002,7 +18008,7 @@
         {
           "kind": "fn",
           "name": "encode_submit_calldata",
-          "line": 348,
+          "line": 375,
           "called": [
             "StateCommit",
             "commit",
@@ -18014,7 +18020,7 @@
         {
           "kind": "fn",
           "name": "encode_respond_calldata",
-          "line": 358,
+          "line": 385,
           "called": [
             "bool_word",
             "game_id",
@@ -18025,7 +18031,7 @@
         {
           "kind": "fn",
           "name": "encode_terminate_calldata",
-          "line": 371,
+          "line": 398,
           "called": [
             "StateCommit",
             "game_id",
@@ -18036,55 +18042,55 @@
         {
           "kind": "struct",
           "name": "CellProof",
-          "line": 391,
+          "line": 418,
           "called": []
         },
         {
           "kind": "struct",
           "name": "OpenedCell",
-          "line": 474,
+          "line": 501,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serialize_u128_hex_lowpadded",
-          "line": 524,
+          "line": 551,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_u128_hex_or_number",
-          "line": 546,
+          "line": 573,
           "called": []
         },
         {
           "kind": "enum",
           "name": "HexOrNumber",
-          "line": 553,
+          "line": 580,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serialize_bytes_hex",
-          "line": 568,
+          "line": 595,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_CELL_VALUE_BYTES",
-          "line": 585,
+          "line": 612,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_bytes_hex_or_array",
-          "line": 591,
+          "line": 618,
           "called": []
         },
         {
           "kind": "enum",
           "name": "HexOrBytes",
-          "line": 598,
+          "line": 625,
           "called": [
             "Err",
             "MAX_CELL_VALUE_BYTES",
@@ -18096,19 +18102,19 @@
         {
           "kind": "const",
           "name": "MAX_PROOF_DATA_BYTES",
-          "line": 636,
+          "line": 663,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_proof_data_hex_or_array",
-          "line": 649,
+          "line": 676,
           "called": []
         },
         {
           "kind": "enum",
           "name": "HexOrBytes",
-          "line": 656,
+          "line": 683,
           "called": [
             "Err",
             "MAX_PROOF_DATA_BYTES",
@@ -18121,7 +18127,7 @@
         {
           "kind": "enum",
           "name": "ActionKind",
-          "line": 694,
+          "line": 721,
           "called": [
             "Verdict"
           ]
@@ -18129,7 +18135,7 @@
         {
           "kind": "fn",
           "name": "encode_terminate_full_calldata",
-          "line": 818,
+          "line": 845,
           "called": [
             "OpenedCell",
             "game_id",
@@ -18139,13 +18145,13 @@
         {
           "kind": "const",
           "name": "HEAD_WORDS",
-          "line": 850,
+          "line": 885,
           "called": []
         },
         {
           "kind": "const",
           "name": "WORD",
-          "line": 851,
+          "line": 886,
           "called": [
             "HEAD_WORDS",
             "encode_dynamic_bytes",
@@ -18160,7 +18166,7 @@
         {
           "kind": "fn",
           "name": "encode_opened_cell_array",
-          "line": 903,
+          "line": 948,
           "called": [
             "OpenedCell",
             "encode_opened_cell_tuple",
@@ -18172,7 +18178,7 @@
         {
           "kind": "fn",
           "name": "encode_opened_cell_tuple",
-          "line": 928,
+          "line": 973,
           "called": [
             "OpenedCell"
           ]
@@ -18180,13 +18186,13 @@
         {
           "kind": "const",
           "name": "HEAD_WORDS",
-          "line": 929,
+          "line": 974,
           "called": []
         },
         {
           "kind": "const",
           "name": "WORD",
-          "line": 930,
+          "line": 975,
           "called": [
             "HEAD_WORDS",
             "encode_dynamic_bytes",
@@ -18197,7 +18203,7 @@
         {
           "kind": "fn",
           "name": "encode_dynamic_bytes",
-          "line": 945,
+          "line": 990,
           "called": [
             "len",
             "u256_be"
@@ -18206,7 +18212,7 @@
         {
           "kind": "fn",
           "name": "encode_claim_timeout_calldata",
-          "line": 958,
+          "line": 1003,
           "called": [
             "game_id",
             "selector",
@@ -18216,31 +18222,31 @@
         {
           "kind": "fn",
           "name": "u256_be",
-          "line": 967,
+          "line": 1012,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bool_word",
-          "line": 974,
+          "line": 1019,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PreparedTx",
-          "line": 987,
+          "line": 1032,
           "called": []
         },
         {
           "kind": "trait",
           "name": "Submitter",
-          "line": 1017,
+          "line": 1062,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_and_sign",
-          "line": 1032,
+          "line": 1077,
           "called": [
             "PreparedTx",
             "SubmitError"
@@ -18249,7 +18255,7 @@
         {
           "kind": "fn",
           "name": "broadcast",
-          "line": 1043,
+          "line": 1088,
           "called": [
             "PreparedTx",
             "SubmitError"
@@ -18258,7 +18264,7 @@
         {
           "kind": "fn",
           "name": "check_inclusion",
-          "line": 1053,
+          "line": 1098,
           "called": [
             "SubmitError"
           ]
@@ -18266,13 +18272,13 @@
         {
           "kind": "fn",
           "name": "invalidate_nonce_cache",
-          "line": 1074,
+          "line": 1119,
           "called": []
         },
         {
           "kind": "mod",
           "name": "mock",
-          "line": 1082,
+          "line": 1127,
           "called": [
             "PreparedTx",
             "SubmitError",
@@ -18282,13 +18288,13 @@
         {
           "kind": "struct",
           "name": "MockSubmission",
-          "line": 1092,
+          "line": 1137,
           "called": []
         },
         {
           "kind": "struct",
           "name": "MockSubmitter",
-          "line": 1103,
+          "line": 1148,
           "called": [
             "MockInner"
           ]
@@ -18296,7 +18302,7 @@
         {
           "kind": "struct",
           "name": "MockInner",
-          "line": 1108,
+          "line": 1153,
           "called": [
             "MockSubmission",
             "invalidate_count"
@@ -18305,7 +18311,7 @@
         {
           "kind": "impl",
           "name": "Default for MockSubmitter",
-          "line": 1121,
+          "line": 1166,
           "called": [
             "MockSubmitter"
           ]
@@ -18313,25 +18319,25 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 1122,
+          "line": 1167,
           "called": []
         },
         {
           "kind": "impl",
           "name": "MockSubmitter",
-          "line": 1127,
+          "line": 1172,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 1130,
+          "line": 1175,
           "called": []
         },
         {
           "kind": "fn",
           "name": "submissions",
-          "line": 1138,
+          "line": 1183,
           "called": [
             "MockSubmission",
             "clone",
@@ -18341,7 +18347,7 @@
         {
           "kind": "fn",
           "name": "set_next_reject",
-          "line": 1147,
+          "line": 1192,
           "called": [
             "lock"
           ]
@@ -18349,7 +18355,7 @@
         {
           "kind": "fn",
           "name": "set_inclusion",
-          "line": 1155,
+          "line": 1200,
           "called": [
             "insert",
             "lock"
@@ -18358,7 +18364,7 @@
         {
           "kind": "fn",
           "name": "invalidate_count",
-          "line": 1167,
+          "line": 1212,
           "called": [
             "lock"
           ]
@@ -18366,7 +18372,7 @@
         {
           "kind": "impl",
           "name": "Submitter for MockSubmitter",
-          "line": 1175,
+          "line": 1220,
           "called": [
             "MockSubmitter",
             "Submitter"
@@ -18375,7 +18381,7 @@
         {
           "kind": "fn",
           "name": "build_and_sign",
-          "line": 1176,
+          "line": 1221,
           "called": [
             "PreparedTx",
             "SubmitError",
@@ -18386,7 +18392,7 @@
         {
           "kind": "fn",
           "name": "broadcast",
-          "line": 1192,
+          "line": 1237,
           "called": [
             "Err",
             "MockSubmission",
@@ -18400,7 +18406,7 @@
         {
           "kind": "fn",
           "name": "check_inclusion",
-          "line": 1208,
+          "line": 1253,
           "called": [
             "SubmitError",
             "get",
@@ -18410,7 +18416,7 @@
         {
           "kind": "fn",
           "name": "invalidate_nonce_cache",
-          "line": 1220,
+          "line": 1265,
           "called": [
             "invalidate_count",
             "lock"
@@ -18419,7 +18425,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1231,
+          "line": 1276,
           "called": [
             "CellProof",
             "Claim",
@@ -18438,7 +18444,7 @@
         {
           "kind": "fn",
           "name": "commit",
-          "line": 1241,
+          "line": 1286,
           "called": [
             "StateCommit",
             "seed"
@@ -18447,7 +18453,7 @@
         {
           "kind": "fn",
           "name": "method_selectors_distinct",
-          "line": 1249,
+          "line": 1294,
           "called": [
             "b",
             "iter",
@@ -18457,13 +18463,13 @@
         {
           "kind": "fn",
           "name": "method_selectors_pinned_against_solidity_abi",
-          "line": 1287,
+          "line": 1332,
           "called": []
         },
         {
           "kind": "fn",
           "name": "selector_of",
-          "line": 1292,
+          "line": 1337,
           "called": [
             "game",
             "hex",
@@ -18478,7 +18484,7 @@
         {
           "kind": "fn",
           "name": "method_selector_length_4",
-          "line": 1346,
+          "line": 1391,
           "called": [
             "is_empty",
             "len",
@@ -18489,7 +18495,7 @@
         {
           "kind": "fn",
           "name": "no_move_errors",
-          "line": 1360,
+          "line": 1405,
           "called": [
             "encode_calldata"
           ]
@@ -18497,7 +18503,7 @@
         {
           "kind": "fn",
           "name": "submit_uses_submit_calldata",
-          "line": 1368,
+          "line": 1413,
           "called": [
             "Claim",
             "bytes",
@@ -18510,7 +18516,7 @@
         {
           "kind": "fn",
           "name": "respond_agree_uses_respond_calldata",
-          "line": 1381,
+          "line": 1426,
           "called": [
             "bytes",
             "encode_calldata",
@@ -18521,7 +18527,7 @@
         {
           "kind": "fn",
           "name": "respond_disagree_uses_respond_calldata",
-          "line": 1392,
+          "line": 1437,
           "called": [
             "bytes",
             "encode_calldata",
@@ -18532,7 +18538,7 @@
         {
           "kind": "fn",
           "name": "terminate_calldata_refuses_minimum_form",
-          "line": 1405,
+          "line": 1450,
           "called": [
             "commit",
             "encode_calldata"
@@ -18541,7 +18547,7 @@
         {
           "kind": "fn",
           "name": "encode_terminate_calldata_minimum_form_shape",
-          "line": 1423,
+          "line": 1468,
           "called": [
             "bytes",
             "commit",
@@ -18553,7 +18559,7 @@
         {
           "kind": "fn",
           "name": "claim_timeout_calldata_length",
-          "line": 1435,
+          "line": 1480,
           "called": [
             "bytes",
             "encode_claim_timeout_calldata",
@@ -18564,7 +18570,7 @@
         {
           "kind": "fn",
           "name": "encode_terminate_full_calldata_shape",
-          "line": 1446,
+          "line": 1491,
           "called": [
             "ActionKind",
             "OpenedCell",
@@ -18580,7 +18586,7 @@
         {
           "kind": "fn",
           "name": "terminate_full_vs_minimum_selectors_differ",
-          "line": 1549,
+          "line": 1620,
           "called": [
             "selector"
           ]
@@ -18588,7 +18594,7 @@
         {
           "kind": "fn",
           "name": "opened_cell_tuple_with_empty_pre_value",
-          "line": 1559,
+          "line": 1630,
           "called": [
             "OpenedCell",
             "bytes",
@@ -18600,7 +18606,7 @@
         {
           "kind": "fn",
           "name": "opened_cell_tuple_pads_the_value_to_a_word",
-          "line": 1582,
+          "line": 1653,
           "called": [
             "OpenedCell",
             "bytes",
@@ -18612,7 +18618,7 @@
         {
           "kind": "fn",
           "name": "encode_opened_cell_array_empty",
-          "line": 1602,
+          "line": 1673,
           "called": [
             "bytes",
             "encode_opened_cell_array",
@@ -18622,7 +18628,7 @@
         {
           "kind": "fn",
           "name": "encode_opened_cell_array_pointers_follow_padded_elements",
-          "line": 1614,
+          "line": 1685,
           "called": [
             "OpenedCell",
             "bytes",
@@ -18633,13 +18639,13 @@
         {
           "kind": "fn",
           "name": "action_kind_byte_values",
-          "line": 1652,
+          "line": 1723,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_id_encoded_as_32_byte_be",
-          "line": 1668,
+          "line": 1739,
           "called": [
             "b",
             "bytes",
@@ -18650,7 +18656,7 @@
         {
           "kind": "fn",
           "name": "game_id_u128_max_encoded",
-          "line": 1681,
+          "line": 1752,
           "called": [
             "b",
             "bytes",
@@ -18661,7 +18667,7 @@
         {
           "kind": "fn",
           "name": "bool_encoding_padded",
-          "line": 1695,
+          "line": 1766,
           "called": [
             "b",
             "bool_word",
@@ -18672,7 +18678,7 @@
         {
           "kind": "fn",
           "name": "terminate_commit_at_end",
-          "line": 1707,
+          "line": 1778,
           "called": [
             "bytes",
             "commit",
@@ -18682,7 +18688,7 @@
         {
           "kind": "fn",
           "name": "mock_submitter_records_broadcast",
-          "line": 1716,
+          "line": 1787,
           "called": [
             "broadcast",
             "build_and_sign",
@@ -18694,7 +18700,7 @@
         {
           "kind": "fn",
           "name": "mock_submitter_tx_hash_deterministic",
-          "line": 1736,
+          "line": 1807,
           "called": [
             "build_and_sign"
           ]
@@ -18702,7 +18708,7 @@
         {
           "kind": "fn",
           "name": "mock_submitter_set_next_reject",
-          "line": 1748,
+          "line": 1819,
           "called": [
             "_",
             "broadcast",
@@ -18713,7 +18719,7 @@
         {
           "kind": "fn",
           "name": "mock_submitter_inclusion_default_confirmed",
-          "line": 1761,
+          "line": 1832,
           "called": [
             "broadcast",
             "build_and_sign",
@@ -18723,7 +18729,7 @@
         {
           "kind": "fn",
           "name": "mock_submitter_inclusion_configurable",
-          "line": 1770,
+          "line": 1841,
           "called": [
             "broadcast",
             "build_and_sign",
@@ -18734,7 +18740,7 @@
         {
           "kind": "fn",
           "name": "mock_build_and_sign_is_pure",
-          "line": 1784,
+          "line": 1855,
           "called": [
             "build_and_sign",
             "len"
@@ -18743,7 +18749,7 @@
         {
           "kind": "fn",
           "name": "mock_broadcast_idempotent_at_tx_hash_level",
-          "line": 1798,
+          "line": 1869,
           "called": [
             "broadcast",
             "build_and_sign",
@@ -18754,7 +18760,7 @@
         {
           "kind": "fn",
           "name": "selectors_non_zero",
-          "line": 1813,
+          "line": 1884,
           "called": [
             "selector"
           ]
@@ -18762,7 +18768,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_matches_lean_emitter_format",
-          "line": 1836,
+          "line": 1907,
           "called": [
             "CellProof",
             "new"
@@ -18771,7 +18777,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_non_empty_cell_value",
-          "line": 1862,
+          "line": 1933,
           "called": [
             "CellProof"
           ]
@@ -18779,7 +18785,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_serialize_then_deserialize_round_trips",
-          "line": 1878,
+          "line": 1949,
           "called": [
             "CellProof"
           ]
@@ -18787,7 +18793,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_serialize_matches_lean_emitter_format",
-          "line": 1894,
+          "line": 1965,
           "called": [
             "CellProof",
             "json"
@@ -18796,7 +18802,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_rejects_malformed_hex",
-          "line": 1923,
+          "line": 1994,
           "called": [
             "CellProof"
           ]
@@ -18804,7 +18810,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_rejects_oversize_cell_value",
-          "line": 1942,
+          "line": 2013,
           "called": [
             "CellProof"
           ]
@@ -18812,13 +18818,13 @@
         {
           "kind": "fn",
           "name": "cell_proof_json_with_proof_data",
-          "line": 1965,
+          "line": 2036,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_rejects_empty_proof_data",
-          "line": 1982,
+          "line": 2053,
           "called": [
             "CellProof",
             "cell_proof_json_with_proof_data"
@@ -18827,7 +18833,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_rejects_misaligned_proof_data",
-          "line": 1994,
+          "line": 2065,
           "called": [
             "CellProof",
             "cell_proof_json_with_proof_data",
@@ -18837,7 +18843,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_rejects_oversize_proof_data",
-          "line": 2008,
+          "line": 2079,
           "called": [
             "CellProof",
             "cell_proof_json_with_proof_data",
@@ -18847,7 +18853,7 @@
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_accepts_proof_data_at_the_cap",
-          "line": 2022,
+          "line": 2093,
           "called": [
             "CellProof",
             "cell_proof_json_with_proof_data",
@@ -18858,13 +18864,13 @@
         {
           "kind": "fn",
           "name": "proof_data_cap_matches_smt_geometry",
-          "line": 2032,
+          "line": 2103,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_rejects_misshapen_proof_data",
-          "line": 2043,
+          "line": 2114,
           "called": [
             "CellProof",
             "is_empty"
@@ -18873,7 +18879,7 @@
         {
           "kind": "fn",
           "name": "sample_bundle",
-          "line": 2062,
+          "line": 2133,
           "called": [
             "OpenedCell",
             "TerminateBundle",
@@ -18883,7 +18889,7 @@
         {
           "kind": "fn",
           "name": "encode_with_bundle_delegates_for_non_terminate",
-          "line": 2095,
+          "line": 2168,
           "called": [
             "commit",
             "encode_submit_calldata"
@@ -18892,7 +18898,7 @@
         {
           "kind": "fn",
           "name": "encode_with_bundle_terminate_without_bundle_errors",
-          "line": 2108,
+          "line": 2181,
           "called": [
             "Err",
             "commit"
@@ -18901,7 +18907,7 @@
         {
           "kind": "fn",
           "name": "encode_with_bundle_terminate_with_bundle_succeeds",
-          "line": 2123,
+          "line": 2196,
           "called": [
             "commit",
             "len",
@@ -18912,7 +18918,7 @@
         {
           "kind": "fn",
           "name": "encode_with_bundle_terminate_commit_mismatch_errors",
-          "line": 2147,
+          "line": 2220,
           "called": [
             "Err",
             "commit",
@@ -18922,7 +18928,7 @@
         {
           "kind": "fn",
           "name": "encode_with_bundle_refuses_a_bundle_without_the_batch_binding",
-          "line": 2167,
+          "line": 2240,
           "called": [
             "Err",
             "commit",
@@ -18932,7 +18938,7 @@
         {
           "kind": "fn",
           "name": "encode_with_bundle_embeds_the_batch_binding",
-          "line": 2194,
+          "line": 2267,
           "called": [
             "args",
             "b",

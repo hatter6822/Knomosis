@@ -15,6 +15,7 @@ import {ActionsRoot} from "src/lib/ActionsRoot.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
+import {SignedActionProbe} from "test/utils/SignedActionProbe.sol";
 import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 import {MockBoldOz} from "test/utils/MockBoldOz.sol";
@@ -1530,7 +1531,8 @@ contract BenchmarkGasV1_3BatchSubmissionTest is BenchmarkGasV1_3Base {
 ///         zero bitmask, no siblings).
 contract BenchmarkGasV1_3TerminateInclusionTest is
     BenchmarkGasV1_3Base,
-    StepVMRootProbeHarness
+    StepVMRootProbeHarness,
+    SignedActionProbe
 {
     KnomosisStepVMRoot internal vmRoot;
     KnomosisStateRootSubmission internal registry;
@@ -1542,6 +1544,10 @@ contract BenchmarkGasV1_3TerminateInclusionTest is
     uint128 internal constant ROOT_BOND = 1 ether;
     uint128 internal constant CHALLENGE_BOND = 0.05 ether;
     uint64 internal constant STEP_INTERVAL = 1;
+    /// @dev The deployment id the registry publishes and the game
+    ///      copies into each game — the §8.8.5 signing domain the
+    ///      F-A gate recomputes the digest under.
+    bytes32 internal constant DEPLOYMENT_ID = bytes32(uint256(0xBA7C4));
 
     string internal raw;
     string internal probeBase;
@@ -1563,7 +1569,7 @@ contract BenchmarkGasV1_3TerminateInclusionTest is
             10,
             SEQUENCER,
             predictedGame,
-            bytes32(uint256(0xBA7C4)),
+            DEPLOYMENT_ID,
             100,
             probe.preRoot, // genesis = the probe's pre-root
             65_536
@@ -1634,7 +1640,9 @@ contract BenchmarkGasV1_3TerminateInclusionTest is
                     _singleEntryProof(),
                     probe.cells,
                     probe.gapMask,
-                    probe.siblings
+                    probe.siblings,
+                    probe.registryValue,
+                    probe.registryProof
                 )
             ),
             true
@@ -1658,7 +1666,9 @@ contract BenchmarkGasV1_3TerminateInclusionTest is
             _singleEntryProof(),
             probe.cells,
             probe.gapMask,
-            probe.siblings
+            probe.siblings,
+            probe.registryValue,
+            probe.registryProof
         );
         (, , , , uint128 bond, , bool finalised, bool disputed, ,) =
             registry.roots(4);
@@ -1674,14 +1684,16 @@ contract BenchmarkGasV1_3TerminateInclusionTest is
         );
     }
 
-    /// @dev The suite's fixed 65-byte action signature (hashed into
-    ///      the leaf per ruling R7).
-    function _testSig() private pure returns (bytes memory sig) {
-        sig = new bytes(65);
-        for (uint256 i = 0; i < 65; i++) {
-            // forge-lint: disable-next-line(unsafe-typecast)
-            sig[i] = bytes1(uint8(i + 1));
-        }
+    /// @dev The probe action's REAL 65-byte wire signature
+    ///      `(r ‖ s ‖ v)` — hashed into the leaf per ruling R7 and
+    ///      VERIFIED by the F-A gate, so the benchmarked transaction
+    ///      measures the honest defence including the signature check
+    ///      (registry opening + decompression + ecrecover).
+    function _testSig() private view returns (bytes memory) {
+        ProbeInput memory probe = loadProbeInput(raw, probeBase);
+        return signAction(
+            probe.actionKind, probe.actionFields, probe.signer,
+            probe.signerNonce, DEPLOYMENT_ID);
     }
 
     /// @dev The single-leaf batch tree's inclusion proof: an all-zero
@@ -1697,7 +1709,7 @@ contract BenchmarkGasV1_3TerminateInclusionTest is
     ///      `ActionsRoot.verifyActionInclusion`).
     function _probeActionsRoot(ProbeInput memory probe)
         private
-        pure
+        view
         returns (bytes32 root)
     {
         bytes32 leafCommit = keccak256(

@@ -1312,9 +1312,13 @@ used for `CollisionFreeOn`.
 > hypothesis quantifies over the responder's bundle (verifier
 > proof-independence is not itself a theorem); it is discharged
 > per-variant by the `VerifierWrites.*_correct` derivation
-> discipline.  On-chain SIGNATURE verification at terminate remains
-> the separately-recorded F-A follow-up in
-> `19-findings-and-followups.md`'s SB close-out.
+> discipline.  On-chain SIGNATURE verification at terminate — the
+> separately-recorded F-A follow-up — is BUILT on the L1 side: the
+> terminal step resolves the signer's registered key by a
+> registry-cell opening against the pre-root and requires
+> `ecrecover` of the recomputed §8.8.5 digest to land on it, with an
+> invalid signature adjudicated as the no-op it is.  The Lean game
+> model's mirror of that gate is the remaining piece.
 
 `applyTransition gs (.terminateOnSingleStep step)` calls
 `kernelStepApply step` and compares the result against

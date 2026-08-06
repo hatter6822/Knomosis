@@ -44,6 +44,19 @@ library Secp256k1 {
     uint256 internal constant SQRT_EXP =
         0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFBFFFFF0C;
 
+    /// @notice The group order `n` of secp256k1.
+    uint256 internal constant N =
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+
+    /// @notice `⌊n / 2⌋` — the EIP-2 / BIP-62 low-s threshold.  A
+    ///         signature with `s > N_HALF` is malleable and the L2
+    ///         adaptor rejects it; L1 verification mirrors the gate so
+    ///         the fault proof never DEFENDS a signature the L2 would
+    ///         have refused to admit (`ecrecover` itself accepts
+    ///         high-s, so the gate must live in the caller).
+    uint256 internal constant N_HALF =
+        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
+
     /// @notice The compressed key is not exactly 33 bytes.
     error PubkeyWrongLength(uint256 got);
 
@@ -126,5 +139,59 @@ library Secp256k1 {
         // lossy accident.
         // forge-lint: disable-next-line(unsafe-typecast)
         return address(uint160(uint256(keccak256(abi.encodePacked(x, y)))));
+    }
+
+    /// @notice Non-reverting [`decompress`]: `ok = false` on any
+    ///         malformed or off-curve input instead of a revert.
+    ///
+    /// @dev    For callers whose malformed-key outcome is a VERDICT
+    ///         rather than a refused call — the fault-proof game's
+    ///         signature gate treats an uninterpretable registered key
+    ///         as an invalid signature (fail-closed: it can never
+    ///         DEFEND a disputed action), and a revert there would
+    ///         leave the game unsettleable instead.
+    function tryDecompress(bytes memory pk)
+        internal
+        view
+        returns (bool ok, uint256 x, uint256 y)
+    {
+        if (pk.length != 33) {
+            return (false, 0, 0);
+        }
+        uint8 prefix = uint8(pk[0]);
+        if (prefix != 0x02 && prefix != 0x03) {
+            return (false, 0, 0);
+        }
+        for (uint256 i = 0; i < 32; i++) {
+            x = (x << 8) | uint256(uint8(pk[1 + i]));
+        }
+        if (x >= P) {
+            return (false, 0, 0);
+        }
+        uint256 y2 = addmod(mulmod(mulmod(x, x, P), x, P), 7, P);
+        y = _modSqrtCandidate(y2);
+        if (mulmod(y, y, P) != y2) {
+            return (false, 0, 0);
+        }
+        if ((y & 1) != (uint256(prefix) & 1)) {
+            y = P - y;
+        }
+        ok = true;
+    }
+
+    /// @notice Non-reverting [`toAddress`]: `ok = false` on any
+    ///         malformed or off-curve input.
+    function tryToAddress(bytes memory pk)
+        internal
+        view
+        returns (bool ok, address addr)
+    {
+        (bool okPoint, uint256 x, uint256 y) = tryDecompress(pk);
+        if (!okPoint) {
+            return (false, address(0));
+        }
+        // forge-lint: disable-next-line(unsafe-typecast)
+        addr = address(uint160(uint256(keccak256(abi.encodePacked(x, y)))));
+        ok = true;
     }
 }

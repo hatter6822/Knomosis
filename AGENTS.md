@@ -784,7 +784,7 @@ work units.  Status:
 | LX-M1–M3 | Lex language (3 milestones) | Complete |
 | H | Fault-proof migration | **Complete.**  The terminal step authenticates its action against the log-entry chain AND adjudicates the state transition: `terminateOnSingleStep` calls `executeStepToRootMulti`, which returns a state ROOT computed by folding the step's derived cell writes into the pre-root from a deduplicating pre-root multiproof.  Both the bespoke `stepVMHash` recipe and the chained fold that replaced it are retired.  See the Workstream H section below |
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
-| SB | Batched submission + user-facing L2 AMM | **Complete** (SB.0–SB.12, v0.14.0).  One L1 record per batch `[prevEnd, end)`: structural prev-hash (R5), one chain-link fold per batch over the batch's actions-root SMT (R8; leaf binds the 65-byte signature, R7), revert recovery (R1/R3/R4), game anchored at the batch start (R2), terminal action authenticated by inclusion proof, settlement forwarded game→V2→bridge (R6).  Measured ~239 gas of amortised L1 per action at B=1000 (`gas_pool_runbook.md` §9.5).  `Laws.reserveSwap` (Action 25; Events 23/24) is the user-signed L2 swap priced in-kernel over the reserve actor's live balances, `user = signer` bound at the AuthorityPolicy; the deposit fee-split's seed leg is credited on L2 (`depositWithFee` gained the appended `seedAmount`; the L1 `ammReserve*` books hold pre-existing liquidity only — L2-primary topology); `knomosis-l1-ingest` materialises deposits opt-in (`--materialise-deposits`, content-derived deposit ids).  The Lean game-model actions-root anchor follow-up is closed (audit-22 MAJOR closed at the model level: `GameState.actionsRoot` + the `actionNotInBatch` terminate guard + `terminate_ok_requires_authentication` + `anchored_challenger_wins`, amendment 1.34); remaining follow-up: on-chain signature verification at terminate; the L1→L2 swap-mirror ingest is a deliberate non-goal.  See GENESIS_PLAN §15E.12 + amendments 1.33/1.34 |
+| SB | Batched submission + user-facing L2 AMM | **Complete** (SB.0–SB.12, v0.14.0).  One L1 record per batch `[prevEnd, end)`: structural prev-hash (R5), one chain-link fold per batch over the batch's actions-root SMT (R8; leaf binds the 65-byte signature, R7), revert recovery (R1/R3/R4), game anchored at the batch start (R2), terminal action authenticated by inclusion proof, settlement forwarded game→V2→bridge (R6).  Measured ~239 gas of amortised L1 per action at B=1000 (`gas_pool_runbook.md` §9.5).  `Laws.reserveSwap` (Action 25; Events 23/24) is the user-signed L2 swap priced in-kernel over the reserve actor's live balances, `user = signer` bound at the AuthorityPolicy; the deposit fee-split's seed leg is credited on L2 (`depositWithFee` gained the appended `seedAmount`; the L1 `ammReserve*` books hold pre-existing liquidity only — L2-primary topology); `knomosis-l1-ingest` materialises deposits opt-in (`--materialise-deposits`, content-derived deposit ids).  The Lean game-model actions-root anchor follow-up is closed (audit-22 MAJOR closed at the model level: `GameState.actionsRoot` + the `actionNotInBatch` terminate guard + `terminate_ok_requires_authentication` + `anchored_challenger_wins`, amendment 1.34); on-chain signature verification at terminate is BUILT on the L1 side (Workstream F-A: `SignInput.sol` rebuilds the §8.8.5 digest, `Secp256k1.sol` resolves the signer's registered key from a registry-cell opening against the pre-root, `ecrecover` must match, and an invalid signature adjudicates as the no-op — the Lean game-model mirror is the remaining piece); the L1→L2 swap-mirror ingest is a deliberate non-goal.  See GENESIS_PLAN §15E.12 + amendments 1.33/1.34 |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
 | FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B + C complete; D documented; GP.8.5 v2 receipt-verified claim **built** — both legs (Lean gate + theorems, Rust builders/verifiers) — and OQ-GP-8b closed (BOLD-leg ETH→BOLD oracle + independent-observer receipt-fetch), but **not yet wired into a production admission path**: `receiptGatedAdmissibleUnified` has no non-test caller and `ConsumedReceipts` has no home in `BridgeState`, so the `min(cap, L1 wei cost)` bound is proved and available, not enforced.  Wiring it is workstream F1 (`docs/audits/19-findings-and-followups.md`) |
@@ -859,9 +859,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 298 | 172 | `lake test` |
 | Rust | ~2 433 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~982 passed | 73 forge suites | `cd solidity && forge test` |
+| Solidity | ~987 passed | 73 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **982 passed / 0 failed / 0 skipped** — the
+`forge test` runs **987 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -882,7 +882,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 982 / 0 / 0.  It is not redundant: a bare `lake test`
+reports the same 987 / 0 / 0.  It is not redundant: a bare `lake test`
 runs on the FALLBACK hash, where 10 Lean cross-stack assertions report
 `SKIPPED` rather than comparing anything.  Under the keccak lane that
 count is **zero** — every corpus is checked against real keccak256 on

@@ -9,6 +9,11 @@ import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/Reentrancy
 import {KnomosisStepVMRoot} from "./KnomosisStepVMRoot.sol";
 
 import {ActionsRoot} from "../lib/ActionsRoot.sol";
+import {CBEEncode} from "../lib/CBEEncode.sol";
+import {Secp256k1} from "../lib/Secp256k1.sol";
+import {SignInput} from "../lib/SignInput.sol";
+import {SmtCellVerifier} from "../lib/SmtCellVerifier.sol";
+import {StepVMMerkle} from "../lib/StepVMMerkle.sol";
 
 /// @notice Minimal interface for the state-root submission
 ///         contract's dispute-locking, bond-slashing, flag-
@@ -538,7 +543,9 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         bytes calldata actionProof,
         KnomosisStepVMRoot.OpenedCell[] calldata opened,
         bytes calldata gapMask,
-        bytes calldata siblings
+        bytes calldata siblings,
+        bytes calldata registryValue,
+        bytes calldata registryProof
     ) external nonReentrant {
         Game storage g = games[gameId];
         if (g.status != GameStatus.InProgress) revert GameAlreadyEnded();
@@ -558,10 +565,9 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         // `keccak256(kind ‖ uint64BE signer ‖ fields ‖ sig)`, and the
         // inclusion proof walks it to the root the sequencer folded
         // into the chain when it published the record.  The signature
-        // is hashed, not verified — on-chain verification at
-        // terminate is the recorded follow-up needing L1 actorId→key
-        // resolution; binding it in the leaf now means that follow-up
-        // is a drop-in rather than another chain-shape migration.
+        // is hashed here and VERIFIED below (Workstream F-A): this
+        // check answers "is this the action the batch committed?",
+        // the signature gate answers "was it authorised?".
         //
         // The batch is read via the game's own immutable
         // `g.disputedLogIndex` (SB ruling R2) — never a
@@ -603,6 +609,26 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         bytes32 computedPostCommit = stepVM.executeStepToRootMulti(
             g.low.commit, actionKind, actionFields, signer,
             g.high.idx, opened, gapMask, siblings);
+
+        // F-A: the SIGNATURE gate.  The batch leaf binds the 65-byte
+        // signature (ruling R7) and the check above authenticates it;
+        // this verifies it.  The signer's registered key is resolved
+        // by a single-cell opening against `g.low.commit`, the nonce
+        // comes off the frontier the step VM has just VERIFIED against
+        // the same root (so a sequencer cannot sign over a nonce of
+        // its choosing), the digest is the canonical §8.8.5 sign-input
+        // recomputed on-chain, and `ecrecover` must land on the
+        // registered key's address.  An INVALID signature makes the
+        // disputed entry inadmissible: the truthful post-state of an
+        // entry the L2 kernel would have refused is the PRE-state, so
+        // the adjudicated root becomes `g.low.commit` — the full
+        // no-op, nonce included — and a sequencer defending a forged
+        // entry loses to any endpoint that claims a state change.
+        if (!_signatureValid(
+                g.low.commit, g.deploymentId, actionKind, actionFields,
+                signer, actionSig, opened, registryValue, registryProof)) {
+            computedPostCommit = g.low.commit;
+        }
 
         // The disputed endpoint is the committed transcript high point.
         if (computedPostCommit == g.high.commit) {
@@ -656,6 +682,161 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
                 batchActionsRoot, stepIndex, commit, actionProof)) {
             revert ActionNotInBatch();
         }
+    }
+
+    /// @notice The registry cell kind — `CellTag.registry` on the
+    ///         Lean side, `StepWrites.CELL_REGISTRY` on the step VM.
+    uint8 internal constant CELL_REGISTRY = 2;
+
+    /// @notice The nonce cell kind — `CellTag.nonce` on the Lean
+    ///         side; in every adjudicable frontier, keyed by signer.
+    uint8 internal constant CELL_NONCE = 1;
+
+    /// @notice The supplied registry opening does not verify against
+    ///         the disputed range's pre-state root.  Retryable — the
+    ///         true opening exists for both a present and an absent
+    ///         registry cell, so the responsible party resubmits with
+    ///         it rather than losing on a malformed proof.
+    error RegistryOpeningInvalid();
+
+    /// @dev The F-A signature verdict.  `true` iff the committed
+    ///      65-byte `(r ‖ s ‖ v)` signature verifies — low-s,
+    ///      `v ∈ {27, 28}`, `ecrecover` of the recomputed §8.8.5
+    ///      digest equal to the address of the signer's REGISTERED
+    ///      key.  Everything uninterpretable is `false`, never a
+    ///      revert: an unregistered signer, a key that is not a
+    ///      33-byte SEC1-compressed secp256k1 point, a mis-width or
+    ///      malleable signature — each is a state of the world the
+    ///      game must ADJUDICATE (the entry was inadmissible), not a
+    ///      calldata defect the caller can fix.  The single revert is
+    ///      a registry opening that fails to verify against the
+    ///      pre-root, which IS a calldata defect.
+    ///
+    ///      The nonce is read from the `opened` frontier, which the
+    ///      step VM has already verified against the same pre-root
+    ///      (its call precedes this one and reverts on any frontier
+    ///      forgery), so the digest is over the pre-state's expected
+    ///      nonce — the only value the L2 admission gate would have
+    ///      accepted a signature for.
+    function _signatureValid(
+        bytes32 preRoot,
+        bytes32 deploymentId,
+        uint8 actionKind,
+        bytes calldata actionFields,
+        uint64 signer,
+        bytes calldata actionSig,
+        KnomosisStepVMRoot.OpenedCell[] calldata opened,
+        bytes calldata registryValue,
+        bytes calldata registryProof
+    ) internal view returns (bool) {
+        // 1. Authenticate the registry opening against the pre-root.
+        //    An absent cell (the unregistered signer) opens from the
+        //    canonical empty leaf; a present one from
+        //    `keccak256(cbe(key) ‖ cbe(value))`.
+        {
+            bytes memory smtKey = abi.encodePacked(
+                StepVMMerkle.deriveCellSmtKey(
+                    CELL_REGISTRY, uint256(signer), 0));
+            bool isAbsent = registryValue.length == 0;
+            bytes32 leaf = StepVMMerkle.cellLeafHash(
+                isAbsent,
+                isAbsent
+                    ? bytes("")
+                    : bytes.concat(
+                        CBEEncode.bytesValue(smtKey),
+                        CBEEncode.bytesValue(registryValue)));
+            if (SmtCellVerifier.recomputeRootFromLeaf(
+                    smtKey, leaf, registryProof) != preRoot) {
+                revert RegistryOpeningInvalid();
+            }
+            if (isAbsent) {
+                // Unregistered signer: no key can have authorised the
+                // entry.
+                return false;
+            }
+        }
+
+        // 2. Decode the registered key from its CBE byte-string cell
+        //    value: `0x02` tag + 8-byte LE length + payload.  The
+        //    value is root-verified, so a malformed shape means the
+        //    L2 state genuinely holds bytes this gate cannot
+        //    interpret — fail closed.
+        if (registryValue.length < 9 || uint8(registryValue[0]) != 0x02) {
+            return false;
+        }
+        uint256 pkLen = 0;
+        for (uint256 i = 0; i < 8; i++) {
+            pkLen |= uint256(uint8(registryValue[1 + i])) << (8 * i);
+        }
+        if (pkLen != registryValue.length - 9 || pkLen != 33) {
+            return false;
+        }
+        (bool pkOk, address keyAddr) =
+            Secp256k1.tryToAddress(registryValue[9:]);
+        if (!pkOk) {
+            return false;
+        }
+
+        // 3. The wire signature: 65 bytes, `v ∈ {27, 28}`, low-s
+        //    (EIP-2 — `ecrecover` itself accepts high-s, and the L1
+        //    must not defend a signature the L2 adaptor refuses).
+        if (actionSig.length != 65) {
+            return false;
+        }
+        uint8 v = uint8(actionSig[64]);
+        if (v != 27 && v != 28) {
+            return false;
+        }
+        bytes32 r = bytes32(actionSig[0:32]);
+        bytes32 s = bytes32(actionSig[32:64]);
+        if (uint256(s) > Secp256k1.N_HALF) {
+            return false;
+        }
+
+        // 4. The nonce, off the step-VM-verified frontier: the
+        //    9-byte CBE uint cell (`0x00` tag + 8-byte LE).
+        (bool nonceOk, uint64 nonce) = _frontierNonce(opened, signer);
+        if (!nonceOk) {
+            return false;
+        }
+
+        // 5. Recompute the §8.8.5 digest and recover.
+        bytes32 digest = SignInput.signingDigest(
+            actionKind, actionFields, signer, nonce,
+            abi.encodePacked(deploymentId));
+        address recovered = ecrecover(digest, v, r, s);
+        return recovered != address(0) && recovered == keyAddr;
+    }
+
+    /// @dev Read the signer's nonce cell pre-value from the frontier.
+    ///      The frontier reaching this point has been verified by the
+    ///      step VM against the pre-root, and every adjudicable
+    ///      variant's derived cell set includes the signer's nonce —
+    ///      so a miss or a malformed value is fail-closed rather than
+    ///      reachable on an honest call.
+    function _frontierNonce(
+        KnomosisStepVMRoot.OpenedCell[] calldata opened,
+        uint64 signer
+    ) private pure returns (bool ok, uint64 nonce) {
+        for (uint256 i = 0; i < opened.length; i++) {
+            KnomosisStepVMRoot.OpenedCell calldata c = opened[i];
+            if (c.cellKind == CELL_NONCE && c.keyA == uint256(signer)
+                    && c.keyB == 0) {
+                bytes calldata v = c.preValue;
+                if (v.length != 9 || uint8(v[0]) != 0x00) {
+                    return (false, 0);
+                }
+                uint256 n = 0;
+                for (uint256 j = 0; j < 8; j++) {
+                    n |= uint256(uint8(v[1 + j])) << (8 * j);
+                }
+                // casting to 'uint64' is exact: the 8-byte LE payload
+                // is by construction below 2^64.
+                // forge-lint: disable-next-line(unsafe-typecast)
+                return (true, uint64(n));
+            }
+        }
+        return (false, 0);
     }
 
     /* ---------------------------------------------------------- */

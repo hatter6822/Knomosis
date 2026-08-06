@@ -633,6 +633,34 @@ pub struct TerminateBundle {
         skip_serializing_if = "Option::is_none"
     )]
     pub action_siblings: Option<Vec<u8>>,
+    /// F-A: the signer's registry cell PRE-VALUE at the disputed
+    /// range's pre-state — CALLDATA.  A CBE byte string wrapping the
+    /// 33-byte SEC1-compressed public key, or EMPTY when the signer
+    /// is unregistered (a real, adjudicable state: no key can have
+    /// authorised the entry, so the game treats the signature as
+    /// invalid).
+    #[serde(
+        default,
+        rename = "registry_value_hex",
+        serialize_with = "serialize_opt_bytes_hex_lower",
+        deserialize_with = "deserialize_opt_action_wire_hex",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub registry_value: Option<Vec<u8>>,
+    /// F-A: the registry cell's single-cell opening against the
+    /// pre-root — CALLDATA, on the standard `bitmask(32) ‖ siblings`
+    /// SMT wire.  Present for BOTH the registered and unregistered
+    /// cases (an absent cell opens from the canonical empty leaf),
+    /// so this is the field that decides whether the bundle carries
+    /// an F-A opening at all.
+    #[serde(
+        default,
+        rename = "registry_proof_hex",
+        serialize_with = "serialize_opt_bytes_hex_lower",
+        deserialize_with = "deserialize_opt_action_wire_hex",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub registry_proof: Option<Vec<u8>>,
 }
 
 impl TerminateBundle {
@@ -643,6 +671,14 @@ impl TerminateBundle {
     #[must_use]
     pub fn has_batch_binding(&self) -> bool {
         self.action_sig.is_some()
+    }
+
+    /// True iff the bundle carries the F-A registry opening.  Keyed
+    /// on the PROOF: the value is legitimately empty for an
+    /// unregistered signer, so its absence proves nothing.
+    #[must_use]
+    pub fn has_registry_opening(&self) -> bool {
+        self.registry_proof.is_some()
     }
 }
 

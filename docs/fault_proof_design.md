@@ -366,9 +366,9 @@ divisor real:
 
 Measured (`gas_pool_runbook.md` §9.5): 238 963 gas per batch
 submission ⇒ ≈239 gas (~2.2¢) of amortised L1 per action at a
-batch of 1 000; the dispute path (1 019 177-gas terminate incl. the
-inclusion proof) is paid only when a batch is disputed, by the
-party the bond economics already price.
+batch of 1 000; the dispute path (1 206 393-gas terminate incl. the
+inclusion proof AND the F-A signature check) is paid only when a
+batch is disputed, by the party the bond economics already price.
 
 Deferred by design: on-chain signature VERIFICATION at terminate
 (the leaf binds the bytes; verification needs an L1 actorId→key

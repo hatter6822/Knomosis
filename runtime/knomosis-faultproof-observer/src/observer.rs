@@ -4039,6 +4039,8 @@ mod tests {
             action_sig: Some(vec![0x11; 65]),
             action_gap_mask: Some(vec![0u8; 32]),
             action_siblings: Some(vec![]),
+            registry_value: Some(vec![0x02; 42]),
+            registry_proof: Some(vec![0u8; 32]),
         }
     }
 
