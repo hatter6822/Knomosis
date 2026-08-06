@@ -212,6 +212,7 @@ import LegalKernel.Test.Integration.ReplayCliFlags
 import LegalKernel.Test.Integration.ReplayUpToCli
 import LegalKernel.Test.Integration.ExportCellProofsCli
 import LegalKernel.Test.Integration.ExportTerminateBundleCli
+import LegalKernel.Test.Integration.ExportBatchCli
 -- Workstream SVC (step-VM cross-stack coherence).
 import LegalKernel.Test.FaultProof.StepVMCoherence
 import LegalKernel.Test.FaultProof.TerminateBundle
@@ -521,6 +522,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.Integration.ExportCellProofsCli.tests)
   failed := failed + (← runAll "integration-export-terminate-bundle-cli"
                                     LegalKernel.Test.Integration.ExportTerminateBundleCli.tests)
+  failed := failed + (← runAll "integration-export-batch-cli"
+                                    LegalKernel.Test.Integration.ExportBatchCli.tests)
   -- Workstream SVC — step-VM cross-stack coherence.
   failed := failed + (← runAll "faultproof-stepvm-coherence"
                                     LegalKernel.Test.FaultProof.StepVMCoherence.tests)

@@ -633,12 +633,21 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
             IO.println "]"
             pure 0
 
-/-- Subcommand: `knomosis export-terminate-bundle LOG IDX`.
+/-- Subcommand: `knomosis export-terminate-bundle LOG IDX
+    [PREV_END END]`.
 
     Replays the log prefix `entries[0..idx]` to obtain the
     pre-state for the action at log index `idx`, decodes that
     action (via `entries[idx]`), and emits the canonical
     terminate-on-single-step bundle as a single line of JSON.
+
+    Workstream SB: with the optional `PREV_END END` batch bounds,
+    the JSON additionally carries the action's batch-inclusion
+    binding — the bounds, the SMT key, the leaf commit, the
+    signature the leaf binds, and the inclusion wire against the
+    batch's actions root — everything the batched
+    `terminateOnSingleStep` needs to authenticate the disputed
+    action against the submitted record.
 
     The off-chain observer (`knomosis-faultproof-observer`) consumes
     this JSON to construct calldata for the L1 contract's
@@ -659,7 +668,8 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
 def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (batchArgs? : Option (String × String) := none) : IO UInt32 := do
   let _ := deploymentId
   -- GP.7.4: the terminate bundle's `expectedPostCommit` +
   -- `cellProofs` are computed against `commitExtendedState preState`,
@@ -679,6 +689,22 @@ def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
     IO.eprintln s!"knomosis export-terminate-bundle: idx '{idxStr}' is not a Nat"
     pure 2
   | some idx =>
+    -- Workstream SB: optional batch bounds.  When supplied, the bundle
+    -- additionally carries the action's inclusion proof against the
+    -- batch's actionsRoot (the R7 leaf binds the signature, so the
+    -- signature rides along).  Parse both or neither.
+    let batchBounds? : Option (Nat × Nat) ← do
+      match batchArgs? with
+      | none => pure none
+      | some (prevEndStr, endStr) =>
+        match prevEndStr.toNat?, endStr.toNat? with
+        | some p, some e => pure (some (p, e))
+        | _, _ =>
+          IO.eprintln s!"knomosis export-terminate-bundle: batch bounds \
+                        '{prevEndStr}' '{endStr}' are not Nats"
+          pure none
+    if batchArgs?.isSome && batchBounds?.isNone then
+      return 2
     let (entries, _, frameErr?) ← readAllEntries logPath
     if let some err := frameErr? then
       IO.eprintln s!"warning: log has partial tail ({repr err})"
@@ -694,13 +720,136 @@ def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
         IO.eprintln "knomosis export-terminate-bundle: internal error (idx within bounds but list access failed)"
         pure 1
       | some entry =>
+        -- The bundle is built AT the disputed index: `withdraw`'s
+        -- pending record carries the l2LogIndex, so the fold must
+        -- know which index it adjudicates.  (Previously defaulted to
+        -- 0, deriving the wrong pending-cell value — and hence the
+        -- wrong expected post root — for any withdraw past index 0.)
         let bundle :=
-          LegalKernel.FaultProof.TerminateBundle.buildTerminateBundle preState entry
+          LegalKernel.FaultProof.TerminateBundle.buildTerminateBundle
+            preState entry idx
+        -- The batch binding, when bounds were supplied.
+        let batch? ← do
+          match batchBounds? with
+          | none => pure (none : Option
+              LegalKernel.FaultProof.TerminateBundle.BatchBinding)
+          | some (prevEnd, endIdx) =>
+            match LegalKernel.FaultProof.TerminateBundle.buildBatchBinding
+                entries prevEnd endIdx idx with
+            | some b => pure (some b)
+            | none =>
+              IO.eprintln s!"knomosis export-terminate-bundle: idx {idx} is \
+                            not inside batch [{prevEnd}, {endIdx}) of a \
+                            {entries.length}-entry log"
+              pure none
+        if batchBounds?.isSome && batch?.isNone then
+          return 2
         let fixtureId := s!"log[{idx}]"
         IO.println
           (LegalKernel.FaultProof.TerminateBundle.formatTerminateBundleJson
-            fixtureId bundle)
+            fixtureId bundle batch?)
         pure 0
+
+/-- Subcommand: `knomosis export-batch LOG PREV_END END`
+    (Workstream SB).
+
+    Emits the two values a batched `submitStateRoot` consumes for the
+    batch covering log indices `[PREV_END, END)` — the post-state
+    commit after the batch's last entry (`commitExtendedState` of the
+    replayed state) and the batch's actions root
+    (`FaultProof.actionsRoot`) — plus the bounds, as one JSON line.
+
+    One log read, one prefix replay, one root fold: O(N + B·depth)
+    for an N-entry log and a B-entry batch — never a per-index
+    subprocess loop.
+
+    Exit codes:
+    * 0 — success.
+    * 1 — log parse error.
+    * 2 — malformed / out-of-range bounds, or a gas-pool-config
+      mismatch. -/
+def cmdExportBatch (logPath : System.FilePath)
+    (prevEndStr endStr : String)
+    (genesis : ExtendedState := demoGenesis)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+  -- The state commit includes `commitLocalPolicies`, so the gas-pool
+  -- genesis declaration affects it — same cross-check as
+  -- export-terminate-bundle (and the budget config is likewise
+  -- irrelevant: `commitExtendedState` excludes it).
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
+  match prevEndStr.toNat?, endStr.toNat? with
+  | some prevEnd, some endIdx =>
+    if prevEnd ≥ endIdx then
+      IO.eprintln s!"knomosis export-batch: empty batch \
+                    [{prevEnd}, {endIdx}) — END must exceed PREV_END"
+      return 2
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some err := frameErr? then
+      IO.eprintln s!"warning: log has partial tail ({repr err})"
+    if endIdx > entries.length then
+      IO.eprintln
+        s!"knomosis export-batch: end {endIdx} > log length {entries.length}"
+      return 2
+    let postState := LegalKernel.Disputes.kernelOnlyReplay genesis
+      (entries.take endIdx)
+    let stateCommit := LegalKernel.FaultProof.commitExtendedState postState
+    let batch := (entries.take endIdx).drop prevEnd
+    let root := LegalKernel.FaultProof.actionsRoot prevEnd batch
+    IO.println
+      (LegalKernel.FaultProof.TerminateBundle.formatBatchExportJson
+        prevEnd endIdx stateCommit root)
+    pure 0
+  | _, _ =>
+    IO.eprintln s!"knomosis export-batch: bounds '{prevEndStr}' \
+                  '{endStr}' are not Nats"
+    pure 2
+
+/-- Subcommand: `knomosis export-action-proof LOG PREV_END END IDX`
+    (Workstream SB).
+
+    Emits the standalone batch-inclusion proof for the action at log
+    index `IDX` within the batch `[PREV_END, END)`: the action's own
+    wire data (kind, fields, signer, signature — the leaf binds all
+    four) plus the compressed inclusion wire against the batch's
+    actions root.
+
+    NO replay and NO gas-pool check: the actions root is a function
+    of the log entries alone (actions + signatures), never of the
+    state, so this command is state-config-independent.
+
+    Exit codes:
+    * 0 — success.
+    * 1 — log parse error.
+    * 2 — malformed bounds, or `IDX` outside the batch. -/
+def cmdExportActionProof (logPath : System.FilePath)
+    (prevEndStr endStr idxStr : String) : IO UInt32 := do
+  match prevEndStr.toNat?, endStr.toNat?, idxStr.toNat? with
+  | some prevEnd, some endIdx, some idx =>
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some err := frameErr? then
+      IO.eprintln s!"warning: log has partial tail ({repr err})"
+    match LegalKernel.FaultProof.TerminateBundle.buildBatchBinding
+        entries prevEnd endIdx idx with
+    | none =>
+      IO.eprintln s!"knomosis export-action-proof: idx {idx} is not inside \
+                    batch [{prevEnd}, {endIdx}) of a {entries.length}-entry log"
+      pure 2
+    | some binding =>
+      match entries[idx]? with
+      | none =>
+        IO.eprintln "knomosis export-action-proof: internal error (binding built but list access failed)"
+        pure 1
+      | some entry =>
+        IO.println
+          (LegalKernel.FaultProof.TerminateBundle.formatActionProofExportJson
+            binding entry)
+        pure 0
+  | _, _, _ =>
+    IO.eprintln s!"knomosis export-action-proof: arguments '{prevEndStr}' \
+                  '{endStr}' '{idxStr}' are not Nats"
+    pure 2
 
 /-- Format a `WithdrawalProof` as a hex-encoded summary string —
     leaf bytes + index + 64 sibling hashes.  Suitable for piping to
@@ -761,7 +910,9 @@ def cmdHelp : IO UInt32 := do
   IO.println "  knomosis [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID"
   IO.println "  knomosis [GLOBAL_FLAGS] replay-up-to      LOG IDX"
   IO.println "  knomosis [GLOBAL_FLAGS] export-cell-proofs LOG IDX SIGNER"
-  IO.println "  knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX"
+  IO.println "  knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX [PREV_END END]"
+  IO.println "  knomosis [GLOBAL_FLAGS] export-batch      LOG PREV_END END"
+  IO.println "  knomosis [GLOBAL_FLAGS] export-action-proof LOG PREV_END END IDX"
   IO.println "  knomosis [GLOBAL_FLAGS] extract-events    --log LOG"
   IO.println "  knomosis gas-pool-demo"
   IO.println "  knomosis help"
@@ -848,6 +999,11 @@ def cmdHelp : IO UInt32 := do
   IO.println "  ID        a `WithdrawalId` (Nat) to look up in the snapshot."
   IO.println "  IDX       a `LogIndex` (Nat) for the replay-up-to subcommand."
   IO.println "  SIGNER    an `ActorId` (Nat) for the export-cell-proofs subcommand."
+  IO.println "  PREV_END  a batch's exclusive lower bound: the entry count already"
+  IO.println "            covered by earlier submissions (Workstream SB).  The"
+  IO.println "            batch covers log indices [PREV_END, END)."
+  IO.println "  END       the batch's exclusive upper bound (= its covered entry"
+  IO.println "            count, and the L1 record's index)."
   IO.println ""
   IO.println "See docs/abi.md for the on-disk and on-wire byte layouts."
   pure 0
@@ -1317,6 +1473,18 @@ def main (args : List String) : IO UInt32 := do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
     cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId genesis gasPoolCfg
+  | ["export-terminate-bundle", log, idxStr, prevEndStr, endStr] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId genesis
+      gasPoolCfg (some (prevEndStr, endStr))
+  | ["export-batch", log, prevEndStr, endStr] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdExportBatch (System.FilePath.mk log) prevEndStr endStr genesis gasPoolCfg
+  | ["export-action-proof", log, prevEndStr, endStr, idxStr] => do
+    warnIfFallbackHash allowFallbackHash
+    cmdExportActionProof (System.FilePath.mk log) prevEndStr endStr idxStr
   | ["extract-events", "--log", log] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?

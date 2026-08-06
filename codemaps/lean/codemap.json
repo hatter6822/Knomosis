@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7c4528eeda36fb11978d5542296639e2ea0b5d279c97d3724e45dfb07c045eff"
+    "source_digest": "358fd445e3c43ebd906acc1891ea4c9e5ce2852fedfc1c365c115bf0d688d7fa"
   },
   "summary": {
-    "module_count": 344,
-    "declaration_count": 6029
+    "module_count": 346,
+    "declaration_count": 6061
   },
   "modules": [
     {
@@ -602,6 +602,7 @@
             "proportionalDilute",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -629,6 +630,7 @@
             "poolActor",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -691,6 +693,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -823,6 +826,7 @@
             "poolActor",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -1859,6 +1863,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -2849,6 +2854,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "step_impl",
             "topUpActionBudget",
@@ -3028,6 +3034,7 @@
             "reclaimAmmReserves",
             "refundConsumeExtra",
             "refundConsumeExtra_eq_zero_of_ne_refund",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -3093,6 +3100,7 @@
             "poolActor",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -3284,6 +3292,7 @@
             "reclaimAmmReserves",
             "refundConsumeExtra",
             "refundConsumeExtra_eq_zero_of_ne_refund",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -3773,6 +3782,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -3945,6 +3955,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -3978,6 +3989,7 @@
             "policy",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -4276,7 +4288,8 @@
             "Authority",
             "LegalKernel",
             "RegistryPreserving",
-            "ResourceId"
+            "ResourceId",
+            "reserveSwap"
           ]
         }
       ]
@@ -5797,6 +5810,7 @@
             "poolActor",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -7370,7 +7384,8 @@
           "called": [
             "Action",
             "ActorId",
-            "ammReserveActor"
+            "ammReserveActor",
+            "reserveSwap"
           ]
         },
         {
@@ -7399,7 +7414,8 @@
           "called": [
             "ActorId",
             "Amount",
-            "ResourceId"
+            "ResourceId",
+            "reserveSwap"
           ]
         },
         {
@@ -7410,7 +7426,8 @@
             "ActorId",
             "Amount",
             "ResourceId",
-            "ammReserveActor"
+            "ammReserveActor",
+            "reserveSwap"
           ]
         },
         {
@@ -7421,7 +7438,8 @@
             "ActorId",
             "Amount",
             "ResourceId",
-            "ammReserveActor"
+            "ammReserveActor",
+            "reserveSwap"
           ]
         },
         {
@@ -7432,7 +7450,8 @@
             "ActorId",
             "Amount",
             "ResourceId",
-            "ammReserveActor"
+            "ammReserveActor",
+            "reserveSwap"
           ]
         },
         {
@@ -7444,6 +7463,7 @@
             "ActorId",
             "AuthorityPolicy",
             "AuthorityPolicy.intersect",
+            "reserveSwap",
             "reserveSwapBindingPolicy",
             "reserveSwapUserBinding"
           ]
@@ -7457,6 +7477,7 @@
             "Amount",
             "AuthorityPolicy",
             "ResourceId",
+            "reserveSwap",
             "reserveSwapBindingPolicy",
             "reserveSwapBindingPolicy_rejects_third_party_user"
           ]
@@ -7669,6 +7690,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -10962,6 +10984,7 @@
             "claimBudgetRefund",
             "gasPoolActor",
             "reclaimAmmReserves",
+            "reserveSwap",
             "sender",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -11017,6 +11040,7 @@
             "proportionalDilute",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "setBalance",
@@ -13727,6 +13751,7 @@
             "policy",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "step_impl",
             "topUpActionBudget",
@@ -13983,6 +14008,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -16207,6 +16233,7 @@
             "poolActor",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -16249,6 +16276,7 @@
             "poolActor",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -16315,6 +16343,7 @@
             "proportionalDilute",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -16402,6 +16431,7 @@
             "readNatField_roundtrip",
             "readUInt64Field_roundtrip",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -16455,6 +16485,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -20369,6 +20400,7 @@
             "poolActor",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -20397,6 +20429,7 @@
             "gasResource",
             "poolActor",
             "reclaimAmmReserves",
+            "reserveSwap",
             "sender",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -21224,6 +21257,7 @@
             "proportionalDilute",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "sumOthers",
@@ -30161,6 +30195,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -30193,6 +30228,7 @@
             "proportionalDilute",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -30322,6 +30358,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -30349,6 +30386,7 @@
             "proportionalDilute",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -30857,6 +30895,7 @@
             "proportionalDilute",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -31646,6 +31685,7 @@
             "poolActor",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -31730,6 +31770,7 @@
             "poolActor",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -31938,6 +31979,7 @@
             "poolActor",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "stateBalanceReader",
@@ -32003,6 +32045,7 @@
             "productionApplyBudget",
             "receiver",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sender",
             "stateBalanceReader",
@@ -32185,24 +32228,24 @@
     {
       "module": "LegalKernel.FaultProof.TerminateBundle",
       "path": "LegalKernel/FaultProof/TerminateBundle.lean",
-      "declaration_count": 18,
+      "declaration_count": 26,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 87,
+          "line": 85,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 88,
+          "line": 86,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "TerminateBundle",
-          "line": 89,
+          "line": 87,
           "called": [
             "LegalKernel.FaultProof",
             "LegalKernel.Runtime"
@@ -32211,7 +32254,7 @@
         {
           "kind": "structure",
           "name": "TerminateBundle",
-          "line": 118,
+          "line": 116,
           "called": [
             "ActorId",
             "CellTag",
@@ -32221,7 +32264,7 @@
         {
           "kind": "def",
           "name": "buildTerminateBundle",
-          "line": 190,
+          "line": 189,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -32236,7 +32279,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_deterministic",
-          "line": 208,
+          "line": 207,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -32247,7 +32290,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_actionKind",
-          "line": 215,
+          "line": 214,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -32259,7 +32302,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_actionFields",
-          "line": 221,
+          "line": 220,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -32271,7 +32314,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_signer",
-          "line": 227,
+          "line": 226,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -32282,7 +32325,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_expectedPostCommit",
-          "line": 239,
+          "line": 238,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -32294,7 +32337,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_openedCells",
-          "line": 245,
+          "line": 244,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -32307,7 +32350,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_wire",
-          "line": 251,
+          "line": 250,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -32319,10 +32362,9 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_openedCells_tags",
-          "line": 265,
+          "line": 264,
           "called": [
             "ExtendedState",
-            "LegalKernel.Runtime.CellProofJson",
             "LogEntry",
             "buildTerminateBundle",
             "es",
@@ -32331,21 +32373,81 @@
           ]
         },
         {
+          "kind": "structure",
+          "name": "BatchBinding",
+          "line": 289,
+          "called": [
+            "SmtCellProof",
+            "actionKey",
+            "actionsRoot"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildBatchBinding",
+          "line": 323,
+          "called": [
+            "BatchBinding",
+            "LogEntry",
+            "actionKey",
+            "actionLeafValue",
+            "actionsRoot",
+            "buildActionProof",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "buildBatchBinding_none_of_out_of_range",
+          "line": 343,
+          "called": [
+            "LogEntry",
+            "buildBatchBinding",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "buildBatchBinding_actionsRoot",
+          "line": 352,
+          "called": [
+            "BatchBinding",
+            "LogEntry",
+            "actionsRoot",
+            "buildBatchBinding",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "buildBatchBinding_binds_entry",
+          "line": 372,
+          "called": [
+            "BatchBinding",
+            "LegalKernel.Runtime.CellProofJson",
+            "LogEntry",
+            "actionKey",
+            "actionLeafValue",
+            "buildBatchBinding",
+            "entries"
+          ]
+        },
+        {
           "kind": "def",
           "name": "formatUInt8",
-          "line": 285,
+          "line": 399,
           "called": []
         },
         {
           "kind": "def",
           "name": "formatUInt64",
-          "line": 289,
+          "line": 403,
           "called": []
         },
         {
           "kind": "def",
           "name": "formatOpenedCellJson",
-          "line": 298,
+          "line": 412,
           "called": [
             "CellTag",
             "bytesHex"
@@ -32354,7 +32456,7 @@
         {
           "kind": "def",
           "name": "formatOpenedCellsArray",
-          "line": 309,
+          "line": 423,
           "called": [
             "CellTag",
             "cells",
@@ -32364,12 +32466,48 @@
         },
         {
           "kind": "def",
-          "name": "formatTerminateBundleJson",
-          "line": 326,
+          "name": "formatBatchBindingFields",
+          "line": 434,
           "called": [
+            "BatchBinding",
+            "bytesHex"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "formatTerminateBundleJson",
+          "line": 469,
+          "called": [
+            "BatchBinding",
+            "TerminateBundle",
+            "bytesHex",
+            "formatBatchBindingFields",
+            "formatOpenedCellsArray",
+            "formatUInt64",
+            "formatUInt8"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "formatBatchExportJson",
+          "line": 507,
+          "called": [
+            "actionsRoot",
+            "bytesHex"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "formatActionProofExportJson",
+          "line": 525,
+          "called": [
+            "BatchBinding",
             "FaultProof",
             "LegalKernel",
+            "LogEntry",
             "TerminateBundle",
+            "actionFieldsForL1",
+            "actionKindByte",
             "bytesHex",
             "formatOpenedCellsArray",
             "formatUInt64",
@@ -33559,6 +33697,7 @@
             "getBalance_setBalance_same",
             "productionApplyBudget",
             "productionApplyBudget_base",
+            "reserveSwap",
             "setBalance",
             "stateBalanceReader",
             "step_impl"
@@ -37343,6 +37482,256 @@
             "ActorId",
             "LegalKernel",
             "State"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Laws.ReserveSwap",
+      "path": "LegalKernel/Laws/ReserveSwap.lean",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 66,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Laws",
+          "line": 67,
+          "called": [
+            "LegalKernel.Bridge"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "reserveQuote",
+          "line": 78,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "reserveSwap",
+          "line": 103,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AmountBounded",
+            "ResourceId",
+            "Transition",
+            "getBalance",
+            "reserveQuote",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_no_reserve_drain",
+          "line": 156,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "reserveQuote",
+            "reserveSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_k_nondecreasing",
+          "line": 169,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "reserveQuote",
+            "reserveSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_min_out_honoured",
+          "line": 185,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "reserveQuote",
+            "reserveSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "totalSupply_setBalance_other",
+          "line": 201,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_other_resource_untouched",
+          "line": 210,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "reserveSwap",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_does_not_touch_other_resources",
+          "line": 232,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "reserveSwap",
+            "reserveSwap_other_resource_untouched",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_other_actor_untouched",
+          "line": 246,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "reserveSwap",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "swap_leg_arithmetic",
+          "line": 275,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_conserves_from",
+          "line": 285,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "getBalance",
+            "reserveSwap",
+            "setBalance",
+            "step_impl",
+            "swap_leg_arithmetic",
+            "totalSupply_setBalance",
+            "totalSupply_setBalance_other"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_conserves_to",
+          "line": 337,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "reserveQuote",
+            "reserveSwap",
+            "reserveSwap_no_reserve_drain",
+            "setBalance",
+            "step_impl",
+            "swap_leg_arithmetic",
+            "totalSupply_setBalance",
+            "totalSupply_setBalance_other"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "reserveSwap_isConservative",
+          "line": 470,
+          "called": [
+            "ActorId",
+            "Amount",
+            "IsConservative",
+            "ResourceId",
+            "TotalSupply",
+            "reserveSwap",
+            "reserveSwap_conserves_from",
+            "reserveSwap_conserves_to",
+            "reserveSwap_other_resource_untouched"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "reserveSwap_localTo",
+          "line": 491,
+          "called": [
+            "ActorId",
+            "Amount",
+            "LocalTo",
+            "ResourceId",
+            "reserveSwap",
+            "reserveSwap_does_not_touch_other_resources"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reserveSwap_freezePreserving",
+          "line": 510,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "ResourceId",
+            "reserveSwap",
+            "reserveSwap_other_resource_untouched"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "reserveSwap_freezePreserving_empty",
+          "line": 526,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "Laws",
+            "LegalKernel",
+            "ResourceId",
+            "reserveSwap",
+            "reserveSwap_freezePreserving"
           ]
         }
       ]
@@ -50958,6 +51347,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sampleDispute",
             "sampleVerdict",
@@ -55429,6 +55819,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "sampleAddr",
             "sampleDispute",
@@ -55455,6 +55846,7 @@
             "mint",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "reserveSwap",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -58891,6 +59283,7 @@
             "base",
             "dummySig",
             "extractEvents",
+            "reserveSwap",
             "setBalance",
             "step_impl"
           ]
@@ -58908,6 +59301,7 @@
             "base",
             "dummySig",
             "extractEvents",
+            "reserveSwap",
             "setBalance",
             "step_impl"
           ]
@@ -63122,6 +63516,68 @@
             "reclaim_inadmissible_while_amm_enabled",
             "setBalance",
             "step_impl"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Laws.ReserveSwap",
+      "path": "LegalKernel/Test/Laws/ReserveSwap.lean",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Laws.ReserveSwapTests",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "fixture",
+          "line": 42,
+          "called": [
+            "State",
+            "emptyState",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "expectedQuote",
+          "line": 48,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 51,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "IsConservative",
+            "LegalKernel.Test.Laws.ReserveSwapTests",
+            "LocalTo",
+            "ResourceId",
+            "State",
+            "TestCase",
+            "TotalSupply",
+            "assert",
+            "assertEq",
+            "emptyState",
+            "expectedQuote",
+            "fixture",
+            "getBalance",
+            "reserveQuote",
+            "reserveSwap",
+            "reserveSwap_conserves_from",
+            "reserveSwap_conserves_to",
+            "reserveSwap_k_nondecreasing",
+            "reserveSwap_min_out_honoured",
+            "reserveSwap_no_reserve_drain",
+            "setBalance",
+            "step_impl",
+            "transfer"
           ]
         }
       ]
@@ -73164,7 +73620,7 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 45,
+      "declaration_count": 47,
       "declarations": [
         {
           "kind": "def",
@@ -73388,7 +73844,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 658,
+          "line": 667,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -73400,8 +73856,29 @@
         },
         {
           "kind": "def",
+          "name": "cmdExportBatch",
+          "line": 770,
+          "called": [
+            "ExtendedState",
+            "demoGenesis",
+            "entries",
+            "genesis",
+            "readAllEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cmdExportActionProof",
+          "line": 825,
+          "called": [
+            "entries",
+            "readAllEntries"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 707,
+          "line": 856,
           "called": [
             "formatHashHex"
           ]
@@ -73409,7 +73886,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 722,
+          "line": 871,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -73419,19 +73896,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 744,
+          "line": 893,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 857,
+          "line": 1013,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 866,
+          "line": 1022,
           "called": [
             "hexCharToNibble"
           ]
@@ -73439,19 +73916,19 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 905,
+          "line": 1061,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 916,
+          "line": 1072,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 931,
+          "line": 1087,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -73473,7 +73950,7 @@
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 990,
+          "line": 1146,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -73489,7 +73966,7 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 1023,
+          "line": 1179,
           "called": [
             "actionCost",
             "deploymentId",
@@ -73499,13 +73976,13 @@
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 1079,
+          "line": 1235,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 1090,
+          "line": 1246,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -73514,7 +73991,7 @@
         {
           "kind": "def",
           "name": "gasPoolConfig?",
-          "line": 1106,
+          "line": 1262,
           "called": [
             "GlobalFlags",
             "maxDrainPerActionBold",
@@ -73524,7 +74001,7 @@
         {
           "kind": "def",
           "name": "ammReserveConfig?",
-          "line": 1118,
+          "line": 1274,
           "called": [
             "GlobalFlags"
           ]
@@ -73532,7 +74009,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 1129,
+          "line": 1285,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -73542,7 +74019,7 @@
         {
           "kind": "def",
           "name": "policy",
-          "line": 1147,
+          "line": 1303,
           "called": [
             "AuthorityPolicy",
             "GlobalFlags",
@@ -73553,7 +74030,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 1157,
+          "line": 1313,
           "called": [
             "GlobalFlags"
           ]
@@ -73561,7 +74038,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 1164,
+          "line": 1320,
           "called": [
             "GlobalFlags"
           ]
@@ -73569,7 +74046,7 @@
         {
           "kind": "def",
           "name": "refundRateConfig",
-          "line": 1170,
+          "line": 1326,
           "called": [
             "GlobalFlags"
           ]
@@ -73577,7 +74054,7 @@
         {
           "kind": "def",
           "name": "refundRate",
-          "line": 1177,
+          "line": 1333,
           "called": [
             "GlobalFlags",
             "ResourceId"
@@ -73586,7 +74063,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 1188,
+          "line": 1344,
           "called": [
             "GlobalFlags"
           ]
@@ -73594,7 +74071,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 1204,
+          "line": 1360,
           "called": [
             "GlobalFlags",
             "actionCost",
@@ -73607,15 +74084,17 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 1229,
+          "line": 1385,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 1240,
+          "line": 1396,
           "called": [
             "cmdBootstrap",
+            "cmdExportActionProof",
+            "cmdExportBatch",
             "cmdExportCellProofs",
             "cmdExportTerminateBundle",
             "cmdExtractEvents",
@@ -73693,7 +74172,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 230,
+          "line": 231,
           "called": [
             "runAll"
           ]
