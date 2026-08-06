@@ -791,9 +791,17 @@ mod tests {
         let chain = push_linear_chain(&mut source, 100, 5, 0x10);
         source.set_latest(104);
 
-        // Synthesise the two logs at block 102.
+        // Synthesise the two logs at block 102.  The batched
+        // StateRootSubmitted carries a 96-byte data payload:
+        // stateCommit ++ prevEndIndex ++ actionsRoot.
         let mut state_root_data = Vec::new();
         state_root_data.extend_from_slice(&[0x77u8; 32]); // commit
+        state_root_data.extend_from_slice(&{
+            let mut w = [0u8; 32];
+            w[24..32].copy_from_slice(&90u64.to_be_bytes());
+            w
+        }); // prevEndIndex
+        state_root_data.extend_from_slice(&[0x78u8; 32]); // actionsRoot
         let state_root_log = RawLog {
             address: state_root_contract,
             topics: vec![

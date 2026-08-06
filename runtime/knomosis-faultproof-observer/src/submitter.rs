@@ -106,11 +106,20 @@ impl MethodSelector {
             // `solidity/src/contracts/KnomosisFaultProofGame.sol`):
             // `terminateOnSingleStep(uint256 gameId, uint8 actionKind,
             //                        bytes actionFields, uint64 signer,
+            //                        bytes actionSig, bytes actionProof,
             //                        OpenedCell[] opened,
             //                        bytes gapMask, bytes siblings)`
             // `KnomosisStepVMRoot::OpenedCell`'s canonical ABI tuple is
             // `(uint8, uint256, uint256, bytes)`: the cell's identity
             // and its proven PRE-state value.
+            //
+            // `actionSig` + `actionProof` are the BATCH BINDING
+            // (Workstream SB ruling R7): the disputed action's fixed
+            // 65-byte signature — the leaf commit hashes it — and the
+            // SMT inclusion wire (`bitmask(32) ‖ siblings`) opening
+            // the leaf at the disputed step's index under the batch
+            // record's actions root.  Without them the contract
+            // reverts `ActionNotInBatch` before the step VM runs.
             //
             // **The per-opening path is gone**, and its absence is the
             // point.  The bundle is a DEDUPLICATING PRE-ROOT
@@ -135,7 +144,7 @@ impl MethodSelector {
             // `runtime/tests/cross-stack/method_selectors.json`, so a
             // signature drift breaks the build rather than the game.
             Self::TerminateOnSingleStepFull => {
-                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes)[],bytes,bytes)"
+                "terminateOnSingleStep(uint256,uint8,bytes,uint64,bytes,bytes,(uint8,uint256,uint256,bytes)[],bytes,bytes)"
             }
             Self::ClaimTimeout => "claimTimeout(uint256)",
         }
@@ -162,30 +171,39 @@ pub enum SubmitError {
     #[error("cannot encode calldata for HonestMove::NoMove")]
     NoMove,
 
-    /// The honest move is `TerminateOnSingleStep` but the
-    /// production submitter's calldata builder is incomplete:
-    /// the L1 `KnomosisFaultProofGame.terminateOnSingleStep(uint256,
-    /// uint8, bytes, uint64, CellProof[], bytes32)` takes the
-    /// full action variant + cell-proof bundle, which requires
-    /// L1 step-VM cross-stack coherence across all 19 `Action`
-    /// variants — currently proven only for Transfer + Mint via
-    /// the `step_vm.json` cross-stack fixture.  See
-    /// `docs/planning/step_vm_coherence_plan.md` (workstream
-    /// SVC) for the engineering plan that closes this gap.  Until
-    /// SVC lands, `encode_calldata` for `TerminateOnSingleStep`
-    /// refuses to silently produce a calldata that would revert
-    /// on-chain at the L1 contract's selector-dispatch layer.
-    /// The minimum-form `encode_terminate_calldata` helper is
-    /// available for integration smoke tests.
+    /// The honest move is `TerminateOnSingleStep` but no
+    /// [`crate::strategy::TerminateBundle`] was supplied: the L1's
+    /// full-form `terminateOnSingleStep(uint256, uint8, bytes,
+    /// uint64, bytes, bytes, OpenedCell[], bytes, bytes)` takes the
+    /// action variant, its batch binding, and the multiproof
+    /// frontier — none of which the observer can synthesise from
+    /// its local game state alone.  `encode_calldata` therefore
+    /// refuses rather than silently producing calldata that would
+    /// revert at the L1 selector-dispatch layer; callers route
+    /// through [`encode_calldata_with_bundle`] with a bundle from
+    /// the [`crate::strategy::TerminateBundleOracle`].
     #[error(
         "TerminateOnSingleStep calldata requires the full \
-         (actionKind, actionFields, signer, cellProofs) form \
-         which is gated on the SVC cross-stack-coherence \
-         workstream (see docs/planning/step_vm_coherence_plan.md); \
-         the off-chain observer cannot synthesise it from local \
-         state alone"
+         (actionKind, actionFields, signer, actionSig, actionProof, \
+         openedCells) bundle from the TerminateBundleOracle; the \
+         off-chain observer cannot synthesise it from local state \
+         alone"
     )]
     TerminateNotImplemented,
+
+    /// The terminate bundle carries no batch binding (Workstream SB
+    /// ruling R7): the batched L1 `terminateOnSingleStep`
+    /// authenticates the disputed action by inclusion proof against
+    /// the batch's actions root, so calldata built from an unbound
+    /// bundle reverts `ActionNotInBatch` on-chain.  Re-export the
+    /// bundle with the batch bounds
+    /// (`knomosis export-terminate-bundle LOG IDX PREV_END END`).
+    #[error(
+        "terminate bundle carries no batch binding (actionSig + \
+         actionProof); the batched terminateOnSingleStep requires \
+         it — re-export the bundle with the batch bounds"
+    )]
+    MissingBatchBinding,
 
     /// Submission was rejected by the L1 RPC (e.g., invalid
     /// nonce, out-of-gas estimate).
@@ -290,11 +308,31 @@ pub fn encode_calldata_with_bundle(
             if b.expected_post_commit != expected_post_commit {
                 return Err(SubmitError::BundleCommitMismatch);
             }
+            // The batch binding is REQUIRED (Workstream SB ruling
+            // R7): fail closed here rather than broadcast calldata
+            // the contract will refuse with `ActionNotInBatch`.
+            // `parse_terminate_bundle_json` guarantees the fields
+            // are all-or-nothing and well-formed, so one probe
+            // suffices.
+            let (Some(action_sig), Some(action_gap_mask), Some(action_siblings)) =
+                (&b.action_sig, &b.action_gap_mask, &b.action_siblings)
+            else {
+                return Err(SubmitError::MissingBatchBinding);
+            };
+            // The L1 takes ONE `bytes actionProof` — the standard
+            // SMT wire `bitmask(32) ‖ siblings` that
+            // `ActionsRoot.verifyActionInclusion` consumes.
+            let mut action_proof =
+                Vec::with_capacity(action_gap_mask.len() + action_siblings.len());
+            action_proof.extend_from_slice(action_gap_mask);
+            action_proof.extend_from_slice(action_siblings);
             Ok(encode_terminate_full_calldata(
                 game_id,
                 b.action_kind,
                 &b.action_fields,
                 b.signer,
+                action_sig,
+                &action_proof,
                 &b.opened_cells,
                 &b.gap_mask,
                 &b.siblings,
@@ -748,8 +786,11 @@ pub enum ActionKind {
 ///     uint8 actionKind,
 ///     bytes actionFields,
 ///     uint64 signer,
-///     CellProof[] cellProofs,
-///     bytes32 claimedPostCommit
+///     bytes actionSig,
+///     bytes actionProof,
+///     OpenedCell[] opened,
+///     bytes gapMask,
+///     bytes siblings
 /// )
 /// ```
 ///
@@ -774,23 +815,28 @@ pub enum ActionKind {
 /// their ABI bounds (e.g., `signer > u64::MAX` is impossible
 /// in Rust's type system since `signer: u64`) are not validated.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn encode_terminate_full_calldata(
     game_id: u128,
     action_kind: u8,
     action_fields: &[u8],
     signer: u64,
+    action_sig: &[u8],
+    action_proof: &[u8],
     opened: &[OpenedCell],
     gap_mask: &[u8],
     siblings: &[u8],
 ) -> Vec<u8> {
-    // Head layout (7 head words, 32 bytes each = 224 bytes):
+    // Head layout (9 head words, 32 bytes each = 288 bytes):
     //   word 0: gameId              (uint256)
     //   word 1: actionKind          (uint8 in uint256 slot)
     //   word 2: actionFields offset (relative to start of args)
     //   word 3: signer              (uint64 in uint256 slot)
-    //   word 4: opened offset       (OpenedCell[])
-    //   word 5: gapMask offset      (bytes)
-    //   word 6: siblings offset     (bytes)
+    //   word 4: actionSig offset    (bytes — SB ruling R7)
+    //   word 5: actionProof offset  (bytes — bitmask ‖ siblings)
+    //   word 6: opened offset       (OpenedCell[])
+    //   word 7: gapMask offset      (bytes)
+    //   word 8: siblings offset     (bytes)
     //
     // The chained form carried a `policyOpening` struct and a
     // `writeOpenings` array of six-word tuples.  Under a multiproof
@@ -802,24 +848,29 @@ pub fn encode_terminate_full_calldata(
     // recomputes the post-commit and compares it against the on-chain
     // `g.high.commit`.  It rides the bundle only to feed the caller's
     // `BundleCommitMismatch` cross-oracle check.
-    const HEAD_WORDS: usize = 7;
+    const HEAD_WORDS: usize = 9;
     const WORD: usize = 32;
     let head_bytes: usize = HEAD_WORDS * WORD;
 
     let action_fields_tail = encode_dynamic_bytes(action_fields);
+    let action_sig_tail = encode_dynamic_bytes(action_sig);
+    let action_proof_tail = encode_dynamic_bytes(action_proof);
     let opened_tail = encode_opened_cell_array(opened);
     let gap_mask_tail = encode_dynamic_bytes(gap_mask);
     let siblings_tail = encode_dynamic_bytes(siblings);
 
     let action_fields_offset: u128 = head_bytes as u128;
-    let opened_offset: u128 = (head_bytes + action_fields_tail.len()) as u128;
-    let gap_mask_offset: u128 = (head_bytes + action_fields_tail.len() + opened_tail.len()) as u128;
-    let siblings_offset: u128 =
-        (head_bytes + action_fields_tail.len() + opened_tail.len() + gap_mask_tail.len()) as u128;
+    let action_sig_offset: u128 = action_fields_offset + action_fields_tail.len() as u128;
+    let action_proof_offset: u128 = action_sig_offset + action_sig_tail.len() as u128;
+    let opened_offset: u128 = action_proof_offset + action_proof_tail.len() as u128;
+    let gap_mask_offset: u128 = opened_offset + opened_tail.len() as u128;
+    let siblings_offset: u128 = gap_mask_offset + gap_mask_tail.len() as u128;
 
     let mut out = Vec::with_capacity(
         4 + head_bytes
             + action_fields_tail.len()
+            + action_sig_tail.len()
+            + action_proof_tail.len()
             + opened_tail.len()
             + gap_mask_tail.len()
             + siblings_tail.len(),
@@ -829,10 +880,14 @@ pub fn encode_terminate_full_calldata(
     out.extend_from_slice(&u256_be(u128::from(action_kind)));
     out.extend_from_slice(&u256_be(action_fields_offset));
     out.extend_from_slice(&u256_be(u128::from(signer)));
+    out.extend_from_slice(&u256_be(action_sig_offset));
+    out.extend_from_slice(&u256_be(action_proof_offset));
     out.extend_from_slice(&u256_be(opened_offset));
     out.extend_from_slice(&u256_be(gap_mask_offset));
     out.extend_from_slice(&u256_be(siblings_offset));
     out.extend_from_slice(&action_fields_tail);
+    out.extend_from_slice(&action_sig_tail);
+    out.extend_from_slice(&action_proof_tail);
     out.extend_from_slice(&opened_tail);
     out.extend_from_slice(&gap_mask_tail);
     out.extend_from_slice(&siblings_tail);
@@ -1386,7 +1441,7 @@ mod tests {
 
     /// Full-form `terminateOnSingleStep` calldata layout
     /// verification.  Encodes a tiny example with one `OpenedCell` and
-    /// verifies the head size, the four dynamic offsets and their
+    /// verifies the head size, the six dynamic offsets and their
     /// targets — the numbers a hand-written ABI encoder gets wrong.
     #[test]
     fn encode_terminate_full_calldata_shape() {
@@ -1398,6 +1453,8 @@ mod tests {
             key_b: 11,
             pre_value: vec![0xAA, 0xBB, 0xCC],
         };
+        let action_sig = vec![0x11u8; 65];
+        let action_proof = vec![0xDDu8; 64]; // bitmask(32) ‖ 1 sibling
         let gap_mask = vec![0u8; 33];
         let siblings = vec![0xEEu8; 64];
         let bytes = encode_terminate_full_calldata(
@@ -1405,18 +1462,22 @@ mod tests {
             ActionKind::Transfer as u8,
             &[1, 2, 3, 4],
             999_u64,
+            &action_sig,
+            &action_proof,
             std::slice::from_ref(&cell),
             &gap_mask,
             &siblings,
         );
 
-        // 4-byte selector + 7×32-byte head (224) + tails:
+        // 4-byte selector + 9×32-byte head (288) + tails:
         //   actionFields:  32 (length) + 32 (4 bytes padded)      =  64
+        //   actionSig:     32 (length) + 96 (65 bytes padded)     = 128
+        //   actionProof:   32 (length) + 64                       =  96
         //   opened:        32 (length) + 32 (1 pointer) + 192     = 256
         //     per cell:    4×32 head + 32 (length) + 32 (padded)  = 192
         //   gapMask:       32 (length) + 64 (33 bytes padded)     =  96
         //   siblings:      32 (length) + 64                       =  96
-        assert_eq!(bytes.len(), 4 + 224 + 64 + 256 + 96 + 96);
+        assert_eq!(bytes.len(), 4 + 288 + 64 + 128 + 96 + 256 + 96 + 96);
 
         assert_eq!(
             &bytes[0..4],
@@ -1428,7 +1489,7 @@ mod tests {
         expected_gid[31] = 123;
         assert_eq!(&bytes[4..36], &expected_gid);
 
-        // The four dynamic offsets, each relative to the start of the
+        // The six dynamic offsets, each relative to the start of the
         // args.  Read them and follow each to its length word — an
         // off-by-one here produces calldata the L1 decodes into
         // something else entirely rather than rejecting.
@@ -1440,12 +1501,26 @@ mod tests {
             v
         };
         let args = &bytes[4..];
-        assert_eq!(word(2), 224, "actionFields offset is the head size");
-        assert_eq!(word(4), 224 + 64, "opened offset follows actionFields");
-        assert_eq!(word(5), 224 + 64 + 256, "gapMask offset follows opened");
+        assert_eq!(word(2), 288, "actionFields offset is the head size");
+        assert_eq!(word(4), 288 + 64, "actionSig offset follows actionFields");
+        assert_eq!(
+            word(5),
+            288 + 64 + 128,
+            "actionProof offset follows actionSig"
+        );
         assert_eq!(
             word(6),
-            224 + 64 + 256 + 96,
+            288 + 64 + 128 + 96,
+            "opened offset follows actionProof"
+        );
+        assert_eq!(
+            word(7),
+            288 + 64 + 128 + 96 + 256,
+            "gapMask offset follows opened"
+        );
+        assert_eq!(
+            word(8),
+            288 + 64 + 128 + 96 + 256 + 96,
             "siblings offset follows gapMask"
         );
         let len_at = |off: usize| -> usize {
@@ -1456,11 +1531,16 @@ mod tests {
             v
         };
         assert_eq!(len_at(word(2)), 4, "actionFields length");
-        assert_eq!(len_at(word(4)), 1, "opened length");
-        assert_eq!(len_at(word(5)), 33, "gapMask length");
-        assert_eq!(len_at(word(6)), 64, "siblings length");
-        // ...and the sibling payload survives the round trip.
-        assert_eq!(&args[word(6) + 32..word(6) + 96], &siblings[..]);
+        assert_eq!(len_at(word(4)), 65, "actionSig length");
+        assert_eq!(len_at(word(5)), 64, "actionProof length");
+        assert_eq!(len_at(word(6)), 1, "opened length");
+        assert_eq!(len_at(word(7)), 33, "gapMask length");
+        assert_eq!(len_at(word(8)), 64, "siblings length");
+        // ...and the dynamic payloads survive the round trip: the
+        // signature (padded to 96), the proof, and the siblings.
+        assert_eq!(&args[word(4) + 32..word(4) + 97], &action_sig[..]);
+        assert_eq!(&args[word(5) + 32..word(5) + 96], &action_proof[..]);
+        assert_eq!(&args[word(8) + 32..word(8) + 96], &siblings[..]);
     }
 
     /// `MethodSelector::TerminateOnSingleStepFull` produces a
@@ -1996,6 +2076,17 @@ mod tests {
             }],
             gap_mask: vec![0u8; 32],
             siblings: vec![],
+            // The batch binding (Workstream SB ruling R7): the
+            // batched terminate calldata is refused without it.
+            prev_end: Some(0),
+            end_index: Some(1),
+            batch_idx: Some(0),
+            actions_root: Some([0xA0; 32]),
+            action_key: Some([0xA1; 32]),
+            leaf_commit: Some([0xA2; 32]),
+            action_sig: Some(vec![0x11; 65]),
+            action_gap_mask: Some(vec![0u8; 32]),
+            action_siblings: Some(vec![0xBB; 32]),
         }
     }
 
@@ -2066,5 +2157,84 @@ mod tests {
             Some(&bundle),
         );
         assert!(matches!(result, Err(SubmitError::BundleCommitMismatch)));
+    }
+
+    /// `encode_calldata_with_bundle` REFUSES a bundle without the
+    /// batch binding (Workstream SB ruling R7): the batched
+    /// `terminateOnSingleStep` authenticates the disputed action by
+    /// inclusion proof, so calldata built from an unbound bundle
+    /// would revert `ActionNotInBatch` on-chain — fail closed here.
+    #[test]
+    fn encode_with_bundle_refuses_a_bundle_without_the_batch_binding() {
+        let c = commit(7);
+        let mut bundle = sample_bundle(c);
+        bundle.prev_end = None;
+        bundle.end_index = None;
+        bundle.batch_idx = None;
+        bundle.actions_root = None;
+        bundle.action_key = None;
+        bundle.leaf_commit = None;
+        bundle.action_sig = None;
+        bundle.action_gap_mask = None;
+        bundle.action_siblings = None;
+        let result = crate::submitter::encode_calldata_with_bundle(
+            10,
+            HonestMove::TerminateOnSingleStep {
+                expected_post_commit: c,
+            },
+            Some(&bundle),
+        );
+        assert!(matches!(result, Err(SubmitError::MissingBatchBinding)));
+    }
+
+    /// The bundle's binding lands in the calldata: `actionSig` is
+    /// the bundle's signature verbatim and `actionProof` is the
+    /// `bitmask ‖ siblings` concatenation, at the offsets the
+    /// 9-word head declares.
+    #[test]
+    fn encode_with_bundle_embeds_the_batch_binding() {
+        let c = commit(7);
+        let bundle = sample_bundle(c);
+        let calldata = crate::submitter::encode_calldata_with_bundle(
+            10,
+            HonestMove::TerminateOnSingleStep {
+                expected_post_commit: c,
+            },
+            Some(&bundle),
+        )
+        .unwrap();
+        let word = |i: usize| -> usize {
+            let mut v = 0usize;
+            for b in &calldata[4 + i * 32..4 + (i + 1) * 32] {
+                v = (v << 8) | *b as usize;
+            }
+            v
+        };
+        let args = &calldata[4..];
+        let len_at = |off: usize| -> usize {
+            let mut v = 0usize;
+            for b in &args[off..off + 32] {
+                v = (v << 8) | *b as usize;
+            }
+            v
+        };
+        // Word 4: actionSig (65 bytes, verbatim).
+        let sig_off = word(4);
+        assert_eq!(len_at(sig_off), 65);
+        assert_eq!(
+            &args[sig_off + 32..sig_off + 97],
+            &bundle.action_sig.clone().unwrap()[..]
+        );
+        // Word 5: actionProof = bitmask(32) ‖ siblings(32).
+        let proof_off = word(5);
+        assert_eq!(len_at(proof_off), 64);
+        assert_eq!(
+            &args[proof_off + 32..proof_off + 64],
+            &bundle.action_gap_mask.clone().unwrap()[..]
+        );
+        assert_eq!(
+            &args[proof_off + 64..proof_off + 96],
+            &bundle.action_siblings.clone().unwrap()[..]
+        );
     }
 }

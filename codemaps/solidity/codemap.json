@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "54d16e22a58fc80638384e91ab8f4c13f6c7052c0fcad024336179a53cfb7d31"
+    "source_digest": "9cf574f819a61dafc29a12c48484ab8b889cdc5442c1198c1abde838c0f21747"
   },
   "summary": {
-    "module_count": 107,
-    "declaration_count": 2213
+    "module_count": 108,
+    "declaration_count": 2225
   },
   "modules": [
     {
@@ -10839,6 +10839,133 @@
           "line": 461,
           "called": [
             "assertEveryDeclaredErrorIsDescribed"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "BatchGame.t",
+      "path": "solidity/test/CrossCheck/BatchGame.t.sol",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "BatchGameCrossCheck",
+          "line": 41,
+          "called": [
+            "CrossCheckFramework",
+            "KnomosisFaultProofGame",
+            "KnomosisStateRootSubmission",
+            "KnomosisStepVMRoot",
+            "probeGapMask",
+            "probePostRoot",
+            "probeSiblings",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_loadProbe",
+          "line": 75,
+          "called": [
+            "probeGapMask",
+            "probePostRoot",
+            "probeSiblings",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 100,
+          "called": [
+            "KnomosisFaultProofGame",
+            "KnomosisStateRootSubmission",
+            "KnomosisStepVMRoot",
+            "_loadProbe",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_cells",
+          "line": 143,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_testSig",
+          "line": 154,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_actionLeafCommit",
+          "line": 165,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_singleLeafActionsRoot",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_singleEntryProof",
+          "line": 200,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_probeActionsRoot",
+          "line": 206,
+          "called": [
+            "_actionLeafCommit",
+            "_singleLeafActionsRoot",
+            "_testSig"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_rollPastInterval",
+          "line": 213,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_honest_sequencer_defends_a_batch_end_to_end",
+          "line": 234,
+          "called": [
+            "_cells",
+            "_probeActionsRoot",
+            "_rollPastInterval",
+            "_singleEntryProof",
+            "_skipWithReason",
+            "_testSig",
+            "fixtureExists",
+            "probeGapMask",
+            "probePostRoot",
+            "probeSiblings",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_challenger_win_reverts_the_batch_then_recovery_resubmits",
+          "line": 326,
+          "called": [
+            "_cells",
+            "_probeActionsRoot",
+            "_rollPastInterval",
+            "_singleEntryProof",
+            "_skipWithReason",
+            "_testSig",
+            "fixtureExists",
+            "probeGapMask",
+            "probePostRoot",
+            "probeSiblings",
+            "sequencer"
           ]
         }
       ]

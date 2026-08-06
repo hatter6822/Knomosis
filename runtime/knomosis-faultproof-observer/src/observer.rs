@@ -169,6 +169,14 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// [`Self::with_state_reader`].
     state_reader: Option<Box<dyn GameStateReader + Send + Sync>>,
     games: HashMap<u128, GameRecord>,
+    /// In-memory mirror of the persisted batch records (Workstream
+    /// SB ruling R9), keyed by the batch's END index — the L1
+    /// record's key.  Populated at startup from persistence and
+    /// updated from every `StateRootSubmitted` event; a
+    /// resubmission at the same key (post-revert recovery)
+    /// overwrites.  The terminate path reads the disputed game's
+    /// batch bounds here to hand the bundle oracle.
+    batches: HashMap<u64, crate::persistence::BatchRecord>,
     /// In-memory cache of `(game_id, pivot_idx)` pairs the
     /// observer has already submitted a response for.  Populated
     /// at startup from the persisted response records; updated
@@ -295,6 +303,16 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         for rec in game_records {
             games.insert(rec.game_id, rec);
         }
+        // Restore the in-memory batch map (Workstream SB ruling R9).
+        let batch_records = persistence.list_batches().map_err(|e| {
+            ObserverError::Storage(knomosis_storage::storage::StorageError::Other(
+                e.to_string(),
+            ))
+        })?;
+        let mut batches = HashMap::new();
+        for rec in batch_records {
+            batches.insert(rec.end_index, rec);
+        }
         // Populate the in-memory pivot-dedup cache from the
         // persisted response records.  This is the O(N) cost
         // paid once at startup; subsequent dedup checks are O(1).
@@ -348,6 +366,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             terminate_bundle_oracle: None,
             state_reader: None,
             games,
+            batches,
             submitted_pivots,
             broadcast_failures,
             iteration_pivot_inserts: Vec::new(),
@@ -599,6 +618,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             last_updated_block: block_number,
             state_known: true,
             turn_deadline: Some(observed.turn_deadline),
+            disputed_log_index: Some(observed.disputed_log_index),
         };
         self.games.insert(game_id, new_rec.clone());
         let mut batch = PersistBatch::new();
@@ -1122,12 +1142,32 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 block_number,
                 ..
             } => self.handle_game_settled(*game_id, *status, *block_number, batch),
-            GameEvent::StateRootSubmitted { .. } => {
-                // State-root submissions are monitored separately
-                // by the fault-detection pipeline (RH-G.4 cell-
-                // proof generator); they don't directly affect a
-                // game state.  Record only.
-                Ok(EventHandling::Skipped)
+            GameEvent::StateRootSubmitted {
+                log_index_claim,
+                state_commit,
+                prev_end_index,
+                actions_root,
+                block_number,
+                ..
+            } => {
+                // A batch submission does not affect any game's
+                // state machine, but its bounds + actions root are
+                // what the terminate path must hand the bundle
+                // oracle (Workstream SB ruling R9) — record the
+                // batch, keyed by its end index.  A resubmission at
+                // the same key (post-revert recovery) overwrites,
+                // which is exactly the registry's own overwrite
+                // rule.
+                let rec = crate::persistence::BatchRecord {
+                    end_index: *log_index_claim,
+                    prev_end_index: *prev_end_index,
+                    actions_root: *actions_root,
+                    state_commit: *state_commit,
+                    block_number: *block_number,
+                };
+                self.batches.insert(rec.end_index, rec.clone());
+                batch.upsert_batch(rec);
+                Ok(EventHandling::Recorded)
             }
         }
     }
@@ -1229,8 +1269,11 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             me: self.config.play_as,
             last_updated_block: block_number,
             state_known: false,
-            // Unknown until the hydrating contract read lands.
+            // Unknown until the hydrating contract read lands —
+            // the event carries neither the deadline nor the
+            // disputed log index.
             turn_deadline: None,
+            disputed_log_index: None,
         };
         self.games.insert(game_id, rec.clone());
         batch.upsert_game(rec);
@@ -1942,7 +1985,53 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // For a single-step range `[low, high] = [n, n+1]`, the
         // action in dispute is `entries[n]`, i.e. `range.low.idx`.
         let pivot = rec.state.range.low.idx;
-        let bundle = match bundle_oracle.terminate_bundle_at(pivot) {
+        // The batch binding (Workstream SB ruling R7): terminate
+        // calldata must carry the disputed action's signature +
+        // inclusion proof against the DISPUTED batch record's
+        // actions root, so the oracle needs the batch bounds.  The
+        // disputed record's key is the game's immutable
+        // `disputedLogIndex` (learned at hydration), and the bounds
+        // come from the observer's own batch store (fed by the
+        // `StateRootSubmitted` events).  Without either, defer:
+        // calldata built without the binding reverts
+        // `ActionNotInBatch` on-chain.
+        let Some(disputed_end) = rec.disputed_log_index else {
+            warn!(
+                game_id = %rec.game_id,
+                pivot_idx = pivot,
+                "TerminateOnSingleStep deferred: the game's disputed \
+                 log index is not yet known (state not hydrated)",
+            );
+            return None;
+        };
+        let Some(batch_rec) = self.batches.get(&disputed_end) else {
+            warn!(
+                game_id = %rec.game_id,
+                disputed_end,
+                pivot_idx = pivot,
+                "TerminateOnSingleStep deferred: no batch record for \
+                 the disputed end index (StateRootSubmitted event not \
+                 yet observed)",
+            );
+            return None;
+        };
+        // Sanity: the disputed step must sit inside the batch —
+        // `initiateChallenge` anchored `low` at the batch's start,
+        // so a violation here means the batch store and the game
+        // disagree (e.g. a stale record from before a re-org).
+        if pivot < batch_rec.prev_end_index || pivot >= batch_rec.end_index {
+            warn!(
+                game_id = %rec.game_id,
+                pivot_idx = pivot,
+                batch_prev_end = batch_rec.prev_end_index,
+                batch_end = batch_rec.end_index,
+                "TerminateOnSingleStep deferred: disputed step index \
+                 outside the recorded batch bounds",
+            );
+            return None;
+        }
+        let bounds = (batch_rec.prev_end_index, batch_rec.end_index);
+        let bundle = match bundle_oracle.terminate_bundle_at(pivot, Some(bounds)) {
             Ok(b) => b,
             Err(TerminateBundleError::Missed { idx }) => {
                 warn!(
@@ -2310,6 +2399,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: false,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let event = GameEvent::MidpointSubmitted {
@@ -2366,6 +2456,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: false,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let event = GameEvent::ResponseSubmitted {
@@ -2475,6 +2566,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: true,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
     }
@@ -2728,6 +2820,10 @@ mod tests {
                         ..s.clone()
                     },
                     turn_deadline: self.turn_deadline,
+                    // The mock hydrates games whose `high` has not
+                    // yet been reassigned by a disagree, so the
+                    // disputed record's key IS the range's high end.
+                    disputed_log_index: s.range.high.idx,
                 }),
                 None => Err(crate::state_reader::GameStateReadError::RpcTransport(
                     "no such game".to_string(),
@@ -2738,9 +2834,11 @@ mod tests {
 
     /// Wrap a bare `GameState` as the reader would return it.
     fn observed(state: GameState) -> ObservedGame {
+        let disputed_log_index = state.range.high.idx;
         ObservedGame {
             state,
             turn_deadline: u64::MAX,
+            disputed_log_index,
         }
     }
 
@@ -2766,6 +2864,7 @@ mod tests {
                 // Not yet read — the trigger fires and the
                 // confirming read decides.
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let mut states = HashMap::new();
@@ -2845,6 +2944,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: true,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let mut states = HashMap::new();
@@ -2954,6 +3054,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: false,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
     }
@@ -3057,6 +3158,7 @@ mod tests {
             last_updated_block: 100,
             state_known: false,
             turn_deadline: None,
+            disputed_log_index: None,
         };
         obs.games.insert(77, cold_game);
 
@@ -3168,6 +3270,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: false,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         // Attempt mark_state_known with WRONG deployment_id.
@@ -3237,6 +3340,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: false,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let resurrect_state = GameState {
@@ -3420,6 +3524,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: false,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let full_state = GameState {
@@ -3492,6 +3597,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: false,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let degenerate_state = GameState {
@@ -3588,6 +3694,7 @@ mod tests {
                 last_updated_block: 100,
                 state_known: true,
                 turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         // Simulate a `GameSettled` event.
@@ -3661,22 +3768,51 @@ mod tests {
         assert!(matches!(outcome, super::EventHandling::Skipped));
     }
 
-    /// `StateRootSubmitted` events are skipped (recorded
-    /// separately).
+    /// `StateRootSubmitted` is RECORDED (Workstream SB ruling R9):
+    /// the batch bounds + actions root land in the in-memory map
+    /// and the persistence batch, keyed by end index — and a
+    /// resubmission at the same key (post-revert recovery)
+    /// OVERWRITES the stale record.
     #[test]
-    fn state_root_submitted_skipped() {
+    fn state_root_submitted_records_the_batch() {
         let (mut obs, _dir) = fresh_observer();
         let event = GameEvent::StateRootSubmitted {
-            log_index_claim: 1,
+            log_index_claim: 4,
             state_commit: commit(7),
             sequencer_topic: [0u8; 32],
+            prev_end_index: 1,
+            actions_root: commit(9),
             block_number: 1,
             tx_hash: [0u8; 32],
             log_index: 0,
         };
         let mut batch = PersistBatch::new();
         let outcome = obs.handle_event(&event, &mut batch).unwrap();
-        assert!(matches!(outcome, super::EventHandling::Skipped));
+        assert!(matches!(outcome, super::EventHandling::Recorded));
+        let rec = obs.batches.get(&4).expect("batch record stored");
+        assert_eq!(rec.prev_end_index, 1);
+        assert_eq!(rec.actions_root, commit(9));
+        assert_eq!(rec.state_commit, commit(7));
+        assert_eq!(batch.batches.len(), 1, "upsert queued for persistence");
+
+        // Upsert-by-end: the corrected resubmission replaces the
+        // reverted record's bounds wholesale.
+        let event2 = GameEvent::StateRootSubmitted {
+            log_index_claim: 4,
+            state_commit: commit(8),
+            sequencer_topic: [0u8; 32],
+            prev_end_index: 0,
+            actions_root: commit(10),
+            block_number: 2,
+            tx_hash: [1u8; 32],
+            log_index: 0,
+        };
+        let mut batch2 = PersistBatch::new();
+        obs.handle_event(&event2, &mut batch2).unwrap();
+        let rec2 = obs.batches.get(&4).expect("batch record still stored");
+        assert_eq!(rec2.prev_end_index, 0);
+        assert_eq!(rec2.actions_root, commit(10));
+        assert_eq!(rec2.state_commit, commit(8));
     }
 
     /// Resume-from-persistence: a fresh observer over the same
@@ -3728,6 +3864,7 @@ mod tests {
                 last_updated_block: 50,
                 state_known: true,
                 turn_deadline: None,
+                disputed_log_index: None,
             };
             obs.persistence().store_game(&rec).unwrap();
             obs.persistence().write_cursor(123).unwrap();
@@ -3871,6 +4008,17 @@ mod tests {
             }],
             gap_mask: vec![0u8; 32],
             siblings: vec![],
+            // The batch binding (Workstream SB): the batched
+            // terminate calldata cannot be built without it.
+            prev_end: Some(0),
+            end_index: Some(1),
+            batch_idx: Some(0),
+            actions_root: Some([0xAA; 32]),
+            action_key: Some([0xAB; 32]),
+            leaf_commit: Some([0xAC; 32]),
+            action_sig: Some(vec![0x11; 65]),
+            action_gap_mask: Some(vec![0u8; 32]),
+            action_siblings: Some(vec![]),
         }
     }
 
@@ -3913,6 +4061,7 @@ mod tests {
             last_updated_block: 100,
             state_known: true,
             turn_deadline: None,
+            disputed_log_index: None,
         };
         let mv = HonestMove::TerminateOnSingleStep {
             expected_post_commit: [0xAB; 32],
@@ -3957,6 +4106,7 @@ mod tests {
             last_updated_block: 100,
             state_known: true,
             turn_deadline: None,
+            disputed_log_index: None,
         };
         let mv = HonestMove::TerminateOnSingleStep {
             expected_post_commit: [0xAB; 32],
@@ -3965,7 +4115,8 @@ mod tests {
         assert!(result.is_none(), "no bundle oracle ⇒ None (deferral)");
     }
 
-    /// With a populated bundle oracle, `build_terminate_calldata`
+    /// With a populated bundle oracle, a known disputed batch, and
+    /// a hydrated disputed log index, `build_terminate_calldata`
     /// produces calldata starting with the full-form selector.
     #[test]
     fn build_terminate_calldata_with_matching_bundle_succeeds() {
@@ -3974,7 +4125,19 @@ mod tests {
         let commit = [0xCD; 32];
         // Bundle lookup uses the action-entry index (`range.low.idx`).
         oracle.insert(0, make_terminate_bundle(commit));
-        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        let mut obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        // The disputed batch [0, 1) at end index 1 — what the
+        // StateRootSubmitted event would have recorded.
+        obs.batches.insert(
+            1,
+            crate::persistence::BatchRecord {
+                end_index: 1,
+                prev_end_index: 0,
+                actions_root: [0xAA; 32],
+                state_commit: commit,
+                block_number: 90,
+            },
+        );
 
         let rec = GameRecord {
             game_id: 42,
@@ -4000,6 +4163,7 @@ mod tests {
             last_updated_block: 100,
             state_known: true,
             turn_deadline: None,
+            disputed_log_index: Some(1),
         };
         let mv = HonestMove::TerminateOnSingleStep {
             expected_post_commit: commit,
@@ -4033,7 +4197,19 @@ mod tests {
         let bundle_commit = [0xCD; 32];
         let strategy_commit = [0xAB; 32]; // Disagrees.
         oracle.insert(0, make_terminate_bundle(bundle_commit));
-        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        let mut obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        // A known disputed batch + hydrated index, so the refusal
+        // below is the COMMIT MISMATCH and not an earlier deferral.
+        obs.batches.insert(
+            1,
+            crate::persistence::BatchRecord {
+                end_index: 1,
+                prev_end_index: 0,
+                actions_root: [0xAA; 32],
+                state_commit: bundle_commit,
+                block_number: 90,
+            },
+        );
 
         let rec = GameRecord {
             game_id: 42,
@@ -4062,6 +4238,7 @@ mod tests {
             last_updated_block: 100,
             state_known: true,
             turn_deadline: None,
+            disputed_log_index: Some(1),
         };
         let mv = HonestMove::TerminateOnSingleStep {
             expected_post_commit: strategy_commit,
@@ -4071,6 +4248,112 @@ mod tests {
             result.is_none(),
             "commit-mismatch ⇒ refusal (None) per defence-in-depth",
         );
+    }
+
+    /// The batch-record shape every deferral test below perturbs:
+    /// a single-entry disputed batch `[0, 1)` at end index 1.
+    fn terminate_record_for_batch_tests(commit: [u8; 32]) -> GameRecord {
+        GameRecord {
+            game_id: 42,
+            state: GameState {
+                sequencer: 1,
+                challenger: 2,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: 0,
+                        commit: [0u8; 32],
+                    },
+                    high: Claim { idx: 1, commit },
+                },
+                pending_midpoint: None,
+                depth: 5,
+                turn: TurnSide::Sequencer,
+                sequencer_bond: 0,
+                challenger_bond: 0,
+                status: GameStatus::InProgress,
+                deployment_id: [0u8; 32],
+            },
+            me: TurnSide::Sequencer,
+            last_updated_block: 100,
+            state_known: true,
+            turn_deadline: None,
+            disputed_log_index: Some(1),
+        }
+    }
+
+    /// Without a hydrated disputed log index the terminate is
+    /// DEFERRED — calldata built without the batch binding would
+    /// revert `ActionNotInBatch` on-chain.
+    #[test]
+    fn build_terminate_calldata_defers_without_disputed_index() {
+        let (obs, _dir) = fresh_observer();
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let commit = [0xCD; 32];
+        oracle.insert(0, make_terminate_bundle(commit));
+        let mut obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        obs.batches.insert(
+            1,
+            crate::persistence::BatchRecord {
+                end_index: 1,
+                prev_end_index: 0,
+                actions_root: [0xAA; 32],
+                state_commit: commit,
+                block_number: 90,
+            },
+        );
+        let mut rec = terminate_record_for_batch_tests(commit);
+        rec.disputed_log_index = None;
+        let mv = HonestMove::TerminateOnSingleStep {
+            expected_post_commit: commit,
+        };
+        assert!(obs.build_terminate_calldata(&rec, mv).is_none());
+    }
+
+    /// Without a recorded batch for the disputed end index
+    /// (`StateRootSubmitted` not yet observed) the terminate is
+    /// DEFERRED.
+    #[test]
+    fn build_terminate_calldata_defers_without_batch_record() {
+        let (obs, _dir) = fresh_observer();
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let commit = [0xCD; 32];
+        oracle.insert(0, make_terminate_bundle(commit));
+        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        let rec = terminate_record_for_batch_tests(commit);
+        let mv = HonestMove::TerminateOnSingleStep {
+            expected_post_commit: commit,
+        };
+        assert!(obs.build_terminate_calldata(&rec, mv).is_none());
+    }
+
+    /// A batch record whose bounds do NOT contain the disputed step
+    /// (a stale record from before a re-org) defers rather than
+    /// requesting a bundle the CLI would refuse.
+    #[test]
+    fn build_terminate_calldata_defers_on_bounds_mismatch() {
+        let (obs, _dir) = fresh_observer();
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let commit = [0xCD; 32];
+        oracle.insert(0, make_terminate_bundle(commit));
+        let mut obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        // A corrupted / stale record: its claimed bounds [2, 1) do
+        // not contain the disputed step index 0 (the shape a
+        // re-orged or hand-edited store could present).
+        obs.batches.insert(
+            1,
+            crate::persistence::BatchRecord {
+                end_index: 1,
+                prev_end_index: 2,
+                actions_root: [0xAA; 32],
+                state_commit: commit,
+                block_number: 90,
+            },
+        );
+        let rec = terminate_record_for_batch_tests(commit);
+        let mv = HonestMove::TerminateOnSingleStep {
+            expected_post_commit: commit,
+        };
+        assert!(obs.build_terminate_calldata(&rec, mv).is_none());
     }
 
     /// `build_calldata_for_move` delegates non-terminate moves to
@@ -4105,6 +4388,7 @@ mod tests {
             last_updated_block: 100,
             state_known: true,
             turn_deadline: None,
+            disputed_log_index: None,
         };
         let mv = HonestMove::RespondAgree;
         let result = obs.build_calldata_for_move(&rec, mv);

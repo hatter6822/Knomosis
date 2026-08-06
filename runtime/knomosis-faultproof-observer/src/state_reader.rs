@@ -110,6 +110,14 @@ pub struct ObservedGame {
     /// loses by timeout.  `claimTimeout` requires
     /// `block.number > turnDeadline` strictly.
     pub turn_deadline: u64,
+    /// The game's immutable disputed log index (contract slot 17) —
+    /// under batching (Workstream SB) this is the disputed BATCH
+    /// record's key, which the terminate path uses to look up the
+    /// batch bounds + actions root the disputed action must be
+    /// proven under.  Read from the contract rather than derived:
+    /// `range.high.idx` diverges from it the moment a disagree
+    /// response reassigns `high` to a midpoint.
+    pub disputed_log_index: u64,
 }
 
 /// A [`GameStateReader`] that OWNS its JSON-RPC source, so it can
@@ -528,7 +536,7 @@ pub fn decode_game_state_with_addresses(
     };
     let deployment_id: [u8; 32] = slot(15).try_into().unwrap();
     let _last_step_block = read_u64_from_slot(slot(16));
-    let _disputed_log_index = read_u64_from_slot(slot(17));
+    let disputed_log_index = read_u64_from_slot(slot(17));
 
     // Extract full 20-byte L1 addresses for callers that need
     // to perform invariant checks (zero-address, collision)
@@ -560,6 +568,7 @@ pub fn decode_game_state_with_addresses(
                 deployment_id,
             },
             turn_deadline,
+            disputed_log_index,
         },
         sequencer_addr,
         challenger_addr,

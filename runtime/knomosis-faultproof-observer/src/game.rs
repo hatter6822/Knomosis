@@ -280,14 +280,13 @@ pub enum GameTransition {
         /// The post-commit the observer expects the L1 step VM to
         /// compute.
         ///
-        /// **Local only — this is not part of the calldata.**  The
-        /// contract's 5-argument `terminateOnSingleStep` takes no
-        /// claimed post-commit: it runs the step VM from
-        /// `g.low.commit` and compares the result against
-        /// `g.high.commit`, both already on-chain.  The field is
-        /// retained solely for the observer's own
-        /// `BundleCommitMismatch` cross-oracle check before it
-        /// broadcasts.
+        /// **Local only — this is not part of the calldata.**
+        /// `terminateOnSingleStep` takes no claimed post-commit:
+        /// it runs the step VM from `g.low.commit` and compares
+        /// the result against `g.high.commit`, both already
+        /// on-chain.  The field is retained solely for the
+        /// observer's own `BundleCommitMismatch` cross-oracle
+        /// check before it broadcasts.
         expected_post_commit: StateCommit,
     },
     /// A party times out (`BISECTION_RESPONSE_TIMEOUT` exceeded).

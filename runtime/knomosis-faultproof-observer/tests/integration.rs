@@ -501,6 +501,7 @@ fn game_state_persists_through_sqlite() {
         last_updated_block: 12345,
         state_known: true,
         turn_deadline: None,
+        disputed_log_index: Some(256),
     };
     persistence.store_game(&rec).unwrap();
     let loaded = persistence.load_game(1).unwrap().unwrap();
@@ -740,6 +741,7 @@ fn cold_start_lifecycle_with_mark_state_known() {
             ObservedGame {
                 state: full_state,
                 turn_deadline: u64::MAX,
+                disputed_log_index: 256,
             },
             150,
         )
@@ -828,6 +830,7 @@ fn integration_mark_state_known_rejects_degenerate_range() {
             ObservedGame {
                 state: dummy_state,
                 turn_deadline: u64::MAX,
+                disputed_log_index: 1,
             },
             100,
         )

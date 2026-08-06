@@ -9,13 +9,14 @@
 //!
 //! ## Schema
 //!
-//! Three keyspaces co-exist in a single knomosis-storage database:
+//! Four keyspaces co-exist in a single knomosis-storage database:
 //!
 //! ```text
 //! key prefix          | content                                     | format
 //! --------------------+---------------------------------------------+----------------------
 //! "g/" + gameId(16BE) | GameRecord (game state + observer metadata) | JSON
 //! "r/" + txhash(32)   | ResponseRecord (submitted-tx tracking)      | JSON
+//! "b/" + endIdx(8BE)  | BatchRecord (batch bounds + actions root)   | JSON
 //! "w/cursor"          | Last-processed L1 block                     | 8-byte BE u64
 //! "w/identifier"      | Observer identifier string                   | UTF-8
 //! ```
@@ -86,6 +87,38 @@ pub const GAME_PREFIX: &[u8] = b"g/";
 /// Key prefix for response records.
 pub const RESPONSE_PREFIX: &[u8] = b"r/";
 
+/// Key prefix for batch records (Workstream SB ruling R9): one
+/// record per `StateRootSubmitted` event, keyed by the batch's
+/// END index, so a resubmission at the same key after a revert
+/// overwrites the stale bounds.
+pub const BATCH_PREFIX: &[u8] = b"b/";
+
+/// One persisted batch record (Workstream SB ruling R9): the
+/// bounds and actions root of a submitted batch, read from the
+/// widened `StateRootSubmitted` event.  The terminate path looks
+/// the disputed record up by its end index to learn the batch
+/// bounds it must hand the bundle oracle — without them the
+/// observer cannot author the inclusion proof
+/// `terminateOnSingleStep` authenticates the disputed action
+/// against.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct BatchRecord {
+    /// The batch's end index — the L1 record's key.  The batch
+    /// covers L2 entries `[prev_end_index, end_index)`.
+    pub end_index: u64,
+    /// The parent record's key.
+    pub prev_end_index: u64,
+    /// The batch's actions root, as the L1 record committed it.
+    pub actions_root: [u8; 32],
+    /// The state root the batch published.
+    pub state_commit: [u8; 32],
+    /// The L1 block the submission was observed in.  A later
+    /// observation at the same key (a post-revert resubmission)
+    /// overwrites this record wholesale.
+    #[serde(default)]
+    pub block_number: u64,
+}
+
 /// One persisted game record.  Carries the full game state plus
 /// per-game observer metadata (last-observed L1 block, the side
 /// we're playing).
@@ -132,6 +165,17 @@ pub struct GameRecord {
     /// costs one `eth_call` rather than a wrong transaction.
     #[serde(default)]
     pub turn_deadline: Option<u64>,
+    /// The game's immutable disputed log index — under batching
+    /// (Workstream SB) the disputed BATCH record's key, which the
+    /// terminate path uses to look up the batch bounds + actions
+    /// root.  Learned from the contract read (`games()` slot 17)
+    /// when the state is hydrated; `None` for a game adopted from
+    /// its `GameOpened` event but not yet hydrated (the event does
+    /// not carry it), and for pre-batching persisted records
+    /// (serde default).  `maybe_play_move` refuses to act before
+    /// hydration, so every game the observer plays has it.
+    #[serde(default)]
+    pub disputed_log_index: Option<u64>,
 }
 
 /// One persisted response-submission record.
@@ -393,15 +437,17 @@ impl Persistence {
             // corrupted — fail loudly rather than silently adopt.
             let has_games = !self.storage.scan(GAME_PREFIX)?.is_empty();
             let has_responses = !self.storage.scan(RESPONSE_PREFIX)?.is_empty();
+            let has_batches = !self.storage.scan(BATCH_PREFIX)?.is_empty();
             let has_cursor = self.storage.get(CURSOR_KEY)?.is_some();
             let has_reorg = self.storage.get(REORG_WINDOW_KEY)?.is_some();
-            if has_games || has_responses || has_cursor || has_reorg {
+            if has_games || has_responses || has_batches || has_cursor || has_reorg {
                 return Err(PersistenceError::IdentifierMismatch {
                     expected: OBSERVER_IDENTIFIER.to_string(),
                     found: format!(
                         "<absent; DB contains observer cells without identifier: \
                          games={has_games}, responses={has_responses}, \
-                         cursor={has_cursor}, reorg={has_reorg}>"
+                         batches={has_batches}, cursor={has_cursor}, \
+                         reorg={has_reorg}>"
                     ),
                 });
             }
@@ -549,6 +595,51 @@ impl Persistence {
         Ok(out)
     }
 
+    /// Load a batch record by its end index.
+    ///
+    /// # Errors
+    ///
+    /// See [`PersistenceError`].
+    pub fn load_batch(&self, end_index: u64) -> Result<Option<BatchRecord>, PersistenceError> {
+        let key = batch_key(end_index);
+        match self.storage.get(&key)? {
+            None => Ok(None),
+            Some(bytes) => {
+                let rec: BatchRecord = serde_json::from_slice(&bytes)?;
+                Ok(Some(rec))
+            }
+        }
+    }
+
+    /// Store a batch record.  Production code uses
+    /// [`Self::commit_batch`] instead; this helper exists for
+    /// tests.
+    ///
+    /// # Errors
+    ///
+    /// See [`PersistenceError`].
+    pub fn store_batch(&self, rec: &BatchRecord) -> Result<(), PersistenceError> {
+        let key = batch_key(rec.end_index);
+        let bytes = serde_json::to_vec(rec)?;
+        self.storage.put(&key, &bytes).map_err(Into::into)
+    }
+
+    /// Enumerate every batch record currently in storage.  Used at
+    /// startup to rebuild the in-memory batch map.
+    ///
+    /// # Errors
+    ///
+    /// See [`PersistenceError`].
+    pub fn list_batches(&self) -> Result<Vec<BatchRecord>, PersistenceError> {
+        let pairs = self.storage.scan(BATCH_PREFIX)?;
+        let mut out = Vec::with_capacity(pairs.len());
+        for (_key, value) in pairs {
+            let rec: BatchRecord = serde_json::from_slice(&value)?;
+            out.push(rec);
+        }
+        Ok(out)
+    }
+
     /// Load a response record by tx-hash.
     ///
     /// # Errors
@@ -631,6 +722,11 @@ impl Persistence {
             let value = serde_json::to_vec(&canonical_rec)?;
             tx.put(&key, &value)?;
         }
+        for rec in &batch.batches {
+            let key = batch_key(rec.end_index);
+            let value = serde_json::to_vec(rec)?;
+            tx.put(&key, &value)?;
+        }
         if let Some(cursor) = batch.cursor {
             tx.put(CURSOR_KEY, &cursor.to_be_bytes())?;
         }
@@ -658,6 +754,10 @@ pub struct PersistBatch {
     pub games: Vec<GameRecord>,
     /// Response records to upsert.
     pub responses: Vec<ResponseRecord>,
+    /// Batch records to upsert (keyed by end index — a later
+    /// record at the same key overwrites, which is the R9
+    /// upsert-by-end discipline for post-revert resubmissions).
+    pub batches: Vec<BatchRecord>,
     /// New cursor value (or `None` to leave the cursor alone).
     pub cursor: Option<u64>,
     /// New re-org window snapshot (or `None` to leave the
@@ -684,6 +784,11 @@ impl PersistBatch {
         self.responses.push(rec);
     }
 
+    /// Append a batch-record upsert.
+    pub fn upsert_batch(&mut self, rec: BatchRecord) {
+        self.batches.push(rec);
+    }
+
     /// Set the cursor advance.  If called more than once, the
     /// last call wins.
     pub fn set_cursor(&mut self, block: u64) {
@@ -702,6 +807,7 @@ impl PersistBatch {
     pub fn is_empty(&self) -> bool {
         self.games.is_empty()
             && self.responses.is_empty()
+            && self.batches.is_empty()
             && self.cursor.is_none()
             && self.reorg_window.is_none()
     }
@@ -724,6 +830,16 @@ fn response_key(tx_hash: &[u8; 32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(2 + 32);
     out.extend_from_slice(RESPONSE_PREFIX);
     out.extend_from_slice(tx_hash);
+    out
+}
+
+/// Build the storage key for a batch record from its end index.
+///
+/// Layout: `b"b/" || u64_to_be(end_index)` (2 + 8 = 10 bytes).
+fn batch_key(end_index: u64) -> Vec<u8> {
+    let mut out = Vec::with_capacity(2 + 8);
+    out.extend_from_slice(BATCH_PREFIX);
+    out.extend_from_slice(&end_index.to_be_bytes());
     out
 }
 
@@ -785,6 +901,7 @@ mod tests {
             last_updated_block: 100,
             state_known: true,
             turn_deadline: None,
+            disputed_log_index: None,
         }
     }
 
@@ -1130,5 +1247,74 @@ mod tests {
         p.commit_batch(&batch).unwrap();
         assert!(p.read_cursor().unwrap().is_none());
         assert!(p.list_games().unwrap().is_empty());
+    }
+
+    /// A sample batch record (Workstream SB ruling R9).
+    fn sample_batch(end_index: u64, prev_end_index: u64) -> super::BatchRecord {
+        super::BatchRecord {
+            end_index,
+            prev_end_index,
+            actions_root: [0xAA; 32],
+            state_commit: [0xBB; 32],
+            block_number: 100,
+        }
+    }
+
+    /// Batch records round-trip through storage and enumerate.
+    #[test]
+    fn batch_record_round_trip_and_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("test.db");
+        let p = Persistence::open(&db).unwrap();
+        assert!(p.load_batch(4).unwrap().is_none());
+        let rec = sample_batch(4, 0);
+        p.store_batch(&rec).unwrap();
+        assert_eq!(p.load_batch(4).unwrap().unwrap(), rec);
+        let rec2 = sample_batch(8, 4);
+        p.store_batch(&rec2).unwrap();
+        let all = p.list_batches().unwrap();
+        assert_eq!(all.len(), 2);
+        assert!(all.contains(&rec) && all.contains(&rec2));
+    }
+
+    /// Upsert-by-end (ruling R9): a second record at the SAME end
+    /// index — a post-revert corrected resubmission — overwrites
+    /// the stale bounds wholesale.
+    #[test]
+    fn batch_record_upsert_by_end_overwrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("test.db");
+        let p = Persistence::open(&db).unwrap();
+        p.store_batch(&sample_batch(4, 0)).unwrap();
+        let corrected = super::BatchRecord {
+            end_index: 4,
+            prev_end_index: 2,
+            actions_root: [0xCC; 32],
+            state_commit: [0xDD; 32],
+            block_number: 200,
+        };
+        p.store_batch(&corrected).unwrap();
+        assert_eq!(p.load_batch(4).unwrap().unwrap(), corrected);
+        assert_eq!(p.list_batches().unwrap().len(), 1, "one key, one record");
+    }
+
+    /// Batch records ride `commit_batch`'s atomic boundary with
+    /// the cursor advance.
+    #[test]
+    fn commit_batch_carries_batch_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("test.db");
+        let p = Persistence::open(&db).unwrap();
+        let mut batch = PersistBatch::new();
+        assert!(batch.is_empty());
+        batch.upsert_batch(sample_batch(4, 0));
+        assert!(
+            !batch.is_empty(),
+            "a batch upsert makes the batch non-empty"
+        );
+        batch.set_cursor(50);
+        p.commit_batch(&batch).unwrap();
+        assert_eq!(p.load_batch(4).unwrap().unwrap(), sample_batch(4, 0));
+        assert_eq!(p.read_cursor().unwrap(), Some(50));
     }
 }

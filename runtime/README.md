@@ -126,9 +126,13 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     `applyTransition` byte-for-byte; chaos suite
     (`tests/chaos.rs`) covers re-org / kill-restart /
     dropped-conn / adversarial-opponent scenarios.  The Lean
-    `knomosis export-cell-proofs LOG IDX SIGNER` subcommand
-    emits the cell-proof bundle JSON the Rust submitter
-    consumes for `terminateOnSingleStep` calldata.  The Lean
+    `knomosis export-terminate-bundle LOG IDX [PREV_END END]`
+    subcommand emits the terminate-bundle JSON the Rust
+    submitter consumes for `terminateOnSingleStep` calldata —
+    with the batch bounds supplied, it additionally carries the
+    disputed action's batch binding (Workstream SB): the
+    signature the leaf commit hashes and the inclusion wire
+    against the submitted batch's actions root.  The Lean
     `knomosis replay-up-to LOG IDX` subcommand provides the
     in-production truth function the `SubprocessTruthOracle`
     shells out to.
