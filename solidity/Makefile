@@ -189,7 +189,12 @@ devnet:
 .PHONY: deploy-sepolia-dryrun
 deploy-sepolia-dryrun:
 	mkdir -p deployments
-	forge script script/DeploySepolia.s.sol
+	# The genesis state commit is REQUIRED by the script (a real
+	# deployment must name its anchor; a silent default would let a
+	# broadcast anchor to garbage).  The dry-run supplies an explicit,
+	# obviously-synthetic placeholder.
+	KNOMOSIS_GENESIS_STATE_COMMIT=$$(cast keccak "knomosis.dryrun.genesis") \
+		forge script script/DeploySepolia.s.sol
 
 # Signer selection keeps the funded key OUT of argv / `ps` / `/proc`:
 #   KNOMOSIS_DEPLOYER_ACCOUNT — a Foundry keystore account name (RECOMMENDED;

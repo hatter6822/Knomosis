@@ -5,7 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
 import {CrossCheckFramework} from "./CrossCheck/Framework.t.sol";
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
+import {ActionsRoot} from "src/lib/ActionsRoot.sol";
+import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {LogChain} from "src/lib/LogChain.sol";
+import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
 
 /// @notice A mock state-root submission contract used by the
 ///         game test.  Implements the dispute-locking, bond-
@@ -22,10 +25,21 @@ contract MockStateRootSubmissionForGame {
         uint64  submittedAtBlock;
         bool    finalised;
         bool    disputed;
+        // The two batch fields are APPENDED (SB risk-register item 1)
+        // so the auto-getter's tuple matches the game's
+        // `IStateRootSubmission.roots` 10-slot destructurings.
+        uint64  prevEndIndex;
+        bytes32 actionsRoot;
     }
 
     mapping(uint64 => RootRecord) public roots;
     bytes32 public deploymentId;
+
+    /// @notice Record-level reverted flags (SB ruling R1).  The real
+    ///         registry derives this from its revert range + stamp;
+    ///         the mock lets a test flip it directly to exercise the
+    ///         game's R2 refusal.
+    mapping(uint64 => bool) public revertedRecords;
 
     bool public markDisputedCalled;
     uint64 public lastMarkedLogIndex;
@@ -41,35 +55,52 @@ contract MockStateRootSubmissionForGame {
         deploymentId = id;
     }
 
-    /// @notice Seed a root, computing its chain value the way the real
-    ///         registry does.
+    function setReverted(uint64 logIndex, bool value) external {
+        revertedRecords[logIndex] = value;
+    }
+
+    function isStateRootReverted(uint64 logIndex)
+        external
+        view
+        returns (bool)
+    {
+        return revertedRecords[logIndex];
+    }
+
+    /// @notice Seed a batch record, computing its chain value the way
+    ///         the real registry does — one `nextEntryHash` fold per
+    ///         batch, with the batch's ACTIONS ROOT in the third word
+    ///         (SB ruling R8).
     ///
-    /// @dev    `expectedNextHash` used to be seeded as zero, which made
-    ///         the mock a stub for exactly the field
-    ///         `terminateOnSingleStep` now authenticates against — a
-    ///         test using it would have proved the binding could not be
-    ///         satisfied rather than that it works.  Computing it here
-    ///         means a seeded root is chain-coherent by construction and
-    ///         the only way to reach terminate is to name the bound
-    ///         action.
+    /// @dev    The load-bearing field is `actionsRoot`: it is what
+    ///         `terminateOnSingleStep` authenticates the disputed
+    ///         action against, by inclusion proof.  A mock that seeded
+    ///         it as a stub zero would make every terminate-path test
+    ///         prove the binding cannot be satisfied rather than that
+    ///         it works — which is exactly what
+    ///         `test_terminate_rejects_an_action_absent_from_the_batch`
+    ///         asserts on purpose, using an explicitly zero root.
     function seedRoot(
-        uint64 logIndex,
+        uint64 endIndex,
         address sequencer,
         bytes32 stateCommit,
         uint128 bond,
         bytes32 prevLogEntryHash,
-        bytes32 actionCommit
+        bytes32 actionsRoot,
+        uint64 prevEndIndex
     ) external payable {
-        roots[logIndex] = RootRecord({
+        roots[endIndex] = RootRecord({
             sequencer: sequencer,
             stateCommit: stateCommit,
             prevLogEntryHash: prevLogEntryHash,
             expectedNextHash: LogChain.nextEntryHash(
-                prevLogEntryHash, stateCommit, actionCommit),
+                prevLogEntryHash, stateCommit, actionsRoot),
             bond: bond,
             submittedAtBlock: uint64(block.number),
             finalised: false,
-            disputed: false
+            disputed: false,
+            prevEndIndex: prevEndIndex,
+            actionsRoot: actionsRoot
         });
     }
 
@@ -148,13 +179,13 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
     bytes32 private LOW_ROOT;
 
     /// @dev The corpus probe this suite adjudicates:
-    ///      `writeBundleGoldens[0]`, a `transfer`.  Its `l2LogIndex` is
+    ///      `multiProofGoldens[0]`, a `transfer`.  Its `l2LogIndex` is
     ///      0 while the game passes `g.high.idx` (at least 1, since
     ///      `lowLogIndex < disputedLogIndex`); that is sound for every
     ///      variant except `withdraw`, whose pending-withdrawal record
     ///      is the only thing that reads the index.  `withdraw` is
-    ///      adjudicated by `CrossCheck/StepVMRoot.t.sol`, which drives
-    ///      the step VM directly and uses the probe's own index.
+    ///      adjudicated by `CrossCheck/StepVMRootMulti.t.sol`, which
+    ///      drives the step VM directly and uses the probe's own index.
     uint8 private probeKind;
     bytes private probeFields;
     uint64 private probeSigner;
@@ -252,36 +283,53 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.deal(sequencer, 100 ether);
     }
 
-    /// @notice Seed a root with no action bound to it.
+    /// @notice Seed a batch record with an EMPTY (all-zero) actions
+    ///         root — no action opens under it.
     ///
     /// @dev    For indices the test never TERMINATES on — challenge,
     ///         bisection, and timeout paths only read the sequencer,
-    ///         the commit, and the bond.  A terminate against one of
-    ///         these reverts `ActionNotInLogChain`, which is the
-    ///         correct outcome for a root whose action was never
-    ///         published, and is asserted directly by
-    ///         `test_terminate_rejects_an_action_absent_from_the_chain`.
+    ///         the commit, the bond, and `prevEndIndex`.  A terminate
+    ///         against one of these reverts `ActionNotInBatch` (every
+    ///         inclusion walk lands on a keccak output, never the zero
+    ///         word), which is the correct outcome for a batch whose
+    ///         actions were never committed, and is asserted directly
+    ///         by `test_terminate_rejects_an_action_absent_from_the_batch`.
+    ///
+    ///         `prevEndIndex` is 0, so every challenge in this suite
+    ///         anchors at the genesis record (`lowLogIndex = 0`) per
+    ///         SB ruling R2.
     function _seedUnboundRoot(uint64 logIndex, bytes32 commit) internal {
         mockStateRootSubmission.seedRoot(
-            logIndex, sequencer, commit, STATE_ROOT_BOND, bytes32(0), bytes32(0));
+            logIndex, sequencer, commit, STATE_ROOT_BOND,
+            bytes32(0), bytes32(0), 0);
     }
 
-    /// @notice Seed a root and bind the action that produced it, the
-    ///         way a real `submitStateRoot` would.
+    /// @notice Seed a batch record and bind the action that produced
+    ///         it, the way a real `submitStateRoot` would: the actions
+    ///         root is the single-leaf SMT holding the action's
+    ///         SIGNATURE-BOUND leaf commit at absolute index 0.
+    ///
+    /// @dev    Index 0 because every batch this suite terminates on
+    ///         starts at `prevEndIndex = 0`, and the terminal range is
+    ///         always `[0, 1]` — so the disputed step's absolute index
+    ///         (`g.low.idx`) is 0.
     function _seedRootForAction(
-        uint64 logIndex,
+        uint64 endIndex,
         bytes32 commit,
         uint8 actionKind,
         uint64 signer,
         bytes memory actionFields
     ) internal {
         mockStateRootSubmission.seedRoot(
-            logIndex,
+            endIndex,
             sequencer,
             commit,
             STATE_ROOT_BOND,
             bytes32(0),
-            LogChain.actionCommitMemory(actionKind, signer, actionFields));
+            _singleLeafActionsRoot(
+                0,
+                _actionLeafCommit(actionKind, signer, actionFields, _testSig())),
+            0);
     }
 
     /* -------- Constructor -------- */
@@ -450,18 +498,68 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
     }
 
     /// @notice CRITICAL SECURITY TEST (audit 21, finding 1.1): a
-    ///         challenge whose `lowLogIndex` references an UNSUBMITTED
-    ///         root must revert — the low endpoint cannot be an agreed
-    ///         pre-state if no root was ever submitted there.
+    ///         challenge whose batch-start anchor references an
+    ///         UNSUBMITTED root must revert — the low endpoint cannot
+    ///         be an agreed pre-state if no root was ever submitted
+    ///         there.  Under batching the anchor is the disputed
+    ///         record's `prevEndIndex`, so the shape is a record whose
+    ///         PARENT key holds no record.  The mock can seed one; the
+    ///         real registry cannot reach this shape (its structural
+    ///         chain only extends the existing canonical tip), so the
+    ///         guard is defence-in-depth there.
     function test_initiateChallenge_rejects_unsubmitted_low_root() public {
+        // A record at end 300 claiming parent 250 — never seeded
+        // (submittedAtBlock == 0).
+        mockStateRootSubmission.seedRoot(
+            300, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND,
+            bytes32(0), bytes32(0), 250);
         vm.prank(challenger);
-        // lowLogIndex = 5 was never seeded (submittedAtBlock == 0).
         vm.expectRevert(KnomosisFaultProofGame.LowRootNotSubmitted.selector);
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            10,                     // disputedLogIndex (seeded)
+            300,                    // disputedLogIndex (seeded)
             bytes32(uint256(0xC1)),
             LOW_ROOT,
-            5);                     // lowLogIndex NOT seeded
+            250);                   // == prevEndIndex, but NOT seeded
+    }
+
+    /// @notice SB ruling R2: the game bisects INSIDE one batch, so the
+    ///         low anchor must be the disputed record's own
+    ///         `prevEndIndex` — the one index below the dispute whose
+    ///         commit is on-chain-agreed.  Any other anchor is refused,
+    ///         even one referencing a perfectly good submitted root.
+    function test_initiateChallenge_anchors_low_to_the_batch_start() public {
+        // A second batch [10, 120) whose parent is the record at 10.
+        mockStateRootSubmission.seedRoot(
+            120, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND,
+            bytes32(0), bytes32(0), 10);
+
+        // Anchoring at 0 — a submitted root, but not THIS batch's
+        // start — is refused before the low record is even read.
+        vm.prank(challenger);
+        vm.expectRevert(KnomosisFaultProofGame.LowNotBatchStart.selector);
+        game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            120, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        // Anchoring at the batch start (10) with its committed root
+        // opens the game.
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            120, bytes32(uint256(0xC1)), DISPUTED_ROOT, 10);
+        assertEq(game.activeGameForLogIndex(120), gameId,
+            "the batch-start-anchored challenge must open");
+    }
+
+    /// @notice SB ruling R2: a REVERTED disputed record is already
+    ///         judged — a game on it would re-litigate a range the
+    ///         chain no longer stands on.
+    function test_initiateChallenge_rejects_a_reverted_disputed_record()
+        public
+    {
+        mockStateRootSubmission.setReverted(10, true);
+        vm.prank(challenger);
+        vm.expectRevert(KnomosisFaultProofGame.DisputedRootReverted.selector);
+        game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            10, bytes32(uint256(0xC1)), LOW_ROOT, 0);
     }
 
     /// @notice CRITICAL: defensive check — a degenerate range
@@ -493,39 +591,71 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
 
     /* -------- terminateOnSingleStep (end-to-end adjudication) -------- */
 
-    /// CBE Nat encoder (mirror of the StepVM test helper): 0x1B tag +
-    /// 8 little-endian value bytes.  Used to build balance cell values.
-    /// @notice The canonical CBE bytes of a BALANCE cell value: the
-    ///         17-byte amount head (tag 0x01 + 16 LE bytes).
+    /// @notice The suite's fixed 65-byte action signature (the
+    ///         `r ‖ s ‖ v` wire shape).
     ///
-    /// @dev    Two things were wrong with the previous form and both
-    ///         mattered.  It emitted tag `0x1B`, which no encoder on
-    ///         any stack produces — the tests passed only because
-    ///         `_decodeNat` used to IGNORE the tag byte and read a
-    ///         fixed 8 bytes.  And it was 8 bytes wide, so it could not
-    ///         express a balance at or above `2^64` (~18.45 ETH in
-    ///         wei).  `_decodeNat` is now exact-width and
-    ///         tag-dispatched, so a wrong tag or width reverts instead
-    ///         of decoding to a wrong number.
-    function _encodeCbeAmount(uint128 v) internal pure returns (bytes memory) {
-        bytes memory result = new bytes(17);
-        result[0] = 0x01;
-        for (uint256 i = 0; i < 16; i++) {
+    /// @dev    The leaf HASHES the signature (SB ruling R7); nothing
+    ///         verifies it on-chain yet, so any fixed 65-byte value
+    ///         works — but it must be the SAME bytes at seed time and
+    ///         terminate time, which is exactly the binding
+    ///         `test_terminate_rejects_a_substituted_signature`
+    ///         exercises.
+    function _testSig() internal pure returns (bytes memory sig) {
+        sig = new bytes(65);
+        for (uint256 i = 0; i < 65; i++) {
             // forge-lint: disable-next-line(unsafe-typecast)
-            result[1 + i] = bytes1(uint8(v >> (8 * i)));
+            sig[i] = bytes1(uint8(i + 1));
         }
-        return result;
     }
 
-    /// @notice A well-formed but minimal SMT opening: a 32-byte
-    ///         all-zero bitmask and no siblings.
+    /// @notice The signature-bound leaf commit
+    ///         `keccak256(kind ‖ uint64BE signer ‖ fields ‖ sig)` —
+    ///         the test's own spelling of
+    ///         `ActionsRoot.actionLeafCommit`, which takes calldata
+    ///         and cannot be handed memory bytes.
+    function _actionLeafCommit(
+        uint8 actionKind,
+        uint64 signer,
+        bytes memory actionFields,
+        bytes memory actionSig
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(actionKind, signer, actionFields, actionSig));
+    }
+
+    /// @notice The actions root of a SINGLE-entry batch: the cell-SMT
+    ///         family tree with exactly one leaf, at
+    ///         `actionKey(actionIdx)`.  Every sibling on the path is
+    ///         the canonical empty sub-tree, so the matching inclusion
+    ///         proof is `_singleEntryProof()`.
     ///
-    /// @dev    Not a filler value — it is the exact opening of a cell in
-    ///         an otherwise-empty tree, where every level's sibling is
-    ///         the canonical empty sub-tree.  `executeStep` shape-checks
-    ///         `proofData` at intake, so a helper returning `""` would
-    ///         make every caller revert.
-    function _defaultProofData() internal pure returns (bytes memory) {
+    /// @dev    A deliberate second spelling of the walk
+    ///         `ActionsRoot.verifyActionInclusion` performs, so the
+    ///         seeded root cross-checks the library rather than being
+    ///         produced by it.
+    function _singleLeafActionsRoot(uint64 actionIdx, bytes32 leafCommit)
+        internal
+        pure
+        returns (bytes32 root)
+    {
+        bytes memory keyBytes =
+            abi.encodePacked(ActionsRoot.actionKey(actionIdx));
+        root = keccak256(bytes.concat(
+            CBEEncode.bytesValue(keyBytes),
+            CBEEncode.bytesValue(abi.encodePacked(leafCommit))));
+        bytes32[256] memory empties =
+            SmtCellVerifier.precomputeEmptySubtreeHashes();
+        for (uint256 d = 0; d < 256; d++) {
+            root = SmtCellVerifier.readKeyBitMSBFirst(keyBytes, d) == 1
+                ? keccak256(abi.encodePacked(empties[d], root))
+                : keccak256(abi.encodePacked(root, empties[d]));
+        }
+    }
+
+    /// @notice The inclusion proof of the only entry in a single-leaf
+    ///         batch tree: a 32-byte all-zero bitmask and no siblings —
+    ///         every level's sibling is the canonical empty sub-tree.
+    function _singleEntryProof() internal pure returns (bytes memory) {
         return new bytes(32);
     }
 
@@ -570,11 +700,14 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
             1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
 
         // At game open turn = Sequencer; the honest sequencer terminates
-        // with the real step.  executeStep(low) == high ⇒ SequencerWon.
+        // with the real step, naming the batch-bound signed action and
+        // its inclusion proof.  executeStep(low) == high ⇒ SequencerWon.
         uint256 seqBalBefore = sequencer.balance;
         vm.prank(sequencer);
         game.terminateOnSingleStep(
-            gameId, kind, actionFields, stepSigner, _cells(), probeGapMask, probeSiblings);
+            gameId, kind, actionFields, stepSigner,
+            _testSig(), _singleEntryProof(),
+            _cells(), probeGapMask, probeSiblings);
 
         // SequencerWon: the sequencer is CREDITED the winner's 95% share
         // of the challenger's forfeited bond (pull-payment, 1.3) and
@@ -600,7 +733,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
     /// @notice **The terminal step adjudicates the action the L2
     ///         published, not one the responding party picks.**
     ///
-    ///         Before the log-chain binding, `terminateOnSingleStep`
+    ///         Without the batch binding, `terminateOnSingleStep`
     ///         executed whatever `(actionKind, actionFields, signer)`
     ///         it was handed and compared the result to `g.high.commit`.
     ///         Nothing on L1 recorded which action carried the pre-root
@@ -609,9 +742,11 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
     ///         reproduce the disputed root and settle in its favour on
     ///         a step that never ran.
     ///
-    ///         Here the sequencer publishes root 1 bound to a transfer
+    ///         Here the sequencer publishes a batch bound to a transfer
     ///         of 5, then tries to terminate naming a transfer of 7.
-    ///         The chain check rejects it before the step VM runs.
+    ///         The inclusion check rejects it before the step VM runs:
+    ///         the substituted action's leaf does not open at the
+    ///         disputed step's index under the batch's actions root.
     function test_terminate_rejects_a_substituted_action() public {
         uint8 kind = probeKind;
         uint64 stepSigner = probeSigner;
@@ -630,16 +765,19 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
             1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
 
         vm.prank(sequencer);
-        vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInBatch.selector);
         game.terminateOnSingleStep(
             gameId, kind, substitutedFields, stepSigner,
+            _testSig(), _singleEntryProof(),
             _cells(), probeGapMask, probeSiblings);
 
         // ...and the bound action still terminates, so the rejection is
         // the substitution and not the binding refusing everything.
         vm.prank(sequencer);
         game.terminateOnSingleStep(
-            gameId, kind, boundFields, stepSigner, _cells(), probeGapMask, probeSiblings);
+            gameId, kind, boundFields, stepSigner,
+            _testSig(), _singleEntryProof(),
+            _cells(), probeGapMask, probeSiblings);
         (, , , , , , , , , , ,
          KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);
         assertEq(uint8(status), uint8(KnomosisFaultProofGame.GameStatus.SequencerWon),
@@ -648,7 +786,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
 
     /// @notice The signer is bound too, not just the fields.  A step
     ///         signed by a different actor is a different step, and the
-    ///         commitment covers all three components.
+    ///         leaf commit covers all four components.
     function test_terminate_rejects_a_substituted_signer() public {
         bytes memory actionFields = probeFields;
         _seedRootForAction(1, probePostRoot, probeKind, probeSigner, actionFields);
@@ -658,9 +796,10 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
             1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
 
         vm.prank(sequencer);
-        vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInBatch.selector);
         game.terminateOnSingleStep(
             gameId, probeKind, actionFields, probeSigner + 1,
+            _testSig(), _singleEntryProof(),
             _cells(), probeGapMask, probeSiblings);
     }
 
@@ -675,19 +814,80 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
             1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
 
         vm.prank(sequencer);
-        vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInBatch.selector);
         game.terminateOnSingleStep(
             gameId, 1 /* Mint */, actionFields, probeSigner,
+            _testSig(), _singleEntryProof(),
             _cells(), probeGapMask, probeSiblings);
     }
 
-    /// @notice A root published with NO action bound to it cannot be
+    /// @notice **The signature is bound in the leaf** (SB ruling R7,
+    ///         user decision "bind signature in leaf"): the leaf
+    ///         commit is `hash(kind ‖ signer ‖ fields ‖ sig)`, so
+    ///         naming the bound action under a DIFFERENT signature is
+    ///         refused exactly like a different action.  Nothing
+    ///         verifies the signature on-chain yet — binding it now is
+    ///         what makes that recorded follow-up a drop-in instead of
+    ///         another chain-shape migration.
+    function test_terminate_rejects_a_substituted_signature() public {
+        bytes memory actionFields = probeFields;
+        _seedRootForAction(1, probePostRoot, probeKind, probeSigner, actionFields);
+
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        // The same 65-byte width with one flipped byte: a different
+        // signature is a different leaf.
+        bytes memory otherSig = _testSig();
+        otherSig[0] = otherSig[0] ^ bytes1(uint8(0xFF));
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInBatch.selector);
+        game.terminateOnSingleStep(
+            gameId, probeKind, actionFields, probeSigner,
+            otherSig, _singleEntryProof(),
+            _cells(), probeGapMask, probeSiblings);
+
+        // ...and the BOUND signature still terminates.
+        vm.prank(sequencer);
+        game.terminateOnSingleStep(
+            gameId, probeKind, actionFields, probeSigner,
+            _testSig(), _singleEntryProof(),
+            _cells(), probeGapMask, probeSiblings);
+        (, , , , , , , , , , ,
+         KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);
+        assertEq(uint8(status), uint8(KnomosisFaultProofGame.GameStatus.SequencerWon),
+            "the bound signature must still win the game");
+    }
+
+    /// @notice A signature of any width but the fixed 65 bytes REVERTS
+    ///         with the library's own error before any walk: the fixed
+    ///         width is what keeps the leaf pre-image's `fields ‖ sig`
+    ///         split injective.
+    function test_terminate_rejects_a_malformed_signature_width() public {
+        bytes memory actionFields = probeFields;
+        _seedRootForAction(1, probePostRoot, probeKind, probeSigner, actionFields);
+
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        vm.prank(sequencer);
+        vm.expectRevert(abi.encodeWithSelector(
+            ActionsRoot.ActionSigWrongLength.selector, uint256(64)));
+        game.terminateOnSingleStep(
+            gameId, probeKind, actionFields, probeSigner,
+            new bytes(64), _singleEntryProof(),
+            _cells(), probeGapMask, probeSiblings);
+    }
+
+    /// @notice A batch published with NO actions committed cannot be
     ///         terminated on at all.  This is the pre-binding world
-    ///         made explicit: an unbound root is one whose action the
-    ///         L1 never recorded, and the game refuses to adjudicate a
-    ///         step it cannot authenticate rather than executing a
-    ///         caller-chosen one.
-    function test_terminate_rejects_an_action_absent_from_the_chain() public {
+    ///         made explicit: an all-zero actions root is one under
+    ///         which no action opens, and the game refuses to
+    ///         adjudicate a step it cannot authenticate rather than
+    ///         executing a caller-chosen one.
+    function test_terminate_rejects_an_action_absent_from_the_batch() public {
         bytes memory actionFields = probeFields;
         _seedUnboundRoot(1, probePostRoot);
 
@@ -696,9 +896,10 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
             1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
 
         vm.prank(sequencer);
-        vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInBatch.selector);
         game.terminateOnSingleStep(
             gameId, probeKind, actionFields, probeSigner,
+            _testSig(), _singleEntryProof(),
             _cells(), probeGapMask, probeSiblings);
     }
 
@@ -720,12 +921,13 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
             1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
 
         uint256 chalBalBefore = challenger.balance;
-        // The sequencer, forced to execute the real step, cannot
+        // The sequencer, forced to execute the batch-bound step, cannot
         // reproduce the fabricated `high`; on its turn a mismatch is a
         // ChallengerWon.
         vm.prank(sequencer);
         game.terminateOnSingleStep(
             gameId, probeKind, actionFields, probeSigner,
+            _testSig(), _singleEntryProof(),
             _cells(), probeGapMask, probeSiblings);
 
         // Pull-payment (1.3): the challenger claims its credited share.
@@ -772,11 +974,13 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
             commits[i] = keccak256(abi.encodePacked(commits[i - 1], i));
         }
 
-        // The sequencer honestly published each commit at its log index,
-        // binding the transfer that produced it.  Index 1 matters as
-        // much as index 4: after two disagreeing bisection rounds the
-        // terminal range is [0, 1], so the action authenticated at
-        // terminate time is the one bound to root 1.
+        // The sequencer honestly published each commit at its end
+        // index, every record binding the transfer at absolute index 0.
+        // Index 4 is the one that matters at terminate time: the game
+        // reads the DISPUTED record's actions root (via its immutable
+        // `g.disputedLogIndex`), and after two disagreeing bisection
+        // rounds the terminal range is [0, 1], so the authenticated
+        // step is entry 0 of THAT batch.
         for (uint64 i = 1; i <= 4; i++) {
             _seedRootForAction(i, commits[i], kind, stepSigner, actionFields);
         }
@@ -811,10 +1015,15 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         assertEq(depth, 2, "two bisection rounds must be recorded");
 
         // Terminal step: the fold from commits[0] reaches commits[1],
-        // which is `high` ⇒ the responding sequencer wins.
+        // which is `high` ⇒ the responding sequencer wins.  The
+        // authenticated action is the one bound in the DISPUTED batch's
+        // actions root (read via `g.disputedLogIndex` = 4) at absolute
+        // index `g.low.idx` = 0.
         vm.prank(sequencer);
         game.terminateOnSingleStep(
-            gameId, kind, actionFields, stepSigner, _cells(), probeGapMask, probeSiblings);
+            gameId, kind, actionFields, stepSigner,
+            _testSig(), _singleEntryProof(),
+            _cells(), probeGapMask, probeSiblings);
 
         (, , , , , , , , , , ,
          KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);
@@ -1069,5 +1278,118 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(challenger);
         vm.expectRevert(KnomosisFaultProofGame.NoPendingMidpoint.selector);
         game.respondToMidpoint(gameId, true);
+    }
+
+    /* -------- Turn parity (SB riding-along item) -------- */
+
+    /// @dev The in-progress game facts the parity invariant is stated
+    ///      over, pulled out of the 15-slot `games()` tuple.
+    function _gameView(uint256 gameId)
+        private
+        view
+        returns (
+            bool pending,
+            KnomosisFaultProofGame.TurnSide turn,
+            uint64 lowIdx,
+            uint64 highIdx,
+            KnomosisFaultProofGame.GameStatus status
+        )
+    {
+        (
+            ,
+            ,
+            KnomosisFaultProofGame.Claim memory low,
+            KnomosisFaultProofGame.Claim memory high,
+            bool hasPending,
+            ,
+            ,
+            KnomosisFaultProofGame.TurnSide t,
+            ,
+            ,
+            ,
+            KnomosisFaultProofGame.GameStatus s,
+            ,
+            ,
+        ) = game.games(gameId);
+        return (hasPending, t, low.idx, high.idx, s);
+    }
+
+    /// @dev The parity invariant: an in-progress game is always in one
+    ///      of exactly two shapes — (Sequencer's turn, no pending
+    ///      midpoint) or (Challenger's turn, pending midpoint).  Lean:
+    ///      `turnAlignedWithPending` (the iff form) preserved by
+    ///      `turn_aligned_preserved`.
+    function _assertTurnParity(uint256 gameId) private view {
+        (bool pending, KnomosisFaultProofGame.TurnSide turn, , ,
+         KnomosisFaultProofGame.GameStatus status) = _gameView(gameId);
+        if (status != KnomosisFaultProofGame.GameStatus.InProgress) return;
+        assertEq(pending,
+            turn == KnomosisFaultProofGame.TurnSide.Challenger,
+            "turn parity: a midpoint is pending iff it is the challenger's turn");
+    }
+
+    /// @notice **The challenger is never terminate-obligated.**  Drive
+    ///         a random move sequence (the seed's bits pick each
+    ///         response) from a 64-step dispute down to the single-step
+    ///         range, asserting after every move that the game is in
+    ///         the parity-reachable set {(Sequencer, no pending),
+    ///         (Challenger, pending)} — and, when the range reaches one
+    ///         step with no midpoint pending (the ONLY shape
+    ///         `terminateOnSingleStep` accepts), that the responsible
+    ///         party is the SEQUENCER.
+    ///
+    ///         Lean mirrors: `turnAlignedWithPending` /
+    ///         `turn_aligned_preserved` /
+    ///         `terminate_owner_is_sequencer` and the Settlement
+    ///         corollary.  This is the assertion the audit-19 narrative
+    ///         got backwards (it claimed a challenger could be forced
+    ///         to terminate); the fuzz pins the truth on the deployed
+    ///         bytecode across move sequences rather than one worked
+    ///         example.
+    function testFuzz_turn_parity_challenger_never_terminate_obligated(
+        uint256 seed
+    ) public {
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            64, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+        _assertTurnParity(gameId);
+
+        // [0, 64] narrows to a single step in at most 6 disagree
+        // rounds (12 moves); 32 move slots is comfortably past every
+        // reachable sequence.
+        bool reachedSingleStep = false;
+        for (uint256 i = 0; i < 32; i++) {
+            (bool pending, , uint64 lowIdx, uint64 highIdx,
+             KnomosisFaultProofGame.GameStatus status) = _gameView(gameId);
+            if (status != KnomosisFaultProofGame.GameStatus.InProgress) break;
+            if (highIdx - lowIdx == 1 && !pending) {
+                // THE CLAIM: the single-step obligation falls on the
+                // sequencer.  By parity no midpoint is pending, so the
+                // responsible party is the turn-holder — assert it is
+                // the sequencer, whatever path the seed drove.
+                (, KnomosisFaultProofGame.TurnSide turn, , ,) =
+                    _gameView(gameId);
+                assertEq(uint8(turn),
+                    uint8(KnomosisFaultProofGame.TurnSide.Sequencer),
+                    "the terminate obligation must fall on the sequencer");
+                reachedSingleStep = true;
+                break;
+            }
+            vm.roll(vm.getBlockNumber() + MIN_STEP_INTERVAL + 1);
+            if (!pending) {
+                // By parity it is the sequencer's move: submit a
+                // midpoint claim (its value is irrelevant to parity).
+                vm.prank(sequencer);
+                game.submitMidpoint(gameId, bytes32(uint256(0xAD00) + i));
+            } else {
+                // By parity it is the challenger's move: agree or
+                // disagree per the seed's next bit.
+                vm.prank(challenger);
+                game.respondToMidpoint(gameId, (seed >> i) & 1 == 1);
+            }
+            _assertTurnParity(gameId);
+        }
+        assertTrue(reachedSingleStep,
+            "every move sequence must reach the single-step range");
     }
 }

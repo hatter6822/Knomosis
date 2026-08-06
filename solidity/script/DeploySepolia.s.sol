@@ -132,6 +132,9 @@ contract DeploySepolia is Script {
         uint64 bisectionResponseTimeout;
         uint128 minChallengeBond;
         uint64 minBisectionStepInterval;
+        // Workstream SB batching parameters.
+        bytes32 genesisStateCommit;
+        uint64 maxActionsPerBatch;
         // Manifest output path.
         string outPath;
         string network;
@@ -304,6 +307,14 @@ contract DeploySepolia is Script {
             uint128(vm.envOr("KNOMOSIS_MIN_CHALLENGE_BOND", uint256(0.05 ether)));
         cfg.minBisectionStepInterval =
             uint64(vm.envOr("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL", uint256(5)));
+        // The genesis anchor's state commit is REQUIRED: the registry
+        // writes its record 0 from it, and an all-zero commit is
+        // refused at construction.  Produce it with the L2's
+        // `knomosis export-batch` genesis output (or
+        // `commitExtendedState` of the deployment's genesis state).
+        cfg.genesisStateCommit = vm.envBytes32("KNOMOSIS_GENESIS_STATE_COMMIT");
+        cfg.maxActionsPerBatch =
+            uint64(vm.envOr("KNOMOSIS_MAX_ACTIONS_PER_BATCH", uint256(65_536)));
         cfg.verifierChallengerBond = vm.envOr(
             "KNOMOSIS_VERIFIER_CHALLENGER_BOND", uint256(cfg.minChallengeBond)
         );
@@ -745,7 +756,9 @@ contract DeploySepolia is Script {
             cfg.sequencer,
             predGame,
             deploymentId,
-            cfg.withdrawalFinalisationWindow
+            cfg.withdrawalFinalisationWindow,
+            cfg.genesisStateCommit,
+            cfg.maxActionsPerBatch
         );
         require(address(submission) == predSub, "submission prediction mismatch");
 

@@ -158,7 +158,26 @@ contract ConstructorHardeningTest is Test {
         address same = address(0x5A3E);
         vm.expectRevert(KnomosisStateRootSubmission.SequencerIsFaultProofGame.selector);
         new KnomosisStateRootSubmission(
-            1 ether, 216_000, 100, 100, same, same, keccak256("dep"), 216_000
+            1 ether, 216_000, 100, 100, same, same, keccak256("dep"), 216_000,
+            keccak256("genesis"), 65_536
+        );
+    }
+
+    // ---- KnomosisStateRootSubmission: SB batching parameters ------------
+
+    function test_state_root_rejects_zero_genesis_commit() public {
+        vm.expectRevert(KnomosisStateRootSubmission.ZeroGenesisCommit.selector);
+        new KnomosisStateRootSubmission(
+            1 ether, 216_000, 100, 100, address(0x5E9), address(0x6A3E),
+            keccak256("dep"), 216_000, bytes32(0), 65_536
+        );
+    }
+
+    function test_state_root_rejects_zero_batch_cap() public {
+        vm.expectRevert(KnomosisStateRootSubmission.BatchTooLarge.selector);
+        new KnomosisStateRootSubmission(
+            1 ether, 216_000, 100, 100, address(0x5E9), address(0x6A3E),
+            keccak256("dep"), 216_000, keccak256("genesis"), 0
         );
     }
 

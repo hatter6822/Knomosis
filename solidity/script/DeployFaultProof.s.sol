@@ -50,6 +50,14 @@ contract DeployFaultProof is Script {
         address treasury  = vm.envAddress("KNOMOSIS_TREASURY_ADDRESS");
         address bridge    = vm.envAddress("KNOMOSIS_BRIDGE_ADDRESS");
         bytes32 deploymentId = vm.envBytes32("KNOMOSIS_DEPLOYMENT_ID");
+        // Workstream SB batching parameters: the genesis anchor's
+        // state commit (REQUIRED — the registry's record 0), and the
+        // per-batch size cap (operational sanity, ruling R10).
+        bytes32 genesisStateCommit =
+          vm.envBytes32("KNOMOSIS_GENESIS_STATE_COMMIT");
+        uint64  maxActionsPerBatch = uint64(
+          vm.envOr("KNOMOSIS_MAX_ACTIONS_PER_BATCH",
+                   uint256(65_536)));
 
         vm.startBroadcast();
 
@@ -114,7 +122,9 @@ contract DeployFaultProof is Script {
             sequencer,
             predictedGame,
             deploymentId,
-            withdrawalFinalisationWindow);
+            withdrawalFinalisationWindow,
+            genesisStateCommit,
+            maxActionsPerBatch);
         require(address(submission) == predictedSubmission, "AddressMismatch");
 
         // Step 6: deploy verifier.  Same discipline.

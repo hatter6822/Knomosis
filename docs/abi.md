@@ -2825,23 +2825,40 @@ contract `docs/api/gateway.openapi.yaml` and
 
 ### 15.1 New Solidity contracts
 
-The five immutable contracts shipped by Workstream H:
+The five immutable contracts shipped by Workstream H, as re-cut by
+Workstream SB (batched submission):
 
   * `solidity/src/contracts/KnomosisStateRootSubmission.sol` —
-    Sequencer state-root submission registry.
-  * `solidity/src/contracts/KnomosisStepVM.sol` — L1 step VM.
+    Sequencer BATCH submission registry: one record per batch
+    `[prevEndIndex, endIndex)`, keyed by `endIndex`, with revert
+    recovery (SB rulings R1/R3/R4) and a constructor-written genesis
+    anchor at key 0 (ruling R5).
+  * `solidity/src/contracts/KnomosisStepVMRoot.sol` — L1 step VM
+    (root-computing; the bespoke-hash `KnomosisStepVM` is retired).
   * `solidity/src/contracts/KnomosisFaultProofGame.sol` —
-    Bisection game state machine.
+    Bisection game state machine; bisects INSIDE one batch and
+    authenticates the disputed action by inclusion proof (rulings
+    R2/R7).
   * `solidity/src/contracts/KnomosisDisputeVerifierV2.sol` —
     Dual-path dispute verifier (fault-proof + adjudicator
     quorum).
   * `solidity/src/contracts/KnomosisFaultProofMigration.sol` —
     V1 → V2 migration handoff.
 
-Plus the cross-cutting library:
+Plus the cross-cutting libraries:
 
   * `solidity/src/lib/StepVMMerkle.sol` — Per-cell Merkle
     proof verification for the L1 step VM.
+  * `solidity/src/lib/ActionsRoot.sol` — The per-batch actions-root
+    tree (the cell-SMT family instantiated at `K = V = bytes32`):
+    key derivation, the signature-bound leaf commit, the inclusion
+    verifier, and the genesis chain seed.  Lean mirror:
+    `LegalKernel.FaultProof.ActionsRoot`; corpus:
+    `actions_root.json`.
+  * `solidity/src/lib/LogChain.sol` — The batched submission hash
+    chain (`nextEntryHash`) and the unsigned action-triple commit
+    (`actionCommit`, the prefix construction the batch leaf
+    extends).  Corpus: `batch_chain.json`.
 
 All contracts immutable per Workstream-E §20 discipline.
 
@@ -2859,52 +2876,114 @@ All contracts immutable per Workstream-E §20 discipline.
 | `MIN_BISECTION_STEP_INTERVAL_BLOCKS` | `uint64` | 5 (recommended) | `KnomosisFaultProofGame` constructor |
 | `MIN_GRACE_WINDOW_BLOCKS` | `uint64` | 216_000 (~30 days) | `KnomosisFaultProofMigration.sol` |
 | `MAX_RECIPIENTS_PER_BULK_ACTION` | (Lean) | 256 | `LegalKernel.FaultProof.SubStep` |
+| `MAX_ACTIONS_PER_BATCH` | `uint64` | 65_536 (default) | `KnomosisStateRootSubmission` constructor (SB ruling R10 — operational sanity, not a correctness bound: the game bisects any range) |
+| `ACTION_KEY_DOMAIN` | `bytes` | `"knomosis.actionsRoot"` | `ActionsRoot.sol`; Lean `ActionsRoot.actionKeyDomain` |
+| `SIG_BYTES` | `uint256` | 65 | `ActionsRoot.sol` — the fixed signature width the batch leaf binds (`r ‖ s ‖ v`); any other width reverts `ActionSigWrongLength` |
 
 ### 15.3 New L1 entry points
 
-`KnomosisStateRootSubmission`:
+`KnomosisStateRootSubmission` (batched — Workstream SB):
 
-  * `submitStateRoot(uint64 logIndex, bytes32 stateCommit, bytes32 prevLogEntryHash, bytes32 actionCommit)` payable
-    — `actionCommit` is `LogChain.actionCommit(actionKind, signer,
-    actionFields)`, i.e.
-    `keccak256(abi.encodePacked(uint8 actionKind, uint64 signer, bytes actionFields))`,
-    over the action that carried `logIndex - 1` to `logIndex`.  The
-    stored chain value becomes
-    `keccak256(abi.encode(prevLogEntryHash, stateCommit, actionCommit))`.
-    Binding the action here is what lets
-    `terminateOnSingleStep` authenticate the step it is asked to
-    adjudicate; the state-roots-only chain it replaced recorded no
-    action at all, so the terminal step executed whatever the
-    responding party supplied.  Lean mirror:
-    `LegalKernel.FaultProof.StepVMCoherence.l1ActionCommit` /
-    `l1NextEntryHash`; pinned per-entry by `step_vm.json`'s
-    `expectedActionCommitHex`.
-  * `finaliseStateRoot(uint64 logIndex)`
-  * `revertStateRootsFrom(uint64 fromIdx)` (called by game)
-  * `isStateRootReverted(uint64 logIndex) view returns (bool)`
+  * `submitStateRoot(uint64 endIndex, uint64 prevEndIndex, bytes32 stateCommit, bytes32 actionsRoot)` payable
+    — one record per BATCH, keyed by `endIndex`, covering L2 log
+    entries `[prevEndIndex, endIndex)` under the entry-count
+    convention (`stateCommit` is the state root after `endIndex`
+    entries).  `prevEndIndex` must equal `canonicalTip`
+    (`NotCanonicalTip`), the batch must be non-empty (`EmptyBatch`)
+    and within `MAX_ACTIONS_PER_BATCH` (`BatchTooLarge`).
+
+    The chain link is STRUCTURAL (ruling R5): `prevLogEntryHash` is
+    READ from the parent record's stored `expectedNextHash`, never
+    accepted from calldata, and the stored chain value becomes
+    `keccak256(abi.encode(prevLogEntryHash, stateCommit, actionsRoot))`
+    — ONE fold per batch (ruling R8), with the batch's `actionsRoot`
+    in the word the retired per-action registry spent on a single
+    action's commitment.  The genesis anchor at key 0 is written by
+    the constructor (born finalised, bondless, chain value
+    `keccak256(abi.encode(bytes32(0), genesisStateCommit, bytes32(0)))`
+    = `ActionsRoot.genesisChainSeed`).
+
+    `actionsRoot` is the SMT root over the batch's per-action
+    SIGNATURE-BOUND commitments (the cell-SMT family verbatim, depth
+    256): entry `n`'s key is
+    `keccak256("knomosis.actionsRoot" ‖ uint64BE n)` and its leaf
+    value is `keccak256(uint8 kind ‖ uint64BE signer ‖ fields ‖ sig)`
+    with the FIXED 65-byte signature suffix (ruling R7).  Lean
+    mirror: `LegalKernel.FaultProof.ActionsRoot`; the fold is Lean
+    `l1NextEntryHash`; pinned by `actions_root.json` (keys, leaves,
+    inclusion proofs, negative rows) and `batch_chain.json` (the
+    genesis seed and the running fold).
+
+    Overwriting is allowed at exactly one kind of key: a REVERTED
+    record whose bond has been emptied (ruling R3 — else
+    `AlreadyClaimed` / `BondNotReclaimed`); that is the recovery path
+    the retired registry lacked.
+  * `finaliseStateRoot(uint64 logIndex)` — refuses reverted records
+    (`RootReverted`); their bonds exit via `reclaimRevertedBond`.
+  * `revertStateRootsFrom(uint64 fromIdx)` (called by game) — stamps
+    `lastRevertAtBlock` and lowers `canonicalTip` to the disputed
+    record's own `prevEndIndex` (monotone-down), so the sequencer
+    re-extends from the last good record (ruling R1).
+  * `reclaimRevertedBond(uint64 logIndex)` — permissionless; returns
+    a reverted, undisputed, unfinalised record's bond to its OWN
+    sequencer (ruling R4).
+  * `isStateRootReverted(uint64 logIndex) view returns (bool)` —
+    record-level (ruling R1): in the reverted key range AND submitted
+    at or before the last revert stamp, so post-revert corrected
+    resubmissions read canonical.
+  * `roots(uint64) view` returns the 10-tuple
+    `(sequencer, stateCommit, prevLogEntryHash, expectedNextHash,
+    bond, submittedAtBlock, finalised, disputed, prevEndIndex,
+    actionsRoot)` — the two batch fields APPENDED last so every
+    pre-existing positional destructuring keeps its slots.
 
 `KnomosisFaultProofGame`:
 
-  * `initiateChallenge(...) payable returns (uint256 gameId)`
-  * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)`
+  * `initiateChallenge(uint64 disputedLogIndex, bytes32 challengerCommit, bytes32 lowCommit, uint64 lowLogIndex) payable returns (uint256 gameId)`
+    — the game bisects INSIDE one batch (ruling R2): `lowLogIndex`
+    must equal the disputed record's `prevEndIndex`
+    (`LowNotBatchStart`), `lowCommit` must match the parent record's
+    committed root (`LowCommitMismatch`), and a reverted disputed
+    record is refused (`DisputedRootReverted`).
+  * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)` — now
+    carries the depth PRE-check (`DepthCapExceeded` on the midpoint
+    that would exceed `MAX_BISECTION_DEPTH`, matching the Lean and
+    Rust mirrors, instead of charging the responder for a move the
+    game could never absorb).
   * `respondToMidpoint(uint256 gameId, bool agree)`
-  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, OpenedCell[] opened, bytes gapMask, bytes siblings)`
+  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, bytes actionSig, bytes actionProof, OpenedCell[] opened, bytes gapMask, bytes siblings)`
     — no `claimedPostCommit` argument: the contract computes the
     post-state ROOT from the step and compares it against the on-chain
     `g.high.commit`, so the claim is not the caller's to make.  It
     also takes no `l2LogIndex`: the contract reads `g.high.idx`, which
-    is the index the disputed action produced.  (An
-    earlier draft of this line documented a third, non-existent form;
-    the Rust observer had been built against it and its calldata could
-    not be dispatched.)  The `(actionKind, actionFields, signer)`
-    triple is authenticated against the log-entry chain at
-    `g.high.idx` before dispatch — reverts `ActionNotInLogChain` if it
-    is not the action the sequencer bound when it published that root.
+    is the index the disputed action produced.  The signed action is
+    authenticated by INCLUSION PROOF before dispatch (ruling R7): its
+    leaf commit
+    `keccak256(actionKind ‖ uint64BE signer ‖ actionFields ‖ actionSig)`
+    (the 65-byte signature is HASHED, not verified — on-chain
+    verification is the recorded follow-up needing L1 actorId→key
+    resolution) must open at absolute index `g.low.idx` — the
+    disputed step's own index under the entry-count convention —
+    under the DISPUTED batch record's `actionsRoot`, read via the
+    game's immutable `g.disputedLogIndex`, never a caller-supplied
+    batch id.  `actionProof` is the standard SMT wire
+    (`bitmask(32) ‖ siblings(N×32)`).  Reverts `ActionNotInBatch` if
+    the action is not the one the sequencer committed when it
+    published the batch.
   * `claimTimeout(uint256 gameId)`
+
+  **Turn parity.**  An in-progress game is always in one of exactly
+  two shapes — (sequencer's turn, no pending midpoint) or
+  (challenger's turn, pending midpoint) — so the single-step
+  terminate obligation ALWAYS falls on the sequencer; a challenger is
+  never terminate-obligated.  Lean: `turnAlignedWithPending` /
+  `turn_aligned_preserved` / `terminate_owner_is_sequencer`; pinned
+  on the deployed bytecode by the game suite's fuzzed move-sequence
+  test.
 
 `KnomosisStepVMRoot`:
 
-  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
+  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..25`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
   * `widestFrontier(bytes probeFields) pure returns (uint256)` — the
     largest frontier any adjudicable action produces, derived from
     `StepWrites.deriveWriteSet` rather than restated.  `assertConsistent`
@@ -2990,9 +3069,15 @@ All contracts immutable per Workstream-E §20 discipline.
 ### 15.4 New events
 
 `KnomosisStateRootSubmission`:
-  * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer)`
+  * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer, uint64 prevEndIndex, bytes32 actionsRoot)`
+    — the two batch fields APPENDED after the retired event's data
+    layout (SB ruling R9): the observer reads a batch's bounds and
+    actions root from this event alone.
   * `StateRootFinalised(uint64 indexed logIndex, address indexed sequencer)`
   * `StateRootRangeReverted(uint64 indexed floor, uint64 indexed ceiling)`
+  * `StateRootBondReclaimed(uint64 indexed logIndex, address indexed sequencer, uint128 amount)` (SB ruling R4)
+  * `StateRootDisputed(uint64 indexed logIndex, address indexed sequencer)`
+  * `SequencerBondSlashed(uint64 indexed logIndex, address indexed sequencer, address indexed recipient, uint128 amount)`
 
 `KnomosisFaultProofGame`:
   * `FaultProofGameOpened(uint256 indexed gameId, address indexed challenger, bytes32 disputedStateRoot, bytes32 challengerStateRoot)`

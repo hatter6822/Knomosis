@@ -8,7 +8,7 @@ import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/Reentrancy
 
 import {KnomosisStepVMRoot} from "./KnomosisStepVMRoot.sol";
 
-import {LogChain} from "../lib/LogChain.sol";
+import {ActionsRoot} from "../lib/ActionsRoot.sol";
 
 /// @notice Minimal interface for the state-root submission
 ///         contract's dispute-locking, bond-slashing, flag-
@@ -24,10 +24,13 @@ interface IStateRootSubmission {
     function clearDisputed(uint64 logIndex) external;
     function slashSequencerBond(uint64 logIndex, address recipient) external;
     function revertStateRootsFrom(uint64 fromIdx) external;
-    /// @notice The canonical accessor for the per-root record.
+    /// @notice The canonical accessor for the per-batch record.
     ///         Returns (sequencer, stateCommit, prevLogEntryHash,
     ///         expectedNextHash, bond, submittedAtBlock, finalised,
-    ///         disputed).
+    ///         disputed, prevEndIndex, actionsRoot) — the two batch
+    ///         fields APPENDED last (SB risk-register item 1), so
+    ///         every pre-existing positional destructuring keeps its
+    ///         slots.
     function roots(uint64 logIndex) external view returns (
         address sequencer,
         bytes32 stateCommit,
@@ -36,8 +39,14 @@ interface IStateRootSubmission {
         uint128 bond,
         uint64  submittedAtBlock,
         bool    finalised,
-        bool    disputed
+        bool    disputed,
+        uint64  prevEndIndex,
+        bytes32 actionsRoot
     );
+    /// @notice Record-level reverted test (SB ruling R1); the game
+    ///         refuses to open on a reverted record (ruling R2).
+    function isStateRootReverted(uint64 logIndex)
+        external view returns (bool);
     /// @notice The deployment ID of the state-root submission
     ///         contract; the game inherits this binding to
     ///         prevent cross-deployment replay.
@@ -203,17 +212,31 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
     /// @notice A pull-payment withdrawal was attempted with nothing
     ///         credited, or its transfer failed.
     error NothingToWithdraw();
-    /// @notice The `(actionKind, actionFields, signer)` triple supplied
-    ///         to `terminateOnSingleStep` is not the action the
-    ///         sequencer bound to the disputed root's log-entry chain.
+    /// @notice The `(actionKind, actionFields, signer, sig)` tuple
+    ///         supplied to `terminateOnSingleStep` does not open at
+    ///         the disputed step's log index under the batch's
+    ///         actions root (SB ruling R7).
     ///
     ///         Without this check the terminal step executed WHATEVER
     ///         action the responding party submitted, and the L1 had no
     ///         record of which action the L2 actually ran — so a party
     ///         about to lose could search for a different action whose
     ///         step reproduces the disputed root and settle in its
-    ///         favour on a step that never happened.
-    error ActionNotInLogChain();
+    ///         favour on a step that never happened.  The retired
+    ///         per-action registry authenticated by re-deriving one
+    ///         chain link; a batch record commits to its actions as an
+    ///         SMT root, so the authentication is an inclusion proof.
+    error ActionNotInBatch();
+    /// @notice `initiateChallenge`'s `lowLogIndex` is not the disputed
+    ///         record's `prevEndIndex` (SB ruling R2).  The game
+    ///         bisects INSIDE one batch: its low anchor is the batch's
+    ///         start — the parent record's agreed commit — and nothing
+    ///         else is on-chain-agreed within the range.
+    error LowNotBatchStart();
+    /// @notice The disputed record is reverted (SB ruling R2): it is
+    ///         already judged, and a game on it would re-litigate a
+    ///         range the chain no longer stands on.
+    error DisputedRootReverted();
     /// @notice The constructor's `_minChallengeBond` is zero.  A zero
     ///         minimum bond lets a challenger open a game with nothing at
     ///         risk (`initiateChallenge` accepts `msg.value == 0`) while
@@ -300,7 +323,7 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         // be stuck.  Defensive: reject degenerate ranges.
         if (lowLogIndex >= disputedLogIndex) revert MidpointOutOfRange();
 
-        // Authoritative lookup of the disputed state root + its
+        // Authoritative lookup of the disputed batch record + its
         // submitter from the state-root submission contract.
         IStateRootSubmission sub = IStateRootSubmission(stateRootSubmission);
         (
@@ -311,14 +334,25 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
             /* bond */,
             uint64  submittedAtBlock,
             bool    finalised,
-            /* disputed */
+            /* disputed */,
+            uint64  prevEndIndex,
+            /* actionsRoot */
         ) = sub.roots(disputedLogIndex);
 
-        // Validate the disputed root exists and is challengeable.
+        // Validate the disputed record exists and is challengeable.
         if (submittedAtBlock == 0) revert ZeroAddress();
         if (finalised) revert GameAlreadyEnded();
+        // A reverted record is already judged (SB ruling R2).
+        if (sub.isStateRootReverted(disputedLogIndex))
+            revert DisputedRootReverted();
         if (challengerCommit == rootStateCommit)
             revert MidpointOutOfRange();  // no actual dispute
+
+        // The game bisects INSIDE the disputed batch: the low anchor
+        // is the batch's start (SB ruling R2) — the parent record's
+        // key — because that is the one index below `disputedLogIndex`
+        // whose commit is on-chain-agreed.
+        if (lowLogIndex != prevEndIndex) revert LowNotBatchStart();
 
         // Anchor the LOW endpoint to the on-chain submitted root at
         // `lowLogIndex` — exactly as `high` is anchored to the disputed
@@ -341,7 +375,9 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
             /* bond */,
             uint64  lowSubmittedAtBlock,
             /* finalised */,
-            /* disputed */
+            /* disputed */,
+            /* prevEndIndex */,
+            /* actionsRoot */
         ) = sub.roots(lowLogIndex);
         if (lowSubmittedAtBlock == 0) revert LowRootNotSubmitted();
         if (lowCommit != lowStateCommit) revert LowCommitMismatch();
@@ -396,6 +432,12 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         if (g.status != GameStatus.InProgress) revert GameAlreadyEnded();
         if (block.number > g.turnDeadline) revert TurnDeadlineExpired();
         if (g.hasPendingMidpoint) revert MidpointAlreadyPending();
+        // Depth PRE-check (SB riding-along item): refuse the midpoint
+        // that would take the game past the cap, rather than
+        // accepting it and refusing the RESPONSE.  The Lean and Rust
+        // mirrors already gate here; without this the L1 charged the
+        // responder for a move the game could never absorb.
+        if (g.depth >= MAX_BISECTION_DEPTH) revert DepthCapExceeded();
         if (block.number <
             g.lastStepBlock + MIN_BISECTION_STEP_INTERVAL_BLOCKS)
             revert BisectionStepTooFast();
@@ -467,6 +509,8 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         uint8 actionKind,
         bytes calldata actionFields,
         uint64 signer,
+        bytes calldata actionSig,
+        bytes calldata actionProof,
         KnomosisStepVMRoot.OpenedCell[] calldata opened,
         bytes calldata gapMask,
         bytes calldata siblings
@@ -480,22 +524,30 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
                               g.sequencer : g.challenger;
         if (msg.sender != responsible) revert NotResponsible();
 
-        // Authenticate the action against the log-entry chain BEFORE
-        // executing it.  `g.high.idx` is the index the disputed action
-        // produced, and its stored `expectedNextHash` is the chain
-        // value the sequencer committed to when it published that root
-        // — over `(prevLogEntryHash, stateCommit, actionCommit)`.
-        // Re-deriving the commitment from the submitted triple and
-        // requiring the chain value to match makes the action the L2
-        // actually executed the only one this step can adjudicate.
+        // Authenticate the action against the disputed batch's
+        // actions root BEFORE executing it (SB ruling R7).  Under the
+        // entry-count convention the single step carries state
+        // `g.low.idx` to `g.low.idx + 1`, so the disputed action's
+        // absolute log index is `g.low.idx`; its leaf under the
+        // batch's actions root is the SIGNATURE-BOUND commit
+        // `keccak256(kind ‖ uint64BE signer ‖ fields ‖ sig)`, and the
+        // inclusion proof walks it to the root the sequencer folded
+        // into the chain when it published the record.  The signature
+        // is hashed, not verified — on-chain verification at
+        // terminate is the recorded follow-up needing L1 actorId→key
+        // resolution; binding it in the leaf now means that follow-up
+        // is a drop-in rather than another chain-shape migration.
         //
-        // Read at terminate rather than cached at challenge time: a
-        // submitted root is immutable (`submitStateRoot` rejects a
-        // re-submission at an occupied index, and `revertStateRootsFrom`
-        // marks a range without clearing storage), so the value cannot
-        // have moved, and caching it would cost two storage slots per
-        // game for nothing.
-        _requireActionInLogChain(g.high.idx, actionKind, actionFields, signer);
+        // The batch is read via the game's own immutable
+        // `g.disputedLogIndex` (SB ruling R2) — never a
+        // caller-supplied batch id — and read at terminate rather
+        // than cached at challenge time: a submitted record is
+        // immutable at its key while a game is open (`markDisputed`
+        // blocks reclaim, so the R3 overwrite path cannot fire), so
+        // the value cannot have moved.
+        _requireActionInBatch(
+            g.disputedLogIndex, g.low.idx,
+            actionKind, actionFields, signer, actionSig, actionProof);
 
         // Run the step VM.  It returns a state ROOT — computed by
         // folding the step's DERIVED cell writes into `g.low.commit` —
@@ -543,34 +595,42 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         }
     }
 
-    /// @notice Revert unless the submitted action is the one the
-    ///         sequencer bound to `logIndex`'s log-entry chain.
+    /// @notice Revert unless the submitted signed action opens at
+    ///         `stepIndex` under the disputed batch's actions root.
     ///
     /// @dev    Extracted from `terminateOnSingleStep` to keep that
-    ///         function's stack shallow under `via_ir`.
-    function _requireActionInLogChain(
-        uint64 logIndex,
+    ///         function's stack shallow under `via_ir`.  The SMT key
+    ///         is DERIVED from `stepIndex` inside
+    ///         `ActionsRoot.verifyActionInclusion`, so the proof can
+    ///         only speak about the disputed step's own slot.
+    function _requireActionInBatch(
+        uint64 disputedEndIndex,
+        uint64 stepIndex,
         uint8 actionKind,
         bytes calldata actionFields,
-        uint64 signer
+        uint64 signer,
+        bytes calldata actionSig,
+        bytes calldata actionProof
     ) internal view {
         (
             /* sequencer */,
-            bytes32 stateCommit,
-            bytes32 prevLogEntryHash,
-            bytes32 expectedNextHash,
+            /* stateCommit */,
+            /* prevLogEntryHash */,
+            /* expectedNextHash */,
             /* bond */,
             /* submittedAtBlock */,
             /* finalised */,
-            /* disputed */
-        ) = IStateRootSubmission(stateRootSubmission).roots(logIndex);
+            /* disputed */,
+            /* prevEndIndex */,
+            bytes32 batchActionsRoot
+        ) = IStateRootSubmission(stateRootSubmission).roots(disputedEndIndex);
 
-        bytes32 expected = LogChain.nextEntryHash(
-            prevLogEntryHash,
-            stateCommit,
-            LogChain.actionCommit(actionKind, signer, actionFields)
-        );
-        if (expected != expectedNextHash) revert ActionNotInLogChain();
+        bytes32 commit = ActionsRoot.actionLeafCommit(
+            actionKind, signer, actionFields, actionSig);
+        if (!ActionsRoot.verifyActionInclusion(
+                batchActionsRoot, stepIndex, commit, actionProof)) {
+            revert ActionNotInBatch();
+        }
     }
 
     /* ---------------------------------------------------------- */
@@ -773,8 +833,12 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         // `widestFrontier` is the probe because it exists only on the
         // multiproof build and its answer is checkable: the widest
         // adjudicable write set plus the read-only policy cell, which
-        // must fit the opening cap the same contract publishes.
-        uint256 widest = stepVM.widestFrontier(new bytes(128));
+        // must fit the opening cap the same contract publishes.  The
+        // probe buffer carries slack over the step VM's own
+        // `PROBE_FIELD_BYTES` floor (160 since the Workstream SB
+        // 136-byte kind-19 layout) so a future layout widening moves
+        // the floor without silently breaking this deploy-time check.
+        uint256 widest = stepVM.widestFrontier(new bytes(256));
         require(widest > 0, "StepVMNotMultiproof");
         require(widest <= stepVM.MAX_CELL_OPENINGS(), "StepVMFrontierExceedsCap");
     }

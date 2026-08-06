@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7f99d6bf88cad81722c353d6b546b2b3834a41720119d0830008999e25a460a1"
+    "source_digest": "1c61cc2a34ede8cf15d8ca8a4244e38bea6aa0fea744a556e6167434dca63c75"
   },
   "summary": {
-    "module_count": 347,
-    "declaration_count": 6082
+    "module_count": 348,
+    "declaration_count": 6100
   },
   "modules": [
     {
@@ -21213,7 +21213,9 @@
           "kind": "def",
           "name": "genesisChainSeed",
           "line": 538,
-          "called": []
+          "called": [
+            "genesisStateCommit"
+          ]
         },
         {
           "kind": "def",
@@ -21221,7 +21223,8 @@
           "line": 546,
           "called": [
             "FaultProof",
-            "LegalKernel"
+            "LegalKernel",
+            "batches"
           ]
         }
       ]
@@ -45172,6 +45175,187 @@
             "withdraw_step_supply",
             "withdraw_step_withdrawn",
             "withdrawalsMonotonic_step"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.ActionsRootBatch",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/ActionsRootBatch.lean",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck.ActionsRootBatch",
+          "line": 53,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 56,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "chainFixtureName",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sig65",
+          "line": 65,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "entryOf",
+          "line": 71,
+          "called": [
+            "Action",
+            "ActorId",
+            "Nonce",
+            "sig65"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "Batch",
+          "line": 78,
+          "called": [
+            "entries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "batches",
+          "line": 89,
+          "called": [
+            "Batch",
+            "deposit",
+            "depositWithFee",
+            "entries",
+            "entryOf",
+            "mint",
+            "reserveSwap",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entryJson",
+          "line": 113,
+          "called": [
+            "Batch",
+            "Json",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "batchJson",
+          "line": 132,
+          "called": [
+            "Batch",
+            "Json",
+            "entryJson",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "negativeBatch",
+          "line": 147,
+          "called": [
+            "Batch",
+            "entries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "flipFirstByte",
+          "line": 151,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "negativesJson",
+          "line": 155,
+          "called": [
+            "Json",
+            "entryOf",
+            "flipFirstByte",
+            "hexFromBytes",
+            "negativeBatch"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixture",
+          "line": 184,
+          "called": [
+            "Json",
+            "batchJson",
+            "negativesJson"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genesisStateCommit",
+          "line": 198,
+          "called": [
+            "ExtendedState.empty",
+            "commitExtendedState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "chainBatches",
+          "line": 204,
+          "called": [
+            "ExtendedState.empty",
+            "base",
+            "commitExtendedState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "chainSteps",
+          "line": 215,
+          "called": [
+            "chainBatches",
+            "genesisStateCommit"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildChainFixture",
+          "line": 222,
+          "called": [
+            "Json",
+            "genesisStateCommit",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 242,
+          "called": [
+            "LegalKernel.Test.Bridge.CrossCheck.ActionsRootBatch",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "batches",
+            "chainFixtureName",
+            "chainSteps",
+            "entryOf",
+            "fixtureName",
+            "flipFirstByte",
+            "genesisStateCommit",
+            "negativeBatch"
           ]
         }
       ]

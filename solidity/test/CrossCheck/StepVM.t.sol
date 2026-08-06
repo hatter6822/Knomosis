@@ -397,18 +397,21 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice **The log-chain action commitment is byte-identical
-    ///         across the stacks.**
+    /// @notice **The action commitment is byte-identical across the
+    ///         stacks.**
     ///
-    ///         `KnomosisStateRootSubmission` binds this value when the
-    ///         sequencer publishes a root and
-    ///         `KnomosisFaultProofGame.terminateOnSingleStep`
-    ///         re-derives it from the action it is handed, so a
-    ///         one-byte disagreement between the Lean encoder and the
-    ///         Solidity one makes every honest terminate revert
-    ///         `ActionNotInLogChain` — a liveness failure that looks
-    ///         exactly like a malicious submission.  The corpus is
-    ///         where that is caught.
+    ///         The unsigned triple commit is the shared PREFIX
+    ///         construction: the batch leaf the fault-proof game
+    ///         authenticates at terminate
+    ///         (`ActionsRoot.actionLeafCommit`, Lean
+    ///         `ActionsRoot.actionLeafValue`) extends this exact
+    ///         `kind ‖ uint64BE signer ‖ fields` pre-image by the
+    ///         fixed 65-byte signature suffix.  A one-byte
+    ///         disagreement between the Lean field encoder and the
+    ///         Solidity one therefore makes every honest terminate
+    ///         revert `ActionNotInBatch` — a liveness failure that
+    ///         looks exactly like a malicious submission.  The corpus
+    ///         is where that is caught.
     function test_perEntry_actionCommit_matches_lean() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");

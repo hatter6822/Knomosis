@@ -2,12 +2,21 @@
 pragma solidity 0.8.36;
 
 import {Test} from "forge-std/Test.sol";
+import {ActionsRoot} from "src/lib/ActionsRoot.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 
 /// @title KnomosisStateRootSubmissionTest
-/// @notice Forge tests for the state-root submission registry
-///         (Workstream-H WUs H.7.1 – H.7.4).
+/// @notice Forge tests for the BATCH submission registry
+///         (Workstream-H WUs H.7.1 – H.7.4, re-cut by Workstream SB).
+///
+///         The revert-recovery suite is the load-bearing half: the
+///         retired per-action registry's reverted range was a dead
+///         end (reverted indices unresubmittable forever, the chain
+///         extending straight through reverted entries), and these
+///         tests FAIL on that behaviour — they drive a revert, then
+///         resubmit the corrected chain and require it to be
+///         canonical.
 contract KnomosisStateRootSubmissionTest is Test {
     KnomosisStateRootSubmission private registry;
 
@@ -16,29 +25,22 @@ contract KnomosisStateRootSubmissionTest is Test {
     address private stranger = address(0xDEAD);
 
     bytes32 private constant DEPLOYMENT_ID = bytes32(uint256(0xCAFE));
-    /// An arbitrary but FIXED action commitment.  The registry treats
-    /// it opaquely — it folds the value into the chain and never
-    /// interprets it — so these tests need one stable value, not a
-    /// realistic one.  `KnomosisFaultProofGame.t.sol` is where a real
-    /// `LogChain.actionCommit` is exercised end-to-end.
-    bytes32 private constant ACTION_COMMIT = bytes32(uint256(0xAC7104));
+    /// An arbitrary but FIXED actions root.  The registry treats it
+    /// opaquely — it folds the value into the chain and never opens
+    /// it — so these tests need one stable value, not a realistic
+    /// tree.  `KnomosisFaultProofGame.t.sol` is where a real
+    /// `ActionsRoot.actionsRoot` is opened end-to-end.
+    bytes32 private constant ACTIONS_ROOT = bytes32(uint256(0xAC7104));
+    bytes32 private constant GENESIS_COMMIT = bytes32(uint256(0x6E0E515));
     uint128 private constant BOND = 1 ether;
     uint64  private constant DISPUTE_WINDOW = 100;
     uint64  private constant MIN_INTERVAL = 10;
     uint64  private constant MAX_OUTSTANDING = 5;
     uint64  private constant WITHDRAWAL_WINDOW = 50;
+    uint64  private constant MAX_BATCH = 1000;
 
     function setUp() public {
-        registry = new KnomosisStateRootSubmission(
-            BOND,
-            DISPUTE_WINDOW,
-            MIN_INTERVAL,
-            MAX_OUTSTANDING,
-            sequencer,
-            faultProofGame,
-            DEPLOYMENT_ID,
-            WITHDRAWAL_WINDOW
-        );
+        registry = _deploy(GENESIS_COMMIT, MAX_BATCH);
         vm.deal(sequencer, 100 ether);
         // Roll past the rate-limit window (lastSubmissionBlock starts
         // at 0; require block.number ≥ MIN_INTERVAL for the first
@@ -46,30 +48,109 @@ contract KnomosisStateRootSubmissionTest is Test {
         vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
     }
 
-    /* -------- Constructor -------- */
+    function _deploy(bytes32 gsc, uint64 maxBatch)
+        internal
+        returns (KnomosisStateRootSubmission)
+    {
+        return new KnomosisStateRootSubmission(
+            BOND,
+            DISPUTE_WINDOW,
+            MIN_INTERVAL,
+            MAX_OUTSTANDING,
+            sequencer,
+            faultProofGame,
+            DEPLOYMENT_ID,
+            WITHDRAWAL_WINDOW,
+            gsc,
+            maxBatch
+        );
+    }
+
+    /// Submit a batch as the sequencer, advancing past the rate
+    /// limit first.
+    function _submit(uint64 endIndex, uint64 prevEndIndex, bytes32 commit)
+        internal
+    {
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
+        vm.prank(sequencer);
+        registry.submitStateRoot{value: BOND}(
+            endIndex, prevEndIndex, commit, ACTIONS_ROOT);
+    }
+
+    function _commitOf(uint64 endIndex) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked("state", endIndex));
+    }
+
+    function _expectedNextHashOf(uint64 endIndex)
+        internal
+        view
+        returns (bytes32 h)
+    {
+        (, , , h, , , , , , ) = registry.roots(endIndex);
+    }
+
+    /* -------- Constructor + genesis anchor -------- */
 
     function test_constructor_sets_immutables() public view {
         assertEq(registry.STATE_ROOT_SUBMISSION_BOND(), BOND);
         assertEq(registry.FAULT_PROOF_DISPUTE_WINDOW(), DISPUTE_WINDOW);
         assertEq(registry.MIN_SUBMISSION_INTERVAL_BLOCKS(), MIN_INTERVAL);
         assertEq(registry.MAX_OUTSTANDING_ROOTS_PER_SEQUENCER(), MAX_OUTSTANDING);
+        assertEq(registry.MAX_ACTIONS_PER_BATCH(), MAX_BATCH);
         assertEq(registry.sequencer(), sequencer);
         assertEq(registry.faultProofGame(), faultProofGame);
         assertEq(registry.deploymentId(), DEPLOYMENT_ID);
+        registry.assertConsistent();
+    }
+
+    /// The constructor writes the genesis anchor: record 0,
+    /// finalised, bondless, its chain value the genesis seed — so
+    /// the first real submission has a structural parent.
+    function test_genesis_anchor_written_by_constructor() public view {
+        (
+            address seq, bytes32 commit, bytes32 prevHash, bytes32 nextHash,
+            uint128 bond, uint64 atBlock, bool finalised, bool disputed,
+            uint64 prevEnd, bytes32 ar
+        ) = registry.roots(0);
+        assertEq(seq, address(0), "nobody submitted genesis");
+        assertEq(commit, GENESIS_COMMIT, "genesis commit");
+        assertEq(prevHash, bytes32(0), "all-zero predecessor");
+        assertEq(
+            nextHash, ActionsRoot.genesisChainSeed(GENESIS_COMMIT),
+            "the genesis seed");
+        assertEq(bond, 0, "bondless");
+        assertGt(atBlock, 0, "anchor exists");
+        assertTrue(finalised, "born finalised");
+        assertFalse(disputed, "undisputed");
+        assertEq(prevEnd, 0, "self-parented");
+        assertEq(ar, bytes32(0), "empty actions root");
+        assertEq(registry.canonicalTip(), 0, "tip starts at genesis");
+    }
+
+    function test_constructor_rejects_zero_genesis_commit() public {
+        vm.expectRevert(KnomosisStateRootSubmission.ZeroGenesisCommit.selector);
+        _deploy(bytes32(0), MAX_BATCH);
+    }
+
+    function test_constructor_rejects_zero_batch_cap() public {
+        vm.expectRevert(KnomosisStateRootSubmission.BatchTooLarge.selector);
+        _deploy(GENESIS_COMMIT, 0);
     }
 
     function test_constructor_rejects_zero_sequencer() public {
         vm.expectRevert(KnomosisStateRootSubmission.ZeroAddress.selector);
         new KnomosisStateRootSubmission(
             BOND, DISPUTE_WINDOW, MIN_INTERVAL, MAX_OUTSTANDING,
-            address(0), faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW);
+            address(0), faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW,
+            GENESIS_COMMIT, MAX_BATCH);
     }
 
     function test_constructor_rejects_zero_faultProofGame() public {
         vm.expectRevert(KnomosisStateRootSubmission.ZeroAddress.selector);
         new KnomosisStateRootSubmission(
             BOND, DISPUTE_WINDOW, MIN_INTERVAL, MAX_OUTSTANDING,
-            sequencer, address(0), DEPLOYMENT_ID, WITHDRAWAL_WINDOW);
+            sequencer, address(0), DEPLOYMENT_ID, WITHDRAWAL_WINDOW,
+            GENESIS_COMMIT, MAX_BATCH);
     }
 
     function test_constructor_rejects_dispute_window_too_short() public {
@@ -80,331 +161,393 @@ contract KnomosisStateRootSubmissionTest is Test {
             10,  // dispute window
             MIN_INTERVAL, MAX_OUTSTANDING,
             sequencer, faultProofGame, DEPLOYMENT_ID,
-            100);  // withdrawal window > dispute window
+            100,  // withdrawal window > dispute window
+            GENESIS_COMMIT, MAX_BATCH);
     }
 
     function test_constructor_rejects_zero_bond() public {
         vm.expectRevert(KnomosisStateRootSubmission.InvalidBond.selector);
         new KnomosisStateRootSubmission(
-            0,  // zero bond — disabled slashing
-            DISPUTE_WINDOW, MIN_INTERVAL, MAX_OUTSTANDING,
-            sequencer, faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW);
+            0, DISPUTE_WINDOW, MIN_INTERVAL, MAX_OUTSTANDING,
+            sequencer, faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW,
+            GENESIS_COMMIT, MAX_BATCH);
     }
 
-    function test_constructor_rejects_zero_dispute_window() public {
-        vm.expectRevert(KnomosisStateRootSubmission.WindowTooShort.selector);
-        new KnomosisStateRootSubmission(
-            BOND,
-            0,  // zero dispute window — instant finality breaks fault-proof
-            MIN_INTERVAL, MAX_OUTSTANDING,
-            sequencer, faultProofGame, DEPLOYMENT_ID, 0);
-    }
+    /* -------- submitStateRoot: batch semantics -------- */
 
-    function test_constructor_rejects_zero_submission_interval() public {
-        vm.expectRevert(KnomosisStateRootSubmission.SubmissionTooFrequent.selector);
-        new KnomosisStateRootSubmission(
-            BOND, DISPUTE_WINDOW,
-            0,  // zero submission interval — unbounded spam
-            MAX_OUTSTANDING,
-            sequencer, faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW);
-    }
-
-    function test_constructor_rejects_zero_max_outstanding() public {
-        vm.expectRevert(KnomosisStateRootSubmission.TooManyOutstandingRoots.selector);
-        new KnomosisStateRootSubmission(
-            BOND, DISPUTE_WINDOW, MIN_INTERVAL,
-            0,  // zero max outstanding — no submissions possible
-            sequencer, faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW);
-    }
-
-    /* -------- submitStateRoot -------- */
-
-    function test_submitStateRoot_first_index_succeeds() public {
-        vm.prank(sequencer);
-        registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
-        // Verify the record was stored.
-        (address seq, bytes32 commit, , , uint128 bond, uint64 atBlock, , )
-          = registry.roots(0);
+    /// One batch covers many entries: a (0 → 500) submission is ONE
+    /// record, one bond, one chain link — the rollup economics the
+    /// per-action registry could not express.
+    function test_submit_batch_extends_the_tip() public {
+        _submit(500, 0, _commitOf(500));
+        assertEq(registry.canonicalTip(), 500, "tip advanced to end");
+        assertEq(registry.latestSubmittedLogIndex(), 500);
+        (
+            address seq, bytes32 commit, bytes32 prevHash, bytes32 nextHash,
+            uint128 bond, , bool finalised, , uint64 prevEnd, bytes32 ar
+        ) = registry.roots(500);
         assertEq(seq, sequencer);
-        assertEq(commit, bytes32(uint256(0xAAA)));
+        assertEq(commit, _commitOf(500));
+        assertEq(
+            prevHash, ActionsRoot.genesisChainSeed(GENESIS_COMMIT),
+            "structural link to the genesis anchor");
+        assertEq(
+            nextHash,
+            LogChain.nextEntryHash(prevHash, commit, ACTIONS_ROOT),
+            "chain folds the actions root");
         assertEq(bond, BOND);
-        assertEq(atBlock, uint64(block.number));
+        assertFalse(finalised);
+        assertEq(prevEnd, 0);
+        assertEq(ar, ACTIONS_ROOT);
     }
 
-    function test_submitStateRoot_rejects_non_sequencer() public {
+    function test_submit_chains_structurally() public {
+        _submit(3, 0, _commitOf(3));
+        bytes32 firstNext = _expectedNextHashOf(3);
+        _submit(10, 3, _commitOf(10));
+        (, , bytes32 prevHash, , , , , , , ) = registry.roots(10);
+        assertEq(
+            prevHash, firstNext,
+            "the child's prev hash IS the parent's stored next hash");
+    }
+
+    function test_submit_rejects_non_sequencer() public {
+        vm.deal(stranger, BOND);
         vm.prank(stranger);
-        vm.deal(stranger, 100 ether);
         vm.expectRevert(KnomosisStateRootSubmission.NotSequencer.selector);
-        registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+        registry.submitStateRoot{value: BOND}(1, 0, _commitOf(1), ACTIONS_ROOT);
     }
 
-    function test_submitStateRoot_rejects_wrong_bond() public {
+    function test_submit_rejects_wrong_bond() public {
         vm.prank(sequencer);
         vm.expectRevert(KnomosisStateRootSubmission.InvalidBond.selector);
         registry.submitStateRoot{value: BOND - 1}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+            1, 0, _commitOf(1), ACTIONS_ROOT);
     }
 
-    function test_submitStateRoot_rejects_duplicate_index() public {
+    function test_submit_rejects_empty_batch() public {
         vm.prank(sequencer);
+        vm.expectRevert(KnomosisStateRootSubmission.EmptyBatch.selector);
+        registry.submitStateRoot{value: BOND}(0, 0, _commitOf(0), ACTIONS_ROOT);
+    }
+
+    function test_submit_rejects_oversized_batch() public {
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisStateRootSubmission.BatchTooLarge.selector);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+            MAX_BATCH + 1, 0, _commitOf(1), ACTIONS_ROOT);
+    }
+
+    /// The chain is linear: a submission must extend the tip, so a
+    /// second child of an already-extended parent — a FORK — is
+    /// refused.
+    function test_submit_rejects_fork() public {
+        _submit(5, 0, _commitOf(5));
         vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
         vm.prank(sequencer);
-        vm.expectRevert(KnomosisStateRootSubmission.AlreadyClaimed.selector);
-        registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xBBB)), bytes32(0), ACTION_COMMIT);
+        vm.expectRevert(KnomosisStateRootSubmission.NotCanonicalTip.selector);
+        registry.submitStateRoot{value: BOND}(7, 0, _commitOf(7), ACTIONS_ROOT);
     }
 
-    function test_submitStateRoot_enforces_rate_limit() public {
+    function test_submit_rejects_gap() public {
         vm.prank(sequencer);
+        vm.expectRevert(KnomosisStateRootSubmission.NotCanonicalTip.selector);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
-        // Try to submit a second root immediately.
-        vm.prank(sequencer);
-        vm.expectRevert(KnomosisStateRootSubmission.SubmissionTooFrequent.selector);
-        registry.submitStateRoot{value: BOND}(
-            1, bytes32(uint256(0xBBB)),
-            LogChain.nextEntryHash(bytes32(0), bytes32(uint256(0xAAA)), ACTION_COMMIT),
-            ACTION_COMMIT);
+            10, 5, _commitOf(10), ACTIONS_ROOT);
     }
 
-    function test_submitStateRoot_hash_chain_break_rejected() public {
+    function test_submit_rate_limited() public {
+        _submit(1, 0, _commitOf(1));
+        // No roll: the second submission is inside the interval.
         vm.prank(sequencer);
-        registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+        vm.expectRevert(
+            KnomosisStateRootSubmission.SubmissionTooFrequent.selector);
+        registry.submitStateRoot{value: BOND}(2, 1, _commitOf(2), ACTIONS_ROOT);
+    }
+
+    function test_submit_outstanding_cap() public {
+        for (uint64 i = 1; i <= MAX_OUTSTANDING; i++) {
+            _submit(i, i - 1, _commitOf(i));
+        }
         vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
         vm.prank(sequencer);
-        // Submit at idx 1 with WRONG prevLogEntryHash.
-        vm.expectRevert(KnomosisStateRootSubmission.HashChainBroken.selector);
+        vm.expectRevert(
+            KnomosisStateRootSubmission.TooManyOutstandingRoots.selector);
         registry.submitStateRoot{value: BOND}(
-            1, bytes32(uint256(0xBBB)), bytes32(uint256(0xDEAD0FF)), ACTION_COMMIT);
+            MAX_OUTSTANDING + 1, MAX_OUTSTANDING,
+            _commitOf(MAX_OUTSTANDING + 1), ACTIONS_ROOT);
     }
 
-    function test_submitStateRoot_rejects_idx1_without_idx0() public {
-        vm.prank(sequencer);
-        // Submit at idx 1 without idx 0 first.
-        vm.expectRevert(KnomosisStateRootSubmission.PreviousRootMissing.selector);
-        registry.submitStateRoot{value: BOND}(
-            1, bytes32(uint256(0xBBB)), bytes32(0), ACTION_COMMIT);
-    }
+    /* -------- finalise -------- */
 
-    /* -------- finaliseStateRoot -------- */
-
-    function test_finaliseStateRoot_after_dispute_window_succeeds() public {
-        vm.prank(sequencer);
-        registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+    function test_finalise_after_window_releases_bond() public {
+        _submit(4, 0, _commitOf(4));
         vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
-
-        uint256 bondBefore = sequencer.balance;
-        registry.finaliseStateRoot(0);
-        // Bond is released back to sequencer.
-        assertEq(sequencer.balance, bondBefore + BOND);
-        (, , , , , , bool finalised, ) = registry.roots(0);
+        uint256 before = sequencer.balance;
+        registry.finaliseStateRoot(4);
+        assertEq(sequencer.balance, before + BOND, "bond released");
+        (, , , , uint128 bond, , bool finalised, , , ) = registry.roots(4);
         assertTrue(finalised);
+        assertEq(bond, 0);
     }
 
-    function test_finaliseStateRoot_rejects_within_window() public {
-        vm.prank(sequencer);
-        registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
+    function test_finalise_rejects_before_window() public {
+        _submit(4, 0, _commitOf(4));
         vm.expectRevert(KnomosisStateRootSubmission.NotYetFinalisable.selector);
-        registry.finaliseStateRoot(0);
+        registry.finaliseStateRoot(4);
     }
 
-    function test_finaliseStateRoot_double_call_rejected() public {
-        vm.prank(sequencer);
-        registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
-        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
-        registry.finaliseStateRoot(0);
+    function test_finalise_rejects_missing() public {
+        vm.expectRevert(KnomosisStateRootSubmission.RootMissing.selector);
+        registry.finaliseStateRoot(77);
+    }
+
+    function test_finalise_rejects_genesis_anchor() public {
         vm.expectRevert(KnomosisStateRootSubmission.AlreadyFinalised.selector);
         registry.finaliseStateRoot(0);
     }
 
-    function test_finaliseStateRoot_unknown_index_reverts() public {
-        vm.expectRevert(KnomosisStateRootSubmission.PreviousRootMissing.selector);
-        registry.finaliseStateRoot(999);
+    function test_finalise_rejects_disputed() public {
+        _submit(4, 0, _commitOf(4));
+        vm.prank(faultProofGame);
+        registry.markDisputed(4);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
+        vm.expectRevert(KnomosisStateRootSubmission.DisputeInProgress.selector);
+        registry.finaliseStateRoot(4);
     }
 
-    /* -------- revertStateRootsFrom -------- */
+    /* -------- Revert recovery (SB ruling R1) -------- */
 
-    function test_revertStateRootsFrom_only_faultProofGame() public {
-        vm.prank(stranger);
-        vm.expectRevert(KnomosisStateRootSubmission.NotFaultProofGame.selector);
+    /// The whole recovery arc, which the retired registry could not
+    /// perform at all: a revert lowers the tip to the disputed
+    /// record's parent, the corrected chain resubmits THROUGH the old
+    /// reverted range, and the resubmissions read canonical.
+    function test_revert_recovery_resubmits_the_corrected_chain() public {
+        _submit(5, 0, _commitOf(5));
+        _submit(9, 5, _commitOf(9));
+        _submit(14, 9, _commitOf(14));
+
+        // The game reverts from record 9 (its parent is record 5).
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(9);
+
+        assertEq(registry.canonicalTip(), 5, "tip lowered to the parent");
+        assertTrue(registry.isStateRootReverted(9), "disputed record reverted");
+        assertTrue(registry.isStateRootReverted(14), "descendant reverted");
+        assertFalse(registry.isStateRootReverted(5), "parent stays canonical");
+
+        // The corrected chain re-extends from 5.  Its keys land
+        // INSIDE the reverted index range — and must not be misread
+        // as reverted (`submittedAtBlock > lastRevertAtBlock`).
+        _submit(8, 5, _commitOf(8));
+        assertEq(registry.canonicalTip(), 8);
+        assertFalse(
+            registry.isStateRootReverted(8),
+            "post-revert resubmission is canonical");
+
+        // ...and finalises normally.
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
+        registry.finaliseStateRoot(8);
+    }
+
+    function test_reverted_descendant_cannot_finalise() public {
+        _submit(5, 0, _commitOf(5));
+        _submit(9, 5, _commitOf(9));
+        vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
+        // The DESCENDANT — which no game ever touched — is reverted
+        // with its ancestor and must not finalise.  The retired
+        // registry let it, which is the defect this line pins.
+        vm.expectRevert(KnomosisStateRootSubmission.RootReverted.selector);
+        registry.finaliseStateRoot(9);
     }
 
-    /* -------- markDisputed (new audit-fix) -------- */
+    /// A second revert deeper in the chain must not RAISE the tip.
+    function test_tip_is_monotone_down_across_reverts() public {
+        _submit(5, 0, _commitOf(5));
+        _submit(9, 5, _commitOf(9));
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(9);
+        assertEq(registry.canonicalTip(), 5);
+        // Now the ancestor at 5 loses its own game.
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(5);
+        assertEq(registry.canonicalTip(), 0, "tip fell to genesis");
+        // And a stale revert of the higher record again cannot raise
+        // it back onto the reverted suffix.
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(9);
+        assertEq(registry.canonicalTip(), 0, "monotone down");
+    }
 
-    function test_markDisputed_only_faultProofGame() public {
-        vm.prank(stranger);
-        vm.expectRevert(KnomosisStateRootSubmission.NotFaultProofGame.selector);
+    function test_markDisputed_rejects_reverted() public {
+        _submit(5, 0, _commitOf(5));
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(5);
+        vm.prank(faultProofGame);
+        vm.expectRevert(KnomosisStateRootSubmission.RootReverted.selector);
         registry.markDisputed(5);
     }
 
-    function test_markDisputed_rejects_missing_root() public {
-        vm.prank(faultProofGame);
-        vm.expectRevert(KnomosisStateRootSubmission.RootMissing.selector);
-        registry.markDisputed(999);
-    }
+    /* -------- reclaimRevertedBond (SB ruling R4) -------- */
 
-    /* -------- clearDisputed (new audit-fix) -------- */
-
-    function test_clearDisputed_only_faultProofGame() public {
-        vm.prank(stranger);
-        vm.expectRevert(KnomosisStateRootSubmission.NotFaultProofGame.selector);
-        registry.clearDisputed(5);
-    }
-
-    function test_clearDisputed_rejects_missing_root() public {
-        vm.prank(faultProofGame);
-        vm.expectRevert(KnomosisStateRootSubmission.RootMissing.selector);
-        registry.clearDisputed(999);
-    }
-
-    /* -------- slashSequencerBond (new audit-fix) -------- */
-
-    function test_slashSequencerBond_only_faultProofGame() public {
-        vm.prank(stranger);
-        vm.expectRevert(KnomosisStateRootSubmission.NotFaultProofGame.selector);
-        registry.slashSequencerBond(5, address(0xCAFE));
-    }
-
-    function test_slashSequencerBond_rejects_zero_recipient() public {
-        vm.prank(faultProofGame);
-        vm.expectRevert(KnomosisStateRootSubmission.NotSequencer.selector);
-        registry.slashSequencerBond(5, address(0));
-    }
-
-    function test_slashSequencerBond_rejects_missing_root() public {
-        vm.prank(faultProofGame);
-        vm.expectRevert(KnomosisStateRootSubmission.RootMissing.selector);
-        registry.slashSequencerBond(999, address(0xCAFE));
-    }
-
-    /// With nothing submitted, reverting from index 5 has nothing above
-    /// it to sweep, so the range is the single index.
-    function test_revertStateRootsFrom_updates_range() public {
+    function test_reclaim_returns_a_reverted_records_bond() public {
+        _submit(5, 0, _commitOf(5));
+        _submit(9, 5, _commitOf(9));
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
-        assertEq(registry.lowestRevertedLogIndex(), 5);
-        assertEq(registry.highestRevertedLogIndex(), 5);
+
+        uint256 before = sequencer.balance;
+        // Permissionless: a stranger can only ever RETURN the bond.
+        vm.prank(stranger);
+        registry.reclaimRevertedBond(9);
+        assertEq(sequencer.balance, before + BOND, "bond back to sequencer");
+        (, , , , uint128 bond, , , , , ) = registry.roots(9);
+        assertEq(bond, 0);
+
+        // Idempotence: a second reclaim refuses.
+        vm.expectRevert(KnomosisStateRootSubmission.BondAlreadyZero.selector);
+        registry.reclaimRevertedBond(9);
     }
 
-    /// Submit a contiguous chain 0..3, then submit them.
-    function _submitChain(uint64 upToIdx) internal returns (bytes32 nextHash) {
-        nextHash = bytes32(0);
-        for (uint64 i = 0; i <= upToIdx; i++) {
-            vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
-            vm.prank(sequencer);
-            registry.submitStateRoot{value: BOND}(
-                i, bytes32(uint256(0xAAA) + i), nextHash, ACTION_COMMIT);
-            (, , , bytes32 expectedNext, , , , ) = registry.roots(i);
-            nextHash = expectedNext;
+    function test_reclaim_rejects_canonical_record() public {
+        _submit(5, 0, _commitOf(5));
+        vm.expectRevert(KnomosisStateRootSubmission.RootMissing.selector);
+        registry.reclaimRevertedBond(5);
+    }
+
+    function test_reclaim_rejects_disputed_record() public {
+        _submit(5, 0, _commitOf(5));
+        _submit(9, 5, _commitOf(9));
+        vm.prank(faultProofGame);
+        registry.markDisputed(9);
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(5);
+        // The record's own game is still open: its bond stays locked
+        // until that game settles (slash or clear).
+        vm.expectRevert(KnomosisStateRootSubmission.DisputeInProgress.selector);
+        registry.reclaimRevertedBond(9);
+    }
+
+    /* -------- Overwrite of a reverted record (SB ruling R3) ------ */
+
+    function test_overwrite_requires_the_bond_out_first() public {
+        _submit(5, 0, _commitOf(5));
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(5);
+
+        // Resubmitting the SAME key while the old bond is still in
+        // the record: refused, so no ETH is orphaned.
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisStateRootSubmission.BondNotReclaimed.selector);
+        registry.submitStateRoot{value: BOND}(
+            5, 0, _commitOf(555), ACTIONS_ROOT);
+
+        // Reclaim, then the overwrite succeeds and is canonical.
+        registry.reclaimRevertedBond(5);
+        _submit(5, 0, _commitOf(555));
+        (, bytes32 commit, , , , , , , , ) = registry.roots(5);
+        assertEq(commit, _commitOf(555), "overwritten with the corrected root");
+        assertFalse(registry.isStateRootReverted(5));
+        assertEq(registry.canonicalTip(), 5);
+    }
+
+    function test_live_record_is_never_overwritten() public {
+        _submit(5, 0, _commitOf(5));
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(5);
+        registry.reclaimRevertedBond(5);
+        _submit(5, 0, _commitOf(555));
+        // The resubmitted record is canonical again, and its key is
+        // now UNREACHABLE by construction: a live record's key is
+        // always at or below `canonicalTip`, while any submission at
+        // key K must pass `prevEndIndex == canonicalTip` and
+        // `K > prevEndIndex` — i.e. K > tip.  So a third submission
+        // at the key dies on the structural chain (`NotCanonicalTip`)
+        // before the occupied-key rule is even consulted; the
+        // `AlreadyClaimed` branch behind it is defence-in-depth for a
+        // tip-invariant break that has no external path.
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisStateRootSubmission.NotCanonicalTip.selector);
+        registry.submitStateRoot{value: BOND}(
+            5, 0, _commitOf(556), ACTIONS_ROOT);
+    }
+
+    /* -------- slash / dispute plumbing (unchanged surface) ------- */
+
+    function test_slash_forwards_bond() public {
+        _submit(5, 0, _commitOf(5));
+        vm.prank(faultProofGame);
+        registry.markDisputed(5);
+        uint256 before = faultProofGame.balance;
+        vm.prank(faultProofGame);
+        registry.slashSequencerBond(5, faultProofGame);
+        assertEq(faultProofGame.balance, before + BOND);
+    }
+
+    function test_only_game_can_mark_slash_revert() public {
+        _submit(5, 0, _commitOf(5));
+        vm.startPrank(stranger);
+        vm.expectRevert(KnomosisStateRootSubmission.NotFaultProofGame.selector);
+        registry.markDisputed(5);
+        vm.expectRevert(KnomosisStateRootSubmission.NotFaultProofGame.selector);
+        registry.slashSequencerBond(5, stranger);
+        vm.expectRevert(KnomosisStateRootSubmission.NotFaultProofGame.selector);
+        registry.revertStateRootsFrom(5);
+        vm.stopPrank();
+    }
+
+    /* -------- ETH conservation (fuzz) -------- */
+
+    /// Across an arbitrary interleaving of submissions, a revert,
+    /// reclaims, finalisations and a slash, every wei that entered
+    /// as a bond is either held by the registry or was paid out —
+    /// no orphaned and no minted ETH.
+    function testFuzz_bond_eth_is_conserved(uint8 batchesRaw, uint8 revertAtRaw)
+        public
+    {
+        uint64 batches = uint64(batchesRaw % 4) + 2;      // 2..5 records
+        uint64 revertOrdinal = uint64(revertAtRaw % batches) + 1;
+
+        uint256 paidIn = 0;
+        uint64[] memory ends = new uint64[](batches);
+        uint64 tip = 0;
+        for (uint64 i = 0; i < batches; i++) {
+            uint64 end = tip + 3 + i;
+            _submit(end, tip, _commitOf(end));
+            paidIn += BOND;
+            ends[i] = end;
+            tip = end;
         }
-    }
 
-    /// **Descendant roots must be reverted too.**
-    ///
-    /// Each root's `prevLogEntryHash` chains to its predecessor's
-    /// `expectedNextHash`, so a root proven invalid at `fromIdx`
-    /// invalidates every root that descends from it.  Raising the ceiling
-    /// only to `fromIdx` marked the single disputed index and left its
-    /// descendants finalisable — this fails against that behaviour.
-    function test_revertStateRootsFrom_sweeps_descendants() public {
-        _submitChain(3);
-        assertEq(registry.latestSubmittedLogIndex(), 3);
+        uint64 revertFrom = ends[revertOrdinal - 1];
         vm.prank(faultProofGame);
-        registry.revertStateRootsFrom(1);
-        assertEq(registry.lowestRevertedLogIndex(), 1);
+        registry.revertStateRootsFrom(revertFrom);
+
+        uint256 paidOut = 0;
+        uint256 seqBefore = sequencer.balance;
+        // Reclaim every reverted record's bond.
+        for (uint64 i = revertOrdinal - 1; i < batches; i++) {
+            registry.reclaimRevertedBond(ends[i]);
+        }
+        paidOut += sequencer.balance - seqBefore;
+
+        // Finalise every surviving canonical record.
+        vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
+        seqBefore = sequencer.balance;
+        for (uint64 i = 0; i + 1 < revertOrdinal; i++) {
+            registry.finaliseStateRoot(ends[i]);
+        }
+        paidOut += sequencer.balance - seqBefore;
+
         assertEq(
-            registry.highestRevertedLogIndex(),
-            3,
-            "the ceiling must cover every descendant of the disputed root"
-        );
-        assertFalse(registry.isStateRootReverted(0), "the ancestor stands");
-        assertTrue(registry.isStateRootReverted(1));
-        assertTrue(registry.isStateRootReverted(2), "descendant 2 is reverted");
-        assertTrue(registry.isStateRootReverted(3), "descendant 3 is reverted");
-    }
-
-    /// **Reverting from index 0 is not a no-op.**
-    ///
-    /// The floor sentinel used to be `0`, which made "no floor set"
-    /// indistinguishable from "the floor is the genesis root", and
-    /// `isStateRootReverted` additionally required `floor > 0`.  Reverting
-    /// from 0 therefore marked nothing at all — the cheapest possible
-    /// bypass of the whole mechanism.
-    function test_revertStateRootsFrom_zero_reverts_the_genesis_root() public {
-        _submitChain(2);
-        vm.prank(faultProofGame);
-        registry.revertStateRootsFrom(0);
-        assertEq(registry.lowestRevertedLogIndex(), 0);
-        assertEq(registry.highestRevertedLogIndex(), 2);
-        assertTrue(
-            registry.isStateRootReverted(0),
-            "reverting from the genesis root must actually revert it"
-        );
-        assertTrue(registry.isStateRootReverted(1));
-        assertTrue(registry.isStateRootReverted(2));
-    }
-
-    /// The floor is monotonically lowered and the ceiling monotonically
-    /// raised across repeated calls.
-    function test_revertStateRootsFrom_range_is_monotone() public {
-        _submitChain(3);
-        vm.prank(faultProofGame);
-        registry.revertStateRootsFrom(2);
-        assertEq(registry.lowestRevertedLogIndex(), 2);
-        assertEq(registry.highestRevertedLogIndex(), 3);
-        // A lower floor widens the range downward.
-        vm.prank(faultProofGame);
-        registry.revertStateRootsFrom(1);
-        assertEq(registry.lowestRevertedLogIndex(), 1);
-        assertEq(registry.highestRevertedLogIndex(), 3);
-        // A higher floor does NOT narrow it.
-        vm.prank(faultProofGame);
-        registry.revertStateRootsFrom(3);
-        assertEq(registry.lowestRevertedLogIndex(), 1);
-        assertEq(registry.highestRevertedLogIndex(), 3);
-    }
-
-    /// `latestSubmittedLogIndex` is a running maximum: submission is not
-    /// monotone (the hash-chain check only requires the PREDECESSOR to
-    /// exist), so a later call at a lower index must not lower it.
-    function test_latestSubmittedLogIndex_is_a_running_maximum() public {
-        _submitChain(3);
-        assertEq(registry.latestSubmittedLogIndex(), 3);
-    }
-
-    function test_isStateRootReverted_in_range() public {
-        vm.prank(faultProofGame);
-        registry.revertStateRootsFrom(5);
-        assertTrue(registry.isStateRootReverted(5));
-    }
-
-    function test_isStateRootReverted_below_floor() public {
-        vm.prank(faultProofGame);
-        registry.revertStateRootsFrom(5);
-        assertFalse(registry.isStateRootReverted(4));
-    }
-
-    function test_isStateRootReverted_unset_floor_is_the_sentinel() public view {
-        // No revert ever fired: the floor is `NO_REVERTED_FLOOR`, which is
-        // above every reachable index, so nothing reads as reverted — and
-        // that is now distinguishable from "the floor is index 0".
-        assertEq(registry.lowestRevertedLogIndex(), registry.NO_REVERTED_FLOOR());
-        assertFalse(registry.isStateRootReverted(0));
-        assertFalse(registry.isStateRootReverted(type(uint64).max));
-    }
-
-    /* -------- assertConsistent -------- */
-
-    function test_assertConsistent_does_not_revert() public view {
-        registry.assertConsistent();
+            paidIn, paidOut + address(registry).balance,
+            "every bonded wei is held or paid out");
+        // And in this schedule everything was released, so the
+        // registry holds nothing.
+        assertEq(address(registry).balance, 0, "fully drained");
     }
 }

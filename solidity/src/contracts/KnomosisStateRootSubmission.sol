@@ -9,32 +9,56 @@ pragma solidity 0.8.36;
 
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
+import {ActionsRoot} from "../lib/ActionsRoot.sol";
 import {LogChain} from "../lib/LogChain.sol";
 
 /// @title KnomosisStateRootSubmission
-/// @notice Sequencer state-root submission registry for the
-///         Workstream-H fault-proof game (per WUs H.7.1 – H.7.4).
+/// @notice Sequencer BATCH submission registry for the Workstream-H
+///         fault-proof game (WUs H.7.1 – H.7.4, re-cut by Workstream
+///         SB to batched submission).
 ///
-/// Each submission posts `STATE_ROOT_SUBMISSION_BOND` ETH and
-/// starts the `FAULT_PROOF_DISPUTE_WINDOW` countdown.  Roots are
-/// finalised after the window expires with no successful challenge.
+/// **One record per batch, not per action.**  A record keyed by
+/// `endIndex` covers L2 log entries `[prevEndIndex, endIndex)` (the
+/// entry-count convention: the state commit is the root after
+/// `endIndex` entries).  This is what gives the L2 rollup economics —
+/// the per-action L1 cost is this contract's submission cost DIVIDED
+/// by the batch size, where the retired per-action registry pinned it
+/// at one full submission each.
+///
+/// Each submission posts `STATE_ROOT_SUBMISSION_BOND` ETH and starts
+/// the `FAULT_PROOF_DISPUTE_WINDOW` countdown.  Records are finalised
+/// after the window expires with no successful challenge.
 ///
 /// Following Workstream-E §20 immutability discipline: no admin
 /// roles, no upgrade proxies, no `pause()` functions.  Recovery
 /// from bugs is via `KnomosisFaultProofMigration`.
 ///
-/// **Hash-chain integrity** (WU H.7.4): each submission's
-/// `prevLogEntryHash` must match the previous submission's
-/// `expectedNextHash`, preventing out-of-order or skipped indices.
-/// The chain also commits to the ACTION that carried the previous
-/// root to this one (`actionCommit`), which is what lets
-/// `KnomosisFaultProofGame.terminateOnSingleStep` authenticate the
-/// action it is handed instead of executing whatever the responding
-/// party supplies.  See `src/lib/LogChain.sol` for the encoding and
-/// for what the state-roots-only chain could not do.
+/// **Hash-chain integrity** (WU H.7.4 as amended by SB ruling R5/R8):
+/// the chain is STRUCTURAL — each record's `prevLogEntryHash` is READ
+/// from its parent's stored `expectedNextHash`, never accepted from
+/// calldata, and the parent is always the canonical tip, so the chain
+/// is linear by construction and the old `PreviousRootMissing` /
+/// `HashChainBroken` refusals are unreachable rather than checked.
+/// Each link folds the batch's `actionsRoot` — the SMT root over the
+/// batch's per-action signature-bound commitments — in the chain
+/// word the retired registry spent on ONE action's commitment, which
+/// is what lets `KnomosisFaultProofGame.terminateOnSingleStep`
+/// authenticate the disputed action by INCLUSION PROOF.
+///
+/// **Revert recovery** (SB ruling R1, fixing a pre-existing defect):
+/// the retired registry's reverted range was a dead end — reverted
+/// indices could never be resubmitted, and the chain extended
+/// straight through reverted entries.  Here `revertStateRootsFrom`
+/// stamps `lastRevertAtBlock` and lowers `canonicalTip` to the
+/// disputed record's OWN `prevEndIndex` (monotone-down), so the
+/// sequencer re-extends from the last good record; a record is
+/// reverted iff its key is in range AND it was submitted at or
+/// before the last revert, so the recovery resubmissions are not
+/// misread as reverted.
 ///
 /// **Anti-DoS** (WU H.7.3): immutable rate-limit constants
-/// (submission interval, outstanding cap) set at construction.
+/// (submission interval, outstanding cap, and the SB ruling R10
+/// per-batch size cap) set at construction.
 contract KnomosisStateRootSubmission is ReentrancyGuard {
     /* ---------------------------------------------------------- */
     /* Immutables                                                 */
@@ -60,11 +84,23 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     ///         protection.
     bytes32 public immutable deploymentId;
 
+    /// @notice The maximum batch size (`endIndex − prevEndIndex`)
+    ///         one submission may cover.  Operational sanity only
+    ///         (SB ruling R10): the game bisects any range, so
+    ///         correctness does not depend on the cap — it bounds
+    ///         how much work one dispute window can put at stake.
+    uint64 public immutable MAX_ACTIONS_PER_BATCH;
+
     /* ---------------------------------------------------------- */
     /* Storage                                                    */
     /* ---------------------------------------------------------- */
 
-    /// @notice Submitted state-root record.
+    /// @notice Submitted batch record, keyed by its `endIndex`.
+    ///
+    /// @dev    The two batching fields are APPENDED (SB risk-register
+    ///         item 1): every pre-existing positional destructuring of
+    ///         `roots(...)` — the game holds three — keeps its slots,
+    ///         and the cross-decode test pins the layout.
     struct SubmittedRoot {
         address sequencer;
         bytes32 stateCommit;
@@ -74,10 +110,32 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         uint64  submittedAtBlock;
         bool    finalised;
         bool    disputed;
+        /// @notice The parent record's key: this batch covers log
+        ///         entries `[prevEndIndex, endIndex)`.
+        uint64  prevEndIndex;
+        /// @notice The batch's actions root — the SMT root over its
+        ///         per-action signature-bound leaf commitments
+        ///         (`ActionsRoot`), folded into the chain link.
+        bytes32 actionsRoot;
     }
 
-    /// @notice Per-log-index submission record.
+    /// @notice Per-batch submission record, keyed by `endIndex`.
     mapping(uint64 => SubmittedRoot) public roots;
+
+    /// @notice The canonical chain's tip: the `endIndex` of the last
+    ///         record on the canonical (non-reverted) chain.  Every
+    ///         submission must extend it, which is what makes the
+    ///         chain linear; `revertStateRootsFrom` lowers it
+    ///         (monotone-down within one call) to the disputed
+    ///         record's `prevEndIndex` so recovery re-extends from
+    ///         the last good record.
+    uint64 public canonicalTip;
+
+    /// @notice The L1 block of the most recent revert.  A record is
+    ///         reverted only if it was submitted AT OR BEFORE this
+    ///         block (SB ruling R1), so post-revert resubmissions in
+    ///         the reverted index range are not misread as reverted.
+    uint64 public lastRevertAtBlock;
 
     /// @notice Last-submission-block per sequencer (for rate
     ///         limiting).
@@ -110,22 +168,38 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     ///         is false for all of them without a separate guard.
     uint64 public constant NO_REVERTED_FLOOR = type(uint64).max;
 
-    /// @notice Highest log index ever passed to `submitStateRoot`.
-    ///         Maintained with a `max` because submission is NOT
-    ///         monotone: the hash-chain check only requires the
-    ///         PREDECESSOR to exist, so indices can be filled in an
-    ///         order that revisits a lower one.  This is the ceiling
-    ///         `revertStateRootsFrom` reverts up to.
+    /// @notice Highest `endIndex` ever passed to `submitStateRoot`.
+    ///         Submission itself is monotone (every batch extends the
+    ///         canonical tip), but the tip DROPS on a revert while
+    ///         reverted records keep their keys — so this survives as
+    ///         the ceiling `revertStateRootsFrom` reverts up to.
     uint64 public latestSubmittedLogIndex;
 
     /* ---------------------------------------------------------- */
     /* Events                                                     */
     /* ---------------------------------------------------------- */
 
+    /// @notice One batch submitted.  The two batch fields are
+    ///         appended after the retired event's data layout (SB
+    ///         ruling R9): the observer reads a batch's bounds and
+    ///         actions root from this event alone.
     event StateRootSubmitted(
         uint64  indexed logIndex,
         bytes32 stateCommit,
-        address indexed sequencer
+        address indexed sequencer,
+        uint64  prevEndIndex,
+        bytes32 actionsRoot
+    );
+
+    /// @notice A reverted, undisputed record's bond returned to its
+    ///         sequencer (SB ruling R4).  Without this path a
+    ///         reverted DESCENDANT record — one nobody disputed,
+    ///         invalidated only because its ancestor lost a game —
+    ///         would strand its bond forever.
+    event StateRootBondReclaimed(
+        uint64  indexed logIndex,
+        address indexed sequencer,
+        uint128 amount
     );
 
     event StateRootFinalised(
@@ -166,18 +240,41 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     error TooManyOutstandingRoots();
     error AlreadyClaimed();
     error InvalidBond();
-    error HashChainBroken();
     error RootMissing();
     error AlreadyDisputed();
     error AlreadySlashed();
     error BondAlreadyZero();
     error SlashTransferFailed();
-    error PreviousRootMissing();
     error NotYetFinalisable();
     error AlreadyFinalised();
     error DisputeInProgress();
     error ZeroAddress();
     error WindowTooShort();
+    /// @notice The batch does not extend the canonical tip
+    ///         (`prevEndIndex != canonicalTip`).  The structural
+    ///         chain admits exactly one child per tip, which is what
+    ///         replaced the retired caller-supplied-hash checks
+    ///         (`PreviousRootMissing` / `HashChainBroken`) — under a
+    ///         tip-anchored parent those conditions are unreachable.
+    error NotCanonicalTip();
+    /// @notice `endIndex <= prevEndIndex`: a batch must cover at
+    ///         least one entry.
+    error EmptyBatch();
+    /// @notice The batch covers more entries than
+    ///         `MAX_ACTIONS_PER_BATCH` (SB ruling R10).
+    error BatchTooLarge();
+    /// @notice Overwriting a reverted record whose bond is still
+    ///         outstanding (SB ruling R3): reclaim (or slash) must
+    ///         empty the old record's bond first, so no ETH is ever
+    ///         orphaned by an overwrite.
+    error BondNotReclaimed();
+    /// @notice The record is in the reverted range: it cannot be
+    ///         finalised, disputed, or used as a game anchor.
+    error RootReverted();
+    /// @notice The genesis anchor's state commit is zero — an
+    ///         all-zero genesis commit is no commitment at all, and
+    ///         every deployment has a real genesis state to anchor.
+    error ZeroGenesisCommit();
     /// @notice Constructor guard: the `sequencer` (posts roots) and the
     ///         `faultProofGame` (privileged `markDisputed` caller) must be
     ///         distinct principals; collapsing them would let one address
@@ -196,7 +293,9 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         address _sequencer,
         address _faultProofGame,
         bytes32 _deploymentId,
-        uint64  _withdrawalFinalisationWindow
+        uint64  _withdrawalFinalisationWindow,
+        bytes32 _genesisStateCommit,
+        uint64  _maxActionsPerBatch
     ) {
         if (_sequencer == address(0)) revert ZeroAddress();
         if (_faultProofGame == address(0)) revert ZeroAddress();
@@ -218,6 +317,10 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         // can be submitted (the first submission would already
         // hit `>= 0`).
         if (_maxOutstandingRoots == 0) revert TooManyOutstandingRoots();
+        // The genesis anchor commits to a real state, and a batch
+        // must be able to hold at least one entry.
+        if (_genesisStateCommit == bytes32(0)) revert ZeroGenesisCommit();
+        if (_maxActionsPerBatch == 0) revert BatchTooLarge();
 
         STATE_ROOT_SUBMISSION_BOND = _bond;
         FAULT_PROOF_DISPUTE_WINDOW = _disputeWindow;
@@ -226,33 +329,89 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         sequencer = _sequencer;
         faultProofGame = _faultProofGame;
         deploymentId = _deploymentId;
+        MAX_ACTIONS_PER_BATCH = _maxActionsPerBatch;
+
+        // The genesis anchor (SB ruling R5): record 0 is written by
+        // the CONSTRUCTOR — already finalised, carrying no bond, its
+        // chain value the genesis seed (`nextEntryHash(0, gsc, 0)` —
+        // the ordinary chain step at the all-zero predecessor and the
+        // empty actions root; mirrored by Lean `genesisChainSeed` and
+        // pinned by the `batch_chain.json` corpus).  Every first
+        // submission extends it structurally, so no submission ever
+        // lacks a parent.  `sequencer` stays zero — nobody submitted
+        // the genesis record and nothing may pay out on it (it is
+        // born finalised, so finalise / slash / dispute all refuse).
+        roots[0] = SubmittedRoot({
+            sequencer:        address(0),
+            stateCommit:      _genesisStateCommit,
+            prevLogEntryHash: bytes32(0),
+            expectedNextHash: ActionsRoot.genesisChainSeed(_genesisStateCommit),
+            bond:             0,
+            submittedAtBlock: uint64(block.number),
+            finalised:        true,
+            disputed:         false,
+            prevEndIndex:     0,
+            actionsRoot:      bytes32(0)
+        });
+        // `canonicalTip` starts at 0 — the genesis record's key.
     }
 
     /* ---------------------------------------------------------- */
-    /* External: submitStateRoot (WU H.7.1 + H.7.4)               */
+    /* External: submitStateRoot (WU H.7.1 + H.7.4, batched)      */
     /* ---------------------------------------------------------- */
 
-    /// @notice Submit a new state root.  Only the registered
-    ///         sequencer can call.
-    /// @param logIndex          the L2 log index this root publishes.
-    /// @param stateCommit       the state root at `logIndex`.
-    /// @param prevLogEntryHash  the predecessor entry's chain hash.
-    /// @param actionCommit      `LogChain.actionCommit` over the
-    ///                          `(actionKind, signer, actionFields)`
-    ///                          triple of the action that carried
-    ///                          `logIndex - 1` to `logIndex`.  Binding
-    ///                          it here is what makes the fault-proof
-    ///                          game's terminal step adjudicate the
-    ///                          action the L2 actually executed.
+    /// @notice Submit one BATCH: the state root after `endIndex` L2
+    ///         log entries, covering entries `[prevEndIndex,
+    ///         endIndex)`.  Only the registered sequencer can call.
+    ///
+    ///         The chain link is structural: `prevLogEntryHash` is
+    ///         read from the canonical tip's stored
+    ///         `expectedNextHash`, so a submission cannot chain onto
+    ///         anything but the tip, and the tip is never a reverted
+    ///         record (`revertStateRootsFrom` lowers it to the last
+    ///         good parent).  Overwriting is allowed at exactly one
+    ///         kind of key: a REVERTED record whose bond has been
+    ///         emptied (SB ruling R3) — that is the recovery path the
+    ///         retired registry lacked.
+    ///
+    /// @param endIndex     the batch's end: the L2 entry count this
+    ///                     root publishes (state after `endIndex`
+    ///                     entries).
+    /// @param prevEndIndex the parent record's key; must equal
+    ///                     `canonicalTip`.
+    /// @param stateCommit  the state root after `endIndex` entries.
+    /// @param actionsRoot  the batch's actions root
+    ///                     (`ActionsRoot.actionsRoot` over entries
+    ///                     `[prevEndIndex, endIndex)`) — the word the
+    ///                     fault-proof game authenticates the disputed
+    ///                     action against by inclusion proof.
     function submitStateRoot(
-        uint64  logIndex,
+        uint64  endIndex,
+        uint64  prevEndIndex,
         bytes32 stateCommit,
-        bytes32 prevLogEntryHash,
-        bytes32 actionCommit
+        bytes32 actionsRoot
     ) external payable nonReentrant {
         if (msg.sender != sequencer) revert NotSequencer();
         if (msg.value != STATE_ROOT_SUBMISSION_BOND) revert InvalidBond();
-        if (roots[logIndex].submittedAtBlock != 0) revert AlreadyClaimed();
+        if (endIndex <= prevEndIndex) revert EmptyBatch();
+        if (endIndex - prevEndIndex > MAX_ACTIONS_PER_BATCH)
+            revert BatchTooLarge();
+        if (prevEndIndex != canonicalTip) revert NotCanonicalTip();
+
+        // Occupied-key rule: a live record is never overwritten; a
+        // reverted one is, once its bond is out (reclaimed to the
+        // sequencer or slashed by the game) so no ETH is orphaned.
+        // The live arm is defence-in-depth: a live record's key is
+        // always at or below `canonicalTip` (the live prefix ends at
+        // the tip), while this submission's key already passed
+        // `endIndex > prevEndIndex == canonicalTip` — so an occupied
+        // live key cannot be reached unless the tip invariant itself
+        // is broken.
+        SubmittedRoot storage existing = roots[endIndex];
+        if (existing.submittedAtBlock != 0) {
+            if (!_isRecordReverted(endIndex)) revert AlreadyClaimed();
+            if (existing.bond != 0) revert BondNotReclaimed();
+        }
 
         // Rate limit (WU H.7.3).
         if (block.number <
@@ -262,19 +421,15 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
             MAX_OUTSTANDING_ROOTS_PER_SEQUENCER)
             revert TooManyOutstandingRoots();
 
-        // Hash-chain integrity check (WU H.7.4).
-        if (logIndex > 0) {
-            SubmittedRoot memory prev = roots[logIndex - 1];
-            if (prev.submittedAtBlock == 0) revert PreviousRootMissing();
-            if (prev.expectedNextHash != prevLogEntryHash)
-                revert HashChainBroken();
-        }
-
-        // Compute this root's expected-next-hash.
+        // The structural chain link (SB ruling R5): the parent is the
+        // canonical tip, whose record always exists (the constructor
+        // wrote the genesis anchor at key 0), so the retired
+        // existence/equality refusals have nothing to check.
+        bytes32 prevLogEntryHash = roots[prevEndIndex].expectedNextHash;
         bytes32 expectedNextHash =
-            LogChain.nextEntryHash(prevLogEntryHash, stateCommit, actionCommit);
+            LogChain.nextEntryHash(prevLogEntryHash, stateCommit, actionsRoot);
 
-        roots[logIndex] = SubmittedRoot({
+        roots[endIndex] = SubmittedRoot({
             sequencer:        msg.sender,
             stateCommit:      stateCommit,
             prevLogEntryHash: prevLogEntryHash,
@@ -282,31 +437,42 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
             bond:             uint128(msg.value),
             submittedAtBlock: uint64(block.number),
             finalised:        false,
-            disputed:         false
+            disputed:         false,
+            prevEndIndex:     prevEndIndex,
+            actionsRoot:      actionsRoot
         });
 
         lastSubmissionBlock[msg.sender] = uint64(block.number);
         outstandingRootsCount[msg.sender]++;
-        if (logIndex > latestSubmittedLogIndex) {
-            latestSubmittedLogIndex = logIndex;
+        canonicalTip = endIndex;
+        if (endIndex > latestSubmittedLogIndex) {
+            latestSubmittedLogIndex = endIndex;
         }
 
-        emit StateRootSubmitted(logIndex, stateCommit, msg.sender);
+        emit StateRootSubmitted(
+            endIndex, stateCommit, msg.sender, prevEndIndex, actionsRoot);
     }
 
     /* ---------------------------------------------------------- */
     /* External: finaliseStateRoot (WU H.7.2)                     */
     /* ---------------------------------------------------------- */
 
-    /// @notice Finalise a state root after the dispute window
+    /// @notice Finalise a batch record after the dispute window
     ///         expires.  Releases the sequencer's bond.
     ///
     ///         Zeros out the bond before transfer so a subsequent
     ///         `slashSequencerBond` call (if any racing path
     ///         exists) cannot double-spend the bond.
+    ///
+    ///         A REVERTED record is refused: the retired registry
+    ///         let a reverted root's untouched descendants finalise
+    ///         (one of the two pre-existing defects this workstream
+    ///         closes); their bonds now exit via
+    ///         `reclaimRevertedBond` instead.
     function finaliseStateRoot(uint64 logIndex) external nonReentrant {
         SubmittedRoot storage r = roots[logIndex];
-        if (r.submittedAtBlock == 0) revert PreviousRootMissing();
+        if (r.submittedAtBlock == 0) revert RootMissing();
+        if (_isRecordReverted(logIndex)) revert RootReverted();
         if (r.finalised) revert AlreadyFinalised();
         if (r.disputed) revert DisputeInProgress();
         if (block.number <
@@ -353,6 +519,10 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
 
         SubmittedRoot storage r = roots[logIndex];
         if (r.submittedAtBlock == 0) revert RootMissing();
+        // Defence-in-depth behind the game's own R2 refusal: a
+        // reverted record is already judged, and a game on it could
+        // only re-litigate a range the chain no longer stands on.
+        if (_isRecordReverted(logIndex)) revert RootReverted();
         if (r.finalised) revert AlreadyFinalised();
         if (r.disputed) revert AlreadyDisputed();
 
@@ -436,19 +606,23 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     /// @notice Revert the state-root range from `fromIdx` onwards.
     ///         Only callable by the fault-proof game contract.
     ///
-    ///         "Onwards" is the point: a root proven invalid at
-    ///         `fromIdx` invalidates every root that descends from it,
-    ///         because each root's `prevLogEntryHash` chains to its
-    ///         predecessor's `expectedNextHash`.  The ceiling is
+    ///         "Onwards" is the point: a record proven invalid at
+    ///         `fromIdx` invalidates every record that descends from
+    ///         it, because each record's `prevLogEntryHash` chains to
+    ///         its parent's `expectedNextHash`.  The ceiling is
     ///         therefore `latestSubmittedLogIndex`, not `fromIdx` —
     ///         raising the ceiling only to `fromIdx` marked the single
     ///         disputed index and left its descendants finalisable.
     ///
-    ///         A later submission above the ceiling is NOT retroactively
-    ///         reverted: it chains onto a reverted predecessor and so
-    ///         fails the hash-chain check in `submitStateRoot` unless
-    ///         the sequencer re-submits the corrected range, which is
-    ///         the intended recovery path.
+    ///         **Recovery** (SB ruling R1): stamp `lastRevertAtBlock`
+    ///         and lower `canonicalTip` to the disputed record's own
+    ///         `prevEndIndex` — the last good parent — so the
+    ///         sequencer re-extends the chain from there.  The stamp
+    ///         is what keeps the recovery honest: a record is
+    ///         reverted only if submitted at or before it, so the
+    ///         corrected resubmissions inside the old range read as
+    ///         canonical, where the retired registry read them as
+    ///         reverted forever (its recovery path was a dead end).
     function revertStateRootsFrom(uint64 fromIdx) external nonReentrant {
         if (msg.sender != faultProofGame) revert NotFaultProofGame();
 
@@ -458,7 +632,7 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         if (fromIdx < lowestRevertedLogIndex) {
             lowestRevertedLogIndex = fromIdx;
         }
-        // Raise the ceiling to cover every root that descends from
+        // Raise the ceiling to cover every record that descends from
         // `fromIdx`, i.e. everything submitted so far.
         uint64 ceiling = latestSubmittedLogIndex;
         if (ceiling < fromIdx) {
@@ -470,28 +644,96 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
             highestRevertedLogIndex = ceiling;
         }
 
+        lastRevertAtBlock = uint64(block.number);
+        // Lower the tip to the disputed record's parent — monotone
+        // down, so a second revert deeper in the chain (an ancestor
+        // of `fromIdx` losing its own game) cannot RAISE the tip back
+        // onto a reverted suffix.
+        uint64 recoveredTip = roots[fromIdx].prevEndIndex;
+        if (recoveredTip < canonicalTip) {
+            canonicalTip = recoveredTip;
+        }
+
         emit StateRootRangeReverted(lowestRevertedLogIndex,
                                     highestRevertedLogIndex);
+    }
+
+    /* ---------------------------------------------------------- */
+    /* External: reclaimRevertedBond (SB ruling R4)               */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Return a reverted, undisputed, unfinalised record's
+    ///         bond to its sequencer.  The record itself stays in
+    ///         storage (its key can then be overwritten by a
+    ///         corrected resubmission, which requires the bond to be
+    ///         out first).
+    ///
+    ///         Permissionless on purpose: the payout target is fixed
+    ///         to the record's own sequencer, so a third-party call
+    ///         can only ever RETURN funds, never move them.
+    function reclaimRevertedBond(uint64 logIndex) external nonReentrant {
+        SubmittedRoot storage r = roots[logIndex];
+        if (r.submittedAtBlock == 0) revert RootMissing();
+        if (!_isRecordReverted(logIndex)) revert RootMissing();
+        if (r.finalised) revert AlreadyFinalised();
+        // An active game's record keeps its bond locked: if the game
+        // settles challenger-won the bond is slashed, and if
+        // sequencer-won the game clears the flag and the reclaim
+        // proceeds then.
+        if (r.disputed) revert DisputeInProgress();
+        if (r.bond == 0) revert BondAlreadyZero();
+
+        uint128 amount = r.bond;
+        address sequencerAddr = r.sequencer;
+
+        // Effects first (CEI).
+        r.bond = 0;
+        if (outstandingRootsCount[sequencerAddr] > 0) {
+            outstandingRootsCount[sequencerAddr]--;
+        }
+
+        (bool ok, ) = payable(sequencerAddr).call{value: amount}("");
+        if (!ok) revert SlashTransferFailed();
+
+        emit StateRootBondReclaimed(logIndex, sequencerAddr, amount);
     }
 
     /* ---------------------------------------------------------- */
     /* View: isStateRootReverted                                  */
     /* ---------------------------------------------------------- */
 
-    /// @notice Returns `true` iff the state root at `logIndex`
-    ///         is in the reverted range.
+    /// @notice Returns `true` iff the record at `logIndex` is
+    ///         reverted: its key is in the reverted range AND it was
+    ///         submitted at or before the most recent revert (SB
+    ///         ruling R1).  A corrected resubmission at a key inside
+    ///         the old range carries a later submission block, so it
+    ///         reads canonical.
     function isStateRootReverted(uint64 logIndex)
         external
         view
         returns (bool)
     {
-        // No `> 0` guard: the floor's sentinel is `NO_REVERTED_FLOOR`,
-        // which is above every reachable index, so an unset floor makes
-        // the first comparison false on its own — and a floor of 0 (the
-        // genesis root reverted) is now a representable state rather
-        // than one the guard silently erased.
+        return _isRecordReverted(logIndex);
+    }
+
+    /// @dev The record-level reverted test.  No `submittedAtBlock !=
+    ///      0` guard is needed for the callers that already checked
+    ///      existence; for the bare view an absent record inside the
+    ///      range reads `0 <= lastRevertAtBlock` = reverted, which is
+    ///      the right answer for a key the revert swept before
+    ///      anything occupied it.
+    function _isRecordReverted(uint64 logIndex)
+        internal
+        view
+        returns (bool)
+    {
+        // The floor's sentinel is `NO_REVERTED_FLOOR`, above every
+        // reachable index, so an unset floor fails the first
+        // comparison on its own — and a floor of 0 stays
+        // representable.
         return logIndex >= lowestRevertedLogIndex &&
-               logIndex <= highestRevertedLogIndex;
+               logIndex <= highestRevertedLogIndex &&
+               roots[logIndex].submittedAtBlock <= lastRevertAtBlock;
     }
 
     /* ---------------------------------------------------------- */
@@ -506,5 +748,16 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         require(faultProofGame != address(0), "ZeroFaultProofGame");
         require(STATE_ROOT_SUBMISSION_BOND > 0, "ZeroBond");
         require(FAULT_PROOF_DISPUTE_WINDOW > 0, "ZeroWindow");
+        require(MAX_ACTIONS_PER_BATCH > 0, "ZeroBatchCap");
+        // The genesis anchor is in place: born finalised, bondless,
+        // and carrying the seed chain value every first submission
+        // extends.
+        require(roots[0].finalised, "GenesisAnchorMissing");
+        require(roots[0].submittedAtBlock != 0, "GenesisAnchorMissing");
+        require(
+            roots[0].expectedNextHash
+                == ActionsRoot.genesisChainSeed(roots[0].stateCommit),
+            "GenesisSeedMismatch"
+        );
     }
 }
