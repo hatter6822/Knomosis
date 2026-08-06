@@ -200,7 +200,7 @@ def depositWithFeeGrantsBudget : TestCase := {
     -- depositWithFee resource=1, recipient=10, poolActor=99, ua=50, pa=50,
     -- budgetGrant=200, depositId=42.
     let st := mkSignedAction
-      (.depositWithFee 1 10 99 50 50 200 42) Bridge.bridgeActor es
+      (.depositWithFee 1 10 99 50 50 200 42 20) Bridge.bridgeActor es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | some es' =>
@@ -229,7 +229,7 @@ def depositWithFeeBudgetLocality : TestCase := {
       , epochBudgets := ebs0 }
     let preBudget20 := EpochBudgetState.currentBudget es.epochBudgets 20 1 5
     let st := mkSignedAction
-      (.depositWithFee 1 10 99 50 50 200 42) Bridge.bridgeActor es
+      (.depositWithFee 1 10 99 50 50 200 42 20) Bridge.bridgeActor es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | some es' =>
@@ -719,7 +719,7 @@ def depositWithFeeNonBridgeSignerRejected : TestCase := {
     -- 1000 budget and 100 balance.  Under the pre-fix design, this
     -- would succeed; under the round-5 fix, this is rejected.
     let st := mkSignedAction
-      (.depositWithFee 1 10 99 50 50 1000 42) 10 es
+      (.depositWithFee 1 10 99 50 50 1000 42 20) 10 es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | none => pure ()  -- expected: gate rejects.
@@ -751,7 +751,7 @@ def bridgeAdmissibleDepositWithFeeNonBridgeSignerRejected : TestCase := {
       , registry := registry
       , budgetPolicy := .bounded 5 1 1 }
     let st := mkSignedAction
-      (.depositWithFee 1 10 99 50 50 1000 42) 10 es
+      (.depositWithFee 1 10 99 50 50 1000 42 20) 10 es
     if h : LegalKernel.Bridge.BridgeAdmissibleWith
               mockVerify policy testDeploymentId es st then
       match LegalKernel.Bridge.apply_bridge_admissible_with_budget
@@ -807,8 +807,8 @@ def admissionConsumesBudgetAPI : TestCase := {
         {freeTier actionCost currentEpoch : Nat},
         es.budgetPolicy = .bounded freeTier actionCost currentEpoch →
         st.signer ≠ Bridge.bridgeActor →
-        (∀ r recipient poolActor ua pa bg dep,
-          st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep) →
+        (∀ r recipient poolActor ua pa bg dep sa,
+          st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa) →
         (∀ gr ga bi pa,
           st.action ≠ .topUpActionBudget gr ga bi pa) →
         (∀ recipient gr ga bi pa,
@@ -1029,7 +1029,7 @@ def depositWithFeeZeroGrant : TestCase := {
     let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
     -- depositWithFee with budgetGrant=0.
     let st := mkSignedAction
-      (.depositWithFee 1 10 99 50 50 0 42) Bridge.bridgeActor es
+      (.depositWithFee 1 10 99 50 50 0 42 20) Bridge.bridgeActor es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | some es' =>
@@ -1115,7 +1115,7 @@ def depositWithFeeRecipientIsBridgeActor : TestCase := {
       , registry := registry
       , budgetPolicy := .bounded 5 1 1 }
     let st := mkSignedAction
-      (.depositWithFee 1 Bridge.bridgeActor 99 50 50 200 42) Bridge.bridgeActor es
+      (.depositWithFee 1 Bridge.bridgeActor 99 50 50 200 42 20) Bridge.bridgeActor es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | some es' =>

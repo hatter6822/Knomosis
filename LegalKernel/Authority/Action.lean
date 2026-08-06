@@ -337,10 +337,22 @@ inductive Action
                               `recipient`'s epoch budget slot.
         * `depositId`      — the L1 deposit-receipt id (frozen by
                               the bridge to defend against replay).
+        * `seedAmount`     — the AMM seed leg (Workstream SB;
+                              APPENDED, so every pre-SB field offset
+                              survives): the portion of `poolAmount`
+                              the L1 fee split committed to AMM
+                              liquidity (`ammSeedAmount`), credited
+                              to the canonical reserve actor.  The
+                              pool receives the NET
+                              `poolAmount - seedAmount`; the total
+                              supply delta stays
+                              `userAmount + poolAmount`.
 
-      Kernel-level effect: `Laws.depositWithFee`-shaped balance
-      increment of both `recipient` (`+userAmount`) and `poolActor`
-      (`+poolAmount`) at `resource`.  Bridge-level effect:
+      Kernel-level effect: `Laws.depositWithFee`-shaped THREE-leg
+      credit at `resource` — `recipient` (`+userAmount`), `poolActor`
+      (`+poolAmount - seedAmount`), and the canonical
+      `Bridge.ammReserveActor` (`+seedAmount`; a LAW parameter pinned
+      by the compiler, never an action field).  Bridge-level effect:
       `BridgeState.consumed` is updated via
       `applyActionToBridgeState`'s bridge tag (mirroring
       `Action.deposit` semantics in v1.0; GP.4 widens to track the
@@ -361,6 +373,7 @@ inductive Action
                     (userAmount : Amount) (poolAmount : Amount)
                     (budgetGrant : Nat)
                     (depositId : Bridge.DepositId)
+                    (seedAmount : Amount)
   /-- Workstream GP §15E (v1.0) — L2 user self-topup of the
       action-budget (frozen index 20).  A user signs this action
       to convert a gas-resource balance into action-budget units,
@@ -605,17 +618,23 @@ def Action.compileTransition : Action → Transition
   -- for fault-proof game outcomes; the L2 actions are advisory.
   | .faultProofChallenge _ _ _ _    => Laws.freezeResource 0
   | .faultProofResolution _ _ _ _   => Laws.freezeResource 0
-  -- Workstream GP (v1.0): bridge deposit with fee split.  Compiles
-  -- to the signer-independent `Laws.depositWithFee` law, which
-  -- directly produces the kernel-level effect (credit recipient
-  -- by `userAmount`, credit poolActor by `poolAmount`).  The
-  -- budget-level effect (granting `budgetGrant` to `recipient`)
-  -- is applied separately by the admission layer's per-action
-  -- budget-grant arm (GP.3.2.d in `apply_admissible_with_budget`).
+  -- Workstream GP (v1.0) + SB: bridge deposit with fee split.
+  -- Compiles to the signer-independent `Laws.depositWithFee` law,
+  -- which directly produces the kernel-level THREE-leg effect
+  -- (credit recipient by `userAmount`, poolActor by the NET
+  -- `poolAmount - seedAmount`, and the canonical reserve by
+  -- `seedAmount`).  The reserve target is pinned HERE, at compile —
+  -- `Bridge.ammReserveActor` is a constant, not an action field, so
+  -- no admissibility conjunct is needed to stop a forged seed
+  -- target.  The budget-level effect (granting `budgetGrant` to
+  -- `recipient`) is applied separately by the admission layer's
+  -- per-action budget-grant arm (GP.3.2.d in
+  -- `apply_admissible_with_budget`).
   | .depositWithFee r recipient poolActor userAmount poolAmount
-                     budgetGrant depositId =>
+                     budgetGrant depositId seedAmount =>
       Laws.depositWithFee r recipient poolActor userAmount poolAmount
-                            budgetGrant depositId
+                            budgetGrant depositId seedAmount
+                            Bridge.ammReserveActor
   -- Workstream GP (v1.0): L2 user self-topup.  Compiles to the
   -- kernel-level no-op `Laws.freezeResource 0`.  The signer-aware
   -- kernel effect (debit signer's gas balance, credit poolActor)
@@ -786,7 +805,7 @@ theorem Action.toTransition_eq_compileTransition_of_ne_topUp
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | depositWithFee _ _ _ _ _ _ _  => rfl
+  | depositWithFee _ _ _ _ _ _ _ _ => rfl
   | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
   | reserveSwap _ _ _ _ _ _       => rfl
@@ -970,9 +989,9 @@ example (bh : ByteArray) (gid : Nat) (w : ActorId) (rfi : Disputes.LogIndex) :
       .faultProofResolution bh gid w rfi := rfl
 
 example (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) :
-    (Action.compile (.depositWithFee r recipient poolActor ua pa bg d)).source =
-      .depositWithFee r recipient poolActor ua pa bg d := rfl
+    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) (sa : Amount) :
+    (Action.compile (.depositWithFee r recipient poolActor ua pa bg d sa)).source =
+      .depositWithFee r recipient poolActor ua pa bg d sa := rfl
 
 example (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
     (Action.compile (.topUpActionBudget gr ga bi pa)).source =

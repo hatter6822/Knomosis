@@ -783,6 +783,12 @@ impl FeeSplitInput {
             pool_amount,
             budget_grant,
             deposit_id: self.deposit_id,
+            // The fee-split model mirrors the L1 `DepositFeeSplit`
+            // computation, which carries no seed input; the AMM seed
+            // leg (Workstream SB) is attested separately by the
+            // deposit-materialisation path, so the corpus action is
+            // seedless.
+            seed_amount: 0,
         })
     }
 }
@@ -1377,6 +1383,7 @@ mod tests {
                 pool_amount,
                 budget_grant,
                 deposit_id,
+                seed_amount,
             } => {
                 assert_eq!(r, 0);
                 assert_eq!(recipient, 7);
@@ -1386,6 +1393,8 @@ mod tests {
                 assert_eq!(user_amount, eu);
                 assert_eq!(pool_amount, ep);
                 assert_eq!(budget_grant, eb);
+                // The fee-split model is seedless (see `to_action`).
+                assert_eq!(seed_amount, 0);
             }
             _ => panic!("expected DepositWithFee constructor"),
         }

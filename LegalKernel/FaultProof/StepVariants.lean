@@ -89,7 +89,7 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   -- consumed-deposit map to verify the deposit hasn't already
   -- been credited (mirroring `deposit`).  topUpActionBudget only
   -- reads the signer's registry entry.
-  | .depositWithFee _ _ _ _ _ _ d, signer =>
+  | .depositWithFee _ _ _ _ _ _ d _, signer =>
       [.registry signer, .bridgeConsumed d]
   | .topUpActionBudget _ _ _ _,    signer => [.registry signer]
   -- GP.3.4: delegated top-up reads only the signer's registry entry
@@ -187,13 +187,19 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- contract is authoritative for game state).
   | .faultProofChallenge _ _ _ _,  signer => [.nonce signer, .epochBudget signer]
   | .faultProofResolution _ _ _ _, signer => [.nonce signer, .epochBudget signer]
-  -- Workstream GP (v1.0): depositWithFee writes the recipient's
-  -- balance, the poolActor's balance, the bridge-consumed cell,
-  -- and the signer's nonce.  The recipient's epoch-budget
-  -- update (budget grant) is an admission-layer effect; at the
-  -- L1 step-VM action-level we only declare kernel-state writes.
-  | .depositWithFee r recipient poolActor _ _ _ d, signer =>
-      [.balance r recipient, .balance r poolActor, .bridgeConsumed d,
+  -- Workstream GP (v1.0) + SB: depositWithFee writes the recipient's
+  -- balance, the poolActor's balance, the canonical AMM reserve's
+  -- balance (the seed leg — the reserve target is a COMPILE-pinned
+  -- law parameter, so the cell is `Bridge.ammReserveActor` by
+  -- construction, never an action field), the bridge-consumed cell,
+  -- and the signer's nonce.  The three balance cells lead (plan
+  -- slots 0..2 on the Solidity mirror).  The recipient's
+  -- epoch-budget update (budget grant) is an admission-layer effect;
+  -- at the L1 step-VM action-level we only declare kernel-state
+  -- writes.
+  | .depositWithFee r recipient poolActor _ _ _ d _, signer =>
+      [.balance r recipient, .balance r poolActor,
+       .balance r Bridge.ammReserveActor, .bridgeConsumed d,
        .nonce signer, .epochBudget signer, .epochBudget recipient]
   -- topUpActionBudget writes the signer's gas balance, the
   -- poolActor's gas balance, and the signer's nonce.  The

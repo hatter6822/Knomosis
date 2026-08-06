@@ -318,7 +318,7 @@ def actionKindByte : Action → UInt8
   | .faultProofChallenge _ _ _ _   => 17
   | .faultProofResolution _ _ _ _  => 18
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
-  | .depositWithFee _ _ _ _ _ _ _  => 19
+  | .depositWithFee _ _ _ _ _ _ _ _  => 19
   | .topUpActionBudget _ _ _ _     => 20
   -- Workstream GP (GP.3.4): delegated top-up.  Dispatcher index 21.
   -- GP.5.3 wired the L1 step-VM execution arm + Solidity `_step21`
@@ -444,13 +444,17 @@ def actionFieldsForL1 : Action → ByteArray
   -- Workstream GP (v1.0): depositWithFee is a structured variant:
   -- `uint64BE resource || uint64BE recipient || uint64BE poolActor ||
   -- uint256BE userAmount || uint256BE poolAmount || uint64BE budgetGrant
-  -- || uint64BE depositId`.  Mirrors the Solidity `_step19` decoder's
-  -- byte-for-byte field reads.  `budgetGrant` is a budget UNIT count
-  -- and `depositId` an identifier, so both stay 8 bytes.
-  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  -- || uint64BE depositId || uint256BE seedAmount`.  Mirrors the
+  -- Solidity `_step19` decoder's byte-for-byte field reads.
+  -- `budgetGrant` is a budget UNIT count and `depositId` an
+  -- identifier, so both stay 8 bytes.  Workstream SB APPENDS the
+  -- wei-denominated `seedAmount` (104 → 136 bytes), so every
+  -- pre-existing field offset survives.
+  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId
+                     seedAmount =>
       uint64BE r.toNat ++ uint64BE recipient.toNat ++ uint64BE poolActor.toNat ++
       uint256BE userAmount ++ uint256BE poolAmount ++ uint64BE budgetGrant ++
-      uint64BE depositId
+      uint64BE depositId ++ uint256BE seedAmount
   -- topUpActionBudget is a structured variant:
   -- `uint64BE gasResource || uint256BE gasAmount || uint64BE budgetIncrement ||
   -- uint64BE poolActor`.  `gasAmount` is wei-denominated and so rides the

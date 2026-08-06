@@ -35,7 +35,7 @@
 //! | 16  | `RevokeLocalPolicy`       | (no fields)                                |
 //! | 17  | `FaultProofChallenge`     | `binding_hash, start, end, commit`         |
 //! | 18  | `FaultProofResolution`    | `binding_hash, game_id, winner, revert_from` |
-//! | 19  | `DepositWithFee`          | `r, recipient, pool_actor, user_amount, pool_amount, budget_grant, deposit_id` |
+//! | 19  | `DepositWithFee`          | `r, recipient, pool_actor, user_amount, pool_amount, budget_grant, deposit_id, seed_amount` |
 //! | 20  | `TopUpActionBudget`       | `gas_resource, gas_amount, budget_increment, pool_actor` |
 //! | 21  | `TopUpActionBudgetFor`    | `recipient, gas_resource, gas_amount, budget_increment, pool_actor` |
 //! | 22  | `ClaimBudgetRefund`       | `gas_resource, budget_units, wei_per_budget_unit, pool_actor` |
@@ -357,6 +357,11 @@ pub enum Action {
         budget_grant: u64,
         /// The L1 deposit id (per-depositor nonce).
         deposit_id: DepositId,
+        /// The slice of the pool leg seeded into the canonical AMM
+        /// reserve actor (Workstream SB; appended field, wei-
+        /// denominated, `seed_amount <= pool_amount` enforced by the
+        /// kernel law's precondition).
+        seed_amount: Amount,
     },
     /// `topUpActionBudget(gasResource, gasAmount, budgetIncrement,
     /// poolActor)`.  Tag 20 (Workstream GP).  Lets an actor pay
@@ -631,6 +636,7 @@ mod tests {
                 pool_amount: 0,
                 budget_grant: 0,
                 deposit_id: 0,
+                seed_amount: 0,
             }
             .tag(),
             19
@@ -692,6 +698,7 @@ mod tests {
             pool_amount: 0,
             budget_grant: 0,
             deposit_id: 0,
+            seed_amount: 0,
         };
         let top_up = Action::TopUpActionBudget {
             gas_resource: 0,

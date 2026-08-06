@@ -74,10 +74,10 @@ def probes : List (String × Authority.Action) :=
   , ("freezeResource",      .freezeResource 1)
   , ("withdraw",            .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero)
   , ("deposit",             .deposit 1 8 5 3)
-  , ("depositWithFee",      .depositWithFee 1 8 9 5 2 3 4)
+  , ("depositWithFee",      .depositWithFee 1 8 9 5 2 3 4 1)
     -- The recipient IS the signer, so the epoch-budget cell appears
     -- twice in the write set.
-  , ("depositWithFeeSelf",  .depositWithFee 1 7 9 5 2 3 5)
+  , ("depositWithFeeSelf",  .depositWithFee 1 7 9 5 2 3 5 1)
   , ("topUpActionBudget",   .topUpActionBudget 1 10 4 9)
     -- The delegated form's `recipient ≠ payer` conjunct FAILS.
   , ("topUpActionBudgetForSelf", .topUpActionBudgetFor 7 1 10 4 9)

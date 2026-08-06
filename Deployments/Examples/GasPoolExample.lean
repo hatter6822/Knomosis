@@ -166,15 +166,18 @@ def examplePolicy : AuthorityPolicy := exampleGenesis.policy
 
 /-- Step 1 — a bridge-signed ETH `depositWithFee`: credit `userActor`
     9000 ETH and skim a 1000-ETH fee to `gasPoolActor` (resource 0),
-    granting the user 50 action-budget units; deposit id 1. -/
+    granting the user 50 action-budget units; deposit id 1.  This
+    deployment seeds no AMM reserves (`seedAmount = 0`), so the pool
+    keeps the whole fee. -/
 def ethDepositAction : Action :=
-  .depositWithFee 0 userActor gasPoolActor 9000 1000 50 1
+  .depositWithFee 0 userActor gasPoolActor 9000 1000 50 1 0
 
 /-- Step 2 — a bridge-signed BOLD `depositWithFee`: credit `userActor`
     27000 BOLD and skim a 3000-BOLD fee to `gasPoolActor` (resource 1),
-    granting the user 150 action-budget units; deposit id 2. -/
+    granting the user 150 action-budget units; deposit id 2.  Seedless
+    like the ETH leg. -/
 def boldDepositAction : Action :=
-  .depositWithFee 1 userActor gasPoolActor 27000 3000 150 2
+  .depositWithFee 1 userActor gasPoolActor 27000 3000 150 2 0
 
 /-- Step 3 — the sequencer's ETH-leg claim: a capped `transfer` of 800
     ETH from `gasPoolActor`'s own balance to `sequencerActor` (within

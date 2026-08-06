@@ -353,10 +353,11 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     ///         plan said it was, and no probe exceeds it.
     function test_the_opening_cap_is_derived_from_the_write_set() public {
         vmRoot.assertConsistent();
-        // `depositWithFee` writes six cells; plus the policy cell.
-        assertEq(vmRoot.widestFrontier(new bytes(128)), 7, "widest frontier");
+        // `depositWithFee` writes seven cells (Workstream SB's seed
+        // leg); plus the policy cell.
+        assertEq(vmRoot.widestFrontier(new bytes(160)), 8, "widest frontier");
         assertLe(
-            vmRoot.widestFrontier(new bytes(128)),
+            vmRoot.widestFrontier(new bytes(160)),
             vmRoot.MAX_CELL_OPENINGS(),
             "the cap must exceed the widest frontier"
         );
@@ -364,7 +365,7 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         if (!fixtureExists(STEP_VM_FIXTURE)) return;
         string memory raw = readFixture(STEP_VM_FIXTURE);
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
-        uint256 cap = vmRoot.widestFrontier(new bytes(128));
+        uint256 cap = vmRoot.widestFrontier(new bytes(160));
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
             beginEntry(_probeLabel(raw, base));

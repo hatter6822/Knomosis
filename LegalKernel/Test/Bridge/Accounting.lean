@@ -325,9 +325,12 @@ def tests : List TestCase :=
   , { name := "GP.4.2 step delta (depositWithFee) via applyActionToBridgeState"
     , body := do
         -- Apply a fresh fee deposit to the genesis bridge: recipient 10,
-        -- poolActor 99, userAmount 60, poolAmount 40, budgetGrant 9, id 1.
+        -- poolActor 99, userAmount 60, poolAmount 40, budgetGrant 9,
+        -- id 1, seedAmount 15.  The seed splits the pool leg on the
+        -- BALANCE side only — the consumed record (and so both ledger
+        -- folds) still carries the full poolAmount.
         let bs := applyActionToBridgeState BridgeState.empty
-                    (.depositWithFee 1 10 99 60 40 9 1) 0
+                    (.depositWithFee 1 10 99 60 40 9 1 15) 0
         assertEq (expected := (60 : Nat)) (actual := totalUserDeposited (es bs) 1) "user += 60"
         assertEq (expected := (40 : Nat)) (actual := totalPoolDeposited (es bs) 1) "pool += 40"
         -- Different resource is untouched:
@@ -402,9 +405,9 @@ def tests : List TestCase :=
   , { name := "GP.4.2 applyActionToBridgeState_depositWithFee: term-level API"
     , body := do
         let _t : ∀ (bs : BridgeState) (r : ResourceId) (recipient poolActor : ActorId)
-                   (ua pa : Amount) (bg : Nat) (d : DepositId) (idx : Nat),
+                   (ua pa : Amount) (bg : Nat) (d : DepositId) (sa : Amount) (idx : Nat),
                    applyActionToBridgeState bs
-                     (.depositWithFee r recipient poolActor ua pa bg d) idx =
+                     (.depositWithFee r recipient poolActor ua pa bg d sa) idx =
                    bs.markConsumed d
                      { resource := r, userAmount := ua, poolAmount := pa, budgetGrant := bg } :=
           applyActionToBridgeState_depositWithFee

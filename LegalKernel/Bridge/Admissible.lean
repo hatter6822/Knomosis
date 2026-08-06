@@ -109,7 +109,7 @@ user-initiated flow.  See CLAUDE.md's audit-1 changelog. -/
 def Action.isBridgeOnly : Action → Bool
   | .registerIdentity _ _              => true
   | .deposit _ _ _ _                   => true
-  | .depositWithFee _ _ _ _ _ _ _      => true
+  | .depositWithFee _ _ _ _ _ _ _ _      => true
   | .ammSwap _ _ _ _ _                 => true
   | .reclaimAmmReserves _ _ _ _        => true
   | _                                  => false
@@ -171,7 +171,12 @@ def applyActionToBridgeState (bs : BridgeState) (action : Action)
   | .deposit r _recipient amount d =>
     bs.markConsumed d ({ resource := r, userAmount := amount,
                          poolAmount := 0, budgetGrant := 0 })
-  | .depositWithFee r _recipient _poolActor userAmount poolAmount budgetGrant d =>
+  | .depositWithFee r _recipient _poolActor userAmount poolAmount budgetGrant d
+                     _seedAmount =>
+    -- Workstream SB: `seedAmount` splits the POOL leg on the balance
+    -- side only; the L2 supply expansion this deposit accounts for is
+    -- still `userAmount + poolAmount`, so the consumed record is
+    -- unchanged.
     bs.markConsumed d ({ resource := r, userAmount := userAmount,
                          poolAmount := poolAmount, budgetGrant := budgetGrant })
   | .withdraw r _sender amount rcp =>
@@ -192,8 +197,8 @@ def applyActionToBridgeState (bs : BridgeState) (action : Action)
 theorem applyActionToBridgeState_non_bridge
     (bs : BridgeState) (action : Action) (idx : Nat)
     (hne_dep : ∀ r recipient amount d, action ≠ .deposit r recipient amount d)
-    (hne_dwf : ∀ r recipient poolActor ua pa bg d,
-      action ≠ .depositWithFee r recipient poolActor ua pa bg d)
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d sa,
+      action ≠ .depositWithFee r recipient poolActor ua pa bg d sa)
     (hne_wd  : ∀ r sender amount rcp, action ≠ .withdraw r sender amount rcp) :
     applyActionToBridgeState bs action idx = bs := by
   unfold applyActionToBridgeState
@@ -217,8 +222,8 @@ theorem applyActionToBridgeState_non_bridge
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | depositWithFee r recipient poolActor ua pa bg d =>
-      exact absurd hact (hne_dwf r recipient poolActor ua pa bg d)
+  | depositWithFee r recipient poolActor ua pa bg d sa =>
+      exact absurd hact (hne_dwf r recipient poolActor ua pa bg d sa)
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
@@ -235,9 +240,10 @@ theorem applyActionToBridgeState_non_bridge
 @[simp] theorem applyActionToBridgeState_depositWithFee_consumed
     (bs : BridgeState) (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (d : DepositId) (idx : Nat) :
+    (d : DepositId) (seedAmount : Amount) (idx : Nat) :
     (applyActionToBridgeState bs
-      (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d)
+      (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d
+        seedAmount)
       idx).consumed.contains d = true := by
   unfold applyActionToBridgeState BridgeState.markConsumed
   simp
@@ -287,9 +293,10 @@ def BridgeAdmissibleWith
   -- the bridge-aware admission path would accept the same
   -- bridge-signed depositWithFee payload multiple times and
   -- re-credit user/pool balances + re-grant budget on each replay.
-  (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId,
+  (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId
+      seedAmount,
     st.action = .depositWithFee r recipient poolActor userAmount poolAmount
-                  budgetGrant depositId →
+                  budgetGrant depositId seedAmount →
     es.bridge.consumed.contains depositId = false) ∧
   -- (7) registration first-time-only:
   (∀ actor pk,
@@ -345,11 +352,12 @@ theorem BridgeAdmissibleWith.depositWithFeeIdFresh
     (h : BridgeAdmissibleWith verify P d es st)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : DepositId)
+    (depositId : DepositId) (seedAmount : Amount)
     (heq : st.action = .depositWithFee r recipient poolActor userAmount
-                          poolAmount budgetGrant depositId) :
+                          poolAmount budgetGrant depositId seedAmount) :
     es.bridge.consumed.contains depositId = false :=
-  h.2.2.1 r recipient poolActor userAmount poolAmount budgetGrant depositId heq
+  h.2.2.1 r recipient poolActor userAmount poolAmount budgetGrant depositId
+    seedAmount heq
 
 /-- The first-time-registration conjunct, projected. -/
 theorem BridgeAdmissibleWith.registrationFresh
@@ -511,7 +519,7 @@ def apply_bridge_admissible_with_budget
       else
       let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=
         match st.action with
-        | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
+        | .depositWithFee _ recipient _ _ _ budgetGrant _ _ =>
             ebs.topUp recipient currentEpoch freeTier budgetGrant
         | .topUpActionBudget _ _ budgetIncrement _ =>
             ebs.topUp st.signer currentEpoch freeTier budgetIncrement
@@ -767,8 +775,8 @@ theorem apply_bridge_admissible_with_preserves_bridge_for_non_bridge
     (st : SignedAction) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es st)
     (hne_dep : ∀ r recipient amount d', st.action ≠ .deposit r recipient amount d')
-    (hne_dwf : ∀ r recipient poolActor ua pa bg d',
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d')
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d' sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d' sa)
     (hne_wd  : ∀ r sender amount rcp, st.action ≠ .withdraw r sender amount rcp) :
     (apply_bridge_admissible_with verify P d es st idx h).bridge = es.bridge := by
   unfold apply_bridge_admissible_with
@@ -1110,8 +1118,8 @@ theorem admission_consumes_budget_on_success_bridge
     {freeTier actionCost currentEpoch : Nat}
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (hne_bridge : st.signer ≠ Bridge.bridgeActor)
-    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa)
     (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
@@ -1155,8 +1163,8 @@ theorem bridgeActor_budget_exempt_bridge
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
     (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa)
-    (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep,
-      st.action = .depositWithFee r recipient poolActor ua pa bg dep →
+    (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action = .depositWithFee r recipient poolActor ua pa bg dep sa →
       recipient ≠ Bridge.bridgeActor)
     {es' : ExtendedState}
     (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
@@ -1176,16 +1184,19 @@ theorem depositWithFee_grants_budget_bridge
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (depositId : DepositId)
+    (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es
             ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                              budgetGrant depositId, signer, nonce, sig⟩)
+                              budgetGrant depositId seedAmount, signer, nonce,
+              sig⟩)
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     {es' : ExtendedState}
     (hsuc : apply_bridge_admissible_with_budget verify P d es
               ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                                budgetGrant depositId, signer, nonce, sig⟩ idx h
+                                budgetGrant depositId seedAmount, signer, nonce,
+                sig⟩ idx h
             = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets recipient currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + budgetGrant := by
@@ -1193,8 +1204,8 @@ theorem depositWithFee_grants_budget_bridge
     apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
   rw [← heb]
   exact depositWithFee_grants_budget verify P d es r recipient poolActor userAmount poolAmount
-    budgetGrant depositId signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch
-    hpolicy hk
+    budgetGrant depositId seedAmount signer nonce sig h.toAdmissibleWith freeTier
+    actionCost currentEpoch hpolicy hk
 
 /-- GP.3.2.g (bridge mirror) — a successful `depositWithFee` on the
     production path changes no actor's budget except the recipient's. -/
@@ -1203,17 +1214,20 @@ theorem depositWithFee_budget_locality_bridge
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (depositId : DepositId)
+    (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es
             ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                              budgetGrant depositId, signer, nonce, sig⟩)
+                              budgetGrant depositId seedAmount, signer, nonce,
+              sig⟩)
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (other : ActorId) (hne_other : other ≠ recipient)
     {es' : ExtendedState}
     (hsuc : apply_bridge_admissible_with_budget verify P d es
               ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                                budgetGrant depositId, signer, nonce, sig⟩ idx h
+                                budgetGrant depositId seedAmount, signer, nonce,
+                sig⟩ idx h
             = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
@@ -1221,8 +1235,8 @@ theorem depositWithFee_budget_locality_bridge
     apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
   rw [← heb]
   exact depositWithFee_budget_locality verify P d es r recipient poolActor userAmount poolAmount
-    budgetGrant depositId signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch
-    hpolicy other hne_other hk
+    budgetGrant depositId seedAmount signer nonce sig h.toAdmissibleWith freeTier
+    actionCost currentEpoch hpolicy other hne_other hk
 
 /-- GP.3.2.h (bridge mirror) — a successful self-`topUpActionBudget` on
     the production path produces a net budget change of
@@ -1319,8 +1333,8 @@ theorem admission_locality_in_budget_bridge
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (hne_bridge : st.signer ≠ Bridge.bridgeActor)
-    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa)
     (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)

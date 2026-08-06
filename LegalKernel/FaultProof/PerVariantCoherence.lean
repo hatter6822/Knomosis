@@ -342,15 +342,15 @@ theorem coherence_depositWithFee
     (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : Bridge.DepositId)
+    (depositId : Bridge.DepositId) (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     recomputeCommitment es
       { action := .depositWithFee r recipient poolActor userAmount
-                                   poolAmount budgetGrant depositId,
+                                   poolAmount budgetGrant depositId seedAmount,
         signer := signer, nonce := nonce, sig := sig } l2LogIndex =
     commitExtendedState (productionApplyBudget es
       { action := .depositWithFee r recipient poolActor userAmount
-                                   poolAmount budgetGrant depositId,
+                                   poolAmount budgetGrant depositId seedAmount,
         signer := signer, nonce := nonce, sig := sig } l2LogIndex) :=
   recomputeCommitment_eq_productionApplyBudget es _ l2LogIndex
 
@@ -725,15 +725,15 @@ theorem cellwrites_depositWithFee
     (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : Bridge.DepositId)
+    (depositId : Bridge.DepositId) (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : ByteArray) (l2LogIndex : Nat) :
     applyCellWrites_to_state es
       { action := .depositWithFee r recipient poolActor userAmount
-                                   poolAmount budgetGrant depositId,
+                                   poolAmount budgetGrant depositId seedAmount,
         signer := signer, nonce := nonce, sig := sig } l2LogIndex =
     productionApplyBudget es
       { action := .depositWithFee r recipient poolActor userAmount
-                                   poolAmount budgetGrant depositId,
+                                   poolAmount budgetGrant depositId seedAmount,
         signer := signer, nonce := nonce, sig := sig } l2LogIndex :=
   applyCellWrites_eq_productionApplyBudget es _ l2LogIndex
 

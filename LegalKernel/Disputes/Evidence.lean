@@ -157,7 +157,7 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- For topUpActionBudget, the signer-aware kernel effect is
   -- handled by the `let t := match action with ...` arm above; no
   -- further mutation at this point.
-  | .depositWithFee _ _ _ _ _ _ _  => es''
+  | .depositWithFee _ _ _ _ _ _ _ _  => es''
   | .topUpActionBudget _ _ _ _     => es''
   -- Workstream GP (GP.3.4): delegated top-up.  Like
   -- `topUpActionBudget`, the signer-aware kernel effect
@@ -646,7 +646,7 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- both `apply_admissible_with` and `kernelOnlyApply` use the
   -- same `(Action.compile st.action).transition`, so they agree
   -- by `rfl`.
-  | depositWithFee _ _ _ _ _ _ _  => rfl
+  | depositWithFee _ _ _ _ _ _ _ _  => rfl
   -- topUpActionBudget compiles to `Laws.freezeResource 0` at the
   -- signer-unaware level, but both `apply_admissible_with` and
   -- `kernelOnlyApply` post-GP.2.3 dispatch on the action and use

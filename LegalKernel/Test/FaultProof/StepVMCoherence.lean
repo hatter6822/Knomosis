@@ -144,7 +144,7 @@ def tests : List TestCase :=
     , body := do
         assertEq (expected := (19 : UInt8))
           (actual := actionKindByte
-            (.depositWithFee 0 0 0 0 0 0 0))
+            (.depositWithFee 0 0 0 0 0 0 0 0))
           "depositWithFee"
     }
   , { name := "actionKindByte: topUpActionBudget is 20"
@@ -455,17 +455,18 @@ def tests : List TestCase :=
     }
   , { name := "cross-stack: depositWithFee field layout matches Solidity decoder"
     , body := do
-        -- Workstream GP closure: depositWithFee's seven-field layout
-        -- is fixed at 5 × uint64BE + 2 × uint256BE = 104 bytes, the
-        -- two wide fields being the wei-denominated userAmount and
-        -- poolAmount.  This test pins the byte offsets so the
-        -- Solidity `_step19` decoder reads each field at the
-        -- matching offset and with the matching width.
+        -- Workstream GP closure + Workstream SB: depositWithFee's
+        -- eight-field layout is fixed at 5 × uint64BE + 3 × uint256BE
+        -- = 136 bytes, the three wide fields being the wei-denominated
+        -- userAmount, poolAmount, and the APPENDED seedAmount (so
+        -- every pre-existing offset survives).  This test pins the
+        -- byte offsets so the Solidity `_step19` decoder reads each
+        -- field at the matching offset and with the matching width.
         let bytes := actionFieldsForL1
           (.depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
-                           (4 : Nat) (5 : Nat) (6 : Nat) (7 : Nat))
-        assertEq (expected := 104) (actual := bytes.size)
-                 "5 × uint64BE + 2 × uint256BE = 104 bytes"
+                           (4 : Nat) (5 : Nat) (6 : Nat) (7 : Nat) (8 : Nat))
+        assertEq (expected := 136) (actual := bytes.size)
+                 "5 × uint64BE + 3 × uint256BE = 136 bytes"
         assertEq (expected := 1) (actual := readUint64BE bytes 0)   "r"
         assertEq (expected := 2) (actual := readUint64BE bytes 8)   "recipient"
         assertEq (expected := 3) (actual := readUint64BE bytes 16)  "poolActor"
@@ -473,6 +474,7 @@ def tests : List TestCase :=
         assertEq (expected := 5) (actual := readUint256BE bytes 56) "poolAmount"
         assertEq (expected := 6) (actual := readUint64BE bytes 88)  "budgetGrant"
         assertEq (expected := 7) (actual := readUint64BE bytes 96)  "depositId"
+        assertEq (expected := 8) (actual := readUint256BE bytes 104) "seedAmount"
     }
   , { name := "cross-stack: topUpActionBudget field layout matches Solidity decoder"
     , body := do
@@ -516,7 +518,7 @@ def tests : List TestCase :=
           , .registerIdentity 7 (ByteArray.mk #[1])
           , .deposit 1 8 5 3, .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero
           , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
-          , .depositWithFee 1 8 9 5 1 1 3, .topUpActionBudget 1 5 1 9
+          , .depositWithFee 1 8 9 5 1 1 3 1, .topUpActionBudget 1 5 1 9
           , .topUpActionBudgetFor 8 1 5 1 9, .claimBudgetRefund 1 1 5 9
           , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 5 9 8 ]
         for a in actions do
@@ -607,7 +609,7 @@ def tests : List TestCase :=
           , .registerIdentity 7 (ByteArray.mk #[1])
           , .deposit 1 8 5 3, .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero
           , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
-          , .depositWithFee 1 8 9 5 1 1 3, .topUpActionBudget 1 5 1 9
+          , .depositWithFee 1 8 9 5 1 1 3 1, .topUpActionBudget 1 5 1 9
           , .topUpActionBudgetFor 8 1 5 1 9, .claimBudgetRefund 1 1 5 9
           , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 5 9 8 ]
         for a in actions do
@@ -616,7 +618,7 @@ def tests : List TestCase :=
               s!"writeCells omits the epoch budget for kind {actionKindByte a}"
         -- And the two delegated variants additionally declare the
         -- RECIPIENT's cell, because that is where their grant lands.
-        assert ((Action.writeCells (.depositWithFee 1 8 9 5 1 1 3) signer).contains
+        assert ((Action.writeCells (.depositWithFee 1 8 9 5 1 1 3 1) signer).contains
                   (.epochBudget 8))
           "depositWithFee declares the recipient's budget cell"
         assert ((Action.writeCells (.topUpActionBudgetFor 8 1 5 1 9) signer).contains

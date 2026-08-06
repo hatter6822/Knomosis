@@ -117,10 +117,10 @@ example (bh : ByteArray) (sIdx eIdx : LegalKernel.Disputes.LogIndex)
 example (bh : ByteArray) (gid : Nat) (winner : ActorId)
     (revIdx : LegalKernel.Disputes.LogIndex) :
     Action.tag (.faultProofResolution bh gid winner revIdx) = 18 := rfl
--- 19 — Workstream GP (depositWithFee)
+-- 19 — Workstream GP (depositWithFee; Workstream SB appended seedAmount)
 example (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) :
-    Action.tag (.depositWithFee r recipient poolActor ua pa bg d) = 19 := rfl
+    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) (sa : Amount) :
+    Action.tag (.depositWithFee r recipient poolActor ua pa bg d sa) = 19 := rfl
 -- 20 — Workstream GP (topUpActionBudget)
 example (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
     Action.tag (.topUpActionBudget gr ga bi pa) = 20 := rfl

@@ -47,7 +47,7 @@ def tests : List TestCase :=
         assertEq (expected := true)  (actual := Action.isBridgeOnly (.registerIdentity 10 ⟨#[]⟩))
                  "registerIdentity flagged"
         assertEq (expected := true)
-                 (actual := Action.isBridgeOnly (.depositWithFee 1 10 99 50 50 1000 42))
+                 (actual := Action.isBridgeOnly (.depositWithFee 1 10 99 50 50 1000 42 20))
                  "depositWithFee flagged (Workstream GP)"
     }
   , { name := "Action.isBridgeOnly: withdraw is NOT bridge-only (audit-1)"
@@ -90,7 +90,7 @@ def tests : List TestCase :=
         -- `bridge.consumed` so a second admission with the same
         -- depositId is rejected at `BridgeAdmissibleWith` conjunct 6b.
         let bs := applyActionToBridgeState BridgeState.empty
-                    (.depositWithFee 1 10 99 50 50 1000 77) 0
+                    (.depositWithFee 1 10 99 50 50 1000 77 20) 0
         assertEq (expected := true) (actual := bs.isConsumed 77)
                  "depositWithFee depositId consumed"
         assertEq (expected := false) (actual := bs.isConsumed 78)
@@ -121,7 +121,7 @@ def tests : List TestCase :=
         -- replay using the L1-attested depositId space.
         let bs0 := applyActionToBridgeState BridgeState.empty (.deposit 1 10 100 50) 0
         let bs1 := applyActionToBridgeState bs0
-                     (.depositWithFee 1 11 99 30 20 500 51) 1
+                     (.depositWithFee 1 11 99 30 20 500 51 5) 1
         assertEq (expected := true) (actual := bs1.isConsumed 50) "deposit consumed"
         assertEq (expected := true) (actual := bs1.isConsumed 51) "depositWithFee consumed"
         assertEq (expected := (2 : Nat)) (actual := bs1.consumed.size)
@@ -135,7 +135,7 @@ def tests : List TestCase :=
         -- depositWithFee r=1 recipient=10 poolActor=10 userAmount=30
         -- poolAmount=20 budgetGrant=100 depositId=88.
         let bs := applyActionToBridgeState BridgeState.empty
-                    (.depositWithFee 1 10 10 30 20 100 88) 0
+                    (.depositWithFee 1 10 10 30 20 100 88 5) 0
         match bs.consumed[(88 : DepositId)]? with
         | some rec =>
           assertEq (expected := (30 : Amount)) (actual := rec.userAmount)
@@ -262,7 +262,7 @@ def tests : List TestCase :=
   , { name := "Cell-writes consistency: depositWithFee writes .bridgeConsumed d"
     , body := do
         let d : DepositId := 0xABCDEF
-        let action : Action := .depositWithFee 1 10 99 30 20 500 d
+        let action : Action := .depositWithFee 1 10 99 30 20 500 d 5
         -- Static declaration: .bridgeConsumed d is in writeCells.
         let declared := action.writeCells 7
         let hasBridgeConsumed := declared.any
@@ -300,8 +300,8 @@ def tests : List TestCase :=
     , body := do
         let _t : ∀ (bs : BridgeState) (action : Action) (idx : Nat),
                   (∀ r recipient amount d, action ≠ .deposit r recipient amount d) →
-                  (∀ r recipient poolActor ua pa bg d,
-                    action ≠ .depositWithFee r recipient poolActor ua pa bg d) →
+                  (∀ r recipient poolActor ua pa bg d sa,
+                    action ≠ .depositWithFee r recipient poolActor ua pa bg d sa) →
                   (∀ r sender amount rcp, action ≠ .withdraw r sender amount rcp) →
                   applyActionToBridgeState bs action idx = bs :=
           applyActionToBridgeState_non_bridge
@@ -409,9 +409,9 @@ def tests : List TestCase :=
         let _r := bridgeAuthorizedAction_of_isBridgeOnly (.registerIdentity 1 ⟨#[]⟩) (by decide)
         let _d := bridgeAuthorizedAction_of_isBridgeOnly (.deposit 1 10 100 42) (by decide)
         let _f := bridgeAuthorizedAction_of_isBridgeOnly
-                    (.depositWithFee 1 10 1 90 10 5 42) (by decide)
+                    (.depositWithFee 1 10 1 90 10 5 42 7) (by decide)
         assertEq (expected := true)
-          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42))
+          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42 7))
           "depositWithFee authorised (the GP fix)"
     }
   ]

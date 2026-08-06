@@ -131,32 +131,60 @@ theorem withdraw_step_supply
   · rw [if_neg hr, Nat.add_zero]
     exact Laws.withdraw_conserves_other_resource r₀ r sender amt rcp es.base hr
 
+/-- §8.1 master-lemma fold over three successive same-resource credits:
+    total supply at `r` rises by the sum of the three increments.  The
+    values are abstract `Nat`s so the lemma is usable for any
+    three-write credit chain (the `depositWithFee` three-leg split
+    instantiates `v₂ := poolAmount − seedAmount`). -/
+private theorem totalSupply_three_credits
+    (s : State) (r : ResourceId) (a₁ a₂ a₃ : ActorId) (v₁ v₂ v₃ : Nat) :
+    TotalSupply (setBalance (setBalance (setBalance s r a₁
+        (getBalance s r a₁ + v₁)) r a₂
+        (getBalance (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂ + v₂)) r a₃
+        (getBalance (setBalance (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂
+          (getBalance (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂ + v₂)) r a₃
+          + v₃)) r
+      = TotalSupply s r + (v₁ + v₂ + v₃) := by
+  have h1 := totalSupply_setBalance s r a₁ (getBalance s r a₁ + v₁)
+  have h2 := totalSupply_setBalance
+      (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂
+      (getBalance (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂ + v₂)
+  have h3 := totalSupply_setBalance
+      (setBalance (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂
+        (getBalance (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂ + v₂)) r a₃
+      (getBalance (setBalance (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂
+        (getBalance (setBalance s r a₁ (getBalance s r a₁ + v₁)) r a₂ + v₂)) r a₃
+        + v₃)
+  omega
+
 /-- At-resource L2 supply delta of the `depositWithFee` law: total
     supply at the deposit's resource rises by `userAmount + poolAmount`
-    (the two mints to `recipient` and `poolActor`).  Mirrors the
+    (the three mints to `recipient`, `poolActor`, and `reserveActor` —
+    the Workstream SB three-leg split — sum to
+    `ua + (pa − sa) + sa = ua + pa` under the law's
+    `seedAmount ≤ poolAmount` conjunct).  Mirrors the
     `totalSupply_after_deposit` law lemma; derived by applying the §8.1
     master lemma `totalSupply_setBalance` once per mint. -/
 private theorem totalSupply_after_depositWithFee
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
+    (seedAmount : Amount) (reserveActor : ActorId)
     (s : State)
     (hpre : (Laws.depositWithFee r recipient poolActor userAmount poolAmount
-              budgetGrant d).pre s) :
+              budgetGrant d seedAmount reserveActor).pre s) :
     TotalSupply (step_impl s (Laws.depositWithFee r recipient poolActor
-        userAmount poolAmount budgetGrant d)) r
+        userAmount poolAmount budgetGrant d seedAmount reserveActor)) r
       = TotalSupply s r + (userAmount + poolAmount) := by
+  have hseed : seedAmount ≤ poolAmount := hpre.2.2.1
   rw [step_impl, if_pos hpre]
-  show TotalSupply (setBalance (setBalance s r recipient
-          (getBalance s r recipient + userAmount)) r poolActor
-          (getBalance (setBalance s r recipient
-            (getBalance s r recipient + userAmount)) r poolActor + poolAmount)) r
-      = TotalSupply s r + (userAmount + poolAmount)
-  have h1 := totalSupply_setBalance s r recipient (getBalance s r recipient + userAmount)
-  have h2 := totalSupply_setBalance
-      (setBalance s r recipient (getBalance s r recipient + userAmount)) r poolActor
-      (getBalance (setBalance s r recipient (getBalance s r recipient + userAmount))
-        r poolActor + poolAmount)
-  omega
+  calc TotalSupply ((Laws.depositWithFee r recipient poolActor userAmount
+          poolAmount budgetGrant d seedAmount reserveActor).apply_impl s) r
+      = TotalSupply s r
+          + (userAmount + (poolAmount - seedAmount) + seedAmount) :=
+        totalSupply_three_credits s r recipient poolActor reserveActor
+          userAmount (poolAmount - seedAmount) seedAmount
+    _ = TotalSupply s r + (userAmount + poolAmount) := by
+        rw [Nat.add_assoc, Nat.sub_add_cancel hseed]
 
 /-- The base-state advance of a `depositWithFee` bridge step reduces to
     the kernel `step_impl` of the `depositWithFee` law. -/
@@ -165,11 +193,12 @@ theorem depositWithFee_step_base
     {P : AuthorityPolicy} {dep : ByteArray} {es : ExtendedState}
     {st : SignedAction} {idx : Nat}
     {r₀ : ResourceId} {recip pool : ActorId} {ua pa : Amount}
-    {bg : Nat} {dpid : DepositId}
-    (haction : st.action = Action.depositWithFee r₀ recip pool ua pa bg dpid)
+    {bg : Nat} {dpid : DepositId} {sa : Amount}
+    (haction : st.action = Action.depositWithFee r₀ recip pool ua pa bg dpid sa)
     (h : BridgeAdmissibleWith verify P dep es st) :
     (apply_bridge_admissible_with verify P dep es st idx h).base
-      = step_impl es.base (Laws.depositWithFee r₀ recip pool ua pa bg dpid) := by
+      = step_impl es.base (Laws.depositWithFee r₀ recip pool ua pa bg dpid sa
+          ammReserveActor) := by
   rw [apply_bridge_admissible_with_base, haction]
   rfl
 
@@ -181,24 +210,27 @@ theorem depositWithFee_step_supply
     {P : AuthorityPolicy} {dep : ByteArray} {es : ExtendedState}
     {st : SignedAction} {idx : Nat}
     {r₀ : ResourceId} {recip pool : ActorId} {ua pa : Amount}
-    {bg : Nat} {dpid : DepositId}
-    (haction : st.action = Action.depositWithFee r₀ recip pool ua pa bg dpid)
+    {bg : Nat} {dpid : DepositId} {sa : Amount}
+    (haction : st.action = Action.depositWithFee r₀ recip pool ua pa bg dpid sa)
     (h : BridgeAdmissibleWith verify P dep es st)
     (r : ResourceId) :
     TotalSupply (apply_bridge_admissible_with verify P dep es st idx h).base r
       = TotalSupply es.base r + (if r₀ = r then ua + pa else 0) := by
   rw [depositWithFee_step_base haction h]
-  have hpre : (Laws.depositWithFee r₀ recip pool ua pa bg dpid).pre es.base := by
+  have hpre : (Laws.depositWithFee r₀ recip pool ua pa bg dpid sa
+      ammReserveActor).pre es.base := by
     have hp := h.1.2.2.2.1
     rw [haction] at hp
     exact hp
   by_cases hr : r₀ = r
   · subst hr
     rw [if_pos rfl]
-    exact totalSupply_after_depositWithFee r₀ recip pool ua pa bg dpid es.base hpre
+    exact totalSupply_after_depositWithFee r₀ recip pool ua pa bg dpid sa
+      ammReserveActor es.base hpre
   · rw [if_neg hr, Nat.add_zero]
     unfold TotalSupply
-    rw [Laws.depositWithFee_other_resource_untouched r₀ r recip pool ua pa bg dpid es.base hr]
+    rw [Laws.depositWithFee_other_resource_untouched r₀ r recip pool ua pa bg dpid
+          sa ammReserveActor es.base hr]
 
 /-! ## Withdrawal-ledger deltas
 
@@ -338,8 +370,8 @@ theorem depositWithFee_step_withdrawn
     {P : AuthorityPolicy} {dep : ByteArray} {es : ExtendedState}
     {st : SignedAction} {idx : Nat}
     {r₀ : ResourceId} {recip pool : ActorId} {ua pa : Amount}
-    {bg : Nat} {dpid : DepositId}
-    (haction : st.action = Action.depositWithFee r₀ recip pool ua pa bg dpid)
+    {bg : Nat} {dpid : DepositId} {sa : Amount}
+    (haction : st.action = Action.depositWithFee r₀ recip pool ua pa bg dpid sa)
     (h : BridgeAdmissibleWith verify P dep es st)
     (r : ResourceId) :
     totalWithdrawn (apply_bridge_admissible_with verify P dep es st idx h) r
@@ -397,25 +429,25 @@ theorem depositWithFee_step_deposited
     {P : AuthorityPolicy} {dep : ByteArray} {es : ExtendedState}
     {st : SignedAction} {idx : Nat}
     {r₀ : ResourceId} {recip pool : ActorId} {ua pa : Amount}
-    {bg : Nat} {dpid : DepositId}
-    (haction : st.action = Action.depositWithFee r₀ recip pool ua pa bg dpid)
+    {bg : Nat} {dpid : DepositId} {sa : Amount}
+    (haction : st.action = Action.depositWithFee r₀ recip pool ua pa bg dpid sa)
     (h : BridgeAdmissibleWith verify P dep es st)
     (r : ResourceId) :
     totalDeposited (apply_bridge_admissible_with verify P dep es st idx h) r
       = totalDeposited es r + (if r₀ = r then ua + pa else 0) := by
   have hfresh : ¬ dpid ∈ es.bridge.consumed := by
-    have hc := h.depositWithFeeIdFresh r₀ recip pool ua pa bg dpid haction
+    have hc := h.depositWithFeeIdFresh r₀ recip pool ua pa bg dpid sa haction
     rw [TreeMap.mem_iff_contains, hc]; simp
   have hbeq : (apply_bridge_admissible_with verify P dep es st idx h).bridge
-      = ({ es with bridge := applyActionToBridgeState es.bridge (Action.depositWithFee r₀ recip pool ua pa bg dpid) idx } : ExtendedState).bridge := by
+      = ({ es with bridge := applyActionToBridgeState es.bridge (Action.depositWithFee r₀ recip pool ua pa bg dpid sa) idx } : ExtendedState).bridge := by
     show applyActionToBridgeState es.bridge st.action idx
-        = applyActionToBridgeState es.bridge (Action.depositWithFee r₀ recip pool ua pa bg dpid) idx
+        = applyActionToBridgeState es.bridge (Action.depositWithFee r₀ recip pool ua pa bg dpid sa) idx
     rw [haction]
   rw [totalDeposited_unchanged_when_bridge_eq _ _ hbeq r,
       ← totalUserDeposited_plus_pool_eq_totalDeposited
-        ({ es with bridge := applyActionToBridgeState es.bridge (Action.depositWithFee r₀ recip pool ua pa bg dpid) idx } : ExtendedState) r,
-      totalUserDeposited_step_eq es r₀ recip pool ua pa bg dpid idx r hfresh,
-      totalPoolDeposited_step_eq es r₀ recip pool ua pa bg dpid idx r hfresh,
+        ({ es with bridge := applyActionToBridgeState es.bridge (Action.depositWithFee r₀ recip pool ua pa bg dpid sa) idx } : ExtendedState) r,
+      totalUserDeposited_step_eq es r₀ recip pool ua pa bg dpid sa idx r hfresh,
+      totalPoolDeposited_step_eq es r₀ recip pool ua pa bg dpid sa idx r hfresh,
       ← totalUserDeposited_plus_pool_eq_totalDeposited es r]
   by_cases hr : r₀ = r
   · simp only [if_pos hr]; omega

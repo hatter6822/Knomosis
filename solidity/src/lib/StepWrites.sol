@@ -63,6 +63,13 @@ library StepWrites {
     ///         Mirrors `LegalKernel.Bridge.bridgeActor`.
     uint64 internal constant BRIDGE_ACTOR = 0;
 
+    /// @notice The canonical AMM reserve actor — the seed leg's target
+    ///         (Workstream SB).  Mirrors `LegalKernel.Bridge.ammReserveActor`,
+    ///         which the compiled `Laws.depositWithFee` pins as its
+    ///         reserve parameter, so the verifier hard-codes the same
+    ///         identity rather than reading one from calldata.
+    uint64 internal constant AMM_RESERVE_ACTOR = 3;
+
     /// @notice CBE uint head width: tag + 8 little-endian bytes.
     uint256 internal constant CBE_UINT_LEN = 9;
 
@@ -532,34 +539,69 @@ library StepWrites {
         return deriveChainPair(payerBal, poolBal, payer, poolActor, gasAmount, gasAmount);
     }
 
-    /// @notice `depositWithFee`: credit the recipient, then the pool.
-    /// @dev    Mirrors `VerifierWrites.deriveDepositWithFeeBalances`.
-    ///         The chained pair with TWO credits rather than a
-    ///         debit/credit, so it cannot route through
-    ///         `deriveChainPair` (whose `x` leg subtracts).
-    ///         `Laws.depositWithFee.pre` carries no positivity clause,
-    ///         like `deposit`'s — a bridge deposit's admissibility is
-    ///         settled by the bridge gate — so the only branch is the
-    ///         C-3 ceiling, and the `x == y` case (a recipient who IS
-    ///         the pool actor) still has to net both credits onto one
-    ///         cell.  Both legs are bounded, the second against the
-    ///         state the first already wrote: bounding them
-    ///         independently would miss their SUM when the two actors
-    ///         coincide.
+    /// @notice `depositWithFee` (Workstream SB three-leg): credit the
+    ///         recipient, then the pool's NET share
+    ///         `poolAmount − seedAmount`, then the reserve's
+    ///         `seedAmount`, each leg reading the already-written
+    ///         state.
+    /// @dev    Mirrors `VerifierWrites.deriveDepositWithFeeBalances` /
+    ///         `deriveChainTriple`.  The evaluated precondition is the
+    ///         law's four conjuncts — the C-3 ceiling per leg plus
+    ///         `seedAmount ≤ poolAmount` — and a failing conjunct
+    ///         returns all three pre-values (the no-op branch), never
+    ///         a truncated split.
+    ///
+    ///         **The seed bound is checked before the subtraction.**
+    ///         Lean's conjunct 2 reads the pool leg through `Nat`'s
+    ///         truncated `poolAmount - seedAmount`; checked `uint256`
+    ///         subtraction would REVERT on an over-seed split, and a
+    ///         revert is not a no-op verdict.  Evaluating the
+    ///         `seedAmount ≤ poolAmount` conjunct first is
+    ///         semantics-preserving — the CONJUNCTION is false either
+    ///         way — and keeps the arithmetic wrap-free (the
+    ///         `_planRefundBalances` idiom).
+    ///
+    ///         Every pairwise actor coincidence is a chain branch, not
+    ///         an assumption: a recipient who IS the pool, a pool that
+    ///         IS the reserve, and a recipient who IS the reserve each
+    ///         read the earlier write, and the published value for an
+    ///         earlier cell is the LAST write landing on it.
     function deriveDepositWithFeeBalances(
         uint256 recipientBal,
         uint256 poolBal,
+        uint256 reserveBal,
         uint64 recipient,
         uint64 poolActor,
+        uint64 reserveActor,
         uint256 userAmount,
-        uint256 poolAmount
-    ) internal pure returns (uint256 newRecipient, uint256 newPool) {
-        if (!creditFits(recipientBal, userAmount)) return (recipientBal, poolBal);
+        uint256 poolAmount,
+        uint256 seedAmount
+    )
+        internal
+        pure
+        returns (uint256 newRecipient, uint256 newPool, uint256 newReserve)
+    {
+        if (!creditFits(recipientBal, userAmount)
+                || seedAmount > poolAmount) {
+            return (recipientBal, poolBal, reserveBal);
+        }
+        uint256 net = poolAmount - seedAmount;
         uint256 nx = recipientBal + userAmount;
-        uint256 creditPre = recipient == poolActor ? nx : poolBal;
-        if (!creditFits(creditPre, poolAmount)) return (recipientBal, poolBal);
-        uint256 ny = creditPre + poolAmount;
-        return (recipient == poolActor ? ny : nx, ny);
+        uint256 r2 = recipient == poolActor ? nx : poolBal;
+        if (!creditFits(r2, net)) return (recipientBal, poolBal, reserveBal);
+        uint256 ny = r2 + net;
+        uint256 r3 = poolActor == reserveActor
+            ? ny
+            : (recipient == reserveActor ? nx : reserveBal);
+        if (!creditFits(r3, seedAmount)) {
+            return (recipientBal, poolBal, reserveBal);
+        }
+        uint256 nz = r3 + seedAmount;
+        return (
+            reserveActor == recipient ? nz : (poolActor == recipient ? ny : nx),
+            reserveActor == poolActor ? nz : ny,
+            nz
+        );
     }
 
     /// @notice `ammSwap`: credit the reserve at `fromResource`, debit
@@ -1002,16 +1044,22 @@ library StepWrites {
             // which is why `Action.stateWriteCells` exists.
             out[4] = Cell({kind: 5, keyA: nextWdIdPre, keyB: 0});
         } else if (actionKind == 19) {                  // depositWithFee
-            _need(actionKind, fields, 104);
-            out = new Cell[](6);
+            // Workstream SB three-leg: the balance cells LEAD the set
+            // (recipient, pool, then the canonical AMM reserve — the
+            // seed target the compiled law pins), so the plan's slots
+            // 0..2 are this variant's three chained credits.  The
+            // appended seedAmount widened the fields 104 → 136 bytes.
+            _need(actionKind, fields, 136);
+            out = new Cell[](7);
             uint64 r = _fieldUint64(fields, 0);
             uint64 recipient = _fieldUint64(fields, 8);
             out[0] = Cell({kind: 0, keyA: r, keyB: recipient});
             out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 16)});
+            out[2] = Cell({kind: 0, keyA: r, keyB: AMM_RESERVE_ACTOR});
             // depositId sits after BOTH 32-byte amounts and budgetGrant.
-            out[2] = Cell({kind: 4, keyA: _fieldUint64(fields, 96), keyB: 0});
-            _appendUniform(out, 3, signer);
-            out[5] = Cell({kind: 13, keyA: recipient, keyB: 0});
+            out[3] = Cell({kind: 4, keyA: _fieldUint64(fields, 96), keyB: 0});
+            _appendUniform(out, 4, signer);
+            out[6] = Cell({kind: 13, keyA: recipient, keyB: 0});
         } else if (actionKind == 20 || actionKind == 22) {
             // topUpActionBudget / claimBudgetRefund: `gr || _ || _ || pa`.
             // The middle pair straddles a 32-byte amount, so `pa` is

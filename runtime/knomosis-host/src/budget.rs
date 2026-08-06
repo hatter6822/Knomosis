@@ -943,7 +943,8 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
             ActionBudgetKind::Ordinary
         }
         // depositWithFee(19): r, recipient, poolActor, userAmount,
-        // poolAmount, budgetGrant, depositId.
+        // poolAmount, budgetGrant, depositId, seedAmount (the
+        // Workstream SB appended AMM seed leg).
         19 => {
             cur.skip_uint()?; // r
             let recipient = cur.read_uint()?;
@@ -952,6 +953,7 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
             cur.skip_amount()?; // poolAmount
             let budget_grant = cur.read_uint()?; // budget UNIT count
             cur.skip_uint()?; // depositId
+            cur.skip_amount()?; // seedAmount
             ActionBudgetKind::DepositWithFee {
                 recipient,
                 budget_grant,
@@ -1950,8 +1952,19 @@ mod tests {
     /// `depositWithFee` decodes to the recipient + budget grant.
     #[test]
     fn decode_deposit_with_fee() {
-        // tag 19: r, recipient, poolActor, userAmount, poolAmount, budgetGrant, depositId
-        let action = cat(&[u(19), u(0), u(10), u(1), amt(1000), amt(500), u(50), u(7)]);
+        // tag 19: r, recipient, poolActor, userAmount, poolAmount,
+        // budgetGrant, depositId, seedAmount (Workstream SB).
+        let action = cat(&[
+            u(19),
+            u(0),
+            u(10),
+            u(1),
+            amt(1000),
+            amt(500),
+            u(50),
+            u(7),
+            amt(25),
+        ]);
         let sa = signed(&action, BRIDGE_ACTOR);
         let view = decode_budget_view(&sa).unwrap();
         assert_eq!(view.signer, BRIDGE_ACTOR);
@@ -3066,6 +3079,7 @@ mod tests {
                 amt(10), // poolAmount
                 u(budget_grant),
                 u(11),
+                amt(12), // seedAmount (Workstream SB)
             ]),
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource,

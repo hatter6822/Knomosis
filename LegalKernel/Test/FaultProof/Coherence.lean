@@ -49,7 +49,7 @@ private def trivialLogEntry : LogEntry :=
     depositId 42.  Signed by `Bridge.bridgeActor` (= 0) per the
     admission gate's `depositWithFee_signerCheck`. -/
 private def depositWithFeeSignedAction : SignedAction :=
-  { action := .depositWithFee 1 10 99 30 20 100 42
+  { action := .depositWithFee 1 10 99 30 20 100 42 8
   , signer := Bridge.bridgeActor
   , nonce  := 0
   , sig    := ByteArray.empty }
@@ -189,14 +189,16 @@ def tests : List TestCase :=
   , { name := "GP.3.3: kernelOnlyApply on depositWithFee mutates recipient balance"
     , body := do
         -- Pre-state: recipient (10) has balance 5; poolActor (99)
-        -- has balance 0.  After kernelOnlyApply:
+        -- and the AMM reserve actor have balance 0.  After
+        -- kernelOnlyApply (three-leg split, seedAmount = 8):
         --   recipient.balance = 5 + 30 = 35
-        --   poolActor.balance = 0 + 20 = 20
+        --   poolActor.balance = 0 + (20 - 8) = 12
+        --   ammReserveActor.balance = 0 + 8 = 8
         -- The signer (bridgeActor = 0) is exempt from balance
         -- mutation at the kernel-step level (Laws.depositWithFee
-        -- only credits recipient + poolActor; bridgeActor is the
-        -- signer but the source of funds is L1, not bridgeActor's
-        -- balance).
+        -- credits recipient + poolActor + reserveActor; bridgeActor
+        -- is the signer but the source of funds is L1, not
+        -- bridgeActor's balance).
         let es0 := ExtendedState.empty
         let baseWithRecipient :=
           LegalKernel.setBalance es0.base 1 10 5
@@ -204,10 +206,13 @@ def tests : List TestCase :=
         let es' := kernelOnlyApply es depositWithFeeLogEntry
         let recipientBal := LegalKernel.getBalance es'.base 1 10
         let poolBal := LegalKernel.getBalance es'.base 1 99
+        let reserveBal := LegalKernel.getBalance es'.base 1 Bridge.ammReserveActor
         assertEq (expected := 35) (actual := recipientBal)
                  "recipient credited userAmount = 30 (pre 5 → post 35)"
-        assertEq (expected := 20) (actual := poolBal)
-                 "poolActor credited poolAmount = 20 (pre 0 → post 20)"
+        assertEq (expected := 12) (actual := poolBal)
+                 "poolActor credited net poolAmount − seed = 12 (pre 0 → post 12)"
+        assertEq (expected := 8) (actual := reserveBal)
+                 "reserve credited seedAmount = 8 (pre 0 → post 8)"
     }
   , { name := "GP.3.3: kernelOnlyApply on topUpActionBudget transfers gas"
     , body := do
@@ -310,10 +315,11 @@ def tests : List TestCase :=
   , { name := "GP.3.3: kernelOnlyApply on depositWithFee self-credit (recipient = poolActor)"
     , body := do
         -- Self-credit edge case: recipient = poolActor.  Both
-        -- credits land on the same cell.  Pre-balance 100 →
+        -- credits land on the same cell (seedless, so the pool leg
+        -- is the whole fee).  Pre-balance 100 →
         -- post-balance 100 + 30 + 20 = 150.
         let selfAction : Action :=
-          .depositWithFee 1 10 10 30 20 100 99
+          .depositWithFee 1 10 10 30 20 100 99 0
         let selfSigned : SignedAction :=
           { action := selfAction, signer := Bridge.bridgeActor,
             nonce := 0, sig := ByteArray.empty }

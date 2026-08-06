@@ -222,7 +222,7 @@ def tests : List TestCase :=
             let _grant : EpochBudgetState.currentBudget es'.epochBudgets userActor 1 100 =
                 EpochBudgetState.currentBudget exampleState.epochBudgets userActor 1 100 + 50 :=
               depositWithFee_grants_budget_bridge exampleVerify examplePolicy exampleDeploymentId
-                exampleState 0 userActor gasPoolActor 9000 1000 50 1 bridgeActor nonce sig 0 h
+                exampleState 0 userActor gasPoolActor 9000 1000 50 1 0 bridgeActor nonce sig 0 h
                 100 1 1 rfl hsuc
             -- Value side: fresh recipient budget = free tier (100); after the grant, 150.
             assertEq (expected := (100 : Nat))

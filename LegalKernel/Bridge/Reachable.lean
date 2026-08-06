@@ -64,6 +64,7 @@ inductive BridgeAction where
       and records `depositId` as consumed. -/
   | depositWithFee (r : ResourceId) (recipient poolActor : ActorId)
       (userAmount poolAmount : Amount) (budgetGrant : Nat) (depositId : DepositId)
+      (seedAmount : Amount)
   /-- An L2 → L1 withdrawal: burns `amount` of `r` from `sender` and
       appends a pending withdrawal to `recipient`. -/
   | withdraw (r : ResourceId) (sender : ActorId) (amount : Amount)
@@ -73,8 +74,8 @@ inductive BridgeAction where
 /-- Embed a `BridgeAction` into the full `Action` type. -/
 def BridgeAction.toAction : BridgeAction → Action
   | .deposit r recipient amount d => Action.deposit r recipient amount d
-  | .depositWithFee r recipient poolActor ua pa bg d =>
-      Action.depositWithFee r recipient poolActor ua pa bg d
+  | .depositWithFee r recipient poolActor ua pa bg d sa =>
+      Action.depositWithFee r recipient poolActor ua pa bg d sa
   | .withdraw r sender amount rcp => Action.withdraw r sender amount rcp
 
 /-- `BridgeAction.toAction` is injective: distinct bridge actions embed

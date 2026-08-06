@@ -801,7 +801,7 @@ theorem topUpActionBudget_gasCheck_true_of_ne_topUp
     `Decidable` instance for `Bool`. -/
 def depositWithFee_signerCheck (action : Action) (signer : ActorId) : Bool :=
   match action with
-  | .depositWithFee _ _ _ _ _ _ _ => decide (signer = Bridge.bridgeActor)
+  | .depositWithFee _ _ _ _ _ _ _ _ => decide (signer = Bridge.bridgeActor)
   | _ => true
 
 /-- For every non-`depositWithFee` action, the signer check is
@@ -809,13 +809,13 @@ def depositWithFee_signerCheck (action : Action) (signer : ActorId) : Bool :=
     safety gate on non-depositWithFee dispatch paths. -/
 theorem depositWithFee_signerCheck_true_of_ne_depositWithFee
     (action : Action) (signer : ActorId)
-    (hne : ∀ r recipient poolActor ua pa bg dep,
-      action ≠ .depositWithFee r recipient poolActor ua pa bg dep) :
+    (hne : ∀ r recipient poolActor ua pa bg dep sa,
+      action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa) :
     depositWithFee_signerCheck action signer = true := by
   unfold depositWithFee_signerCheck
   cases hact : action with
-  | depositWithFee r recipient poolActor ua pa bg dep =>
-      exact absurd hact (hne r recipient poolActor ua pa bg dep)
+  | depositWithFee r recipient poolActor ua pa bg dep sa =>
+      exact absurd hact (hne r recipient poolActor ua pa bg dep sa)
   | _ => rfl
 
 /-- GP.3.4 recipient-consent predicate (Bool form).  `true` iff the
@@ -1194,7 +1194,7 @@ def apply_admissible_with_budget
       -- carried by the refund-aware consume amount below, not a topUp.
       let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=
         match st.action with
-        | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
+        | .depositWithFee _ recipient _ _ _ budgetGrant _ _ =>
             ebs.topUp recipient currentEpoch freeTier budgetGrant
         | .topUpActionBudget _ _ budgetIncrement _ =>
             ebs.topUp st.signer currentEpoch freeTier budgetIncrement
@@ -1313,7 +1313,7 @@ theorem apply_admissible_base
   | revokeLocalPolicy             => simp_all [step_impl]
   | faultProofChallenge _ _ _ _   => simp_all [step_impl]
   | faultProofResolution _ _ _ _  => simp_all [step_impl]
-  | depositWithFee _ _ _ _ _ _ _  => simp_all [step_impl]
+  | depositWithFee _ _ _ _ _ _ _ _  => simp_all [step_impl]
   | ammSwap _ _ _ _ _             => simp_all [step_impl]
   | reclaimAmmReserves _ _ _ _    => simp_all [step_impl]
   | reserveSwap _ _ _ _ _ _       => simp_all [step_impl]
@@ -1489,8 +1489,8 @@ private theorem consume_some_of_admit_non_bridge
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (hne_bridge : st.signer ≠ Bridge.bridgeActor)
     (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
-    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
     (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa)
@@ -1544,8 +1544,8 @@ theorem admission_consumes_budget_on_success
     {freeTier actionCost currentEpoch : Nat}
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (hne_bridge : st.signer ≠ Bridge.bridgeActor)
-    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa)
     (hne_topup : ∀ gr ga bi pa,
       st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
@@ -1578,8 +1578,8 @@ theorem admission_consumes_budget_on_success
       topUpRoundTripCheck_true_of_ne st.action (fun _ => 0) hne_topup hne_topupFor] at hsuc
     -- hsuc : { applied... epochBudgets := <match on st.action> } = es'
     cases hact : st.action with
-    | depositWithFee r recipient poolActor ua pa bg dep =>
-        exact absurd hact (hne_dep r recipient poolActor ua pa bg dep)
+    | depositWithFee r recipient poolActor ua pa bg dep sa =>
+        exact absurd hact (hne_dep r recipient poolActor ua pa bg dep sa)
     | topUpActionBudget gr ga bi pa => exact absurd hact (hne_topup gr ga bi pa)
     | topUpActionBudgetFor recipient gr ga bi pa =>
         exact absurd hact (hne_topupFor recipient gr ga bi pa)
@@ -1699,8 +1699,8 @@ theorem bridgeActor_budget_exempt
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
     (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa)
-    (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep,
-      st.action = .depositWithFee r recipient poolActor ua pa bg dep →
+    (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action = .depositWithFee r recipient poolActor ua pa bg dep sa →
       recipient ≠ Bridge.bridgeActor)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es st h = some es') :
@@ -1725,7 +1725,7 @@ theorem bridgeActor_budget_exempt
   have hdep : depositWithFee_signerCheck st.action Bridge.bridgeActor = true := by
     unfold depositWithFee_signerCheck
     cases hact : st.action with
-    | depositWithFee _ _ _ _ _ _ _ => simp
+    | depositWithFee _ _ _ _ _ _ _ _ => simp
     | _ => rfl
   -- GP.3.4 gate is vacuously `true` for non-delegated-top-up actions.
   have hForGate : topUpActionBudgetFor_gate st.action Bridge.bridgeActor es = true :=
@@ -1736,7 +1736,7 @@ theorem bridgeActor_budget_exempt
   have hRefGate : claimBudgetRefund_gate st.action Bridge.bridgeActor es (fun _ => 0) = true :=
     claimBudgetRefund_gate_true_of_ne st.action Bridge.bridgeActor es (fun _ => 0) hne_refund
   have h_eb : es'.epochBudgets = match st.action with
-    | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
+    | .depositWithFee _ recipient _ _ _ budgetGrant _ _ =>
         es.epochBudgets.topUp recipient currentEpoch freeTier budgetGrant
     | .topUpActionBudget _ _ budgetIncrement _ =>
         es.epochBudgets.topUp Bridge.bridgeActor currentEpoch freeTier budgetIncrement
@@ -1757,9 +1757,9 @@ theorem bridgeActor_budget_exempt
   | topUpActionBudgetFor recipient gr ga bi pa =>
       exact absurd hact (hne_topupFor recipient gr ga bi pa)
   | claimBudgetRefund gr bu w pa => rfl
-  | depositWithFee r recipient poolActor ua pa bg dep =>
+  | depositWithFee r recipient poolActor ua pa bg dep sa =>
       have hne_recip : recipient ≠ Bridge.bridgeActor :=
-        hne_dep_to_bridge r recipient poolActor ua pa bg dep hact
+        hne_dep_to_bridge r recipient poolActor ua pa bg dep sa hact
       exact EpochBudgetState.currentBudget_after_topUp_other
         es.epochBudgets recipient Bridge.bridgeActor currentEpoch freeTier bg
         hne_recip
@@ -1801,17 +1801,18 @@ theorem depositWithFee_grants_budget
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : Bridge.DepositId)
+    (depositId : Bridge.DepositId) (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : Signature)
     (h : AdmissibleWith verify P d es
             ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                              budgetGrant depositId, signer, nonce, sig⟩)
+                              budgetGrant depositId seedAmount, signer, nonce, sig⟩)
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es
               ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                                budgetGrant depositId, signer, nonce, sig⟩ h
+                                budgetGrant depositId seedAmount, signer, nonce,
+                sig⟩ h
             = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets recipient currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + budgetGrant := by
@@ -1852,18 +1853,19 @@ theorem depositWithFee_budget_locality
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : Bridge.DepositId)
+    (depositId : Bridge.DepositId) (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : Signature)
     (h : AdmissibleWith verify P d es
             ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                              budgetGrant depositId, signer, nonce, sig⟩)
+                              budgetGrant depositId seedAmount, signer, nonce, sig⟩)
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (other : ActorId) (hne_other : other ≠ recipient)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es
               ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                                budgetGrant depositId, signer, nonce, sig⟩ h
+                                budgetGrant depositId seedAmount, signer, nonce,
+                sig⟩ h
             = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
@@ -2084,8 +2086,8 @@ theorem admission_locality_in_budget
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (hne_bridge : st.signer ≠ Bridge.bridgeActor)
-    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa)
     (hne_topup : ∀ gr ga bi pa,
       st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
@@ -2117,8 +2119,8 @@ theorem admission_locality_in_budget
     simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge, hconsume,
       topUpRoundTripCheck_true_of_ne st.action (fun _ => 0) hne_topup hne_topupFor] at hsuc
     cases hact : st.action with
-    | depositWithFee r recipient poolActor ua pa bg dep =>
-        exact absurd hact (hne_dep r recipient poolActor ua pa bg dep)
+    | depositWithFee r recipient poolActor ua pa bg dep sa =>
+        exact absurd hact (hne_dep r recipient poolActor ua pa bg dep sa)
     | topUpActionBudget gr ga bi pa =>
         exact absurd hact (hne_topup gr ga bi pa)
     | topUpActionBudgetFor recipient gr ga bi pa =>
@@ -2934,7 +2936,7 @@ theorem non_registry_mutating_preserves_registry
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | depositWithFee _ _ _ _ _ _ _  => rfl
+  | depositWithFee _ _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
@@ -3156,7 +3158,7 @@ theorem non_meta_preserves_localPolicies
   | revokeLocalPolicy             => exact absurd hact hneRevoke
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | depositWithFee _ _ _ _ _ _ _  => rfl
+  | depositWithFee _ _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
@@ -3204,7 +3206,7 @@ theorem localPolicies_other_actor_untouched
     exact LocalPolicies.lookup_revoke_other _ st.signer a h_ne
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | depositWithFee _ _ _ _ _ _ _  => rfl
+  | depositWithFee _ _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
@@ -3384,9 +3386,10 @@ instance faultProofResolution_registryPreserving
 instance depositWithFee_registryPreserving
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : Bridge.DepositId) :
+    (depositId : Bridge.DepositId) (seedAmount : Amount) :
     RegistryPreserving (.depositWithFee r recipient poolActor
-                          userAmount poolAmount budgetGrant depositId) where
+                          userAmount poolAmount budgetGrant depositId
+                          seedAmount) where
   preserves := fun _ => rfl
 
 /-- Workstream GP (v1.0): `topUpActionBudget` preserves the registry.

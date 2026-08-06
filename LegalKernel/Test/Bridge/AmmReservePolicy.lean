@@ -85,7 +85,7 @@ def nonAmmSwapSamples : List (Nat × Action) :=
   , (16, .revokeLocalPolicy)
   , (17, .faultProofChallenge ⟨#[]⟩ 0 0 ⟨#[]⟩)
   , (18, .faultProofResolution ⟨#[]⟩ 0 someUser 0)
-  , (19, .depositWithFee 0 someUser gasPoolActor 5 5 5 0)
+  , (19, .depositWithFee 0 someUser gasPoolActor 5 5 5 0 2)
   , (20, .topUpActionBudget 0 5 5 gasPoolActor)
   , (21, .topUpActionBudgetFor someUser 0 5 5 gasPoolActor)
   , (22, .claimBudgetRefund 0 5 5 gasPoolActor) ]

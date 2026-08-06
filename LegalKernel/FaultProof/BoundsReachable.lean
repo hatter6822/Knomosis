@@ -243,9 +243,13 @@ theorem balancesBounded_apply_impl (a : Action) (signer : ActorId) (s : State)
       exact balancesBounded_setBalance (balancesBounded_setBalance_sub hs) hpre.2
   | reclaimAmmReserves r amount reserveActor poolActor =>
       exact balancesBounded_setBalance (balancesBounded_setBalance_sub hs) hpre.2.2.2
-  -- Two credits, the second reading the first's write.
-  | depositWithFee r recipient poolActor ua pa bg d =>
-      exact balancesBounded_setBalance (balancesBounded_setBalance hs hpre.1) hpre.2
+  -- Three chained credits (Workstream SB added the seed leg), each
+  -- bounded by its own precondition conjunct.
+  | depositWithFee r recipient poolActor ua pa bg d sa =>
+      exact balancesBounded_setBalance
+        (balancesBounded_setBalance (balancesBounded_setBalance hs hpre.1)
+          hpre.2.1)
+        hpre.2.2.2
   -- Credit at one resource, debit at another.
   | ammSwap fromResource toResource amountIn amountOut reserveActor =>
       exact balancesBounded_setBalance_sub

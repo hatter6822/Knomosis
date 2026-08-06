@@ -48,7 +48,7 @@ The constructor-tag map (frozen):
   | 16  | `revokeLocalPolicy`  | (no fields)                                             |
   | 17  | `faultProofChallenge` | `bindingHash`, `disputedStartIdx`, `disputedEndIdx`, `challengerCommit` |
   | 18  | `faultProofResolution`| `bindingHash`, `gameId`, `winner`, `revertFromIdx`     |
-  | 19  | `depositWithFee`     | `resource`, `recipient`, `poolActor`, `userAmount`, `poolAmount`, `budgetGrant`, `depositId` |
+  | 19  | `depositWithFee`     | `resource`, `recipient`, `poolActor`, `userAmount`, `poolAmount`, `budgetGrant`, `depositId`, `seedAmount` |
   | 20  | `topUpActionBudget`  | `gasResource`, `gasAmount`, `budgetIncrement`, `poolActor` |
   | 21  | `topUpActionBudgetFor` | `recipient`, `gasResource`, `gasAmount`, `budgetIncrement`, `poolActor` |
   | 22  | `claimBudgetRefund`  | `gasResource`, `budgetUnits`, `weiPerBudgetUnit`, `poolActor` |
@@ -134,10 +134,10 @@ def Action.fieldsBounded : Action → Prop
   | .faultProofResolution bh gid w rfi =>
       bh.size < 256 ^ 8 ∧ gid < 256 ^ 8 ∧ w.toNat < 256 ^ 8 ∧ rfi < 256 ^ 8
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
-  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount =>
       r.toNat < 256 ^ 8 ∧ recipient.toNat < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8 ∧
       userAmount < 256 ^ 32 ∧ poolAmount < 256 ^ 32 ∧
-      budgetGrant < 256 ^ 8 ∧ depositId < 256 ^ 8
+      budgetGrant < 256 ^ 8 ∧ depositId < 256 ^ 8 ∧ seedAmount < 256 ^ 32
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       gasResource.toNat < 256 ^ 8 ∧ gasAmount < 256 ^ 32 ∧
       budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
@@ -269,7 +269,7 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) w.toNat ++
       Encodable.encode (T := Nat) rfi
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
-  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount =>
       Encodable.encode (T := Nat) 19 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) recipient.toNat ++
@@ -277,7 +277,8 @@ def Action.encode : Action → Stream
       encodeAmount userAmount ++
       encodeAmount poolAmount ++
       Encodable.encode (T := Nat) budgetGrant ++
-      Encodable.encode (T := Nat) depositId
+      Encodable.encode (T := Nat) depositId ++
+      encodeAmount seedAmount
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       Encodable.encode (T := Nat) 20 ++
       Encodable.encode (T := Nat) gasResource.toNat ++
@@ -564,8 +565,11 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
               | .ok (budgetGrant, s₇) =>
                 match Action.readNatField s₇ with
                 | .ok (depositId, s₈) =>
-                  .ok (.depositWithFee r recipient poolActor userAmount poolAmount
-                          budgetGrant depositId, s₈)
+                  match Action.readAmountField s₈ with
+                  | .ok (seedAmount, s₉) =>
+                    .ok (.depositWithFee r recipient poolActor userAmount
+                            poolAmount budgetGrant depositId seedAmount, s₉)
+                  | .error e => .error e
                 | .error e => .error e
               | .error e => .error e
             | .error e => .error e
@@ -1055,10 +1059,11 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readUInt64Field_roundtrip w _]
     dsimp only
     rw [readNatField_roundtrip rfi rest h4]
-  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
-    obtain ⟨_, _, _, h4, h5, h6, h7⟩ := h
+  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount =>
+    obtain ⟨_, _, _, h4, h5, h6, h7, h8⟩ := h
     show Action.decode (Action.encode
-            (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId) ++ rest)
+            (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant
+              depositId seedAmount) ++ rest)
         = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
@@ -1068,14 +1073,16 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
         encodeAmount userAmount ++
         encodeAmount poolAmount ++
         Encodable.encode (T := Nat) budgetGrant ++
-        Encodable.encode (T := Nat) depositId ++ rest =
+        Encodable.encode (T := Nat) depositId ++
+        encodeAmount seedAmount ++ rest =
       Encodable.encode (T := Nat) 19 ++ (Encodable.encode (T := Nat) r.toNat ++
         (Encodable.encode (T := Nat) recipient.toNat ++
         (Encodable.encode (T := Nat) poolActor.toNat ++
         (encodeAmount userAmount ++
         (encodeAmount poolAmount ++
         (Encodable.encode (T := Nat) budgetGrant ++
-        (Encodable.encode (T := Nat) depositId ++ rest)))))))
+        (Encodable.encode (T := Nat) depositId ++
+        (encodeAmount seedAmount ++ rest))))))))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 19 _ (by decide)]
     dsimp only
@@ -1091,7 +1098,9 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip budgetGrant _ h6]
     dsimp only
-    rw [readNatField_roundtrip depositId rest h7]
+    rw [readNatField_roundtrip depositId _ h7]
+    dsimp only
+    rw [readAmountField_roundtrip seedAmount rest h8]
   | topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
     obtain ⟨_, h2, h3, _⟩ := h
     show Action.decode (Action.encode
@@ -1328,7 +1337,7 @@ theorem Action.tag_matches_encode_tag (a : Action) :
     rfl
   | faultProofChallenge _ _ _ _   => exact ⟨_, rfl⟩
   | faultProofResolution _ _ _ _  => exact ⟨_, rfl⟩
-  | depositWithFee _ _ _ _ _ _ _  => exact ⟨_, rfl⟩
+  | depositWithFee _ _ _ _ _ _ _ _  => exact ⟨_, rfl⟩
   | topUpActionBudget _ _ _ _     => exact ⟨_, rfl⟩
   | topUpActionBudgetFor _ _ _ _ _ => exact ⟨_, rfl⟩
   | claimBudgetRefund _ _ _ _     => exact ⟨_, rfl⟩

@@ -208,23 +208,26 @@ instance BridgeAdmissibleWith.dec_depositIdFresh
 instance BridgeAdmissibleWith.dec_depositWithFeeIdFresh
     (es : ExtendedState) (st : SignedAction) :
     Decidable
-      (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId,
+      (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId
+          seedAmount,
          st.action = .depositWithFee r recipient poolActor userAmount poolAmount
-                       budgetGrant depositId →
+                       budgetGrant depositId seedAmount →
          es.bridge.consumed.contains depositId = false) := by
   generalize _h_eq : st.action = a
   cases a with
-  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant
+      depositId seedAmount =>
     by_cases hcon : es.bridge.consumed.contains depositId = false
     · apply isTrue
-      intro _ _ _ _ _ _ _ heq
-      injection heq with _ _ _ _ _ _ hd
+      intro _ _ _ _ _ _ _ _ heq
+      injection heq with _ _ _ _ _ _ hd _
       subst hd
       exact hcon
     · apply isFalse
       intro h
-      exact hcon (h r recipient poolActor userAmount poolAmount budgetGrant depositId rfl)
-  | _ => apply isTrue; intro _ _ _ _ _ _ _ heq; cases heq
+      exact hcon (h r recipient poolActor userAmount poolAmount budgetGrant
+        depositId seedAmount rfl)
+  | _ => apply isTrue; intro _ _ _ _ _ _ _ _ heq; cases heq
 
 /-- RB.1.b — Decidable instance for the registration-freshness
     obligation (`BridgeAdmissibleWith` conjunct 7).  Reduces to

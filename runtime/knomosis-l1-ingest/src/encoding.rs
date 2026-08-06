@@ -349,12 +349,15 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             pool_amount,
             budget_grant,
             deposit_id,
+            seed_amount,
         } => {
             // Field order matches `Encoding/Action.lean::Action.encode`'s
             // `.depositWithFee` arm exactly:
             //   r ‖ recipient ‖ poolActor ‖ userAmount ‖ poolAmount
-            //     ‖ budgetGrant ‖ depositId.
-            // Each field is a CBE uint (9-byte head).
+            //     ‖ budgetGrant ‖ depositId ‖ seedAmount.
+            // Narrow fields ride the 9-byte uint head; the three
+            // wei-denominated amounts (the Workstream SB APPENDED
+            // seedAmount included) ride the 33-byte amount head.
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*recipient));
             out.extend_from_slice(&encode_u64(*pool_actor));
@@ -362,6 +365,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_amount(*pool_amount));
             out.extend_from_slice(&encode_u64(*budget_grant));
             out.extend_from_slice(&encode_u64(*deposit_id));
+            out.extend_from_slice(&encode_amount(*seed_amount));
         }
         Action::TopUpActionBudget {
             gas_resource,
@@ -918,10 +922,11 @@ mod tests {
         assert_eq!(encode_u64(0), vec![0x00, 0, 0, 0, 0, 0, 0, 0, 0]);
     }
 
-    /// `encode_action` for `DepositWithFee` (Workstream GP).  The
-    /// encoded form is: tag 19 + r + recipient + pool_actor +
-    /// user_amount + pool_amount + budget_grant + deposit_id =
-    /// 8 × 9 = 72 bytes (each field is a 9-byte CBE uint head).
+    /// `encode_action` for `DepositWithFee` (Workstream GP +
+    /// Workstream SB).  The encoded form is: tag 19 + r + recipient +
+    /// pool_actor + user_amount + pool_amount + budget_grant +
+    /// deposit_id + seed_amount — six 9-byte uint heads plus three
+    /// 33-byte amount heads (153 bytes).
     #[test]
     fn encode_deposit_with_fee_layout() {
         let action = Action::DepositWithFee {
@@ -932,11 +937,13 @@ mod tests {
             pool_amount: 500,
             budget_grant: 10,
             deposit_id: 42,
+            seed_amount: 25,
         };
         let encoded = encode_action(&action).unwrap();
         // 6 narrow heads (tag, r, recipient, pool_actor, budget_grant,
-        // deposit_id) + 2 amount heads (user_amount, pool_amount).
-        assert_eq!(encoded.len(), HEAD_LEN * 6 + AMOUNT_HEAD_LEN * 2);
+        // deposit_id) + 3 amount heads (user_amount, pool_amount, and
+        // the appended seed_amount).
+        assert_eq!(encoded.len(), HEAD_LEN * 6 + AMOUNT_HEAD_LEN * 3);
         // Tag is 19 (0x13).
         assert_eq!(encoded[0], CBE_TAG_UINT);
         assert_eq!(&encoded[1..9], &19u64.to_le_bytes());
@@ -1040,16 +1047,20 @@ mod tests {
     /// `Action.depositWithFee` byte-equivalently to Lean, breaking
     /// the kernel's signature-verification path.
     ///
-    /// Hand-calculated expected bytes (8 × 9 = 72 bytes):
+    /// Hand-calculated expected bytes (153 = 6 × 9 + 3 × 33; the
+    /// Lean twin is the `deposit_with_fee_action.json` canonical
+    /// vector):
     ///
     ///   * Tag 19 (uint): `[0x00, 0x13, 0, 0, 0, 0, 0, 0, 0]`
     ///   * r 0 (uint): `[0x00, 0x00, 0, 0, 0, 0, 0, 0, 0]`
     ///   * recipient 1 (uint): `[0x00, 0x01, 0, 0, 0, 0, 0, 0, 0]`
     ///   * pool_actor 2 (uint): `[0x00, 0x02, 0, 0, 0, 0, 0, 0, 0]`
-    ///   * user_amount 1000 (uint): `[0x00, 0xe8, 0x03, 0, 0, 0, 0, 0, 0]`
-    ///   * pool_amount 500 (uint): `[0x00, 0xf4, 0x01, 0, 0, 0, 0, 0, 0]`
+    ///   * user_amount 1000 (amount): `[0x06, 0xe8, 0x03, 0 × 30]`
+    ///   * pool_amount 500 (amount): `[0x06, 0xf4, 0x01, 0 × 30]`
     ///   * budget_grant 10 (uint): `[0x00, 0x0a, 0, 0, 0, 0, 0, 0, 0]`
     ///   * deposit_id 42 (uint): `[0x00, 0x2a, 0, 0, 0, 0, 0, 0, 0]`
+    ///   * seed_amount 25 (amount): `[0x06, 0x19, 0 × 31]` — the
+    ///     Workstream SB APPENDED head, last on the wire.
     #[test]
     fn encode_deposit_with_fee_known_vector() {
         let action = Action::DepositWithFee {
@@ -1060,9 +1071,10 @@ mod tests {
             pool_amount: 500,
             budget_grant: 10,
             deposit_id: 42,
+            seed_amount: 25,
         };
         let actual = encode_action(&action).unwrap();
-        let expected: Vec<u8> = vec![
+        let mut expected: Vec<u8> = vec![
             // uint 19
             0x00, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 1
@@ -1078,6 +1090,10 @@ mod tests {
             0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 42
             0x00, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
+        // amount 25 — 33-byte head: tag + 32 LE.
+        expected.push(0x06);
+        expected.push(0x19);
+        expected.extend_from_slice(&[0x00; 31]);
         assert_eq!(actual, expected);
     }
 
@@ -1094,6 +1110,7 @@ mod tests {
             pool_amount: 500,
             budget_grant: 10,
             deposit_id: 42,
+            seed_amount: 25,
         };
         let bold_action = Action::DepositWithFee {
             r: 1,
@@ -1103,6 +1120,7 @@ mod tests {
             pool_amount: 500,
             budget_grant: 10,
             deposit_id: 42,
+            seed_amount: 25,
         };
         let eth_bytes = encode_action(&eth_action).unwrap();
         let bold_bytes = encode_action(&bold_action).unwrap();
@@ -1317,6 +1335,7 @@ mod tests {
             pool_amount: huge,
             budget_grant: 0,
             deposit_id: 0,
+            seed_amount: big,
         })
         .expect("full-width deposit amounts must encode");
         assert_amount_at(&bytes, HEAD_LEN * 4, big, "depositWithFee.userAmount");
@@ -1325,6 +1344,13 @@ mod tests {
             HEAD_LEN * 4 + AMOUNT_HEAD_LEN,
             huge,
             "depositWithFee.poolAmount",
+        );
+        // The appended seed head sits after budgetGrant + depositId.
+        assert_amount_at(
+            &bytes,
+            HEAD_LEN * 6 + AMOUNT_HEAD_LEN * 2,
+            big,
+            "depositWithFee.seedAmount",
         );
 
         // topUpActionBudget: tag, gasResource, gasAmount.
@@ -1408,6 +1434,7 @@ mod tests {
             pool_amount: 500,
             budget_grant: 10,
             deposit_id: 42,
+            seed_amount: 25,
         };
         let signing_bytes = signing_input(&action, 99, 7, b"test-deployment").unwrap();
         // Domain prefix: 9-byte head + 27-byte ASCII.
@@ -1421,13 +1448,14 @@ mod tests {
         // Action follows; tag 19 starts at offset 60.
         assert_eq!(signing_bytes[60], CBE_TAG_UINT);
         assert_eq!(&signing_bytes[61..69], &19u64.to_le_bytes());
-        // Total length: 36 (domain) + 24 (deployment) + 88 (action:
-        // 6 narrow heads + 2 amount heads) + 9 (signer) + 9 (nonce).
+        // Total length: 36 (domain) + 24 (deployment) + 153 (action:
+        // 6 narrow heads + 3 amount heads, the Workstream SB seed
+        // included) + 9 (signer) + 9 (nonce).
         // The nonce stays narrow — it is a counter, and widening it
         // would change the SIGNING INPUT, which is a consensus break.
         assert_eq!(
             signing_bytes.len(),
-            36 + 24 + (HEAD_LEN * 6 + AMOUNT_HEAD_LEN * 2) + 9 + 9
+            36 + 24 + (HEAD_LEN * 6 + AMOUNT_HEAD_LEN * 3) + 9 + 9
         );
     }
 
@@ -1445,6 +1473,7 @@ mod tests {
             pool_amount: 1,
             budget_grant: 1,
             deposit_id: 1,
+            seed_amount: 1,
         };
         let e1 = encode_action(&a).unwrap();
         let e2 = encode_action(&a).unwrap();

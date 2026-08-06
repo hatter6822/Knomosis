@@ -389,7 +389,7 @@ def tests : List TestCase :=
   , { name := "bridgeAuthorizedAction returns true for depositWithFee (GP fix)"
     , body := do
         assertEq (expected := true)
-          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42))
+          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42 7))
           "depositWithFee is bridge-authorised"
     }
   , { name := "bridgeAuthorizedAction returns false for the user gas actions"
@@ -407,8 +407,8 @@ def tests : List TestCase :=
         -- depositWithFee was unadmittable under bridgePolicy despite
         -- being `isBridgeOnly`.
         let _h : bridgePolicy.authorized bridgeActor
-                  (.depositWithFee 1 10 1 90 10 5 42) :=
-          bridgePolicy_authorizes_depositWithFee 1 10 1 90 10 5 42
+                  (.depositWithFee 1 10 1 90 10 5 42 7) :=
+          bridgePolicy_authorizes_depositWithFee 1 10 1 90 10 5 42 7
         pure ()
     }
   , { name := "bridgePolicy rejects bridge-signed topUpActionBudget / topUpActionBudgetFor"
@@ -438,7 +438,7 @@ def tests : List TestCase :=
         assertEq (expected := true)
           (actual := bridgeAuthorizedAction (.deposit 1 10 100 42)) "deposit"
         assertEq (expected := true)
-          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42))
+          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42 7))
           "depositWithFee"
     }
   , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff forward at replaceKey"
@@ -452,10 +452,10 @@ def tests : List TestCase :=
                     (Action.replaceKey 1 samplePk) = .registerIdentity actor pk) ∨
                  (∃ r recipient amount d,
                     (Action.replaceKey 1 samplePk) = .deposit r recipient amount d) ∨
-                 (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
+                 (∃ r recipient poolActor userAmount poolAmount budgetGrant d seedAmount,
                     (Action.replaceKey 1 samplePk) =
                       .depositWithFee r recipient poolActor userAmount
-                                      poolAmount budgetGrant d) ∨
+                                      poolAmount budgetGrant d seedAmount) ∨
                  (∃ fr tr ai ao ra,
                     (Action.replaceKey 1 samplePk) = .ammSwap fr tr ai ao ra) ∨
                    (∃ r amount reserveActor poolActor,
@@ -474,9 +474,9 @@ def tests : List TestCase :=
     }
   , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff backward at depositWithFee"
     , body := do
-        let _h : bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42) = true :=
-          (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42)).mpr
-            (Or.inr (Or.inr (Or.inr (Or.inl ⟨1, 10, 1, 90, 10, 5, 42, rfl⟩))))
+        let _h : bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42 7) = true :=
+          (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42 7)).mpr
+            (Or.inr (Or.inr (Or.inr (Or.inl ⟨1, 10, 1, 90, 10, 5, 42, 7, rfl⟩))))
         pure ()
     }
   , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff forward at depositWithFee"
@@ -487,20 +487,20 @@ def tests : List TestCase :=
         -- right-hand disjunction (no over-broad authority, applied
         -- positively to the GP action).
         let _h : (∃ actor newKey,
-                    (Action.depositWithFee 1 10 1 90 10 5 42) = .replaceKey actor newKey) ∨
+                    (Action.depositWithFee 1 10 1 90 10 5 42 7) = .replaceKey actor newKey) ∨
                  (∃ actor pk,
-                    (Action.depositWithFee 1 10 1 90 10 5 42) = .registerIdentity actor pk) ∨
+                    (Action.depositWithFee 1 10 1 90 10 5 42 7) = .registerIdentity actor pk) ∨
                  (∃ r recipient amount d,
-                    (Action.depositWithFee 1 10 1 90 10 5 42) = .deposit r recipient amount d) ∨
-                 (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
-                    (Action.depositWithFee 1 10 1 90 10 5 42) =
+                    (Action.depositWithFee 1 10 1 90 10 5 42 7) = .deposit r recipient amount d) ∨
+                 (∃ r recipient poolActor userAmount poolAmount budgetGrant d seedAmount,
+                    (Action.depositWithFee 1 10 1 90 10 5 42 7) =
                       .depositWithFee r recipient poolActor userAmount
-                                      poolAmount budgetGrant d) ∨
+                                      poolAmount budgetGrant d seedAmount) ∨
                  (∃ fr tr ai ao ra,
-                    (Action.depositWithFee 1 10 1 90 10 5 42) = .ammSwap fr tr ai ao ra) ∨
+                    (Action.depositWithFee 1 10 1 90 10 5 42 7) = .ammSwap fr tr ai ao ra) ∨
                    (∃ r amount reserveActor poolActor,
-                    (Action.depositWithFee 1 10 1 90 10 5 42) = .reclaimAmmReserves r amount reserveActor poolActor) :=
-          (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42)).mp
+                    (Action.depositWithFee 1 10 1 90 10 5 42 7) = .reclaimAmmReserves r amount reserveActor poolActor) :=
+          (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42 7)).mp
             (by decide)
         pure ()
     }
@@ -511,9 +511,9 @@ def tests : List TestCase :=
                    (∃ actor newKey, action = .replaceKey actor newKey) ∨
                    (∃ actor pk, action = .registerIdentity actor pk) ∨
                    (∃ r recipient amount d, action = .deposit r recipient amount d) ∨
-                   (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
+                   (∃ r recipient poolActor userAmount poolAmount budgetGrant d seedAmount,
                      action = .depositWithFee r recipient poolActor userAmount
-                                               poolAmount budgetGrant d) ∨
+                                               poolAmount budgetGrant d seedAmount) ∨
                    (∃ fr tr ai ao ra, action = .ammSwap fr tr ai ao ra) ∨
                    (∃ r amount reserveActor poolActor,
                      action = .reclaimAmmReserves r amount reserveActor poolActor)) :=
@@ -530,7 +530,7 @@ def tests : List TestCase :=
         if ¬ (decide (bridgePolicy.authorized bridgeActor (.deposit 1 10 100 42))) then
           throw <| IO.userError "deposit should be authorised"
         if ¬ (decide (bridgePolicy.authorized bridgeActor
-                       (.depositWithFee 1 10 1 90 10 5 42))) then
+                       (.depositWithFee 1 10 1 90 10 5 42 7))) then
           throw <| IO.userError "depositWithFee should be authorised"
         -- Term-level: the bundled theorem witnesses all four at once.
         let _h := bridgePolicy_authorizes_all_bridge_actions
@@ -544,10 +544,10 @@ def tests : List TestCase :=
                     bridgePolicy.authorized bridgeActor (.registerIdentity actor pk)) ∧
                  (∀ r recipient amount d,
                     bridgePolicy.authorized bridgeActor (.deposit r recipient amount d)) ∧
-                 (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
+                 (∀ r recipient poolActor userAmount poolAmount budgetGrant d seedAmount,
                     bridgePolicy.authorized bridgeActor
                       (.depositWithFee r recipient poolActor userAmount poolAmount
-                                        budgetGrant d)) ∧
+                                        budgetGrant d seedAmount)) ∧
                  (∀ fr tr ai ao ra,
                     bridgePolicy.authorized bridgeActor (.ammSwap fr tr ai ao ra)) ∧
                  (∀ r amount reserveActor poolActor,
@@ -619,9 +619,9 @@ def tests : List TestCase :=
                  (∀ actor newKey, action ≠ .replaceKey actor newKey) →
                  (∀ actor pk, action ≠ .registerIdentity actor pk) →
                  (∀ r recipient amount d, action ≠ .deposit r recipient amount d) →
-                 (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
+                 (∀ r recipient poolActor userAmount poolAmount budgetGrant d seedAmount,
                     action ≠ .depositWithFee r recipient poolActor userAmount
-                                              poolAmount budgetGrant d) →
+                                              poolAmount budgetGrant d seedAmount) →
                  (∀ fr tr ai ao ra, action ≠ .ammSwap fr tr ai ao ra) →
                  (∀ r amount reserveActor poolActor,
                     action ≠ .reclaimAmmReserves r amount reserveActor poolActor) →
@@ -645,7 +645,7 @@ def tests : List TestCase :=
         let es : ExtendedState :=
           { base := genesisState, nonces := NonceState.empty, registry := registry }
         let st := mkSignedAction
-          (.depositWithFee 1 10 99 50 50 200 42) Bridge.bridgeActor es
+          (.depositWithFee 1 10 99 50 50 200 42 20) Bridge.bridgeActor es
         -- The whole BridgeAdmissibleWith predicate must hold, and the
         -- bridge-aware entry point must produce a post-state.
         if h : BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st then

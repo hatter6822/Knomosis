@@ -215,6 +215,7 @@ proptest! {
         pool_amount in any::<u64>(),
         budget_grant in any::<u64>(),
         deposit_id in any::<u64>(),
+        seed_amount in any::<u64>(),
     ) {
         let action = Action::DepositWithFee {
             r,
@@ -224,14 +225,16 @@ proptest! {
             pool_amount: u128::from(pool_amount),
             budget_grant,
             deposit_id,
+            seed_amount: u128::from(seed_amount),
         };
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
         prop_assert_eq!(&e1, &e2);
         // Layout invariant: 6 × 9-byte CBE uint heads (tag, r,
-        // recipient, poolActor, budgetGrant, depositId) + 2 × 33-byte
-        // amount heads (userAmount, poolAmount).
-        prop_assert_eq!(e1.len(), 120);
+        // recipient, poolActor, budgetGrant, depositId) + 3 × 33-byte
+        // amount heads (userAmount, poolAmount, and the Workstream SB
+        // appended seedAmount).
+        prop_assert_eq!(e1.len(), 153);
     }
 }
 
@@ -248,6 +251,7 @@ proptest! {
         pool_amount in any::<u64>(),
         budget_grant in any::<u64>(),
         deposit_id in any::<u64>(),
+        seed_amount in any::<u64>(),
     ) {
         let mk = |r: u64| Action::DepositWithFee {
             r,
@@ -257,6 +261,7 @@ proptest! {
             pool_amount: u128::from(pool_amount),
             budget_grant,
             deposit_id,
+            seed_amount: u128::from(seed_amount),
         };
         let eth = encode_action(&mk(0)).unwrap();
         let bold = encode_action(&mk(1)).unwrap();

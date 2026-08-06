@@ -195,17 +195,8 @@ library StepPlan {
                 pre1
             );
         }
-        if (actionKind == 19) {
-            // depositWithFee: recipient @8, poolActor @16,
-            // userAmount @24 (32), poolAmount @56 (32).
-            return StepWrites.deriveDepositWithFeeBalances(
-                pre0, pre1,
-                uint64(StepWrites.readFieldUint(fields, 8, 8)),
-                uint64(StepWrites.readFieldUint(fields, 16, 8)),
-                StepWrites.readFieldUint(fields, 24, 32),
-                StepWrites.readFieldUint(fields, 56, 32)
-            );
-        }
+        // Kind 19 (depositWithFee) is a THREE-cell plan since the
+        // Workstream SB seed leg and lives in `planBalances4`.
         if (actionKind == 20) {
             // topUpActionBudget: gasAmount @8 (32), poolActor @48.
             // Sufficiency only — there is NO positivity conjunct, so a
@@ -267,7 +258,8 @@ library StepPlan {
     ///         the user and the reserve each at both swap resources,
     ///         in the law's write order (user debit at `from`, reserve
     ///         credit at `from`, reserve debit at `to`, user credit at
-    ///         `to`).
+    ///         `to`) — and `depositWithFee`'s three-leg split fills
+    ///         slots 0..2 (recipient, pool net, reserve seed).
     ///
     /// @dev    Every other kind delegates to the two-slot
     ///         `planBalances` and passes cells 2 and 3 through at
@@ -301,6 +293,23 @@ library StepPlan {
                 StepWrites.readFieldUint(fields, 56, 32)
             );
             return (new0, new1, new2, new3);
+        }
+        if (actionKind == 19) {
+            // depositWithFee (three-leg): recipient @8, poolActor @16,
+            // userAmount @24 (32), poolAmount @56 (32), seedAmount
+            // @104 (32, the Workstream SB appended field).  The seed
+            // target is the canonical AMM reserve actor the compiled
+            // law pins, not a calldata field.
+            (new0, new1, new2) = StepWrites.deriveDepositWithFeeBalances(
+                pre0, pre1, pre2,
+                uint64(StepWrites.readFieldUint(fields, 8, 8)),
+                uint64(StepWrites.readFieldUint(fields, 16, 8)),
+                StepWrites.AMM_RESERVE_ACTOR,
+                StepWrites.readFieldUint(fields, 24, 32),
+                StepWrites.readFieldUint(fields, 56, 32),
+                StepWrites.readFieldUint(fields, 104, 32)
+            );
+            return (new0, new1, new2, pre3);
         }
         (new0, new1) = planBalances(actionKind, fields, signer, pre0, pre1);
         return (new0, new1, pre2, pre3);

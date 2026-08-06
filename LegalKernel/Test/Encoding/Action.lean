@@ -425,7 +425,7 @@ def tagMatchesEncodeTagAPI : TestCase := {
 def depositWithFeeRT : TestCase := {
   name := "Action.depositWithFee roundtrip"
   body := do
-    let a : Action := .depositWithFee 1 10 99 50 50 200 42
+    let a : Action := .depositWithFee 1 10 99 50 50 200 42 20
     match Encodable.decode (T := Action) (Encodable.encode a) with
     | .ok (a', rest) =>
       assertEq a a' "decoded action"
@@ -450,7 +450,7 @@ def topUpActionBudgetRT : TestCase := {
 def depositWithFeeVsDepositBytes : TestCase := {
   name := "Action.depositWithFee ≠ Action.deposit (distinct tags)"
   body := do
-    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7)
+    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7 8)
     let b2 := Encodable.encode (T := Action) (.deposit 1 2 4 7)
     if b1 == b2 then
       throw <| IO.userError "depositWithFee and deposit encoded identically"
@@ -473,7 +473,7 @@ def topUpActionBudgetVsTransferBytes : TestCase := {
 def depositWithFeeTagPin : TestCase := {
   name := "Action.tag depositWithFee = 19 (frozen)"
   body := do
-    assertEq (expected := 19) (actual := Action.tag (.depositWithFee 1 2 3 4 5 6 7))
+    assertEq (expected := 19) (actual := Action.tag (.depositWithFee 1 2 3 4 5 6 7 8))
       "depositWithFee tag"
 }
 
@@ -490,10 +490,24 @@ def topUpActionBudgetTagPin : TestCase := {
 def depositWithFeeFieldInjective : TestCase := {
   name := "Action.depositWithFee per-field injectivity (budgetGrant distinguished)"
   body := do
-    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 100 7)
-    let b2 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 200 7)
+    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 100 7 8)
+    let b2 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 200 7 8)
     if b1 == b2 then
       throw <| IO.userError "depositWithFee with distinct budgetGrant encoded identically"
+    else pure ()
+}
+
+/-- The appended `seedAmount` field (Workstream SB) is distinguished
+    by the encoding — two splits differing only in the seed slice
+    encode differently, so the codec cannot conflate a seeded deposit
+    with an unseeded one. -/
+def depositWithFeeSeedInjective : TestCase := {
+  name := "Action.depositWithFee per-field injectivity (seedAmount distinguished)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7 0)
+    let b2 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7 8)
+    if b1 == b2 then
+      throw <| IO.userError "depositWithFee with distinct seedAmount encoded identically"
     else pure ()
 }
 
@@ -666,7 +680,7 @@ def sampleActions : List Action :=
   , .revokeLocalPolicy
   , .faultProofChallenge (ByteArray.mk #[0xAA]) 1 2 (ByteArray.mk #[0xBB])
   , .faultProofResolution (ByteArray.mk #[0xCC]) 1 2 3
-  , .depositWithFee 1 10 99 50 50 200 42
+  , .depositWithFee 1 10 99 50 50 200 42 20
   , .topUpActionBudget 1 2 3 4
   , .topUpActionBudgetFor 20 1 2 3 4
   , .claimBudgetRefund 0 89 1000 1
@@ -750,7 +764,8 @@ def tests : List TestCase :=
    depositWithFeeRT, topUpActionBudgetRT,
    depositWithFeeVsDepositBytes, topUpActionBudgetVsTransferBytes,
    depositWithFeeTagPin, topUpActionBudgetTagPin,
-   depositWithFeeFieldInjective, topUpActionBudgetFieldInjective,
+   depositWithFeeFieldInjective, depositWithFeeSeedInjective,
+   topUpActionBudgetFieldInjective,
    -- GP.3.4:
    topUpActionBudgetForRT, topUpActionBudgetForVsTopUpActionBudgetBytes,
    topUpActionBudgetForTagPin, topUpActionBudgetForFieldInjective,

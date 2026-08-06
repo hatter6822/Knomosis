@@ -490,15 +490,23 @@ theorem pool_nondecreasing_of_does_not_debit
         getBalance ((Laws.deposit r recipient amount depositId).apply_impl es.base)
           rLeg gasPoolActor
       exact getBalance_credit_nondecreasing es.base r rLeg recipient gasPoolActor amount
-  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant
+      depositId seedAmount =>
+      -- Workstream SB: three credit legs (recipient, pool NET, seed);
+      -- credits never lower the pool's cell.
       intro _
       show getBalance es.base rLeg gasPoolActor ≤
         getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
-          budgetGrant depositId).apply_impl es.base) rLeg gasPoolActor
+          budgetGrant depositId seedAmount
+          Bridge.ammReserveActor).apply_impl es.base) rLeg gasPoolActor
       simp only [Laws.depositWithFee]
       refine Nat.le_trans
         (getBalance_credit_nondecreasing es.base r rLeg recipient gasPoolActor userAmount) ?_
-      exact getBalance_credit_nondecreasing _ r rLeg poolActor gasPoolActor poolAmount
+      refine Nat.le_trans
+        (getBalance_credit_nondecreasing _ r rLeg poolActor gasPoolActor
+          (poolAmount - seedAmount)) ?_
+      exact getBalance_credit_nondecreasing _ r rLeg Bridge.ammReserveActor
+        gasPoolActor seedAmount
   | distributeOthers r excluded amount =>
       intro _
       show getBalance es.base rLeg gasPoolActor ≤

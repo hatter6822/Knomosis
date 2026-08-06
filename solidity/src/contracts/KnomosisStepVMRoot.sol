@@ -127,12 +127,12 @@ contract KnomosisStepVMRoot {
     ///         `uint256` forced a truncating `uint8(k)` cast at every
     ///         call site; typing it here removes the cast rather than
     ///         annotating it as safe.
-    uint8 internal constant MAX_ACTION_KIND = 24;
+    uint8 internal constant MAX_ACTION_KIND = 25;
 
     /// @notice Field-buffer length `widestFrontier` probes with —
     ///         comfortably past the longest layout `actionFieldsForL1`
-    ///         produces (`depositWithFee`'s 64 bytes).
-    uint256 internal constant PROBE_FIELD_BYTES = 128;
+    ///         produces (`depositWithFee`'s 136 bytes, Workstream SB).
+    uint256 internal constant PROBE_FIELD_BYTES = 160;
 
     /// @notice The frontier names a cell the write set does not, at a
     ///         position where only a write set cell can appear.
@@ -490,10 +490,11 @@ contract KnomosisStepVMRoot {
 
     /// @dev The per-variant plan, over PRE-STATE balance values read BY
     ///      CELL.  Positions 0..3 of the WRITE SET are the balance
-    ///      cells the plan's four slots belong to — positions 2 and 3
-    ///      exist only for `reserveSwap` (kind 25), the first
-    ///      four-balance-cell variant; every other kind's plan is the
-    ///      familiar pair plus pass-through.
+    ///      cells the plan's four slots belong to — position 3 exists
+    ///      only for `reserveSwap` (kind 25), the four-balance-cell
+    ///      variant, and position 2 for it plus `depositWithFee`'s
+    ///      three-leg split (kind 19, Workstream SB); every other
+    ///      kind's plan is the familiar pair plus pass-through.
     function _planMulti(
         uint8 actionKind,
         bytes calldata actionFields,

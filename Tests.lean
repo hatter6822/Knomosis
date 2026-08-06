@@ -174,6 +174,7 @@ import LegalKernel.Test.FaultProof.StateCellsInjective
 import LegalKernel.Test.FaultProof.CellWrites
 import LegalKernel.Test.FaultProof.Frontier
 import LegalKernel.Test.Bridge.CrossCheck.MultiProof
+import LegalKernel.Test.Bridge.CrossCheck.ActionsRootBatch
 import LegalKernel.Test.FaultProof.MultiProof
 import LegalKernel.Test.FaultProof.StepWriteSets
 import LegalKernel.Test.FaultProof.Terminate
@@ -451,6 +452,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.MultiProof.tests)
   failed := failed + (← runAll "crosscheck-smt-multi-proof"
                         LegalKernel.Test.Bridge.CrossCheck.MultiProof.tests)
+  failed := failed + (← runAll "crosscheck-actions-root-batch"
+                        LegalKernel.Test.Bridge.CrossCheck.ActionsRootBatch.tests)
   failed := failed + (← runAll "faultproof-write-sets"
                                 LegalKernel.Test.FaultProof.StepWriteSets.tests)
   failed := failed + (← runAll "faultproof-terminate"

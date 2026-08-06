@@ -125,7 +125,7 @@ def tests : List TestCase :=
                  , .revokeLocalPolicy
                  , .faultProofChallenge ByteArray.empty 0 1 ByteArray.empty
                  , .faultProofResolution ByteArray.empty 0 1 1
-                 , .depositWithFee 1 8 9 4 1 2 3
+                 , .depositWithFee 1 8 9 4 1 2 3 1
                  , .topUpActionBudget 1 5 2 9
                  , .topUpActionBudgetFor 8 1 5 2 9
                  , .claimBudgetRefund 1 2 1 9
@@ -485,8 +485,8 @@ def tests : List TestCase :=
         check (.deposit 1 8 5 3) (deriveDepositBalance read 1 8 5)
         check (.withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero)
           (deriveWithdrawBalance read 1 7 5)
-        check (.depositWithFee 1 8 9 5 1 1 3)
-          (deriveDepositWithFeeBalances read 1 8 9 5 1)
+        check (.depositWithFee 1 8 9 5 1 1 3 1)
+          (deriveDepositWithFeeBalances read 1 8 9 5 1 1 Bridge.ammReserveActor)
         check (.topUpActionBudget 1 5 2 9) (deriveTopUpBalances read 1 7 9 5)
         check (.topUpActionBudgetFor 8 1 5 2 9)
           (deriveDelegatedTopUpBalances read 1 7 9 8 5)
@@ -541,7 +541,7 @@ def tests : List TestCase :=
         check (.deposit 1 8 5 3) (CellTag.bridgeConsumed 3)
           (deriveConsumedCellValue
             { resource := 1, userAmount := 5, poolAmount := 0, budgetGrant := 0 })
-        check (.depositWithFee 1 8 9 5 1 1 4) (CellTag.bridgeConsumed 4)
+        check (.depositWithFee 1 8 9 5 1 1 4 1) (CellTag.bridgeConsumed 4)
           (deriveConsumedCellValue
             { resource := 1, userAmount := 5, poolAmount := 1, budgetGrant := 1 })
         -- `withdraw`'s pending cell is keyed by the PRE-state's

@@ -5,6 +5,7 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
+import {AmmMath} from "src/lib/AmmMath.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
 
 /// @title StepVMCrossCheck
@@ -167,12 +168,19 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 count = vm.parseJsonUint(raw, ".count");
         uint256 countTransfer = vm.parseJsonUint(raw, ".countTransfer");
         uint256 countMint = vm.parseJsonUint(raw, ".countMint");
-        // GP.11.10: the corpus widened from 268 → 278 entries
-        // (ammSwap extension: +ammSwap at 10 entries, on top of the
-        // 258 entries that already carried +claimBudgetRefund).
-        assertEq(count, 278, "GP.11.10: total corpus is 278 entries");
+        // Workstream SB: the corpus widened from 278 → 288 entries
+        // (+reserveSwap at 10 entries, on top of the 278 entries that
+        // already carried +ammSwap and +reclaimAmmReserves).
+        assertEq(count, 288, "SB: total corpus is 288 entries");
         assertEq(countTransfer, 24, "transfer count");
         assertEq(countMint, 24, "mint count");
+        // The ONE swap-fee constant: the Lean value the corpus's
+        // kind-25 quotes were priced with must be the L1's.
+        assertEq(
+            vm.parseJsonUint(raw, ".reserveSwapFeeBps"),
+            AmmMath.SWAP_FEE_BPS,
+            "SB: reserveSwap fee bps pinned across the stacks"
+        );
     }
 
     /// @notice GP.11.8 — verify the per-variant count fields are
@@ -268,10 +276,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 adversarialCount++;
             }
         }
-        // GP.11.8: 8 adversarial transfer + 8 adversarial mint +
-        // 22 x4 = 88 adversarial new-variant entries (17 SVC.5.e +
-        // 6 GP variants) = 108 total.
-        assertEq(adversarialCount, 108, "108 adversarial entries total (16 + 23 x4)");
+        // Workstream SB: 8 adversarial transfer + 8 adversarial mint +
+        // 24 x4 = 96 adversarial new-variant entries = 112 total
+        // (+reserveSwap on the 23 variants GP.11.10 left).
+        assertEq(adversarialCount, 112, "112 adversarial entries total (16 + 24 x4)");
     }
 
     /// @notice Per-entry happy-path check: every entry whose
@@ -298,9 +306,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 happyCount++;
             }
         }
-        // GP.11.8: 16 happy transfer + 16 happy mint + 22 x6 =
-        // 170 happy entries total (17 SVC.5.e + 6 GP variants).
-        assertEq(happyCount, 170, "170 happy entries total (32 + 23 x6)");
+        // Workstream SB: 16 happy transfer + 16 happy mint + 24 x6 =
+        // 176 happy entries total (+reserveSwap on the 23 variants
+        // GP.11.10 left).
+        assertEq(happyCount, 176, "176 happy entries total (32 + 24 x6)");
     }
 
     /// @notice **The bespoke-hash byte-equivalence driver is gone.**
@@ -1039,9 +1048,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         one, so both directions are checked.
     function test_writeSet_refuses_only_the_bulk_pair() public {
         // Long enough for EVERY adjudicable kind's `_need` floor: the
-        // widest is `depositWithFee` at 104 bytes once both amounts
-        // ride the 32-byte field.
-        bytes memory fields = new bytes(104);
+        // widest is `depositWithFee` at 136 bytes once all three
+        // amounts — the Workstream SB seed included — ride the
+        // 32-byte field.
+        bytes memory fields = new bytes(136);
         vm.expectRevert(
             abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(6)));
         proxy.deriveWriteSet(6, fields, 7, 0);
@@ -1089,7 +1099,8 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         post-Workstream-GP: 0..18 SVC.5.e variants + 19
     ///         (DepositWithFee) + 20 (TopUpActionBudget) + 21
     ///         (TopUpActionBudgetFor) + 22 (ClaimBudgetRefund) +
-    ///         23 (AmmSwap) + 24 (ReclaimAmmReserves)).
+    ///         23 (AmmSwap) + 24 (ReclaimAmmReserves) +
+    ///         25 (ReserveSwap, Workstream SB)).
     ///         An out-of-range dispatcher would revert in
     ///         `_toActionKind`.
     function test_perEntry_actionKindByte_in_range() public {
@@ -1110,7 +1121,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 continue;
             }
             uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            checkLe(kind, 24, string.concat("actionKindByte out of range for ", base));
+            checkLe(kind, 25, string.concat("actionKindByte out of range for ", base));
         }
     }
 

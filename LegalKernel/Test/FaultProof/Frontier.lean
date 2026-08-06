@@ -206,7 +206,7 @@ def tests : List TestCase :=
         let read : BalanceReader := fun _ _ => some 100
         let aliased : List Action :=
           [ .transfer 1 7 7 30                 -- sender = receiver
-          , .depositWithFee 1 7 7 30 5 0 0     -- recipient = pool
+          , .depositWithFee 1 7 7 30 5 0 0 2   -- recipient = pool
           , .topUpActionBudget 1 30 0 7        -- payer = pool
           , .topUpActionBudgetFor 7 1 30 0 7   -- recipient = payer = pool
           , .claimBudgetRefund 1 3 10 7        -- pool = claimant
