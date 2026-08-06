@@ -38,6 +38,24 @@ fuzz = { runs = 256 }
 # instead, so the shortfall never surfaced.  Set it here so the default lane
 # runs what it claims to run.
 gas_limit = 50000000000
+# Silence solc warnings raised by VENDORED code, and only by vendored code.
+#
+# All 63 of them are `Warning (6335)` — `error` will become a reserved
+# word in a future solc, and both `lib/forge-std/src/Vm.sol` and
+# `lib/openzeppelin-contracts/.../ECDSA.sol` use it as an identifier.
+# Neither is ours to fix: the vendored deps are pinned by COMMIT SHA
+# (`scripts/vendor-deps.sh`) precisely so their bytecode cannot move
+# under us, and bumping a pin to quiet a forward-compatibility notice
+# would change deployed bytecode for no security gain.  When solc
+# actually reserves the word the vendored code will fail to COMPILE,
+# which is a build error and cannot be ignored.
+#
+# Scoped to `lib` on purpose.  A blanket `ignored_error_codes = [6335]`
+# would hide the same warning in `src/` and `test/`, and the point of
+# clearing the vendored noise is that a warning from OUR source is then
+# visible — and gated: `ci-solidity.yml` fails the build on any warning
+# whose location is under `src/`, `test/` or `script/`.
+ignored_warnings_from = ["lib"]
 
 [profile.ci]
 fuzz = { runs = 1000 }
