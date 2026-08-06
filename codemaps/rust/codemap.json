@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c6bcbfa47bbc9eab54ffe705b8997a63737fe0bd494bfe5c4f03b0e7debcc85d"
+    "source_digest": "980f90c50f12cf80fddf67d61d264abfb685ea2a62bd763af6daf9fad2383022"
   },
   "summary": {
     "module_count": 193,
-    "declaration_count": 6160
+    "declaration_count": 6188
   },
   "modules": [
     {
@@ -986,7 +986,7 @@
         {
           "kind": "fn",
           "name": "fixture_size_accessors",
-          "line": 670,
+          "line": 671,
           "called": [
             "average_payload_bytes",
             "fixture",
@@ -999,7 +999,7 @@
         {
           "kind": "fn",
           "name": "max_scalar_attempts_documented",
-          "line": 692,
+          "line": 693,
           "called": [
             "MAX_SCALAR_ATTEMPTS",
             "MAX_SCALAR_ATTEMPT_INDEX"
@@ -1008,7 +1008,7 @@
         {
           "kind": "fn",
           "name": "empty_fixture_accessors",
-          "line": 702,
+          "line": 703,
           "called": [
             "Fixture",
             "average_payload_bytes",
@@ -12385,13 +12385,15 @@
         {
           "kind": "fn",
           "name": "sign_eip1559_via_bridge_key",
-          "line": 706,
+          "line": 705,
           "called": [
             "BridgeActorKey",
             "EIP_1559_TX_TYPE",
             "Eip1559TxFields",
+            "Err",
             "JsonRpcSubmitError",
             "PreparedTx",
+            "SIGNATURE_LEN",
             "finalize",
             "key",
             "len",
@@ -12406,7 +12408,7 @@
         {
           "kind": "fn",
           "name": "recover_y_parity",
-          "line": 764,
+          "line": 782,
           "called": [
             "Err",
             "JsonRpcSubmitError",
@@ -12417,7 +12419,7 @@
         {
           "kind": "fn",
           "name": "derive_address_from_pubkey",
-          "line": 797,
+          "line": 815,
           "called": [
             "Err",
             "JsonRpcSubmitError",
@@ -12431,7 +12433,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_u64_strict",
-          "line": 823,
+          "line": 841,
           "called": [
             "is_empty",
             "ok"
@@ -12440,7 +12442,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_u128",
-          "line": 833,
+          "line": 851,
           "called": [
             "is_empty",
             "ok"
@@ -12449,13 +12451,13 @@
         {
           "kind": "mod",
           "name": "rlp",
-          "line": 853,
+          "line": 871,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_bytes",
-          "line": 856,
+          "line": 874,
           "called": [
             "be_trim",
             "len",
@@ -12465,7 +12467,7 @@
         {
           "kind": "fn",
           "name": "encode_uint_u128",
-          "line": 884,
+          "line": 902,
           "called": [
             "be_trim",
             "encode_bytes"
@@ -12474,7 +12476,7 @@
         {
           "kind": "fn",
           "name": "encode_uint_from_be",
-          "line": 894,
+          "line": 912,
           "called": [
             "be_trim",
             "encode_bytes"
@@ -12483,7 +12485,7 @@
         {
           "kind": "fn",
           "name": "encode_list",
-          "line": 902,
+          "line": 920,
           "called": [
             "be_trim",
             "iter",
@@ -12494,7 +12496,7 @@
         {
           "kind": "fn",
           "name": "be_trim",
-          "line": 928,
+          "line": 946,
           "called": [
             "b",
             "bytes",
@@ -12507,7 +12509,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 935,
+          "line": 953,
           "called": [
             "encode_bytes",
             "encode_list",
@@ -12518,7 +12520,7 @@
         {
           "kind": "fn",
           "name": "test_key",
-          "line": 939,
+          "line": 957,
           "called": [
             "BridgeActorKey"
           ]
@@ -12526,7 +12528,7 @@
         {
           "kind": "fn",
           "name": "rlp_uint_zero_is_empty_string",
-          "line": 950,
+          "line": 968,
           "called": [
             "encode_uint_u128"
           ]
@@ -12534,7 +12536,7 @@
         {
           "kind": "fn",
           "name": "rlp_uint_single_byte_low_half",
-          "line": 956,
+          "line": 974,
           "called": [
             "encode_uint_u128"
           ]
@@ -12542,7 +12544,7 @@
         {
           "kind": "fn",
           "name": "rlp_uint_128_needs_prefix",
-          "line": 963,
+          "line": 981,
           "called": [
             "encode_uint_u128"
           ]
@@ -12550,7 +12552,7 @@
         {
           "kind": "fn",
           "name": "rlp_uint_256",
-          "line": 969,
+          "line": 987,
           "called": [
             "encode_uint_u128"
           ]
@@ -12558,7 +12560,7 @@
         {
           "kind": "fn",
           "name": "rlp_uint_u64_max",
-          "line": 975,
+          "line": 993,
           "called": [
             "b",
             "encode_uint_u128",
@@ -12569,7 +12571,7 @@
         {
           "kind": "fn",
           "name": "rlp_uint_u128_max",
-          "line": 985,
+          "line": 1003,
           "called": [
             "b",
             "encode_uint_u128",
@@ -12580,7 +12582,7 @@
         {
           "kind": "fn",
           "name": "rlp_bytes_empty",
-          "line": 994,
+          "line": 1012,
           "called": [
             "encode_bytes"
           ]
@@ -12588,7 +12590,7 @@
         {
           "kind": "fn",
           "name": "rlp_bytes_single_low",
-          "line": 999,
+          "line": 1017,
           "called": [
             "encode_bytes"
           ]
@@ -12596,7 +12598,7 @@
         {
           "kind": "fn",
           "name": "rlp_bytes_single_high",
-          "line": 1004,
+          "line": 1022,
           "called": [
             "encode_bytes"
           ]
@@ -12604,7 +12606,7 @@
         {
           "kind": "fn",
           "name": "rlp_bytes_55_bytes",
-          "line": 1010,
+          "line": 1028,
           "called": [
             "encode_bytes",
             "len"
@@ -12613,7 +12615,7 @@
         {
           "kind": "fn",
           "name": "rlp_bytes_56_bytes_uses_long_form",
-          "line": 1019,
+          "line": 1037,
           "called": [
             "encode_bytes",
             "len"
@@ -12622,7 +12624,7 @@
         {
           "kind": "fn",
           "name": "rlp_list_empty",
-          "line": 1029,
+          "line": 1047,
           "called": [
             "encode_list"
           ]
@@ -12630,7 +12632,7 @@
         {
           "kind": "fn",
           "name": "rlp_list_short_items",
-          "line": 1035,
+          "line": 1053,
           "called": [
             "encode_list",
             "encode_uint_u128"
@@ -12639,7 +12641,7 @@
         {
           "kind": "fn",
           "name": "rlp_uint_from_be_trims_leading_zeroes",
-          "line": 1044,
+          "line": 1062,
           "called": [
             "encode_uint_from_be"
           ]
@@ -12647,7 +12649,7 @@
         {
           "kind": "fn",
           "name": "rlp_uint_from_be_no_zeroes",
-          "line": 1052,
+          "line": 1070,
           "called": [
             "encode_uint_from_be",
             "len"
@@ -12656,7 +12658,7 @@
         {
           "kind": "fn",
           "name": "eip1559_tx_type_byte",
-          "line": 1063,
+          "line": 1081,
           "called": [
             "EIP_1559_TX_TYPE"
           ]
@@ -12664,7 +12666,7 @@
         {
           "kind": "fn",
           "name": "sign_eip1559_via_bridge_key_produces_typed_tx",
-          "line": 1068,
+          "line": 1086,
           "called": [
             "EIP_1559_TX_TYPE",
             "Eip1559TxFields",
@@ -12678,7 +12680,7 @@
         {
           "kind": "fn",
           "name": "sign_eip1559_via_bridge_key_is_deterministic",
-          "line": 1091,
+          "line": 1109,
           "called": [
             "Eip1559TxFields",
             "b",
@@ -12691,7 +12693,7 @@
         {
           "kind": "fn",
           "name": "sign_eip1559_via_bridge_key_different_nonces_differ",
-          "line": 1112,
+          "line": 1130,
           "called": [
             "Eip1559TxFields",
             "b",
@@ -12704,7 +12706,7 @@
         {
           "kind": "fn",
           "name": "sign_eip1559_y_parity_is_zero_or_one",
-          "line": 1132,
+          "line": 1150,
           "called": [
             "Eip1559TxFields",
             "is_empty",
@@ -12717,7 +12719,7 @@
         {
           "kind": "fn",
           "name": "recover_y_parity_round_trip",
-          "line": 1159,
+          "line": 1177,
           "called": [
             "key",
             "public_key_compressed",
@@ -12729,7 +12731,7 @@
         {
           "kind": "fn",
           "name": "recover_y_parity_fails_for_wrong_pubkey",
-          "line": 1169,
+          "line": 1187,
           "called": [
             "Err",
             "_",
@@ -12743,7 +12745,7 @@
         {
           "kind": "fn",
           "name": "derive_address_returns_20_bytes",
-          "line": 1184,
+          "line": 1202,
           "called": [
             "addr",
             "derive_address_from_pubkey",
@@ -12756,7 +12758,7 @@
         {
           "kind": "fn",
           "name": "derive_address_is_deterministic",
-          "line": 1191,
+          "line": 1209,
           "called": [
             "b",
             "derive_address_from_pubkey",
@@ -12768,7 +12770,7 @@
         {
           "kind": "fn",
           "name": "derive_address_for_scalar_one",
-          "line": 1199,
+          "line": 1217,
           "called": [
             "addr",
             "derive_address_from_pubkey",
@@ -12780,7 +12782,7 @@
         {
           "kind": "fn",
           "name": "derive_address_rejects_garbage",
-          "line": 1210,
+          "line": 1228,
           "called": [
             "Err",
             "_",
@@ -12790,7 +12792,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_u64_strict_rejects_empty_0x",
-          "line": 1221,
+          "line": 1239,
           "called": [
             "parse_hex_u64_strict"
           ]
@@ -12798,7 +12800,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_u64_strict_accepts_lowercase",
-          "line": 1227,
+          "line": 1245,
           "called": [
             "parse_hex_u64_strict"
           ]
@@ -12806,7 +12808,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_u64_strict_accepts_0x_uppercase",
-          "line": 1232,
+          "line": 1250,
           "called": [
             "parse_hex_u64_strict"
           ]
@@ -12814,7 +12816,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_u128_accepts_large",
-          "line": 1237,
+          "line": 1255,
           "called": [
             "parse_hex_u128"
           ]
@@ -12822,7 +12824,7 @@
         {
           "kind": "fn",
           "name": "config_rejects_zero_chain_id",
-          "line": 1247,
+          "line": 1265,
           "called": [
             "_",
             "key",
@@ -12832,7 +12834,7 @@
         {
           "kind": "fn",
           "name": "config_accepts_mainnet",
-          "line": 1254,
+          "line": 1272,
           "called": [
             "key",
             "test_key"
@@ -12841,7 +12843,7 @@
         {
           "kind": "fn",
           "name": "config_default_confirmations_is_12",
-          "line": 1264,
+          "line": 1282,
           "called": [
             "key",
             "test_key"
@@ -12850,13 +12852,13 @@
         {
           "kind": "fn",
           "name": "fee_config_defaults_sane",
-          "line": 1271,
+          "line": 1289,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rebroadcast_with_bump_rejects_excessive",
-          "line": 1282,
+          "line": 1300,
           "called": [
             "MAX_FEE_BUMP_PERCENT",
             "_",
@@ -12869,7 +12871,7 @@
         {
           "kind": "fn",
           "name": "rebroadcast_with_bump_zero_pct_is_no_op",
-          "line": 1294,
+          "line": 1312,
           "called": [
             "key",
             "rebroadcast_with_bump",
@@ -12880,7 +12882,7 @@
         {
           "kind": "fn",
           "name": "rebroadcast_with_bump_scales_correctly",
-          "line": 1309,
+          "line": 1327,
           "called": [
             "b",
             "key",
@@ -12892,7 +12894,7 @@
         {
           "kind": "fn",
           "name": "nonce_cache_starts_empty",
-          "line": 1329,
+          "line": 1347,
           "called": [
             "cached_nonce",
             "key",
@@ -12903,7 +12905,7 @@
         {
           "kind": "fn",
           "name": "invalidate_nonce_cache_resets",
-          "line": 1338,
+          "line": 1356,
           "called": [
             "cached_nonce",
             "invalidate_nonce_cache",
@@ -12916,7 +12918,7 @@
         {
           "kind": "fn",
           "name": "submit_error_conversion_carries_message",
-          "line": 1355,
+          "line": 1373,
           "called": [
             "SubmitError"
           ]
@@ -12924,7 +12926,7 @@
         {
           "kind": "fn",
           "name": "eip1559_minimal_tx_layout",
-          "line": 1373,
+          "line": 1391,
           "called": [
             "Eip1559TxFields",
             "key",
@@ -12937,7 +12939,7 @@
         {
           "kind": "fn",
           "name": "eip1559_calldata_grows_tx_size",
-          "line": 1399,
+          "line": 1417,
           "called": [
             "Eip1559TxFields",
             "key",
@@ -12950,7 +12952,7 @@
         {
           "kind": "fn",
           "name": "eip1559_chain_id_affects_tx_hash",
-          "line": 1418,
+          "line": 1436,
           "called": [
             "Eip1559TxFields",
             "key",
@@ -12962,7 +12964,7 @@
         {
           "kind": "mod",
           "name": "mock_server_tests",
-          "line": 1438,
+          "line": 1456,
           "called": [
             "TcpListener"
           ]
@@ -12970,7 +12972,7 @@
         {
           "kind": "struct",
           "name": "MockJsonRpcServer",
-          "line": 1455,
+          "line": 1473,
           "called": [
             "addr",
             "recorded",
@@ -12980,13 +12982,13 @@
         {
           "kind": "impl",
           "name": "MockJsonRpcServer",
-          "line": 1461,
+          "line": 1479,
           "called": []
         },
         {
           "kind": "fn",
           "name": "spawn",
-          "line": 1462,
+          "line": 1480,
           "called": [
             "_",
             "addr",
@@ -13002,7 +13004,7 @@
         {
           "kind": "fn",
           "name": "url",
-          "line": 1509,
+          "line": 1527,
           "called": [
             "addr"
           ]
@@ -13010,7 +13012,7 @@
         {
           "kind": "fn",
           "name": "handle",
-          "line": 1513,
+          "line": 1531,
           "called": [
             "Err",
             "_",
@@ -13035,7 +13037,7 @@
         {
           "kind": "impl",
           "name": "Drop for MockJsonRpcServer",
-          "line": 1582,
+          "line": 1600,
           "called": [
             "MockJsonRpcServer"
           ]
@@ -13043,7 +13045,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 1583,
+          "line": 1601,
           "called": [
             "lock",
             "stop"
@@ -13052,7 +13054,7 @@
         {
           "kind": "fn",
           "name": "find_double_crlf",
-          "line": 1591,
+          "line": 1609,
           "called": [
             "b",
             "len"
@@ -13061,7 +13063,7 @@
         {
           "kind": "fn",
           "name": "test_key",
-          "line": 1595,
+          "line": 1613,
           "called": [
             "BridgeActorKey"
           ]
@@ -13069,7 +13071,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_build_and_sign_via_mock",
-          "line": 1602,
+          "line": 1620,
           "called": [
             "EIP_1559_TX_TYPE",
             "build_and_sign",
@@ -13088,7 +13090,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_check_inclusion_returns_confirmed",
-          "line": 1630,
+          "line": 1648,
           "called": [
             "check_inclusion",
             "key",
@@ -13100,7 +13102,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_broadcast_tx_hash_mismatch_surfaces_error",
-          "line": 1645,
+          "line": 1663,
           "called": [
             "broadcast",
             "build_and_sign",
@@ -13113,7 +13115,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_escalate_for_deadline_within_window",
-          "line": 1668,
+          "line": 1686,
           "called": [
             "escalate_for_deadline",
             "key",
@@ -13125,7 +13127,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_escalate_for_deadline_outside_window",
-          "line": 1684,
+          "line": 1702,
           "called": [
             "escalate_for_deadline",
             "key",
@@ -13137,7 +13139,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_escalate_for_deadline_passed",
-          "line": 1699,
+          "line": 1717,
           "called": [
             "escalate_for_deadline",
             "key",
@@ -13149,13 +13151,13 @@
         {
           "kind": "fn",
           "name": "gas_estimate_margin_arithmetic_matches_docstring",
-          "line": 1724,
+          "line": 1742,
           "called": []
         },
         {
           "kind": "fn",
           "name": "peek_without_commit_does_not_consume_nonce",
-          "line": 1755,
+          "line": 1773,
           "called": [
             "cached_nonce",
             "commit_nonce_bump",
@@ -13170,7 +13172,7 @@
         {
           "kind": "fn",
           "name": "stale_commit_is_no_op",
-          "line": 1792,
+          "line": 1810,
           "called": [
             "cached_nonce",
             "commit_nonce_bump",
@@ -13184,7 +13186,7 @@
         {
           "kind": "fn",
           "name": "commit_at_u64_max_returns_overflow_error",
-          "line": 1817,
+          "line": 1835,
           "called": [
             "_",
             "commit_nonce_bump",
@@ -13198,7 +13200,7 @@
         {
           "kind": "fn",
           "name": "verify_rpc_chain_id_accepts_match",
-          "line": 1835,
+          "line": 1853,
           "called": [
             "key",
             "rpc",
@@ -13211,7 +13213,7 @@
         {
           "kind": "fn",
           "name": "verify_rpc_chain_id_rejects_mismatch",
-          "line": 1850,
+          "line": 1868,
           "called": [
             "key",
             "rpc",
@@ -13224,7 +13226,7 @@
         {
           "kind": "fn",
           "name": "trait_invalidate_nonce_cache_no_infinite_recursion",
-          "line": 1882,
+          "line": 1900,
           "called": [
             "JsonRpcSubmitter",
             "cached_nonce",
@@ -55498,42 +55500,42 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::key",
       "path": "runtime/knomosis-l1-ingest/src/key.rs",
-      "declaration_count": 39,
+      "declaration_count": 41,
       "declarations": [
         {
           "kind": "const",
           "name": "PRIVATE_KEY_LEN",
-          "line": 47,
+          "line": 51,
           "called": []
         },
         {
           "kind": "const",
           "name": "COMPRESSED_PUBKEY_LEN",
-          "line": 50,
+          "line": 54,
           "called": []
         },
         {
           "kind": "const",
           "name": "SIGNATURE_LEN",
-          "line": 53,
+          "line": 61,
           "called": []
         },
         {
           "kind": "const",
           "name": "PREHASH_LEN",
-          "line": 56,
+          "line": 64,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_KEYSTORE_FILE_BYTES",
-          "line": 68,
+          "line": 76,
           "called": []
         },
         {
           "kind": "struct",
           "name": "BridgeActorKey",
-          "line": 91,
+          "line": 99,
           "called": [
             "COMPRESSED_PUBKEY_LEN",
             "PRIVATE_KEY_LEN"
@@ -55542,7 +55544,7 @@
         {
           "kind": "impl",
           "name": "core::fmt::Debug for BridgeActorKey",
-          "line": 100,
+          "line": 108,
           "called": [
             "BridgeActorKey"
           ]
@@ -55550,7 +55552,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 101,
+          "line": 109,
           "called": [
             "_"
           ]
@@ -55558,7 +55560,7 @@
         {
           "kind": "enum",
           "name": "KeyError",
-          "line": 113,
+          "line": 121,
           "called": [
             "error",
             "path",
@@ -55569,7 +55571,7 @@
         {
           "kind": "fn",
           "name": "check_key_file_permissions",
-          "line": 152,
+          "line": 160,
           "called": [
             "Err",
             "KeyError",
@@ -55581,7 +55583,7 @@
         {
           "kind": "fn",
           "name": "check_key_file_permissions",
-          "line": 173,
+          "line": 181,
           "called": [
             "KeyError"
           ]
@@ -55589,13 +55591,13 @@
         {
           "kind": "impl",
           "name": "BridgeActorKey",
-          "line": 180,
+          "line": 188,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_private_bytes",
-          "line": 188,
+          "line": 196,
           "called": [
             "COMPRESSED_PUBKEY_LEN",
             "Err",
@@ -55610,7 +55612,7 @@
         {
           "kind": "fn",
           "name": "from_file",
-          "line": 241,
+          "line": 249,
           "called": [
             "Err",
             "KeyError",
@@ -55628,7 +55630,7 @@
         {
           "kind": "fn",
           "name": "public_key_compressed",
-          "line": 293,
+          "line": 301,
           "called": [
             "COMPRESSED_PUBKEY_LEN"
           ]
@@ -55636,7 +55638,7 @@
         {
           "kind": "fn",
           "name": "sign_prehash",
-          "line": 314,
+          "line": 327,
           "called": [
             "Err",
             "KeyError",
@@ -55645,13 +55647,14 @@
             "_",
             "bytes",
             "len",
+            "to_byte",
             "to_bytes"
           ]
         },
         {
           "kind": "fn",
           "name": "sign_keccak256",
-          "line": 352,
+          "line": 375,
           "called": [
             "KeyError",
             "SIGNATURE_LEN",
@@ -55662,7 +55665,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 363,
+          "line": 386,
           "called": [
             "BridgeActorKey",
             "COMPRESSED_PUBKEY_LEN",
@@ -55675,7 +55678,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 371,
+          "line": 394,
           "called": [
             "COMPRESSED_PUBKEY_LEN",
             "PREHASH_LEN",
@@ -55686,7 +55689,7 @@
         {
           "kind": "fn",
           "name": "from_bytes_known_good_scalar",
-          "line": 381,
+          "line": 404,
           "called": [
             "COMPRESSED_PUBKEY_LEN",
             "PRIVATE_KEY_LEN",
@@ -55698,7 +55701,7 @@
         {
           "kind": "fn",
           "name": "from_bytes_rejects_wrong_length",
-          "line": 398,
+          "line": 421,
           "called": [
             "Err"
           ]
@@ -55706,7 +55709,7 @@
         {
           "kind": "fn",
           "name": "from_bytes_rejects_zero_scalar",
-          "line": 419,
+          "line": 442,
           "called": [
             "Err",
             "PRIVATE_KEY_LEN"
@@ -55715,7 +55718,7 @@
         {
           "kind": "fn",
           "name": "sign_prehash_length",
-          "line": 429,
+          "line": 452,
           "called": [
             "PRIVATE_KEY_LEN",
             "SIGNATURE_LEN",
@@ -55727,7 +55730,7 @@
         {
           "kind": "fn",
           "name": "sign_prehash_rejects_wrong_length",
-          "line": 439,
+          "line": 462,
           "called": [
             "Err",
             "PRIVATE_KEY_LEN",
@@ -55738,7 +55741,7 @@
         {
           "kind": "fn",
           "name": "sign_prehash_deterministic",
-          "line": 462,
+          "line": 485,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -55748,13 +55751,13 @@
         {
           "kind": "fn",
           "name": "sign_prehash_emits_low_s",
-          "line": 478,
+          "line": 501,
           "called": []
         },
         {
           "kind": "const",
           "name": "HALF_ORDER",
-          "line": 480,
+          "line": 503,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -55764,8 +55767,32 @@
         },
         {
           "kind": "fn",
+          "name": "sign_prehash_emits_eth_v",
+          "line": 526,
+          "called": [
+            "PRIVATE_KEY_LEN",
+            "SIGNATURE_LEN",
+            "key",
+            "nonce",
+            "sign_prehash"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "sign_verifies_under_the_production_wire_verifier",
+          "line": 547,
+          "called": [
+            "PRIVATE_KEY_LEN",
+            "b",
+            "key",
+            "public_key_compressed",
+            "sign_keccak256"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "sign_keccak256_deterministic",
-          "line": 503,
+          "line": 569,
           "called": [
             "PRIVATE_KEY_LEN",
             "b",
@@ -55776,7 +55803,7 @@
         {
           "kind": "fn",
           "name": "sign_keccak256_different_messages",
-          "line": 515,
+          "line": 581,
           "called": [
             "PRIVATE_KEY_LEN",
             "b",
@@ -55787,7 +55814,7 @@
         {
           "kind": "fn",
           "name": "write_key_file",
-          "line": 528,
+          "line": 594,
           "called": [
             "bytes",
             "path",
@@ -55797,7 +55824,7 @@
         {
           "kind": "fn",
           "name": "from_file_round_trip",
-          "line": 539,
+          "line": 605,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -55809,7 +55836,7 @@
         {
           "kind": "fn",
           "name": "from_file_too_short",
-          "line": 552,
+          "line": 618,
           "called": [
             "Err",
             "path",
@@ -55820,7 +55847,7 @@
         {
           "kind": "fn",
           "name": "from_file_rejects_world_readable_keystore",
-          "line": 572,
+          "line": 638,
           "called": [
             "Err",
             "PRIVATE_KEY_LEN",
@@ -55832,7 +55859,7 @@
         {
           "kind": "fn",
           "name": "from_file_accepts_owner_and_group_only_keystores",
-          "line": 596,
+          "line": 662,
           "called": [
             "PRIVATE_KEY_LEN",
             "path"
@@ -55841,7 +55868,7 @@
         {
           "kind": "fn",
           "name": "from_file_missing",
-          "line": 614,
+          "line": 680,
           "called": [
             "Err"
           ]
@@ -55849,7 +55876,7 @@
         {
           "kind": "fn",
           "name": "from_file_rejects_oversized_file",
-          "line": 625,
+          "line": 691,
           "called": [
             "Err",
             "PRIVATE_KEY_LEN",
@@ -55861,7 +55888,7 @@
         {
           "kind": "fn",
           "name": "from_file_accepts_exact_length",
-          "line": 644,
+          "line": 710,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -55873,7 +55900,7 @@
         {
           "kind": "fn",
           "name": "from_file_accepts_under_threshold",
-          "line": 660,
+          "line": 726,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -55885,7 +55912,7 @@
         {
           "kind": "fn",
           "name": "debug_redacts_secret",
-          "line": 674,
+          "line": 740,
           "called": [
             "PRIVATE_KEY_LEN",
             "key"
@@ -57631,13 +57658,13 @@
         {
           "kind": "const",
           "name": "TEST_SCALAR",
-          "line": 482,
+          "line": 479,
           "called": []
         },
         {
           "kind": "fn",
           "name": "test_key",
-          "line": 488,
+          "line": 485,
           "called": [
             "BridgeActorKey",
             "TEST_SCALAR"
@@ -57646,7 +57673,7 @@
         {
           "kind": "fn",
           "name": "claim_is_capped_gas_pool_to_sequencer_transfer",
-          "line": 493,
+          "line": 490,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -57663,7 +57690,7 @@
         {
           "kind": "fn",
           "name": "over_cap_request_is_clamped_to_cap",
-          "line": 514,
+          "line": 511,
           "called": [
             "SEQUENCER_ACTOR_ID",
             "_",
@@ -57677,7 +57704,7 @@
         {
           "kind": "fn",
           "name": "signature_verifies_against_the_pool_public_key",
-          "line": 527,
+          "line": 524,
           "called": [
             "action",
             "b",
@@ -57692,7 +57719,7 @@
         {
           "kind": "fn",
           "name": "build_is_deterministic_and_encodes",
-          "line": 544,
+          "line": 545,
           "called": [
             "b",
             "encode",
@@ -57704,7 +57731,7 @@
         {
           "kind": "fn",
           "name": "test_receipt",
-          "line": 556,
+          "line": 557,
           "called": [
             "GasReceipt"
           ]
@@ -57712,7 +57739,7 @@
         {
           "kind": "fn",
           "name": "reimbursement_is_gas_used_times_gas_price",
-          "line": 566,
+          "line": 567,
           "called": [
             "gas_receipt_reimbursement",
             "reimbursement",
@@ -57722,7 +57749,7 @@
         {
           "kind": "fn",
           "name": "reimbursement_saturates_instead_of_wrapping",
-          "line": 576,
+          "line": 577,
           "called": [
             "gas_receipt_reimbursement",
             "reimbursement",
@@ -57732,7 +57759,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_clamps_to_the_receipt_when_it_binds",
-          "line": 586,
+          "line": 587,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -57750,7 +57777,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_still_respects_the_cap_when_cap_binds",
-          "line": 618,
+          "line": 619,
           "called": [
             "amount",
             "b",
@@ -57763,7 +57790,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_passes_through_under_both_bounds",
-          "line": 631,
+          "line": 632,
           "called": [
             "amount",
             "b",
@@ -57776,7 +57803,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by_rejects_an_overspend",
-          "line": 642,
+          "line": 643,
           "called": [
             "amount",
             "b",
@@ -57789,7 +57816,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by_rejects_noncanonical_claim_shapes",
-          "line": 659,
+          "line": 660,
           "called": [
             "Action",
             "GAS_POOL_ACTOR_ID",
@@ -57808,7 +57835,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_fresh_and_backed_rejects_consumed_receipts",
-          "line": 731,
+          "line": 732,
           "called": [
             "b",
             "is_receipt_fresh_and_backed",
@@ -57820,7 +57847,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_signature_verifies",
-          "line": 756,
+          "line": 757,
           "called": [
             "action",
             "b",
@@ -57836,7 +57863,7 @@
         {
           "kind": "fn",
           "name": "test_rate",
-          "line": 777,
+          "line": 779,
           "called": [
             "EthBoldRate"
           ]
@@ -57844,7 +57871,7 @@
         {
           "kind": "fn",
           "name": "bold_reimbursement_converts_wei_via_rate",
-          "line": 786,
+          "line": 788,
           "called": [
             "bold_receipt_reimbursement",
             "bold_reimbursement",
@@ -57855,7 +57882,7 @@
         {
           "kind": "fn",
           "name": "bold_reimbursement_floors_and_fail_closes",
-          "line": 799,
+          "line": 801,
           "called": [
             "bold_receipt_reimbursement"
           ]
@@ -57863,7 +57890,7 @@
         {
           "kind": "fn",
           "name": "bold_receipt_backed_clamps_to_the_converted_cost",
-          "line": 814,
+          "line": 816,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -57883,7 +57910,7 @@
         {
           "kind": "fn",
           "name": "bold_receipt_backed_still_respects_the_cap",
-          "line": 854,
+          "line": 856,
           "called": [
             "amount",
             "b",
@@ -57898,7 +57925,7 @@
         {
           "kind": "fn",
           "name": "is_bold_receipt_backed_by_rejects_noncanonical_claim_shapes",
-          "line": 868,
+          "line": 870,
           "called": [
             "Action",
             "GAS_POOL_ACTOR_ID",
@@ -57919,7 +57946,7 @@
         {
           "kind": "fn",
           "name": "is_bold_receipt_fresh_and_backed_rejects_consumed_receipts",
-          "line": 928,
+          "line": 930,
           "called": [
             "b",
             "is_bold_receipt_fresh_and_backed",
@@ -67531,50 +67558,56 @@
         {
           "kind": "mod",
           "name": "verify",
-          "line": 108,
+          "line": 125,
           "called": [
+            "ETH_V_EVEN_Y",
+            "ETH_V_ODD_Y",
             "MESSAGE_LEN",
             "PUBKEY_LEN",
             "SEC1_TAG_EVEN",
             "SEC1_TAG_ODD",
             "SIGNATURE_LEN",
-            "knomosis_verify_ecdsa_raw"
+            "WIRE_SIGNATURE_LEN",
+            "knomosis_verify_ecdsa_raw",
+            "knomosis_verify_signed_message_raw",
+            "verify_signed_message"
           ]
         },
         {
           "kind": "const",
           "name": "CRATE_NAME",
-          "line": 120,
+          "line": 138,
           "called": []
         },
         {
           "kind": "const",
           "name": "ADAPTOR_IDENTIFIER",
-          "line": 130,
+          "line": 148,
           "called": []
         },
         {
           "kind": "fn",
           "name": "lean_ffi_built",
-          "line": 141,
+          "line": 159,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 146,
+          "line": 164,
           "called": [
             "ADAPTOR_IDENTIFIER",
             "CRATE_NAME",
             "MESSAGE_LEN",
             "PUBKEY_LEN",
-            "SIGNATURE_LEN"
+            "SIGNATURE_LEN",
+            "WIRE_SIGNATURE_LEN"
           ]
         },
         {
           "kind": "fn",
           "name": "crate_name_constant",
-          "line": 151,
+          "line": 171,
           "called": [
             "CRATE_NAME"
           ]
@@ -67582,7 +67615,7 @@
         {
           "kind": "fn",
           "name": "adaptor_identifier_matches_lean_constant",
-          "line": 160,
+          "line": 180,
           "called": [
             "ADAPTOR_IDENTIFIER"
           ]
@@ -67590,11 +67623,12 @@
         {
           "kind": "fn",
           "name": "length_constants_re_exported",
-          "line": 172,
+          "line": 192,
           "called": [
             "MESSAGE_LEN",
             "PUBKEY_LEN",
-            "SIGNATURE_LEN"
+            "SIGNATURE_LEN",
+            "WIRE_SIGNATURE_LEN"
           ]
         }
       ]
@@ -67602,42 +67636,60 @@
     {
       "module": "runtime::knomosis-verify-secp256k1::src::verify",
       "path": "runtime/knomosis-verify-secp256k1/src/verify.rs",
-      "declaration_count": 43,
+      "declaration_count": 69,
       "declarations": [
         {
           "kind": "const",
           "name": "PUBKEY_LEN",
-          "line": 80,
+          "line": 81,
           "called": []
         },
         {
           "kind": "const",
           "name": "MESSAGE_LEN",
-          "line": 84,
+          "line": 85,
           "called": []
         },
         {
           "kind": "const",
           "name": "SIGNATURE_LEN",
-          "line": 87,
+          "line": 88,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "WIRE_SIGNATURE_LEN",
+          "line": 96,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "ETH_V_EVEN_Y",
+          "line": 99,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "ETH_V_ODD_Y",
+          "line": 102,
           "called": []
         },
         {
           "kind": "const",
           "name": "SEC1_TAG_EVEN",
-          "line": 90,
+          "line": 105,
           "called": []
         },
         {
           "kind": "const",
           "name": "SEC1_TAG_ODD",
-          "line": 93,
+          "line": 108,
           "called": []
         },
         {
           "kind": "fn",
           "name": "verify",
-          "line": 114,
+          "line": 129,
           "called": [
             "MESSAGE_LEN",
             "PUBKEY_LEN",
@@ -67650,14 +67702,33 @@
         },
         {
           "kind": "fn",
+          "name": "verify_signed_message",
+          "line": 233,
+          "called": [
+            "ETH_V_EVEN_Y",
+            "ETH_V_ODD_Y",
+            "PUBKEY_LEN",
+            "SEC1_TAG_EVEN",
+            "SEC1_TAG_ODD",
+            "SIGNATURE_LEN",
+            "WIRE_SIGNATURE_LEN",
+            "_",
+            "as_bytes",
+            "finalize",
+            "len",
+            "signature"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "knomosis_verify_ecdsa_raw",
-          "line": 215,
+          "line": 321,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_SLICE_LEN",
-          "line": 227,
+          "line": 333,
           "called": [
             "make_slice",
             "verify"
@@ -67665,8 +67736,23 @@
         },
         {
           "kind": "fn",
+          "name": "knomosis_verify_signed_message_raw",
+          "line": 375,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "MAX_SLICE_LEN",
+          "line": 383,
+          "called": [
+            "make_slice",
+            "verify_signed_message"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "make_slice",
-          "line": 265,
+          "line": 410,
           "called": [
             "len"
           ]
@@ -67674,42 +67760,42 @@
         {
           "kind": "fn",
           "name": "knomosis_lean_sarray_size",
-          "line": 308,
+          "line": 453,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_sarray_cptr",
-          "line": 310,
+          "line": 455,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_dec",
-          "line": 312,
+          "line": 457,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_mk_string_from_bytes",
-          "line": 315,
+          "line": 460,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_verify_ecdsa",
-          "line": 343,
+          "line": 501,
           "called": [
             "knomosis_lean_dec",
             "knomosis_lean_sarray_cptr",
             "knomosis_lean_sarray_size",
-            "knomosis_verify_ecdsa_raw"
+            "knomosis_verify_signed_message_raw"
           ]
         },
         {
           "kind": "const",
           "name": "IDENTIFIER_BYTES",
-          "line": 371,
+          "line": 530,
           "called": [
             "as_bytes"
           ]
@@ -67717,7 +67803,7 @@
         {
           "kind": "fn",
           "name": "knomosis_verify_identifier",
-          "line": 388,
+          "line": 547,
           "called": [
             "IDENTIFIER_BYTES",
             "knomosis_lean_dec",
@@ -67729,7 +67815,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 394,
+          "line": 553,
           "called": [
             "MESSAGE_LEN",
             "PUBKEY_LEN",
@@ -67742,7 +67828,7 @@
         {
           "kind": "fn",
           "name": "length_constants_match_contract",
-          "line": 400,
+          "line": 559,
           "called": [
             "MESSAGE_LEN",
             "PUBKEY_LEN",
@@ -67752,7 +67838,7 @@
         {
           "kind": "fn",
           "name": "rejects_short_pubkey",
-          "line": 408,
+          "line": 567,
           "called": [
             "verify"
           ]
@@ -67760,7 +67846,7 @@
         {
           "kind": "fn",
           "name": "rejects_long_pubkey",
-          "line": 414,
+          "line": 573,
           "called": [
             "verify"
           ]
@@ -67768,7 +67854,7 @@
         {
           "kind": "fn",
           "name": "rejects_short_message",
-          "line": 420,
+          "line": 579,
           "called": [
             "verify"
           ]
@@ -67776,7 +67862,7 @@
         {
           "kind": "fn",
           "name": "rejects_long_message",
-          "line": 428,
+          "line": 587,
           "called": [
             "verify"
           ]
@@ -67784,7 +67870,7 @@
         {
           "kind": "fn",
           "name": "rejects_short_signature",
-          "line": 436,
+          "line": 595,
           "called": [
             "verify"
           ]
@@ -67792,7 +67878,7 @@
         {
           "kind": "fn",
           "name": "rejects_65byte_signature",
-          "line": 446,
+          "line": 605,
           "called": [
             "verify"
           ]
@@ -67800,7 +67886,7 @@
         {
           "kind": "fn",
           "name": "rejects_empty_inputs",
-          "line": 454,
+          "line": 613,
           "called": [
             "verify"
           ]
@@ -67808,7 +67894,7 @@
         {
           "kind": "fn",
           "name": "rejects_uncompressed_prefix_at_compressed_length",
-          "line": 463,
+          "line": 622,
           "called": [
             "verify"
           ]
@@ -67816,7 +67902,7 @@
         {
           "kind": "fn",
           "name": "rejects_hybrid_even_prefix",
-          "line": 470,
+          "line": 629,
           "called": [
             "verify"
           ]
@@ -67824,7 +67910,7 @@
         {
           "kind": "fn",
           "name": "rejects_hybrid_odd_prefix",
-          "line": 477,
+          "line": 636,
           "called": [
             "verify"
           ]
@@ -67832,7 +67918,7 @@
         {
           "kind": "fn",
           "name": "rejects_zero_r",
-          "line": 484,
+          "line": 643,
           "called": [
             "make_valid_pk",
             "verify"
@@ -67841,7 +67927,7 @@
         {
           "kind": "fn",
           "name": "rejects_zero_s",
-          "line": 494,
+          "line": 653,
           "called": [
             "make_valid_pk",
             "verify"
@@ -67850,7 +67936,7 @@
         {
           "kind": "fn",
           "name": "rejects_r_equals_order",
-          "line": 504,
+          "line": 663,
           "called": [
             "make_valid_pk",
             "verify"
@@ -67859,7 +67945,7 @@
         {
           "kind": "fn",
           "name": "rejects_s_equals_order",
-          "line": 520,
+          "line": 679,
           "called": [
             "make_valid_pk",
             "verify"
@@ -67868,7 +67954,7 @@
         {
           "kind": "fn",
           "name": "rejects_pubkey_with_zero_x",
-          "line": 541,
+          "line": 700,
           "called": [
             "verify"
           ]
@@ -67876,7 +67962,7 @@
         {
           "kind": "fn",
           "name": "rejects_arbitrary_x_with_random_signature",
-          "line": 552,
+          "line": 711,
           "called": [
             "verify"
           ]
@@ -67884,7 +67970,7 @@
         {
           "kind": "fn",
           "name": "rejects_zero_prefix",
-          "line": 559,
+          "line": 718,
           "called": [
             "verify"
           ]
@@ -67892,7 +67978,7 @@
         {
           "kind": "fn",
           "name": "rejects_prefix_one",
-          "line": 566,
+          "line": 725,
           "called": [
             "verify"
           ]
@@ -67900,7 +67986,7 @@
         {
           "kind": "fn",
           "name": "rejects_prefix_five",
-          "line": 574,
+          "line": 733,
           "called": [
             "verify"
           ]
@@ -67908,7 +67994,7 @@
         {
           "kind": "fn",
           "name": "rejects_prefix_max",
-          "line": 581,
+          "line": 740,
           "called": [
             "verify"
           ]
@@ -67916,7 +68002,7 @@
         {
           "kind": "fn",
           "name": "rejects_every_invalid_prefix_exhaustively",
-          "line": 595,
+          "line": 754,
           "called": [
             "SEC1_TAG_EVEN",
             "SEC1_TAG_ODD",
@@ -67926,19 +68012,19 @@
         {
           "kind": "fn",
           "name": "make_valid_pk",
-          "line": 613,
+          "line": 772,
           "called": []
         },
         {
           "kind": "const",
           "name": "GX",
-          "line": 616,
+          "line": 775,
           "called": []
         },
         {
           "kind": "fn",
           "name": "raw_null_pointer_inputs_rejected",
-          "line": 635,
+          "line": 794,
           "called": [
             "make_valid_pk",
             "r"
@@ -67947,10 +68033,234 @@
         {
           "kind": "fn",
           "name": "raw_oversize_len_rejected",
-          "line": 656,
+          "line": 815,
           "called": [
             "make_valid_pk",
             "r"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "wire_tests",
+          "line": 834,
+          "called": [
+            "ETH_V_EVEN_Y",
+            "ETH_V_ODD_Y",
+            "WIRE_SIGNATURE_LEN",
+            "verify_signed_message"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "test_key",
+          "line": 846,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "wire_sign",
+          "line": 853,
+          "called": [
+            "WIRE_SIGNATURE_LEN",
+            "finalize",
+            "key",
+            "to_byte",
+            "to_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "test_pk",
+          "line": 877,
+          "called": [
+            "as_bytes",
+            "test_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_round_trip_verifies",
+          "line": 886,
+          "called": [
+            "b",
+            "test_key",
+            "test_pk",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_sign_emits_eth_v",
+          "line": 894,
+          "called": [
+            "ETH_V_EVEN_Y",
+            "ETH_V_ODD_Y",
+            "b",
+            "test_key",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_rejects_tampered_message",
+          "line": 901,
+          "called": [
+            "b",
+            "test_key",
+            "test_pk",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_rejects_wrong_key",
+          "line": 913,
+          "called": [
+            "as_bytes",
+            "b",
+            "test_key",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_rejects_flipped_v",
+          "line": 926,
+          "called": [
+            "ETH_V_EVEN_Y",
+            "ETH_V_ODD_Y",
+            "b",
+            "test_key",
+            "test_pk",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_rejects_bad_v_values",
+          "line": 940,
+          "called": [
+            "b",
+            "test_key",
+            "test_pk",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_rejects_64_byte_signature",
+          "line": 956,
+          "called": [
+            "b",
+            "test_key",
+            "test_pk",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_rejects_high_s",
+          "line": 966,
+          "called": [
+            "ETH_V_EVEN_Y",
+            "ETH_V_ODD_Y",
+            "b",
+            "test_key",
+            "test_pk",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_accepts_empty_message_round_trip",
+          "line": 1008,
+          "called": [
+            "b",
+            "test_key",
+            "test_pk",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_hashes_32_byte_messages_too",
+          "line": 1020,
+          "called": [
+            "WIRE_SIGNATURE_LEN",
+            "test_key",
+            "test_pk",
+            "to_byte",
+            "to_bytes",
+            "verify_signed_message",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "wire_raw_mirror_agrees",
+          "line": 1049,
+          "called": [
+            "b",
+            "len",
+            "ok",
+            "test_key",
+            "test_pk",
+            "wire_sign"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "lean_self_test_vector",
+          "line": 1079,
+          "called": [
+            "WIRE_SIGNATURE_LEN",
+            "verify_signed_message"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "SK",
+          "line": 1092,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "MSG",
+          "line": 1097,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "wire_sign",
+          "line": 1103,
+          "called": [
+            "SK",
+            "WIRE_SIGNATURE_LEN",
+            "finalize",
+            "key",
+            "to_byte",
+            "to_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_vector_bytes_pinned",
+          "line": 1126,
+          "called": [
+            "MSG",
+            "SK",
+            "as_bytes",
+            "key",
+            "verify_signed_message",
+            "wire_sign"
           ]
         }
       ]

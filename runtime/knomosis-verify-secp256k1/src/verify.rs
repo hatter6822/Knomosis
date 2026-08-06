@@ -72,8 +72,9 @@
 //! The reference: SEC1 v2.0 §4.1.4 "Verifying Operation" + EIP-2
 //! ("Homestead").
 
-use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
+use k256::ecdsa::{signature::hazmat::PrehashVerifier, RecoveryId, Signature, VerifyingKey};
 use k256::elliptic_curve::scalar::IsHigh;
+use sha3::{Digest, Keccak256};
 use subtle::ConstantTimeEq;
 
 /// Length of a SEC1-compressed secp256k1 public key in bytes
@@ -86,6 +87,20 @@ pub const MESSAGE_LEN: usize = 32;
 
 /// Length of a raw `(r, s)` ECDSA signature in bytes (32 + 32).
 pub const SIGNATURE_LEN: usize = 64;
+
+/// Length of the Knomosis WIRE signature: Ethereum-style
+/// `(r ‖ s ‖ v)` = 32 + 32 + 1 bytes.  This is the width the L2
+/// `SignedAction.sig` field carries, the width the batch actions-root
+/// leaf binds (Workstream SB ruling R7), and the width the L1
+/// fault-proof game's `terminateOnSingleStep` demands — one
+/// signature format across every stack.
+pub const WIRE_SIGNATURE_LEN: usize = 65;
+
+/// The Ethereum `v` byte for an even-`y` recovery (recovery id 0).
+pub const ETH_V_EVEN_Y: u8 = 27;
+
+/// The Ethereum `v` byte for an odd-`y` recovery (recovery id 1).
+pub const ETH_V_ODD_Y: u8 = 28;
 
 /// Leading byte of a SEC1-compressed pubkey with even y-coordinate.
 pub const SEC1_TAG_EVEN: u8 = 0x02;
@@ -182,6 +197,97 @@ pub fn verify(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
     verifying_key.verify_prehash(msg, &signature).is_ok()
 }
 
+/// Verify a Knomosis WIRE signature against the raw signing-input
+/// bytes and a compressed public key — the v2 Lean-facing contract
+/// wired to `Authority.Crypto.Verify`.
+///
+/// | Argument | Length     | Format                                        |
+/// |----------|------------|-----------------------------------------------|
+/// | `pk`     | 33 bytes   | SEC1-compressed pubkey (`0x02`/`0x03` prefix) |
+/// | `msg`    | any length | RAW signing-input bytes (hashed internally)   |
+/// | `sig`    | 65 bytes   | Ethereum `(r ‖ s ‖ v)`, `v ∈ {27, 28}`        |
+///
+/// Semantics — a byte-mirror of L1 `ecrecover` adjudication:
+///
+///   1. `digest = keccak256(msg)` — the adaptor hashes the raw
+///      signing-input bytes itself, so the Lean admission conjunct
+///      `Verify pk (signingInput …) sig` composes with the
+///      production signer (`keccak256` then ECDSA) with no
+///      convention seam between them.  No length-based branching:
+///      a 32-byte `msg` is hashed like any other, so there is no
+///      raw-vs-prehash ambiguity an attacker could steer.
+///   2. `v` must be `27` or `28` (recovery id 0 / 1).  `v` is
+///      VALIDATED by recovery rather than stripped: L1 settlement
+///      runs `ecrecover(digest, v, r, s)`, so a signature whose
+///      `(r, s)` verifies but whose `v` names the wrong candidate
+///      point must be rejected HERE too — otherwise the L2 would
+///      admit an action the L1 fault-proof game refuses to defend.
+///   3. `(r, s)` must parse with `1 ≤ r, s < n` and be low-s
+///      (EIP-2 / BIP-62), same as the strict core.
+///   4. Accept iff the recovered verifying key's SEC1-compressed
+///      bytes equal `pk` exactly (33-byte constant-time compare —
+///      strictly stronger than L1's 20-byte address compare, so
+///      off-chain admission never accepts what L1 would reject).
+///
+/// Returns `false` for every other case.  Never panics.
+#[must_use]
+pub fn verify_signed_message(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
+    if pk.len() != PUBKEY_LEN {
+        return false;
+    }
+    if sig.len() != WIRE_SIGNATURE_LEN {
+        return false;
+    }
+
+    // SEC1 prefix discipline, identical to the strict core.
+    let prefix = pk[0];
+    let is_even: u8 = prefix.ct_eq(&SEC1_TAG_EVEN).unwrap_u8();
+    let is_odd: u8 = prefix.ct_eq(&SEC1_TAG_ODD).unwrap_u8();
+    if (is_even | is_odd) == 0 {
+        return false;
+    }
+
+    // Ethereum v byte → recovery id.  Only the two point-parity
+    // values are on the wire; EIP-155 chain-folded v values and
+    // the x-reduced ids 2/3 are refused.
+    let v = sig[WIRE_SIGNATURE_LEN - 1];
+    let recovery_byte = match v {
+        ETH_V_EVEN_Y => 0u8,
+        ETH_V_ODD_Y => 1u8,
+        _ => return false,
+    };
+    let Some(recovery_id) = RecoveryId::from_byte(recovery_byte) else {
+        return false;
+    };
+
+    // Parse `(r, s)`; rejects zero / out-of-range components.
+    let Ok(signature) = Signature::from_slice(&sig[..SIGNATURE_LEN]) else {
+        return false;
+    };
+
+    // Low-s canonicalisation (EIP-2 / BIP-62) — same gate and same
+    // rationale as the strict core.
+    if signature.s().is_high().unwrap_u8() != 0 {
+        return false;
+    }
+
+    // The digest the signer committed to: keccak256 of the raw
+    // signing-input bytes.
+    let mut hasher = Keccak256::new();
+    hasher.update(msg);
+    let digest = hasher.finalize();
+
+    // Recovery-based verification: recover the unique candidate key
+    // named by `(digest, r, s, v)` and require it to BE `pk`.  This
+    // is what `ecrecover` computes on L1 (modulo L1's further
+    // truncation of the key to an address).
+    let Ok(recovered) = VerifyingKey::recover_from_prehash(&digest, &signature, recovery_id) else {
+        return false;
+    };
+    let recovered_sec1 = recovered.to_encoded_point(true);
+    recovered_sec1.as_bytes().ct_eq(pk).unwrap_u8() == 1
+}
+
 /// C ABI surface for the verification core.  Exposed as
 /// `knomosis_verify_ecdsa_raw` so the Lean-side shim
 /// (`c/lean_shim.c`) can call into it from a `lean_object *`
@@ -253,6 +359,45 @@ pub unsafe extern "C" fn knomosis_verify_ecdsa_raw(
     u8::from(verify(pk, msg, sig))
 }
 
+/// C ABI surface for the WIRE verification path
+/// ([`verify_signed_message`]) — the raw-pointer counterpart of the
+/// Lean entry point `knomosis_verify_ecdsa`, exposed separately so
+/// integration tests can drive the exact production semantics
+/// without a Lean runtime.
+///
+/// # Safety
+///
+/// Identical contract to [`knomosis_verify_ecdsa_raw`]: each
+/// `(ptr, len)` pair must be a readable region for `len > 0`; the
+/// in-process-detectable violations (null with non-zero length,
+/// length above `isize::MAX`) are rejected fail-closed.
+#[no_mangle]
+#[allow(unsafe_code)]
+pub unsafe extern "C" fn knomosis_verify_signed_message_raw(
+    pk_ptr: *const u8,
+    pk_len: usize,
+    msg_ptr: *const u8,
+    msg_len: usize,
+    sig_ptr: *const u8,
+    sig_len: usize,
+) -> u8 {
+    const MAX_SLICE_LEN: usize = usize::MAX >> 1;
+    if (pk_len > 0 && pk_ptr.is_null())
+        || (msg_len > 0 && msg_ptr.is_null())
+        || (sig_len > 0 && sig_ptr.is_null())
+        || pk_len > MAX_SLICE_LEN
+        || msg_len > MAX_SLICE_LEN
+        || sig_len > MAX_SLICE_LEN
+    {
+        return 0;
+    }
+    let pk = make_slice(pk_ptr, pk_len);
+    let msg = make_slice(msg_ptr, msg_len);
+    let sig = make_slice(sig_ptr, sig_len);
+
+    u8::from(verify_signed_message(pk, msg, sig))
+}
+
 /// Build a byte slice from a `(ptr, len)` pair, substituting a
 /// dangling-but-valid pointer when `len == 0` so the resulting
 /// slice is always sound regardless of the caller's pointer.
@@ -321,10 +466,23 @@ extern "C" {
 ///
 /// The three arguments are Lean `ByteArray`s passed as owned
 /// `lean_object *`.  This function reads their byte payloads,
-/// delegates verification to [`verify`], decrements the
-/// reference counts (per Lean's `@[extern]` owned-transfer
-/// ABI), and returns the result as a `u8` (Lean's C
-/// representation for `Bool`).
+/// delegates verification to [`verify_signed_message`] — the WIRE
+/// semantics: `msg` is the RAW signing-input bytes (keccak256-hashed
+/// internally) and `sig` is the 65-byte Ethereum `(r ‖ s ‖ v)` form,
+/// verified by recovery so `v` agrees with what L1 `ecrecover`
+/// adjudicates — decrements the reference counts (per Lean's
+/// `@[extern]` owned-transfer ABI), and returns the result as a
+/// `u8` (Lean's C representation for `Bool`).
+///
+/// This is exactly the shape of the Lean admission conjunct
+/// `Verify pk (signingInput action signer nonce deploymentId) st.sig`:
+/// the raw pre-image bytes and the wire signature, with the
+/// deployment-supplied scheme (hash + curve + wire format) living
+/// entirely in this adaptor.  The v1 entry point delegated to the
+/// strict prehash core instead, which demanded a 32-byte pre-hashed
+/// `msg` and a 64-byte `(r ‖ s)` — lengths the admission conjunct
+/// never produces — so a production-linked deployment rejected every
+/// signed action.  v2 closes that seam.
 ///
 /// # Safety
 ///
@@ -353,7 +511,8 @@ pub unsafe extern "C" fn knomosis_verify_ecdsa(
     let sig_len = knomosis_lean_sarray_size(sig);
     let sig_ptr = knomosis_lean_sarray_cptr(sig);
 
-    let result = knomosis_verify_ecdsa_raw(pk_ptr, pk_len, msg_ptr, msg_len, sig_ptr, sig_len);
+    let result =
+        knomosis_verify_signed_message_raw(pk_ptr, pk_len, msg_ptr, msg_len, sig_ptr, sig_len);
 
     // Release the three owned references AFTER reading the byte
     // data: `lean_dec` may deallocate the buffer, invalidating
@@ -669,5 +828,323 @@ mod tests {
             )
         };
         assert_eq!(r, 0, "oversize length must be rejected fail-closed");
+    }
+}
+
+#[cfg(test)]
+mod wire_tests {
+    //! Tests for [`verify_signed_message`] — the v2 WIRE semantics
+    //! wired to Lean's `Verify` opaque: raw message bytes hashed
+    //! internally with keccak256, 65-byte `(r ‖ s ‖ v)` signatures
+    //! validated by RECOVERY (so `v` agrees with L1 `ecrecover`).
+
+    use super::{verify_signed_message, ETH_V_EVEN_Y, ETH_V_ODD_Y, WIRE_SIGNATURE_LEN};
+    use k256::ecdsa::SigningKey;
+    use sha3::{Digest, Keccak256};
+
+    /// Deterministic test key (scalar `0x01…01`, matching the
+    /// `knomosis verify-check` self-test vector's key).
+    fn test_key() -> SigningKey {
+        SigningKey::from_slice(&[0x01u8; 32]).expect("scalar in range")
+    }
+
+    /// Sign `msg` per the production wire convention:
+    /// `keccak256(msg)` pre-hash, low-s normalisation, recovery-id
+    /// parity flip on normalisation, `v = 27 + recid`.
+    fn wire_sign(key: &SigningKey, msg: &[u8]) -> [u8; WIRE_SIGNATURE_LEN] {
+        let mut hasher = Keccak256::new();
+        hasher.update(msg);
+        let digest = hasher.finalize();
+        let (sig, recid) = key
+            .sign_prehash_recoverable(&digest)
+            .expect("signing succeeds");
+        // Belt-and-suspenders low-s normalisation with the matching
+        // recovery-id parity flip (the same discipline the
+        // production signer in `knomosis-l1-ingest` follows).
+        let (sig, recid) = match sig.normalize_s() {
+            Some(normalised) => (
+                normalised,
+                k256::ecdsa::RecoveryId::new(!recid.is_y_odd(), recid.is_x_reduced()),
+            ),
+            None => (sig, recid),
+        };
+        let mut out = [0u8; WIRE_SIGNATURE_LEN];
+        out[..64].copy_from_slice(&sig.to_bytes());
+        out[64] = 27 + recid.to_byte();
+        out
+    }
+
+    /// The compressed public key of [`test_key`].
+    fn test_pk() -> [u8; 33] {
+        let point = test_key().verifying_key().to_encoded_point(true);
+        let mut pk = [0u8; 33];
+        pk.copy_from_slice(point.as_bytes());
+        pk
+    }
+
+    /// Round trip: a wire-signed message verifies.
+    #[test]
+    fn wire_round_trip_verifies() {
+        let msg = b"knomosis wire-signature round trip";
+        let sig = wire_sign(&test_key(), msg);
+        assert!(verify_signed_message(&test_pk(), msg, &sig));
+    }
+
+    /// The v byte is one of the two Ethereum parity values.
+    #[test]
+    fn wire_sign_emits_eth_v() {
+        let sig = wire_sign(&test_key(), b"v-byte discipline");
+        assert!(sig[64] == ETH_V_EVEN_Y || sig[64] == ETH_V_ODD_Y);
+    }
+
+    /// A tampered message does not verify (the digest moved).
+    #[test]
+    fn wire_rejects_tampered_message() {
+        let sig = wire_sign(&test_key(), b"original message");
+        assert!(!verify_signed_message(
+            &test_pk(),
+            b"tampered message",
+            &sig
+        ));
+    }
+
+    /// The wrong public key does not verify (recovery lands on the
+    /// signer's key, which differs from the presented one).
+    #[test]
+    fn wire_rejects_wrong_key() {
+        let msg = b"wrong-key rejection";
+        let sig = wire_sign(&test_key(), msg);
+        let other = SigningKey::from_slice(&[0x02u8; 32]).expect("scalar in range");
+        let point = other.verifying_key().to_encoded_point(true);
+        assert!(!verify_signed_message(point.as_bytes(), msg, &sig));
+    }
+
+    /// A flipped v byte (27 ↔ 28) is rejected: the recovered
+    /// candidate point differs from the presented key.  This is the
+    /// cross-stack coherence case — L1 `ecrecover` would recover a
+    /// different address, so the off-chain adaptor must refuse too.
+    #[test]
+    fn wire_rejects_flipped_v() {
+        let msg = b"flipped-v rejection";
+        let mut sig = wire_sign(&test_key(), msg);
+        sig[64] = if sig[64] == ETH_V_EVEN_Y {
+            ETH_V_ODD_Y
+        } else {
+            ETH_V_EVEN_Y
+        };
+        assert!(!verify_signed_message(&test_pk(), msg, &sig));
+    }
+
+    /// v values outside {27, 28} are rejected up front (EIP-155
+    /// chain-folded values and x-reduced recovery ids included).
+    #[test]
+    fn wire_rejects_bad_v_values() {
+        let msg = b"bad-v rejection";
+        let mut sig = wire_sign(&test_key(), msg);
+        for v in [0u8, 1, 2, 26, 29, 35, 37, 255] {
+            sig[64] = v;
+            assert!(
+                !verify_signed_message(&test_pk(), msg, &sig),
+                "v = {v} must be rejected"
+            );
+        }
+    }
+
+    /// A 64-byte `(r ‖ s)` signature (the strict-core width) is
+    /// rejected on the wire path: the wire format is exactly 65
+    /// bytes.
+    #[test]
+    fn wire_rejects_64_byte_signature() {
+        let msg = b"64-byte rejection";
+        let sig = wire_sign(&test_key(), msg);
+        assert!(!verify_signed_message(&test_pk(), msg, &sig[..64]));
+    }
+
+    /// A high-s mate of a valid signature is rejected (EIP-2 /
+    /// BIP-62), keeping the wire path malleability-free.
+    #[test]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // BE byte arithmetic
+    fn wire_rejects_high_s() {
+        let msg = b"high-s rejection";
+        let sig = wire_sign(&test_key(), msg);
+        // Construct the high-s mate: s' = n - s (and the parity of
+        // the recovery flips, which we ignore — the low-s gate
+        // fires before recovery).
+        let n_be: [u8; 32] = [
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            0xFF, 0xFE, 0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E, 0x8C,
+            0xD0, 0x36, 0x41, 0x41,
+        ];
+        let mut s = [0u8; 32];
+        s.copy_from_slice(&sig[32..64]);
+        // Big-endian subtraction: n - s.
+        let mut high_s = [0u8; 32];
+        let mut borrow = 0i16;
+        for i in (0..32).rev() {
+            let d = i16::from(n_be[i]) - i16::from(s[i]) - borrow;
+            if d < 0 {
+                high_s[i] = (d + 256) as u8;
+                borrow = 1;
+            } else {
+                high_s[i] = d as u8;
+                borrow = 0;
+            }
+        }
+        let mut tampered = sig;
+        tampered[32..64].copy_from_slice(&high_s);
+        assert!(!verify_signed_message(&test_pk(), msg, &tampered));
+        // Flipping v on the high-s mate must not rescue it either.
+        tampered[64] = if tampered[64] == ETH_V_EVEN_Y {
+            ETH_V_ODD_Y
+        } else {
+            ETH_V_EVEN_Y
+        };
+        assert!(!verify_signed_message(&test_pk(), msg, &tampered));
+    }
+
+    /// An empty message is legal on the wire path (the adaptor
+    /// hashes whatever it is given); the signature must still bind
+    /// it.
+    #[test]
+    fn wire_accepts_empty_message_round_trip() {
+        let sig = wire_sign(&test_key(), b"");
+        assert!(verify_signed_message(&test_pk(), b"", &sig));
+        assert!(!verify_signed_message(&test_pk(), b"x", &sig));
+    }
+
+    /// A 32-byte message is HASHED like any other length — there is
+    /// no raw-vs-prehash branching.  A signature over the digest
+    /// directly (the strict-core convention) must NOT verify on the
+    /// wire path when the 32-byte digest itself is presented as the
+    /// message.
+    #[test]
+    fn wire_hashes_32_byte_messages_too() {
+        let msg = [0xAB_u8; 32];
+        // Sign the RAW 32 bytes per the wire convention (digest =
+        // keccak256(msg)).
+        let sig = wire_sign(&test_key(), &msg);
+        assert!(verify_signed_message(&test_pk(), &msg, &sig));
+        // Now sign msg AS a prehash (the strict-core convention) and
+        // present the same 32 bytes on the wire path: the internal
+        // keccak256 moves the digest, so it must not verify.
+        let (core_sig, recid) = test_key()
+            .sign_prehash_recoverable(&msg)
+            .expect("signing succeeds");
+        let (core_sig, recid) = match core_sig.normalize_s() {
+            Some(normalised) => (
+                normalised,
+                k256::ecdsa::RecoveryId::new(!recid.is_y_odd(), recid.is_x_reduced()),
+            ),
+            None => (core_sig, recid),
+        };
+        let mut wire = [0u8; WIRE_SIGNATURE_LEN];
+        wire[..64].copy_from_slice(&core_sig.to_bytes());
+        wire[64] = 27 + recid.to_byte();
+        assert!(!verify_signed_message(&test_pk(), &msg, &wire));
+    }
+
+    /// The raw C-ABI mirror agrees with the safe API on a valid
+    /// signature and rejects fail-closed on a null pointer.
+    #[test]
+    #[allow(unsafe_code)] // exercises the raw C-ABI guard itself
+    fn wire_raw_mirror_agrees() {
+        let msg = b"raw-mirror agreement";
+        let sig = wire_sign(&test_key(), msg);
+        let pk = test_pk();
+        let ok = unsafe {
+            super::knomosis_verify_signed_message_raw(
+                pk.as_ptr(),
+                pk.len(),
+                msg.as_ptr(),
+                msg.len(),
+                sig.as_ptr(),
+                sig.len(),
+            )
+        };
+        assert_eq!(ok, 1);
+        let null_pk = unsafe {
+            super::knomosis_verify_signed_message_raw(
+                std::ptr::null(),
+                pk.len(),
+                msg.as_ptr(),
+                msg.len(),
+                sig.as_ptr(),
+                sig.len(),
+            )
+        };
+        assert_eq!(null_pk, 0, "null pk must be rejected fail-closed");
+    }
+}
+
+#[cfg(test)]
+mod lean_self_test_vector {
+    //! Lockstep pin for the `knomosis verify-check` functional
+    //! self-test vector (`Main.lean`'s `verifySelfTest*` constants).
+    //! The F-2 deploy gate calls `Verify` — this adaptor's wire
+    //! path — on exactly these bytes; if the signer convention or
+    //! the vector drifts on either side, this test breaks the
+    //! build before the gate can go green-on-nothing.
+
+    use super::{verify_signed_message, WIRE_SIGNATURE_LEN};
+    use k256::ecdsa::SigningKey;
+    use sha3::{Digest, Keccak256};
+
+    /// Secret scalar `0x01…01` — the self-test vector's key.
+    const SK: [u8; 32] = [0x01; 32];
+
+    /// The raw self-test message: 31 zero bytes then `0x01`
+    /// (`Main.lean`'s `verifySelfTestMsg`).  Hashed internally by
+    /// the wire path.
+    const MSG: [u8; 32] = {
+        let mut m = [0u8; 32];
+        m[31] = 1;
+        m
+    };
+
+    fn wire_sign(msg: &[u8]) -> [u8; WIRE_SIGNATURE_LEN] {
+        let key = SigningKey::from_slice(&SK).expect("scalar in range");
+        let mut hasher = Keccak256::new();
+        hasher.update(msg);
+        let digest = hasher.finalize();
+        let (sig, recid) = key.sign_prehash_recoverable(&digest).expect("signs");
+        let (sig, recid) = match sig.normalize_s() {
+            Some(n) => (
+                n,
+                k256::ecdsa::RecoveryId::new(!recid.is_y_odd(), recid.is_x_reduced()),
+            ),
+            None => (sig, recid),
+        };
+        let mut out = [0u8; WIRE_SIGNATURE_LEN];
+        out[..64].copy_from_slice(&sig.to_bytes());
+        out[64] = 27 + recid.to_byte();
+        out
+    }
+
+    /// The exact bytes `Main.lean` hardcodes (`verifySelfTestPk` /
+    /// `verifySelfTestSig`), re-derived from the scalar and the
+    /// message.  A drift on either side breaks this test.
+    #[test]
+    fn lean_vector_bytes_pinned() {
+        let key = SigningKey::from_slice(&SK).expect("scalar in range");
+        let pk = key.verifying_key().to_encoded_point(true);
+        assert_eq!(
+            hex::encode(pk.as_bytes()),
+            "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+        );
+        let sig = wire_sign(&MSG);
+        assert_eq!(
+            hex::encode(sig),
+            "3972b889be2c40555046bd8c23e5454c04a8b8cbea3fa5b6e5b3c282375c6ed7\
+             25dc29de12bc83dfdc120b208450f1872668ba69c244e9ec9a6ae613276a98ee\
+             1c"
+        );
+        // The gate's positive path: the vector verifies on the wire
+        // semantics.
+        assert!(verify_signed_message(pk.as_bytes(), &MSG, &sig));
+        // The gate's negative control: the tampered message
+        // (`Main.lean`'s `verifySelfTestMsgTampered`) is refused.
+        let mut tampered = MSG;
+        tampered[31] = 2;
+        assert!(!verify_signed_message(pk.as_bytes(), &tampered, &sig));
     }
 }

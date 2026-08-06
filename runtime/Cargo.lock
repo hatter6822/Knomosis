@@ -473,6 +473,7 @@ dependencies = [
  "knomosis-cli-common",
  "knomosis-cross-stack",
  "knomosis-host",
+ "knomosis-verify-secp256k1",
  "proptest",
  "serde",
  "serde_json",
@@ -504,6 +505,7 @@ dependencies = [
  "k256",
  "knomosis-cross-stack",
  "proptest",
+ "sha3",
  "subtle",
 ]
 

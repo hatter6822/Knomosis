@@ -229,18 +229,25 @@ Encoded as the concatenation of:
   3. **nonce** (CBE uint, 9 bytes): the nonce as
      `0x00 :: <8 LE bytes>`.
   4. **sig** (CBE bytestring): the deployment-specific signature
-     bytes.  For Ed25519, this is 64 bytes (length prefix + 64
-     bytes of payload).
+     bytes.  For the production ECDSA secp256k1 scheme this is the
+     65-byte Ethereum WIRE signature `(r ‖ s ‖ v)` — low-s `(r, s)`
+     plus the recovery byte `v ∈ {27, 28}` (§7.1).  The CBE layer
+     itself is length-agnostic (a deployment supplying a different
+     `Verify` adaptor may carry a different width), but the batch
+     actions-root leaf (§15) and the L1 fault-proof game bind the
+     65-byte width, so an EVM-adjudicated deployment uses exactly
+     this form.
 
 ## 5. The `Action` CBE Encoding
 
-The `Action` type has 25 constructors, encoded by their inductive
+The `Action` type has 26 constructors, encoded by their inductive
 index (frozen — no phase will renumber existing constructors).
 Phase 5 ships indices 0..7; Phase 6 appends 8..11; Workstream B
 appends 12; Workstream C appends 13..14; Workstream LP (actor-
 scoped policies) appends 15..16; Workstream H (fault-proof
 migration) appends 17..18; Workstream GP (unified gas pool /
-budgets / AMM) appends 19..24.
+budgets / AMM) appends 19..24; Workstream SB (batched submission +
+the user-facing L2 AMM) appends 25.
 
 ```
 Action.transfer            := 0
@@ -747,10 +754,42 @@ bytes; its CBE-bytestring form is `0x02 :: <0x1B 0x00 0x00 0x00
 is the genesis state hash (32 bytes after Audit-3.1's fixed-width
 hash unification).
 
-Production deployments hash the resulting bytes with BLAKE3-256
-(or whatever hash the `Verify` adaptor expects) and pass the
-digest to `Verify`.  The Phase-5 stub passes the bytes themselves
-(since `Verify` is opaque at the Lean level).
+The admission gate passes the RAW sign-input bytes to `Verify`
+(the conjunct is literally `Verify pk (signingInput …) st.sig`);
+the deployment-supplied adaptor owns the digest recipe.  Under the
+production adaptor that recipe is §7.1's.
+
+### 7.1 The production signature convention (ECDSA secp256k1, v2)
+
+One convention across every stack — the L2 signer, the admission
+gate, the batch actions-root leaf and L1 adjudication:
+
+```
+digest := keccak256(signInput(action, signer, nonce, deploymentId))
+sig    := (r ‖ s ‖ v)          -- 65 bytes: 32 + 32 + 1
+```
+
+  * `(r, s)` is low-s (EIP-2 / BIP-62); the signer normalises and
+    the verifier rejects high-s.
+  * `v ∈ {27, 28}` is the Ethereum recovery byte (`27 + recovery
+    id`).  It is VALIDATED, not decorative: the off-chain adaptor
+    (`knomosis-verify-secp256k1`'s `verify_signed_message`, the
+    production semantics of the Lean `Verify` opaque) verifies by
+    RECOVERY — `recover(digest, r, s, v)` must equal the presented
+    33-byte SEC1-compressed key — so a signature whose `v` names
+    the wrong candidate point is refused off-chain exactly as L1
+    `ecrecover` would refuse it at the fault-proof game's terminal
+    step.  A signer whose low-s normalisation negates `s` flips the
+    recovery parity in lockstep (`knomosis-l1-ingest`'s
+    `BridgeActorKey::sign_prehash`).
+  * The adaptor hashes the raw sign-input bytes ITSELF (no
+    length-based raw-vs-prehash branching), so the Lean conjunct
+    composes with the signer with no convention seam.  (The v1
+    adaptor demanded a 32-byte pre-hashed message and a 64-byte
+    `(r ‖ s)` — shapes the admission conjunct never produces — so
+    a production-linked deployment rejected every signed action;
+    the v2 identifier `ecdsa-secp256k1-low-s/EVM-compatible/v2`
+    marks the corrected contract.)
 
 ## 8. The Runtime CLI (`knomosis`) ABI
 

@@ -107,6 +107,12 @@ serde_json = { workspace = true }
 # tests use to read `l1_ingest.cxsf` and assert byte-equivalence
 # against the Lean reference.
 knomosis-cross-stack = { workspace = true }
+# `knomosis-verify-secp256k1` closes the signer/verifier loop in
+# tests: a `BridgeActorKey` wire signature must verify under the
+# production adaptor's `verify_signed_message` (the semantics of the
+# Lean `Verify` opaque), pinning the shared digest recipe and the
+# 65-byte `(r ‖ s ‖ v)` wire width across the two crates.
+knomosis-verify-secp256k1 = { workspace = true }
 # `hex` is the dev-only fixture / log encoding helper used by the
 # tests and the fixture generator.
 hex = { workspace = true }

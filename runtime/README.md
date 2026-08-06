@@ -34,8 +34,11 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     assertions against the Lean reference.
   * **`knomosis-verify-secp256k1`** — RH-A.1 ECDSA secp256k1
     verifier.  Production cdylib exposing the `knomosis_verify_ecdsa`
-    C ABI symbol.  Strict input validation, EIP-2 / BIP-62 low-s
-    canonicalisation, k256 v0.13 backend.
+    C ABI symbol — the v2 WIRE semantics: raw signing-input bytes
+    keccak256-hashed in-adaptor, 65-byte `(r ‖ s ‖ v)` signatures
+    validated by recovery (mirroring L1 `ecrecover`).  Strict input
+    validation, EIP-2 / BIP-62 low-s canonicalisation, k256 v0.13
+    backend.
   * **`knomosis-hash-keccak256`** — RH-A.2 Keccak-256 hash adaptor.
     Production cdylib exposing the `knomosis_hash_bytes` /
     `knomosis_hash_stream` / `knomosis_hash_identifier` C ABI symbols.

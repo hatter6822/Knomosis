@@ -40,16 +40,16 @@
 //!          if the receipt is missing AND the cached nonce has
 //!          been mined past (signalling a drop).
 //!
-//! ## Y-parity recovery
+//! ## Y-parity
 //!
-//! For EIP-1559, `(y_parity, r, s)` is the signature.  Because
-//! [`BridgeActorKey`] does not expose private bytes (zeroize
-//! discipline), we cannot use `k256`'s
-//! `SigningKey::sign_prehash_recoverable` which would give us
-//! the recovery id for free.  Instead, we sign via the audited
-//! `sign_prehash` wrapper and recover `y_parity` by checking
-//! which of the two candidate recovery ids produces the known
-//! public key (two scalar multiplications; cheap).
+//! For EIP-1559, `(y_parity, r, s)` is the signature.  The audited
+//! `sign_prehash` wrapper emits the 65-byte wire signature
+//! `(r ‖ s ‖ v)` with `v = 27 + recovery id`, so the parity comes
+//! off the wire byte directly.  Before broadcasting we CROSS-CHECK
+//! it by recovery ([`recover_y_parity`]): the recovered candidate
+//! must equal `v − 27`, so a signer parity bug can never corrupt an
+//! L1 broadcast (two scalar multiplications; cheap, off-chain,
+//! per-submission).
 //!
 //! ## Re-submission on dropped txes
 //!
@@ -692,12 +692,11 @@ pub struct Eip1559TxFields {
 /// `raw_bytes = 0x02 || rlp([signed fields])` ready for
 /// `eth_sendRawTransaction`.
 ///
-/// `y_parity` is recovered by checking both candidate
-/// recovery ids against the known public key.  The
-/// [`BridgeActorKey`] does not expose private bytes, so we
-/// cannot use `k256`'s `sign_prehash_recoverable` (which would
-/// give us the recovery id for free); the brute-force
-/// two-candidate check is cheap (two scalar multiplications).
+/// `y_parity` is read from the wire signature's `v` byte
+/// (`v − 27`) and CROSS-CHECKED by recovery against the known
+/// public key before anything is broadcast — a parity
+/// inconsistency is surfaced as an error rather than an L1
+/// transaction that recovers to the wrong sender.
 ///
 /// This is the production signing path for the observer.
 ///
@@ -726,10 +725,27 @@ pub fn sign_eip1559_via_bridge_key(
     let mut hasher = Keccak256::new();
     hasher.update(&signing_input);
     let signing_hash: [u8; 32] = hasher.finalize().into();
-    // 2. Sign via the audited BridgeActorKey surface.
+    // 2. Sign via the audited BridgeActorKey surface — the 65-byte
+    //    wire signature `(r ‖ s ‖ v)`.
     let sig_bytes = key.sign_prehash(&signing_hash)?;
-    // 3. Recover y_parity by checking the two recovery candidates.
-    let y_parity_bit = recover_y_parity(&signing_hash, &sig_bytes, &key.public_key_compressed())?;
+    // 3. y_parity comes off the wire byte; cross-check it by
+    //    recovery so a parity inconsistency can never reach L1.
+    let v = sig_bytes[SIGNATURE_LEN - 1];
+    let y_parity_bit = match v {
+        27 | 28 => v - 27,
+        other => {
+            return Err(JsonRpcSubmitError::Malformed(format!(
+                "wire signature carries invalid v byte {other} (expected 27 or 28)"
+            )))
+        }
+    };
+    let recovered_parity =
+        recover_y_parity(&signing_hash, &sig_bytes, &key.public_key_compressed())?;
+    if recovered_parity != y_parity_bit {
+        return Err(JsonRpcSubmitError::Malformed(format!(
+            "wire v byte names parity {y_parity_bit} but recovery finds {recovered_parity}"
+        )));
+    }
     // 4. RLP-encode the full signed fields.
     let mut r_bytes = [0u8; 32];
     let mut s_bytes = [0u8; 32];
@@ -761,14 +777,16 @@ pub fn sign_eip1559_via_bridge_key(
 /// Recover the `y_parity` bit (`0` or `1`) for an ECDSA signature
 /// over `prehash` whose verifying key is `compressed_pubkey`.
 /// Iterates the two recovery candidates and selects the one whose
-/// recovered public key matches.
+/// recovered public key matches.  Consumes the `(r ‖ s)` prefix of
+/// the 65-byte wire signature; the trailing `v` byte is the claim
+/// this function is used to cross-check.
 fn recover_y_parity(
     prehash: &[u8; 32],
     sig_bytes: &[u8; SIGNATURE_LEN],
     compressed_pubkey: &[u8; 33],
 ) -> Result<u8, JsonRpcSubmitError> {
     use k256::ecdsa::{Signature as Sig, VerifyingKey};
-    let sig = Sig::from_slice(sig_bytes)
+    let sig = Sig::from_slice(&sig_bytes[..SIGNATURE_LEN - 1])
         .map_err(|e| JsonRpcSubmitError::Malformed(format!("invalid signature bytes: {e}")))?;
     for candidate in 0u8..2u8 {
         let rec_id = RecoveryId::from_byte(candidate).ok_or_else(|| {

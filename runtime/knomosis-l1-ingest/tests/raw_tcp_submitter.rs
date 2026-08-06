@@ -52,7 +52,7 @@ fn signed_action(signer: u64) -> SignedActionForSubmit {
             signer,
             nonce: 0,
         },
-        signature: [0x22; 64],
+        signature: [0x22; 65],
     }
 }
 

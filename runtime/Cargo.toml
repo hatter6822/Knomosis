@@ -233,6 +233,7 @@ tiny_http = { version = "0.12", default-features = false }
 # `workspace = true` shorthand).
 knomosis-cli-common = { path = "knomosis-cli-common" }
 knomosis-cross-stack = { path = "knomosis-cross-stack" }
+knomosis-verify-secp256k1 = { path = "knomosis-verify-secp256k1" }
 
 # CI / release profile.  `lto = "thin"` keeps release builds reasonably
 # fast while still hitting cross-crate optimisations.  `panic = "abort"`

@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "131d8fcb13839d9f99b0578b8aafd539d4a1f04c66400084fabfecd0cf781491"
+    "source_digest": "fb9c307f9130400ddee0c2bfc0f5ffb1d19992aea1ebc5b275fe67ba1d2d8aeb"
   },
   "summary": {
     "module_count": 348,
@@ -12437,19 +12437,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Bridge",
-          "line": 60,
+          "line": 69,
           "called": []
         },
         {
           "kind": "def",
           "name": "secp256k1Order",
-          "line": 90,
+          "line": 99,
           "called": []
         },
         {
           "kind": "def",
           "name": "secp256k1HalfOrder",
-          "line": 95,
+          "line": 104,
           "called": [
             "secp256k1Order"
           ]
@@ -12457,43 +12457,43 @@
         {
           "kind": "def",
           "name": "secp256k1OrderBytes",
-          "line": 101,
+          "line": 110,
           "called": []
         },
         {
           "kind": "def",
           "name": "ecdsaSignatureSize",
-          "line": 112,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "ecdsaPublicKeyCompressedSize",
-          "line": 118,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "ecdsaPublicKeyUncompressedSize",
           "line": 123,
           "called": []
         },
         {
           "kind": "def",
+          "name": "ecdsaPublicKeyCompressedSize",
+          "line": 129,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ecdsaPublicKeyUncompressedSize",
+          "line": 134,
+          "called": []
+        },
+        {
+          "kind": "def",
           "name": "verifyAdaptorIdentifier",
-          "line": 131,
+          "line": 142,
           "called": []
         },
         {
           "kind": "def",
           "name": "fallbackVerifyAdaptorIdentifier",
-          "line": 139,
+          "line": 150,
           "called": []
         },
         {
           "kind": "def",
           "name": "verifyImplementationIdentifierFallback",
-          "line": 147,
+          "line": 158,
           "called": [
             "fallbackVerifyAdaptorIdentifier"
           ]
@@ -12501,7 +12501,7 @@
         {
           "kind": "def",
           "name": "verifyImplementationIdentifier",
-          "line": 159,
+          "line": 170,
           "called": [
             "verifyImplementationIdentifierFallback"
           ]
@@ -12509,7 +12509,7 @@
         {
           "kind": "def",
           "name": "isProductionVerify",
-          "line": 166,
+          "line": 177,
           "called": [
             "fallbackVerifyAdaptorIdentifier",
             "verifyImplementationIdentifier"
@@ -12518,7 +12518,7 @@
         {
           "kind": "def",
           "name": "isLowS",
-          "line": 190,
+          "line": 201,
           "called": [
             "secp256k1HalfOrder"
           ]
@@ -12526,7 +12526,7 @@
         {
           "kind": "instance",
           "name": "isLowSDecidable",
-          "line": 195,
+          "line": 206,
           "called": [
             "secp256k1HalfOrder"
           ]
@@ -12534,7 +12534,7 @@
         {
           "kind": "theorem",
           "name": "Verify_deterministic",
-          "line": 210,
+          "line": 221,
           "called": [
             "PublicKey",
             "Signature",
@@ -12544,7 +12544,7 @@
         {
           "kind": "theorem",
           "name": "secp256k1HalfOrder_eq",
-          "line": 217,
+          "line": 228,
           "called": [
             "secp256k1HalfOrder",
             "secp256k1Order"
@@ -12553,13 +12553,13 @@
         {
           "kind": "theorem",
           "name": "secp256k1OrderBytes_size",
-          "line": 221,
+          "line": 232,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "isLowS_zero",
-          "line": 224,
+          "line": 235,
           "called": [
             "isLowS",
             "secp256k1HalfOrder"
@@ -12568,7 +12568,7 @@
         {
           "kind": "theorem",
           "name": "isLowS_at_threshold",
-          "line": 231,
+          "line": 242,
           "called": [
             "isLowS",
             "secp256k1HalfOrder"
@@ -12577,7 +12577,7 @@
         {
           "kind": "theorem",
           "name": "isLowS_just_below_order",
-          "line": 239,
+          "line": 250,
           "called": [
             "LegalKernel.Bridge",
             "isLowS",
@@ -74331,25 +74331,25 @@
         {
           "kind": "def",
           "name": "verifySelfTestMsg",
-          "line": 174,
+          "line": 176,
           "called": []
         },
         {
           "kind": "def",
           "name": "verifySelfTestMsgTampered",
-          "line": 178,
+          "line": 180,
           "called": []
         },
         {
           "kind": "def",
           "name": "verifySelfTestSig",
-          "line": 185,
+          "line": 192,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdVerifyCheck",
-          "line": 208,
+          "line": 216,
           "called": [
             "Verify",
             "verifySelfTestMsg",
@@ -74361,7 +74361,7 @@
         {
           "kind": "def",
           "name": "warnIfFallbackHash",
-          "line": 237,
+          "line": 245,
           "called": [
             "isProductionHash"
           ]
@@ -74369,7 +74369,7 @@
         {
           "kind": "def",
           "name": "cmdProcess",
-          "line": 246,
+          "line": 254,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -74387,7 +74387,7 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 337,
+          "line": 345,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -74405,7 +74405,7 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 376,
+          "line": 384,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -74420,7 +74420,7 @@
         {
           "kind": "def",
           "name": "cmdSnapshot",
-          "line": 412,
+          "line": 420,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -74438,7 +74438,7 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 466,
+          "line": 474,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -74457,13 +74457,13 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 522,
+          "line": 530,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 541,
+          "line": 549,
           "called": [
             "ActorId",
             "AuthorityPolicy",
@@ -74482,7 +74482,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 667,
+          "line": 675,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -74495,7 +74495,7 @@
         {
           "kind": "def",
           "name": "cmdExportBatch",
-          "line": 770,
+          "line": 778,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -74507,7 +74507,7 @@
         {
           "kind": "def",
           "name": "cmdExportActionProof",
-          "line": 825,
+          "line": 833,
           "called": [
             "entries",
             "readAllEntries"
@@ -74516,7 +74516,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 856,
+          "line": 864,
           "called": [
             "formatHashHex"
           ]
@@ -74524,7 +74524,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 871,
+          "line": 879,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -74534,19 +74534,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 893,
+          "line": 901,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 1013,
+          "line": 1021,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 1022,
+          "line": 1030,
           "called": [
             "hexCharToNibble"
           ]
@@ -74554,19 +74554,19 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 1061,
+          "line": 1069,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 1072,
+          "line": 1080,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 1087,
+          "line": 1095,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -74588,7 +74588,7 @@
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 1146,
+          "line": 1154,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -74604,7 +74604,7 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 1179,
+          "line": 1187,
           "called": [
             "actionCost",
             "deploymentId",
@@ -74614,13 +74614,13 @@
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 1235,
+          "line": 1243,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 1246,
+          "line": 1254,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -74629,7 +74629,7 @@
         {
           "kind": "def",
           "name": "gasPoolConfig?",
-          "line": 1262,
+          "line": 1270,
           "called": [
             "GlobalFlags",
             "maxDrainPerActionBold",
@@ -74639,7 +74639,7 @@
         {
           "kind": "def",
           "name": "ammReserveConfig?",
-          "line": 1274,
+          "line": 1282,
           "called": [
             "GlobalFlags"
           ]
@@ -74647,7 +74647,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 1285,
+          "line": 1293,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -74657,7 +74657,7 @@
         {
           "kind": "def",
           "name": "policy",
-          "line": 1303,
+          "line": 1311,
           "called": [
             "AuthorityPolicy",
             "GlobalFlags",
@@ -74668,7 +74668,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 1313,
+          "line": 1321,
           "called": [
             "GlobalFlags"
           ]
@@ -74676,7 +74676,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 1320,
+          "line": 1328,
           "called": [
             "GlobalFlags"
           ]
@@ -74684,7 +74684,7 @@
         {
           "kind": "def",
           "name": "refundRateConfig",
-          "line": 1326,
+          "line": 1334,
           "called": [
             "GlobalFlags"
           ]
@@ -74692,7 +74692,7 @@
         {
           "kind": "def",
           "name": "refundRate",
-          "line": 1333,
+          "line": 1341,
           "called": [
             "GlobalFlags",
             "ResourceId"
@@ -74701,7 +74701,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 1344,
+          "line": 1352,
           "called": [
             "GlobalFlags"
           ]
@@ -74709,7 +74709,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 1360,
+          "line": 1368,
           "called": [
             "GlobalFlags",
             "actionCost",
@@ -74722,13 +74722,13 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 1385,
+          "line": 1393,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 1396,
+          "line": 1404,
           "called": [
             "cmdBootstrap",
             "cmdExportActionProof",

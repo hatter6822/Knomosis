@@ -13,21 +13,30 @@ LegalKernel.Bridge.VerifyAdaptor — Workstream A.1 (Ethereum integration plan �
 The Lean-side documentation, constants, and stability theorems for
 the ECDSA secp256k1 verify adaptor.  The actual cryptographic
 implementation is a Rust crate (`runtime/knomosis-verify-secp256k1`)
-linked at runtime via the C ABI symbol `knomosis_verify`; this module
-captures the Lean-visible contract:
+linked at runtime via the C ABI symbol `knomosis_verify_ecdsa`; this
+module captures the Lean-visible contract:
 
   * The opaque `Verify : PublicKey → ByteArray → Signature → Bool`
     (declared in `LegalKernel/Authority/Crypto.lean`) is the
-    swap-point.  Production deployments wire `knomosis_verify` to that
-    opaque via `@[extern]` linkage.
+    swap-point.  Production deployments wire `knomosis_verify_ecdsa`
+    to that opaque via `@[extern]` linkage.
+  * The v2 wire semantics match the admission conjunct's call shape
+    `Verify pk (signingInput …) st.sig` exactly: `pk` is the 33-byte
+    SEC1-compressed key, `msg` is the RAW signing-input bytes (the
+    adaptor keccak256-hashes them itself), and `sig` is the 65-byte
+    Ethereum `(r ‖ s ‖ v)` wire signature, verified by RECOVERY
+    (`recover(digest, r, s, v) = pk`) so the `v` byte agrees with
+    what L1 `ecrecover` adjudicates at the fault-proof game's
+    terminal step.  One signature convention across the L2 signer,
+    the admission gate, the batch actions-root leaf (Workstream SB
+    ruling R7's fixed 65-byte suffix) and the L1.
   * The Rust adaptor enforces low-s canonicalisation (the EIP-2 /
     BIP-62 malleability mitigation).  At the Lean level we expose
     the secp256k1 curve order constant (`secp256k1Order`) and the
     half-curve-order constant (`secp256k1HalfOrder`) that the
     adaptor uses to reject high-s signatures.
-  * The Rust adaptor parses an Ethereum-style 65-byte
-    `(r ‖ s ‖ v)` signature.  We export the expected sizes
-    (`ecdsaSignatureSize`, `ecdsaPublicKeyCompressedSize`,
+  * We export the expected sizes (`ecdsaSignatureSize`,
+    `ecdsaPublicKeyCompressedSize`,
     `ecdsaPublicKeyUncompressedSize`) so downstream code (and
     fuzzers) can produce well-shaped fixtures without re-deriving
     the magic numbers.
@@ -107,9 +116,11 @@ def secp256k1OrderBytes : ByteArray :=
     0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41
   ]
 
-/-- The byte length of an Ethereum-style ECDSA signature:
-    `(r ‖ s ‖ v)` = 32 + 32 + 1 = 65 bytes.  The Rust adaptor
-    rejects any signature whose length differs. -/
+/-- The byte length of the Ethereum-style WIRE ECDSA signature:
+    `(r ‖ s ‖ v)` = 32 + 32 + 1 = 65 bytes.  This is the width the
+    L2 `SignedAction.sig` carries, the width the batch actions-root
+    leaf binds, and the only width the v2 adaptor accepts — any
+    other length is rejected. -/
 def ecdsaSignatureSize : Nat := 65
 
 /-- The byte length of a SEC1 compressed secp256k1 public key:
@@ -129,7 +140,7 @@ def ecdsaPublicKeyUncompressedSize : Nat := 65
     Production deployments override this constant by linking the
     runtime adaptor; the Lean-level value names the *contract*
     that the linked binding agrees to honour. -/
-def verifyAdaptorIdentifier : String := "ecdsa-secp256k1-low-s/EVM-compatible/v1"
+def verifyAdaptorIdentifier : String := "ecdsa-secp256k1-low-s/EVM-compatible/v2"
 
 /-- The fallback identifier — what the Lean-level `Verify` opaque
     reports when no production binding is linked.  The opaque

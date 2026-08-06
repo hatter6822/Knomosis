@@ -133,7 +133,7 @@ pub struct SequencerClaim {
     pub signer: u64,
     /// The signer's expected nonce for this claim.
     pub nonce: u128,
-    /// The 64-byte `(r || s)` low-s ECDSA signature over the
+    /// The 65-byte wire signature `(r ‖ s ‖ v)`, low-s, over the
     /// domain-separated signing input.
     pub sig: [u8; SIGNATURE_LEN],
 }
@@ -475,9 +475,6 @@ pub fn gas_receipt_reimbursement(gas_used: u128, gas_price: u128) -> Amount {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use k256::ecdsa::signature::hazmat::PrehashVerifier;
-    use k256::ecdsa::{Signature as K256Sig, VerifyingKey};
-    use sha3::{Digest, Keccak256};
 
     /// A fixed, valid secp256k1 scalar for the pool key under test.
     const TEST_SCALAR: [u8; 32] = [
@@ -530,13 +527,17 @@ mod tests {
         let claim = SequencerClaim::build(&key, 0, 250, 1000, 3, b"deployment-xyz").unwrap();
         // Recompute the domain-separated signing input and verify the
         // claim's signature against the pool's public key.
+        // Verify through the PRODUCTION wire verifier (the semantics
+        // of the Lean `Verify` opaque): raw signing-input bytes,
+        // 65-byte `(r ‖ s ‖ v)` wire signature, recovery-validated.
         let input =
             signing_input(&claim.action, claim.signer, claim.nonce, b"deployment-xyz").unwrap();
-        let prehash = Keccak256::digest(&input);
-        let vk = VerifyingKey::from_sec1_bytes(&key.public_key_compressed()).unwrap();
-        let sig = K256Sig::from_slice(&claim.sig).unwrap();
         assert!(
-            vk.verify_prehash(&prehash, &sig).is_ok(),
+            knomosis_verify_secp256k1::verify_signed_message(
+                &key.public_key_compressed(),
+                &input,
+                &claim.sig
+            ),
             "claim signature must verify under the pool public key"
         );
     }
@@ -763,11 +764,12 @@ mod tests {
             SequencerClaim::build_receipt_backed(&key, &receipt, 500, 1_000_000, 9, b"dep-xyz")
                 .unwrap();
         let input = signing_input(&claim.action, claim.signer, claim.nonce, b"dep-xyz").unwrap();
-        let prehash = Keccak256::digest(&input);
-        let vk = VerifyingKey::from_sec1_bytes(&key.public_key_compressed()).unwrap();
-        let sig = K256Sig::from_slice(&claim.sig).unwrap();
         assert!(
-            vk.verify_prehash(&prehash, &sig).is_ok(),
+            knomosis_verify_secp256k1::verify_signed_message(
+                &key.public_key_compressed(),
+                &input,
+                &claim.sig
+            ),
             "receipt-backed claim signature must verify"
         );
     }

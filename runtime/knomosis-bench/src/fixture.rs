@@ -642,14 +642,15 @@ mod tests {
             //   nonce    at 78..87  (CBE uint, 9 bytes — a counter, so
             //                        it stays narrow alongside amount)
             //   sig head at 87..96  (CBE bytes head, 9 bytes)
-            //   sig      at 96..160 (64 raw bytes)
-            // Total = 160 bytes.
-            assert!(payload.len() >= 9 * 7 + 33 + 64);
+            //   sig      at 96..161 (the 65-byte wire signature
+            //                        `(r ‖ s ‖ v)`)
+            // Total = 161 bytes.
+            assert!(payload.len() >= 9 * 7 + 33 + 65);
             // sender field offset = 9 (after tag) + 9 (r) = 18; then
             // we want bytes [19..27] for the LE u64 sender.
             let sender_le = &payload[19..27];
             let sender_u64 = u64::from_le_bytes(sender_le.try_into().unwrap());
-            assert_eq!(payload.len(), 160);
+            assert_eq!(payload.len(), 161);
             // signer u64 (bytes 70..78, little-endian — past the
             // 9-byte head's tag at 69)
             let signer_le = &payload[70..78];
@@ -675,10 +676,10 @@ mod tests {
         let fixture = generate(&cfg).unwrap();
         assert!(!fixture.is_empty());
         assert_eq!(fixture.len(), 4);
-        // Every Transfer payload is 160 bytes (proved in
+        // Every Transfer payload is 161 bytes (proved in
         // `per_actor_nonces_strictly_increase`).
-        assert!((fixture.average_payload_bytes() - 160.0).abs() < 0.001);
-        assert_eq!(fixture.max_payload_bytes(), 160);
+        assert!((fixture.average_payload_bytes() - 161.0).abs() < 0.001);
+        assert_eq!(fixture.max_payload_bytes(), 161);
     }
 
     /// `MAX_SCALAR_ATTEMPT_INDEX` and `MAX_SCALAR_ATTEMPTS` are

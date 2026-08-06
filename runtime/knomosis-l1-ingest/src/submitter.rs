@@ -163,8 +163,8 @@ impl Submitter for Box<dyn Submitter> {
 pub struct SignedActionForSubmit {
     /// The action to be submitted.
     pub unsigned: UnsignedAction,
-    /// The 64-byte `(r || s)` low-s ECDSA signature.
-    pub signature: [u8; 64],
+    /// The 65-byte wire signature `(r ‖ s ‖ v)`, low-s, `v ∈ {27, 28}`.
+    pub signature: [u8; 65],
 }
 
 impl SignedActionForSubmit {
@@ -706,7 +706,7 @@ mod tests {
                 signer: BRIDGE_ACTOR_ID,
                 nonce: 7,
             },
-            signature: [0xff; 64],
+            signature: [0xff; 65],
         }
     }
 
@@ -756,7 +756,7 @@ mod tests {
                 signer,
                 nonce: 3,
             },
-            signature: [0x11; 64],
+            signature: [0x11; 65],
         }
     }
 
