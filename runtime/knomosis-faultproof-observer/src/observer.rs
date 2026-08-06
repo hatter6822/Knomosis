@@ -100,7 +100,28 @@ pub struct ObserverConfig {
     /// Mismatched deployment-ids are silently ignored (a
     /// cross-deployment-replay defence).
     pub deployment_id: [u8; 32],
+    /// How many times a single move may be re-signed and
+    /// re-broadcast after a broadcast error before the observer
+    /// gives up on it and escalates to the operator.
+    ///
+    /// A failed broadcast does NOT consume the move's pivot — the
+    /// move was never submitted, and the dedup set exists to stop
+    /// double-submission, not to make one transient RPC error
+    /// forfeit the game.  But an error that is not transient (a
+    /// permanently malformed tx, a wallet with no funds) would
+    /// otherwise retry every iteration for the life of the daemon,
+    /// so the retries are counted per pivot and capped here.  At
+    /// the cap the pivot is retained, an `error!` line names it,
+    /// and a human decides.
+    pub max_broadcast_attempts: u32,
 }
+
+/// Default for [`ObserverConfig::max_broadcast_attempts`].  The
+/// bisection response timeout is the real deadline; this many
+/// attempts across as many poll intervals is comfortably inside it
+/// for any sane polling cadence, and is far more than a transient
+/// RPC blip needs.
+pub const DEFAULT_MAX_BROADCAST_ATTEMPTS: u32 = 8;
 
 impl ObserverConfig {
     /// Construct an observer config with defaults.
@@ -111,6 +132,7 @@ impl ObserverConfig {
             poll_interval: DEFAULT_POLL_INTERVAL,
             play_as: TurnSide::Challenger,
             deployment_id,
+            max_broadcast_attempts: DEFAULT_MAX_BROADCAST_ATTEMPTS,
         }
     }
 }
@@ -165,6 +187,14 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// cleared `pending_broadcasts` but left `submitted_pivots`
     /// populated, making the move un-retry-able in this process.
     iteration_pivot_inserts: Vec<(u128, MoveKind, Option<u64>)>,
+    /// Per-pivot count of BROADCAST failures.  A failed broadcast
+    /// releases the pivot from `submitted_pivots` so the next
+    /// iteration's sweep retries it; this counter is what keeps
+    /// that retry bounded.  Seeded at startup from the persisted
+    /// `Failed` / `Dropped` records so a restart does not reset an
+    /// exhausted move's budget.  See
+    /// [`ObserverConfig::max_broadcast_attempts`].
+    broadcast_failures: HashMap<(u128, MoveKind, Option<u64>), u32>,
     /// Per-iteration queue of prepared transactions awaiting
     /// L1 broadcast.  `maybe_play_move` enqueues; `run_iteration`
     /// drains AFTER `commit_batch` succeeds so the persistence
@@ -187,11 +217,15 @@ struct PendingBroadcast {
     /// `#[allow(dead_code)]` because the field is read only by
     /// the structured log fields (which clippy's dead-code
     /// analyzer doesn't track through `tracing::info!` macros).
-    #[allow(dead_code)]
     pivot_idx: Option<u64>,
+    /// The move's dedup class.  Carried alongside `pivot_idx` so a
+    /// broadcast FAILURE can release the exact key
+    /// `maybe_play_move` inserted; without it the release would
+    /// have to guess the kind from the label.
+    move_kind: MoveKind,
     /// Debug string for the `HonestMove` variant — logged on
     /// broadcast for operator visibility.
-    move_kind: String,
+    move_label: String,
 }
 
 impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
@@ -255,15 +289,40 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 e.to_string(),
             ))
         })?;
-        let submitted_pivots: std::collections::HashSet<(u128, MoveKind, Option<u64>)> =
-            response_records
-                .iter()
-                .map(|r| (r.game_id, r.move_kind, r.pivot_idx))
-                .collect();
+        //
+        // A `Failed` / `Dropped` record does NOT seed the set.  Both
+        // statuses mean the transaction never made it onto L1 —
+        // `Failed` is a broadcast error, `Dropped` is the submitter
+        // observing that a broadcast tx did not survive, and its own
+        // docstring says the caller re-submits with bumped gas.
+        // Seeding either one made the pivot permanently unplayable
+        // across restarts, so a single transient RPC error at
+        // broadcast time forfeited the game.  They seed
+        // `broadcast_failures` instead, which bounds the retry
+        // without forbidding it.
+        let mut broadcast_failures: HashMap<(u128, MoveKind, Option<u64>), u32> = HashMap::new();
+        let mut submitted_pivots: std::collections::HashSet<(u128, MoveKind, Option<u64>)> =
+            std::collections::HashSet::new();
+        for r in &response_records {
+            let key = (r.game_id, r.move_kind, r.pivot_idx);
+            match r.status {
+                ResponseStatus::Failed | ResponseStatus::Dropped => {
+                    *broadcast_failures.entry(key).or_insert(0) += 1;
+                }
+                ResponseStatus::Intent | ResponseStatus::Pending | ResponseStatus::Confirmed => {
+                    submitted_pivots.insert(key);
+                }
+            }
+        }
+        // A pivot that later succeeded is submitted, whatever its
+        // earlier attempts did — drop its failure budget so a
+        // re-org-driven re-entry is not charged for history.
+        broadcast_failures.retain(|k, _| !submitted_pivots.contains(k));
         info!(
             cursor = ?cursor,
             game_count = games.len(),
             submitted_pivot_count = submitted_pivots.len(),
+            failed_pivot_count = broadcast_failures.len(),
             "observer initialised; resumed from persistence"
         );
         Ok(Self {
@@ -276,6 +335,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             state_reader: None,
             games,
             submitted_pivots,
+            broadcast_failures,
             iteration_pivot_inserts: Vec::new(),
             pending_broadcasts: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
@@ -711,6 +771,11 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 EventHandling::Recorded | EventHandling::Skipped => (),
             }
         }
+        // Owed-move sweep.  Runs AFTER the event loop so a turn that
+        // changed this iteration is evaluated in its new state, and
+        // BEFORE the commit so anything it queues rides the same
+        // batch and the same intent-then-broadcast sequencing.
+        submitted_moves += self.sweep_owed_moves(&mut batch)?;
         if let Some(new_cursor) = watch.new_last_confirmed {
             batch.set_cursor(new_cursor);
             // Snapshot the re-org window into the batch so it
@@ -845,7 +910,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 prepared,
                 game_id: rec.game_id,
                 pivot_idx: rec.pivot_idx,
-                move_kind: "re-broadcast".to_string(),
+                move_kind: rec.move_kind,
+                move_label: "re-broadcast".to_string(),
             };
             info!(
                 tx_hash = %rec.tx_hash_hex,
@@ -905,6 +971,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 // the next call re-fetches from
                 // `eth_getTransactionCount`.
                 self.submitter.invalidate_nonce_cache();
+                self.release_pivot_after_broadcast_failure(pending);
                 (ResponseStatus::Failed, "broadcast failed")
             }
         };
@@ -928,7 +995,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 })?;
                 info!(
                     game_id = %pending.game_id,
-                    move_kind = %pending.move_kind,
+                    move_kind = %pending.move_label,
                     tx_hash = %hex::encode(pending.prepared.tx_hash),
                     status = ?new_status,
                     "{log_msg}",
@@ -942,6 +1009,55 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             }
         }
         Ok(())
+    }
+
+    /// Release a pivot the observer reserved but never actually
+    /// broadcast, so the next iteration's sweep can retry it.
+    ///
+    /// `maybe_play_move` inserts the pivot into `submitted_pivots`
+    /// BEFORE the broadcast, which is correct — the insert is what
+    /// stops a second move for the same pivot inside the same
+    /// iteration, and it has to happen while the batch is still
+    /// being assembled.  But the reservation is a claim that the
+    /// move WAS submitted, and after a broadcast error it was not.
+    /// Left in place it is permanent: nothing else removes a pivot,
+    /// and the startup seed used to re-add it from the `Failed`
+    /// record, so one transient RPC error at broadcast time cost the
+    /// game — the observer would sit out its turn until the deadline
+    /// having computed the correct move.
+    ///
+    /// Bounded by [`ObserverConfig::max_broadcast_attempts`]: an
+    /// error that is not transient keeps the reservation and
+    /// escalates instead of retrying forever.
+    fn release_pivot_after_broadcast_failure(&mut self, pending: &PendingBroadcast) {
+        let key = (pending.game_id, pending.move_kind, pending.pivot_idx);
+        let failures = self.broadcast_failures.entry(key).or_insert(0);
+        *failures += 1;
+        if *failures >= self.config.max_broadcast_attempts {
+            error!(
+                game_id = %pending.game_id,
+                move_kind = %pending.move_label,
+                pivot_idx = ?pending.pivot_idx,
+                failures = *failures,
+                "broadcast failed {} times; giving up on this move — OPERATOR ACTION REQUIRED, \
+                 the observer will not retry it and may lose the game by timeout",
+                *failures,
+            );
+            return;
+        }
+        self.submitted_pivots.remove(&key);
+        // The rollback set is keyed the same way; drop the entry so a
+        // later `commit_batch` failure in the same iteration does not
+        // try to remove an already-removed key.
+        self.iteration_pivot_inserts.retain(|k| *k != key);
+        warn!(
+            game_id = %pending.game_id,
+            move_kind = %pending.move_label,
+            pivot_idx = ?pending.pivot_idx,
+            attempt = *failures,
+            max_attempts = self.config.max_broadcast_attempts,
+            "pivot released for retry on the next iteration",
+        );
     }
 
     /// Handle a single event.  Updates the in-memory game map +
@@ -1486,7 +1602,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             prepared,
             game_id: rec.game_id,
             pivot_idx,
-            move_kind: format!("{mv:?}"),
+            move_kind,
+            move_label: format!("{mv:?}"),
         });
         info!(
             game_id = %rec.game_id,
@@ -1494,6 +1611,64 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             "honest move queued for broadcast (intent persisted)",
         );
         Ok(Some(true))
+    }
+
+    /// Play every move the observer OWES on a live game but has not
+    /// yet queued.
+    ///
+    /// The event handlers are the fast path — an opponent moves, we
+    /// answer in the same iteration — but they are only half the
+    /// story, because there are two situations in which no event is
+    /// ever coming and the observer is nonetheless on the clock.
+    ///
+    /// 1. **It owes the FIRST move.**  `initiateChallenge` leaves
+    ///    the turn with the sequencer, so a sequencer-side observer
+    ///    must open the bisection with nothing to react to.
+    ///    `handle_game_opened` cannot play it even in principle: the
+    ///    event does not carry the disputed range, so the record is
+    ///    adopted `state_known = false` and hydration lands at the
+    ///    top of the NEXT iteration, by which point the event that
+    ///    would have driven the move is long consumed.  Driven by
+    ///    events alone the game simply sits there.
+    /// 2. **A move was DEFERRED.**  `maybe_play_move` returns
+    ///    `Ok(Some(false))` on an un-hydrated state, a truth oracle
+    ///    that has not caught up to the disputed index, an absent
+    ///    terminate bundle and a signing failure.  Every one of
+    ///    those is transient and resolves on its own — but the
+    ///    retry needs a trigger, and the opponent has already moved:
+    ///    it is our turn until we move or time out, so no further
+    ///    event will arrive.
+    ///
+    /// Both cases lose the game by timeout having computed the
+    /// correct move, which is the worst possible failure for an
+    /// honest party.  This sweep is the trigger.
+    ///
+    /// It is safe to run unconditionally because `maybe_play_move`
+    /// is idempotent by construction: it returns early on a settled
+    /// game, on the opponent's turn, on an un-hydrated state, and on
+    /// a pivot already in `submitted_pivots` — which is exactly the
+    /// set of reasons a sweep must not act.  So a game the event
+    /// loop just handled is re-examined here and skipped, at the
+    /// cost of one hash lookup.
+    fn sweep_owed_moves(&mut self, batch: &mut PersistBatch) -> Result<u32, ObserverError> {
+        let block = self.watcher.last_confirmed_block().unwrap_or(0);
+        // Snapshot first: `maybe_play_move` takes `&mut self`, and
+        // only the records whose turn it is are candidates, so the
+        // clone is bounded by the number of games actually owed a
+        // move rather than by the whole map.
+        let owed: Vec<GameRecord> = self
+            .games
+            .values()
+            .filter(|rec| rec.state.status.is_in_progress() && rec.state.turn == rec.me)
+            .cloned()
+            .collect();
+        let mut submitted = 0u32;
+        for rec in owed {
+            if self.maybe_play_move(&rec, block, batch)? == Some(true) {
+                submitted += 1;
+            }
+        }
+        Ok(submitted)
     }
 
     /// Check whether we've already submitted this KIND of move for
@@ -1518,7 +1693,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         move_kind: MoveKind,
         pivot_idx: Option<u64>,
     ) -> bool {
-        self.submitted_pivots.contains(&(game_id, move_kind, pivot_idx))
+        self.submitted_pivots
+            .contains(&(game_id, move_kind, pivot_idx))
     }
 
     /// Workstream SVC.5 helper: build the L1 calldata bytes for
@@ -2071,9 +2247,239 @@ mod tests {
         assert!(!obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(16)));
         // Insert directly into the in-memory cache (mirrors
         // what `maybe_play_move` does after a successful submit).
-        obs.submitted_pivots.insert((42, MoveKind::Respond, Some(16)));
+        obs.submitted_pivots
+            .insert((42, MoveKind::Respond, Some(16)));
         assert!(obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(16)));
         assert!(!obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(32)));
+    }
+
+    /// Install a live, hydrated game that the observer OWES a move
+    /// on, and no events at all.  `hydratable_state` has the turn
+    /// with the sequencer and a `0..1024` range, so a
+    /// sequencer-side observer owes the opening midpoint at 512.
+    fn insert_owed_game(obs: &mut Observer<InMemoryL1Source, MockSubmitter, MemoryTruthOracle>) {
+        obs.config.play_as = TurnSide::Sequencer;
+        obs.games.insert(
+            77,
+            GameRecord {
+                game_id: 77,
+                state: hydratable_state(),
+                me: TurnSide::Sequencer,
+                last_updated_block: 100,
+                state_known: true,
+            },
+        );
+    }
+
+    /// **Liveness regression.**  A move the observer owes is played
+    /// even when no event arrives to prompt it.
+    ///
+    /// `initiateChallenge` leaves the turn with the sequencer, so a
+    /// sequencer-side observer must OPEN the bisection with nothing
+    /// to react to.  `handle_game_opened` cannot play it even in
+    /// principle — the event does not carry the disputed range, so
+    /// the record is adopted `state_known = false` and hydration
+    /// lands at the top of the NEXT iteration, by which point the
+    /// event is consumed.  Driven by events alone the game just sits
+    /// there and the honest sequencer loses on the turn deadline
+    /// without ever having moved.
+    ///
+    /// Fails against the pre-fix code: `submitted_moves` is 0,
+    /// because every call site of `maybe_play_move` was an event
+    /// handler.
+    #[test]
+    fn an_owed_move_is_played_with_no_event_to_react_to() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_owed_game(&mut obs);
+        obs.oracle.insert(512, commit(9));
+
+        let out = obs.run_iteration().expect("iteration succeeds");
+
+        assert_eq!(out.event_count, 0, "precondition: nothing to react to");
+        assert_eq!(
+            out.submitted_moves, 1,
+            "the opening midpoint must be played anyway"
+        );
+        assert_eq!(obs.submitter().submissions().len(), 1);
+        assert!(obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)));
+    }
+
+    /// **Liveness regression.**  A move DEFERRED for a transient
+    /// reason is retried on a later iteration.
+    ///
+    /// `maybe_play_move` defers on an un-hydrated state, on a truth
+    /// oracle that has not caught up, on an absent terminate bundle
+    /// and on a signing failure — every one of them transient.  But
+    /// the retry needs a trigger, and none is coming: the opponent
+    /// has already moved, so it is our turn until we move or time
+    /// out.  Here the oracle lags on the first iteration and catches
+    /// up before the second, with no event in between.
+    #[test]
+    fn a_deferred_move_is_retried_once_its_reason_clears() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_owed_game(&mut obs);
+        // Oracle has nothing at the midpoint: the move defers.
+        let out = obs.run_iteration().expect("iteration succeeds");
+        assert_eq!(out.submitted_moves, 0, "deferred while the oracle lags");
+        assert!(
+            !obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)),
+            "a deferred move must not reserve its pivot"
+        );
+
+        // The oracle catches up.  No event accompanies it.
+        obs.oracle.insert(512, commit(9));
+        let out = obs.run_iteration().expect("iteration succeeds");
+        assert_eq!(out.event_count, 0);
+        assert_eq!(out.submitted_moves, 1, "the deferred move is retried");
+    }
+
+    /// **Liveness regression.**  A move whose broadcast FAILS is
+    /// retried; it does not consume the pivot.
+    ///
+    /// `maybe_play_move` reserves the pivot before the broadcast,
+    /// which is correct — that reservation is what stops a second
+    /// move for the same pivot inside one iteration.  But it is a
+    /// claim that the move WAS submitted, and after a broadcast
+    /// error it was not.  Nothing released it and the startup seed
+    /// re-added it from the `Failed` record, so one transient RPC
+    /// error at broadcast time permanently forfeited the move: the
+    /// observer sat out its turn having computed it correctly.
+    #[test]
+    fn a_failed_broadcast_does_not_consume_the_move() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_owed_game(&mut obs);
+        obs.oracle.insert(512, commit(9));
+
+        obs.submitter().set_next_reject();
+        let out = obs.run_iteration().expect("iteration survives the failure");
+        // The move was queued, so the iteration counts it; the
+        // broadcast is what failed.
+        assert_eq!(out.submitted_moves, 1);
+        assert!(
+            obs.submitter().submissions().is_empty(),
+            "precondition: nothing actually reached L1"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)),
+            "the pivot must be released — the move was never broadcast"
+        );
+
+        // The next iteration re-signs and re-broadcasts it, with no
+        // event and no operator action.
+        let out = obs.run_iteration().expect("iteration succeeds");
+        assert_eq!(out.submitted_moves, 1);
+        assert_eq!(
+            obs.submitter().submissions().len(),
+            1,
+            "the retry reaches L1"
+        );
+    }
+
+    /// The retry above is BOUNDED.  A permanently-failing broadcast
+    /// must not spin for the life of the daemon: at
+    /// `max_broadcast_attempts` the pivot is retained and the
+    /// operator is told.
+    #[test]
+    fn the_broadcast_retry_budget_is_bounded() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_owed_game(&mut obs);
+        obs.oracle.insert(512, commit(9));
+        obs.config.max_broadcast_attempts = 2;
+
+        obs.submitter().set_next_reject();
+        obs.run_iteration().expect("iteration 1");
+        assert!(
+            !obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)),
+            "attempt 1 of 2: still retryable"
+        );
+
+        obs.submitter().set_next_reject();
+        obs.run_iteration().expect("iteration 2");
+        assert!(
+            obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)),
+            "budget exhausted: the pivot is retained rather than retried forever"
+        );
+
+        // A third iteration submits nothing, even though the
+        // submitter would now accept it.
+        let out = obs.run_iteration().expect("iteration 3");
+        assert_eq!(out.submitted_moves, 0);
+        assert!(obs.submitter().submissions().is_empty());
+    }
+
+    /// A persisted `Failed` record must not seed the dedup set at
+    /// startup.  Both halves of the fix are needed: releasing the
+    /// pivot in-process is undone on the next restart if the seed
+    /// puts it back.
+    #[test]
+    fn startup_does_not_treat_a_failed_record_as_submitted() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("test.db");
+        {
+            let persistence = Persistence::open(&db).unwrap();
+            for (seed, status) in [
+                (0xaau8, ResponseStatus::Failed),
+                (0xbbu8, ResponseStatus::Dropped),
+                (0xccu8, ResponseStatus::Pending),
+            ] {
+                persistence
+                    .store_response(&ResponseRecord {
+                        tx_hash_hex: format!("{seed:02x}").repeat(32),
+                        raw_tx_hex: None,
+                        game_id: u128::from(seed),
+                        status,
+                        submitted_at_block: 100,
+                        depth: 0,
+                        pivot_idx: Some(32),
+                        move_kind: MoveKind::Submit,
+                    })
+                    .unwrap();
+            }
+        }
+        let persistence = Persistence::open(&db).unwrap();
+        let cfg = ObserverConfig::new(
+            WatcherConfig {
+                game_contract: make_contract_addr(1),
+                state_root_submission_contract: make_contract_addr(2),
+                confirmation_depth: 1,
+                reorg_window_capacity: 16,
+                blocks_per_iteration: 64,
+            },
+            [0u8; 32],
+        );
+        let obs = Observer::new(
+            cfg,
+            InMemoryL1Source::new(),
+            MockSubmitter::new(),
+            MemoryTruthOracle::new(),
+            persistence,
+        )
+        .unwrap();
+
+        assert!(
+            !obs.has_submitted_for_pivot(0xaa, MoveKind::Submit, Some(32)),
+            "a Failed record means the tx never reached L1"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(0xbb, MoveKind::Submit, Some(32)),
+            "a Dropped record's own docstring says the caller re-submits"
+        );
+        assert!(
+            obs.has_submitted_for_pivot(0xcc, MoveKind::Submit, Some(32)),
+            "a Pending record IS submitted and must still dedup"
+        );
+        // ...and the failures are counted, so the retry stays bounded
+        // across the restart rather than starting over.
+        assert_eq!(
+            obs.broadcast_failures
+                .get(&(0xaa, MoveKind::Submit, Some(32))),
+            Some(&1)
+        );
+        assert_eq!(
+            obs.broadcast_failures
+                .get(&(0xbb, MoveKind::Submit, Some(32))),
+            Some(&1)
+        );
     }
 
     /// A [`crate::state_reader::GameStateReader`] that answers from a
@@ -2564,8 +2970,10 @@ mod tests {
     fn iteration_pivot_rollback_clears_cache_on_failed_iteration() {
         let (mut obs, _dir) = fresh_observer();
         // Pre-populate the iteration rollback set + cache.
-        obs.submitted_pivots.insert((42, MoveKind::Respond, Some(7)));
-        obs.iteration_pivot_inserts.push((42, MoveKind::Respond, Some(7)));
+        obs.submitted_pivots
+            .insert((42, MoveKind::Respond, Some(7)));
+        obs.iteration_pivot_inserts
+            .push((42, MoveKind::Respond, Some(7)));
         // Simulate the run_iteration outer wrapper's error-path
         // rollback by invoking the same logic directly.
         let pivots = std::mem::take(&mut obs.iteration_pivot_inserts);
@@ -2574,7 +2982,8 @@ mod tests {
         }
         // Cache must be empty post-rollback.
         assert!(
-            !obs.submitted_pivots.contains(&(42, MoveKind::Respond, Some(7))),
+            !obs.submitted_pivots
+                .contains(&(42, MoveKind::Respond, Some(7))),
             "pivot should be rolled back after failed iteration",
         );
         // The rollback set is also drained.

@@ -25,6 +25,7 @@
 //! | `--reorg-window <N>`       | 16      | Re-org-window capacity               |
 //! | `--blocks-per-iter <N>`    | 64      | Per-iteration block budget           |
 //! | `--poll-interval-ms <N>`   | 12000   | Polling interval between iterations  |
+//! | `--max-broadcast-attempts <N>` | 8   | Broadcast retries per move before escalating |
 //! | `--start-block <N>`        |         | (optional) Override watcher cursor   |
 //! | `--chain-id <N>`           |         | (optional) L1 chain id (enables `JsonRpcSubmitter`) |
 //! | `--knomosis-binary <PATH>`    |         | (optional) Path to `knomosis` for replay-up-to |
@@ -40,6 +41,7 @@
 //!   * `confirmation-depth > 0`.
 //!   * `blocks-per-iter > 0`.
 //!   * `poll-interval-ms > 0`.
+//!   * `max-broadcast-attempts > 0`.
 //!   * `deployment-id` is exactly 32 bytes (hex-encoded as 64
 //!     chars, optional `0x` prefix).
 //!   * `game-contract` and `state-root-contract` are exactly 20
@@ -95,6 +97,10 @@ pub struct CliConfig {
     pub blocks_per_iteration: u32,
     /// Polling interval between iterations.
     pub poll_interval: Duration,
+    /// How many broadcast failures a single move tolerates before
+    /// the observer stops retrying it and escalates.  See
+    /// [`crate::observer::ObserverConfig::max_broadcast_attempts`].
+    pub max_broadcast_attempts: u32,
     /// Optional override for the watcher's starting block.  When
     /// `Some(n)`, the watcher's `last_confirmed_block` is set to
     /// `n` BEFORE the first iteration, overriding any persisted
@@ -195,6 +201,7 @@ impl CliConfig {
         let mut reorg_window: u32 = DEFAULT_REORG_WINDOW;
         let mut blocks_per_iteration: u32 = DEFAULT_BLOCKS_PER_ITER;
         let mut poll_interval_ms: u64 = DEFAULT_POLL_INTERVAL_MS;
+        let mut max_broadcast_attempts: u32 = crate::observer::DEFAULT_MAX_BROADCAST_ATTEMPTS;
         let mut start_block: Option<u64> = None;
         let mut chain_id: Option<u64> = None;
         let mut knomosis_binary: Option<PathBuf> = None;
@@ -245,6 +252,10 @@ impl CliConfig {
                 "--poll-interval-ms" => {
                     let v = read_value(&args_vec, &mut i, "poll-interval-ms")?;
                     poll_interval_ms = parse_u64(&v, "poll-interval-ms")?;
+                }
+                "--max-broadcast-attempts" => {
+                    let v = read_value(&args_vec, &mut i, "max-broadcast-attempts")?;
+                    max_broadcast_attempts = parse_u32(&v, "max-broadcast-attempts")?;
                 }
                 "--start-block" => {
                     let v = read_value(&args_vec, &mut i, "start-block")?;
@@ -299,6 +310,7 @@ impl CliConfig {
             reorg_window,
             blocks_per_iteration,
             poll_interval: Duration::from_millis(poll_interval_ms),
+            max_broadcast_attempts,
             start_block,
             chain_id,
             knomosis_binary,
@@ -359,6 +371,17 @@ impl CliConfig {
         if self.poll_interval.as_millis() == 0 {
             return Err(CliError::InvalidConfiguration(
                 "poll-interval-ms must be > 0".into(),
+            ));
+        }
+        // Zero would mean "give up before the first attempt", which
+        // reinstates the bug the retry budget exists to fix: the
+        // pivot would be reserved by `maybe_play_move` and never
+        // released, so one broadcast error forfeits the move.
+        if self.max_broadcast_attempts == 0 {
+            return Err(CliError::InvalidConfiguration(
+                "max-broadcast-attempts must be > 0 (0 would forfeit a move on its first \
+                 broadcast error)"
+                    .into(),
             ));
         }
         if self.reorg_window < self.confirmation_depth {
@@ -506,6 +529,14 @@ OPTIONS:
     --reorg-window <N>          Re-org-window capacity (default: 16)
     --blocks-per-iter <N>       Per-iteration block budget (default: 64)
     --poll-interval-ms <N>      Polling interval in ms (default: 12000)
+    --max-broadcast-attempts <N>
+                                How many times one move may be re-signed
+                                and re-broadcast after a broadcast error
+                                before the observer gives up on it and
+                                escalates (default: 8).  A failed
+                                broadcast does not consume the move; this
+                                bounds the retry so a permanently-failing
+                                one does not spin forever.
     --start-block <N>           Override watcher cursor at startup
                                 (advanced operator-only escape hatch;
                                 bypasses the persisted-cursor recovery —
