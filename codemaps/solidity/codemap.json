@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "dcb9462f51640419d267c083d90fbb62b9f3b26305c1655a5dccdd069343c77e"
+    "source_digest": "cae333a5186d44901c01dd11f71466f92f3bfc45724aa9740e7001d4cb183b74"
   },
   "summary": {
-    "module_count": 108,
-    "declaration_count": 2244
+    "module_count": 110,
+    "declaration_count": 2265
   },
   "modules": [
     {
@@ -4554,6 +4554,95 @@
           "name": "nextEntryHash",
           "line": 97,
           "called": []
+        }
+      ]
+    },
+    {
+      "module": "SignInput",
+      "path": "solidity/src/lib/SignInput.sol",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "SignInput",
+          "line": 51,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnknownActionKind",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "FieldsWrongLength",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_u64BE",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_u256BE",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_tail",
+          "line": 91,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_slice",
+          "line": 103,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_requireLen",
+          "line": 115,
+          "called": [
+            "FieldsWrongLength"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "cbeAction",
+          "line": 131,
+          "called": [
+            "FieldsWrongLength",
+            "UnknownActionKind",
+            "_requireLen",
+            "_slice",
+            "_tail",
+            "_u256BE",
+            "_u64BE"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "signingInput",
+          "line": 318,
+          "called": [
+            "cbeAction",
+            "deploymentId"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "signingDigest",
+          "line": 337,
+          "called": [
+            "deploymentId",
+            "signingInput"
+          ]
         }
       ]
     },
@@ -12787,6 +12876,87 @@
           "called": [
             "assertEveryDeclaredErrorIsDescribed"
           ]
+        }
+      ]
+    },
+    {
+      "module": "SigningInput.t",
+      "path": "solidity/test/CrossCheck/SigningInput.t.sol",
+      "declaration_count": 10,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "SigningInputCrossCheck",
+          "line": 31,
+          "called": [
+            "CrossCheckFramework",
+            "SignInputCaller"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 42,
+          "called": [
+            "SignInputCaller"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_fixture",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_cbe_action_transcode_matches_lean",
+          "line": 52,
+          "called": [
+            "_fixture",
+            "_requireIdentifier",
+            "beginEntry"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_signing_input_assembly_matches_lean",
+          "line": 80,
+          "called": [
+            "_fixture",
+            "_requireIdentifier",
+            "beginEntry",
+            "deploymentId"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_unknown_kind_reverts",
+          "line": 121,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_truncated_structured_fields_revert",
+          "line": 131,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_short_variable_trailer_reverts",
+          "line": 142,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "SignInputCaller",
+          "line": 152,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "cbeAction",
+          "line": 153,
+          "called": []
         }
       ]
     },

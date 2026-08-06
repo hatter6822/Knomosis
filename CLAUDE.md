@@ -857,11 +857,11 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 294 | 171 | `lake test` |
+| Lean | ~3 298 | 172 | `lake test` |
 | Rust | ~2 433 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~968 passed | 71 forge suites | `cd solidity && forge test` |
+| Solidity | ~973 passed | 72 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **968 passed / 0 failed / 0 skipped** — the
+`forge test` runs **973 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -882,7 +882,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 968 / 0 / 0.  It is not redundant: a bare `lake test`
+reports the same 973 / 0 / 0.  It is not redundant: a bare `lake test`
 runs on the FALLBACK hash, where 10 Lean cross-stack assertions report
 `SKIPPED` rather than comparing anything.  Under the keccak lane that
 count is **zero** — every corpus is checked against real keccak256 on

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "fb9c307f9130400ddee0c2bfc0f5ffb1d19992aea1ebc5b275fe67ba1d2d8aeb"
+    "source_digest": "36d8fdf02b24fb30a78184b6fb6ff288ebae6b42abd624975a58fdaee9d9e9a6"
   },
   "summary": {
-    "module_count": 348,
-    "declaration_count": 6106
+    "module_count": 349,
+    "declaration_count": 6119
   },
   "modules": [
     {
@@ -49324,6 +49324,138 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.SigningInput",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/SigningInput.lean",
+      "declaration_count": 13,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 46,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.FaultProof",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "SigningInput",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "fixtureDeploymentId",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "maxU64",
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 72,
+          "called": [
+            "Action",
+            "Json",
+            "deploymentId",
+            "fixtureDeploymentId",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "sampleDispute",
+          "line": 93,
+          "called": [
+            "challenger"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "sampleVerdict",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleRecipientL1",
+          "line": 108,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "samplePk",
+          "line": 114,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "entries",
+          "line": 122,
+          "called": [
+            "Json",
+            "ammSwap",
+            "burn",
+            "claimBudgetRefund",
+            "deploymentId",
+            "deposit",
+            "depositWithFee",
+            "distributeOthers",
+            "freezeResource",
+            "maxU64",
+            "mint",
+            "mkEntry",
+            "proportionalDilute",
+            "reclaimAmmReserves",
+            "reserveSwap",
+            "reward",
+            "sampleDispute",
+            "samplePk",
+            "sampleRecipientL1",
+            "sampleVerdict",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixture",
+          "line": 167,
+          "called": [
+            "Json",
+            "entries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 178,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 186,
+          "called": [
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "SigningInput",
+            "TestCase",
+            "bytesFromHex",
+            "entries",
+            "fixtureName"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.SmtCellProof",
       "path": "LegalKernel/Test/Bridge/CrossCheck/SmtCellProof.lean",
       "declaration_count": 30,
@@ -74810,7 +74942,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 232,
+          "line": 233,
           "called": [
             "runAll"
           ]
