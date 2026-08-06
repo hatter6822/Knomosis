@@ -1259,6 +1259,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             // game's deploymentId matches.  See lib.rs's
             // "Security properties" §3 for the deferral note.
             deployment_id: self.config.deployment_id,
+            actions_root: [0u8; 32],
         };
         let _ = challenger_state_root; // recorded for future use; the
                                        // honest strategy doesn't need
@@ -2394,6 +2395,7 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::SequencerWon, // already settled
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
@@ -2451,6 +2453,7 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::ChallengerWon, // settled
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
@@ -2817,6 +2820,7 @@ mod tests {
                 Some(s) => Ok(ObservedGame {
                     state: GameState {
                         deployment_id: expected_deployment_id,
+                        actions_root: [0u8; 32],
                         ..s.clone()
                     },
                     turn_deadline: self.turn_deadline,
@@ -3017,6 +3021,7 @@ mod tests {
             challenger_bond: 100_000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         }
     }
 
@@ -3049,6 +3054,7 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
@@ -3153,6 +3159,7 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Challenger,
             last_updated_block: 100,
@@ -3186,6 +3193,7 @@ mod tests {
             // (fresh_observer uses `[0u8; 32]`).  The audit-
             // pass-3 defensive check rejects mismatched ids.
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         let updated = obs
             .mark_state_known(77, observed(full_state.clone()), 200)
@@ -3225,6 +3233,7 @@ mod tests {
             challenger_bond: 0,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         let updated = obs
             .mark_state_known(99_999, observed(dummy_state), 100)
@@ -3265,6 +3274,7 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
@@ -3293,7 +3303,8 @@ mod tests {
             sequencer_bond: 0,
             challenger_bond: 0,
             status: GameStatus::InProgress,
-            deployment_id: [0xDE; 32], // mismatched!
+            deployment_id: [0xDE; 32], // mismatched!,
+            actions_root: [0u8; 32],
         };
         let err = obs
             .mark_state_known(77, observed(wrong_state), 200)
@@ -3335,6 +3346,7 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::ChallengerWon, // already settled
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
@@ -3363,6 +3375,7 @@ mod tests {
             challenger_bond: 0,
             status: GameStatus::InProgress, // tries to resurrect
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         let err = obs
             .mark_state_known(88, observed(resurrect_state), 200)
@@ -3519,6 +3532,7 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
@@ -3547,6 +3561,7 @@ mod tests {
             challenger_bond: 100_000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         // First call: transitions to state_known = true.
         let first = obs
@@ -3592,6 +3607,7 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
@@ -3620,6 +3636,7 @@ mod tests {
             challenger_bond: 0,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         let err = obs
             .mark_state_known(99, observed(degenerate_state), 200)
@@ -3689,6 +3706,7 @@ mod tests {
                     challenger_bond: 1_000,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
@@ -3859,6 +3877,7 @@ mod tests {
                     challenger_bond: 1_000,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 50,
@@ -3935,6 +3954,7 @@ mod tests {
             challenger_bond: 0,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         assert_eq!(super::pivot_for_move(&state, HonestMove::NoMove), None,);
         assert_eq!(
@@ -4056,6 +4076,7 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
@@ -4101,6 +4122,7 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
@@ -4158,6 +4180,7 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
@@ -4233,6 +4256,7 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
@@ -4272,6 +4296,7 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
@@ -4383,6 +4408,7 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,

@@ -45,7 +45,8 @@ private def trivialGameState : LegalKernel.FaultProof.GameState := {
   sequencerBond   := 1_000,
   challengerBond  := 50,
   status          := .inProgress,
-  deploymentId    := ByteArray.empty
+  deploymentId    := ByteArray.empty,
+  actionsRoot     := ByteArray.empty
 }
 
 /-- A `gs` with disagreement between the high commit and
@@ -61,7 +62,8 @@ private def disagreeingGameState : LegalKernel.FaultProof.GameState := {
   sequencerBond   := 1_000,
   challengerBond  := 50,
   status          := .inProgress,
-  deploymentId    := ByteArray.empty
+  deploymentId    := ByteArray.empty,
+  actionsRoot     := ByteArray.empty
 }
 
 /-- API-stability tests for the trust-model upgrade composite

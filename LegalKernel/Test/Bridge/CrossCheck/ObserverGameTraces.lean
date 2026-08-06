@@ -97,7 +97,8 @@ def gameStateJson (gs : GameState) : Test.Bridge.CrossCheck.Json :=
          ("sequencer_bond",   .num gs.sequencerBond),
          ("challenger_bond",  .num gs.challengerBond),
          ("status",           .str (gameStatusJson gs.status)),
-         ("deployment_id",    .str (commitHex gs.deploymentId)) ]
+         ("deployment_id",    .str (commitHex gs.deploymentId)),
+         ("actions_root",     .str (commitHex gs.actionsRoot)) ]
 
 /-- Encode a `GameTransition` as JSON.  We do NOT emit
     `TerminateOnSingleStep` traces here because the two sides
@@ -126,7 +127,7 @@ def transitionJson (t : GameTransition) : Test.Bridge.CrossCheck.Json :=
     .obj [ ("kind", .str "RespondAgree") ]
   | .respondDisagree =>
     .obj [ ("kind", .str "RespondDisagree") ]
-  | .terminateOnSingleStep _ =>
+  | .terminateOnSingleStep _ _ =>
     -- Nothing but the tag.  The step itself stays off the wire (the
     -- L1 step VM is the authority), and there is no
     -- `claimed_post_commit` any more: the contract compares the step
@@ -154,6 +155,7 @@ def outcomeJson (e : Except GameError GameState) :
       | .rangeNotSingleStep       => "RangeNotSingleStep"
       | .bisectionDepthExceeded   => "BisectionDepthExceeded"
       | .terminationDuringBisection => "TerminationDuringBisection"
+      | .actionNotInBatch           => "ActionNotInBatch"
     .obj [ ("kind", .str "Err"), ("error", .str tag) ]
 
 /-! ## Trace structure -/
@@ -225,7 +227,11 @@ def mkInitialState (sequencer challenger : ActorId)
   , sequencerBond := 1000
   , challengerBond := 1000
   , status := .inProgress
-  , deploymentId := canonicalDeploymentId }
+  , deploymentId := canonicalDeploymentId
+    -- The anchor is unexercised here: terminates stay off-trace (the
+    -- L1 step VM is the authoritative evaluator), so the corpus pins
+    -- the zero root and the Rust port just carries it.
+  , actionsRoot := ByteArray.mk (Array.replicate 32 (0 : UInt8)) }
 
 /-- Apply a transition; produce the trace step pairing the
     transition with its outcome via `applyTransition`. -/
@@ -724,7 +730,7 @@ def tests : List Test.TestCase :=
         for t in corpus do
           for s in t.steps do
             match s.transition with
-            | .terminateOnSingleStep _ =>
+            | .terminateOnSingleStep _ _ =>
               throw (IO.userError
                 s!"trace {t.id} emits TerminateOnSingleStep; this is disallowed (Lean/Rust diverge on terminate outcome — see transitionJson docstring)")
             | .submitMidpoint _   => pure ()

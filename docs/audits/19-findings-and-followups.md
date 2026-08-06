@@ -1857,12 +1857,20 @@ fails on the old code (`solidity/test/CrossCheck/BatchGame.t.sol`):
     inclusion; VERIFYING the signature on-chain needs an L1
     actorId→key resolution surface that does not exist yet.
   * **The Lean game-model chain binding** (the standing audit-22
-    MAJOR): `actionProof_binds_action`
-    (`FaultProof/ActionsRoot.lean`) gives the authentication
-    primitive a proven Lean counterpart, but `GameState` still
-    carries no actions-root anchor and the Settlement theorems are
-    stated over the unanchored model.  Narrowed, not closed — see
-    the annotation in `22-full-codebase-sweep.md`.
+    MAJOR): **closed at the model level** in the follow-up pass.
+    `GameState.actionsRoot` anchors the disputed batch's actions
+    root in the model, `.terminateOnSingleStep` takes the
+    responder's `actionProof` and refuses an unauthenticated step
+    (`.error .actionNotInBatch`, mirroring the L1 revert),
+    `terminate_ok_requires_authentication` inverts the arm, and the
+    upgraded composite `anchored_challenger_wins`
+    (`FaultProof/Settlement.lean`) states kernel-truthfulness over
+    the batch-COMMITTED `(kind, signer, fields, sig)` spelling via
+    `actionProof_binds_action` — the substitution attack is now
+    unprovable rather than unmodelled.  The residual interface (the
+    truthfulness hypothesis quantifies over the responder's bundle;
+    discharged per-variant by `VerifierWrites.*_correct`) is noted
+    in the `22-full-codebase-sweep.md` annotation.
   * **The L1→L2 swap-mirror ingest is deliberately unbuilt** under
     the L2-primary pool topology (deposits stopped accruing the L1
     `ammReserve*` books; the two AMM venues price independently and

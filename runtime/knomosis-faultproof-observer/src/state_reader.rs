@@ -566,6 +566,7 @@ pub fn decode_game_state_with_addresses(
                 challenger_bond,
                 status,
                 deployment_id,
+                actions_root: [0u8; 32],
             },
             turn_deadline,
             disputed_log_index,

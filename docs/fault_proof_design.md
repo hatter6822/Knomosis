@@ -372,8 +372,14 @@ party the bond economics already price.
 
 Deferred by design: on-chain signature VERIFICATION at terminate
 (the leaf binds the bytes; verification needs an L1 actorId→key
-surface), and the Lean game model's actions-root anchor (the
-standing audit-22 MAJOR, narrowed by `actionProof_binds_action`).
+surface).  The Lean game model's actions-root anchor — formerly the
+second deferral here (the standing audit-22 MAJOR) — is built:
+`GameState.actionsRoot` anchors the disputed batch's root,
+`terminateOnSingleStep` carries the responder's inclusion proof and
+refuses an unauthenticated step (`.error .actionNotInBatch`,
+mirroring the L1 revert), and the upgraded composite
+`anchored_challenger_wins` states kernel-truthfulness over the
+batch-committed spelling via `actionProof_binds_action`.
 
 ---
 

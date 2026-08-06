@@ -896,6 +896,7 @@ mod tests {
                 challenger_bond: 1_000,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Challenger,
             last_updated_block: 100,

@@ -1275,25 +1275,45 @@ used for `CollisionFreeOn`.
 
 *Where:* `LegalKernel/FaultProof/Game.lean:336` — Lean sweep, verifier confidence high
 
-> **Workstream SB status (applies to this finding and the next): the
-> gap is NARROWED, not closed.**  The batching cutover replaced the
-> per-action mechanism this finding describes: the L1 no longer
+> **Status (applies to this finding and the next): CLOSED at the
+> model level.**  Two steps.  First, the batching cutover replaced
+> the per-action mechanism this finding describes: the L1 no longer
 > re-derives `_requireActionInLogChain` /
 > `LogChain.actionCommit`-per-entry — `terminateOnSingleStep` now
 > authenticates the disputed action by INCLUSION PROOF against the
 > disputed batch's submitted `actionsRoot`
-> (`_requireActionInBatch` / `ActionNotInBatch`, ruling R7), and
-> that authentication primitive DOES have a proven Lean counterpart:
+> (`_requireActionInBatch` / `ActionNotInBatch`, ruling R7), with the
+> proven Lean primitive
 > `LegalKernel.FaultProof.ActionsRoot.actionProof_binds_action`
 > (under collision-freeness, a verifying opening at the action's key
 > determines the signature-bound leaf commitment, hence the
-> `(kind, signer, fields, sig)` tuple).  What remains open is
-> exactly what this finding's remediation asks for: the Lean GAME
-> MODEL's `GameState` still carries no actions-root anchor and its
-> `.terminateOnSingleStep` arm does not gate on
-> `actionProof_binds_action`, so the Settlement theorems are still
-> stated over the weaker model.  This is the standing "Lean
-> game-model chain binding" follow-up in
+> `(kind, signer, fields, sig)` tuple).  Second — the remediation this
+> finding asks for — the Lean game model now carries the anchor and
+> gates on it: `GameState.actionsRoot` models the L1's
+> `roots[disputedLogIndex].actionsRoot` (immutable while the game is
+> open, since `markDisputed` blocks the R3 overwrite), the
+> `.terminateOnSingleStep` transition takes the responder's
+> `actionProof : SmtCellProof`, and the arm refuses (`.error
+> .actionNotInBatch`, mirroring the L1 revert — retryable, not a
+> loss) any step whose signature is not the fixed 65 bytes or whose
+> signature-bound leaf does not open at `gs.range.low.idx` against
+> the anchor.  `terminate_ok_requires_authentication` inverts the
+> arm (any `.ok` outcome implies authentication), and the upgraded
+> composite `anchored_challenger_wins`
+> (`FaultProof/Settlement.lean`) derives the responder's spelling
+> from the batch-committed one via `actionProof_binds_action` — so
+> kernel-truthfulness is now hypothesised about the COMMITTED
+> `(kind, signer, fields, sig)` tuple, not about whatever step the
+> responder chose, which is precisely the substitution attack in the
+> failure scenario below.  Value-level pins: substituted action /
+> re-signed action / mis-width signature all refuse with
+> `actionNotInBatch` (`Test/FaultProof/Settlement.lean`).  The one
+> residual interface: `anchored_challenger_wins`'s truthfulness
+> hypothesis quantifies over the responder's bundle (verifier
+> proof-independence is not itself a theorem); it is discharged
+> per-variant by the `VerifierWrites.*_correct` derivation
+> discipline.  On-chain SIGNATURE verification at terminate remains
+> the separately-recorded F-A follow-up in
 > `19-findings-and-followups.md`'s SB close-out.
 
 `applyTransition gs (.terminateOnSingleStep step)` calls

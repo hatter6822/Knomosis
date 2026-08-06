@@ -135,6 +135,8 @@ elab "#assert_canonical_axioms " id:ident : command => do
 #assert_canonical_axioms LegalKernel.FaultProof.honest_challenger_wins_of_turn_aligned
 #assert_canonical_axioms LegalKernel.FaultProof.turn_aligned_preserved
 #assert_canonical_axioms LegalKernel.FaultProof.terminate_owner_is_sequencer
+#assert_canonical_axioms LegalKernel.FaultProof.terminate_ok_requires_authentication
+#assert_canonical_axioms LegalKernel.FaultProof.anchored_challenger_wins
 
 /-! ## Fault proof: the batch actions root (Workstream SB) -/
 

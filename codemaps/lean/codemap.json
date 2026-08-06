@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7d7a6adc47d03f348a61dd252b70034ce12e043ce50a13011e6a7d1c2c661e03"
+    "source_digest": "131d8fcb13839d9f99b0578b8aafd539d4a1f04c66400084fabfecd0cf781491"
   },
   "summary": {
     "module_count": 348,
-    "declaration_count": 6100
+    "declaration_count": 6106
   },
   "modules": [
     {
@@ -18312,13 +18312,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 49,
+          "line": 51,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Encoding",
-          "line": 50,
+          "line": 52,
           "called": [
             "LegalKernel.FaultProof"
           ]
@@ -18326,7 +18326,7 @@
         {
           "kind": "def",
           "name": "Claim.encode",
-          "line": 58,
+          "line": 60,
           "called": [
             "Stream"
           ]
@@ -18334,7 +18334,7 @@
         {
           "kind": "def",
           "name": "Claim.decode",
-          "line": 63,
+          "line": 65,
           "called": [
             "Claim.encode",
             "DecodeError",
@@ -18347,7 +18347,7 @@
         {
           "kind": "def",
           "name": "DisputedRange.encode",
-          "line": 79,
+          "line": 81,
           "called": [
             "Stream"
           ]
@@ -18355,7 +18355,7 @@
         {
           "kind": "def",
           "name": "DisputedRange.decode",
-          "line": 84,
+          "line": 86,
           "called": [
             "DecodeError",
             "DisputedRange.encode",
@@ -18368,7 +18368,7 @@
         {
           "kind": "def",
           "name": "TurnSide.encode",
-          "line": 100,
+          "line": 102,
           "called": [
             "Stream",
             "challenger"
@@ -18377,7 +18377,7 @@
         {
           "kind": "def",
           "name": "TurnSide.decode",
-          "line": 105,
+          "line": 107,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18392,7 +18392,7 @@
         {
           "kind": "def",
           "name": "GameStatus.encode",
-          "line": 120,
+          "line": 122,
           "called": [
             "Stream"
           ]
@@ -18400,7 +18400,7 @@
         {
           "kind": "def",
           "name": "GameStatus.decode",
-          "line": 128,
+          "line": 130,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18414,7 +18414,7 @@
         {
           "kind": "def",
           "name": "GameState.encode",
-          "line": 146,
+          "line": 148,
           "called": [
             "Stream"
           ]
@@ -18422,12 +18422,13 @@
         {
           "kind": "def",
           "name": "GameState.decode",
-          "line": 160,
+          "line": 163,
           "called": [
             "DecodeError",
             "Encodable",
             "GameState.encode",
             "Stream",
+            "actionsRoot",
             "challenger",
             "decode",
             "deploymentId",
@@ -18437,7 +18438,7 @@
         {
           "kind": "theorem",
           "name": "gameState_encode_deterministic",
-          "line": 203,
+          "line": 208,
           "called": [
             "GameState.encode"
           ]
@@ -18445,7 +18446,7 @@
         {
           "kind": "theorem",
           "name": "claim_encode_deterministic",
-          "line": 207,
+          "line": 212,
           "called": [
             "Claim.encode"
           ]
@@ -18453,7 +18454,7 @@
         {
           "kind": "theorem",
           "name": "disputedRange_encode_deterministic",
-          "line": 211,
+          "line": 216,
           "called": [
             "DisputedRange.encode",
             "Encoding",
@@ -24370,25 +24371,25 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 36,
+          "line": 37,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 37,
+          "line": 38,
           "called": []
         },
         {
           "kind": "def",
           "name": "MAX_BISECTION_DEPTH",
-          "line": 48,
+          "line": 49,
           "called": []
         },
         {
           "kind": "structure",
           "name": "Claim",
-          "line": 55,
+          "line": 56,
           "called": [
             "LogIndex",
             "StateCommit"
@@ -24397,7 +24398,7 @@
         {
           "kind": "structure",
           "name": "DisputedRange",
-          "line": 69,
+          "line": 70,
           "called": [
             "Claim"
           ]
@@ -24405,7 +24406,7 @@
         {
           "kind": "inductive",
           "name": "TurnSide",
-          "line": 79,
+          "line": 80,
           "called": [
             "challenger"
           ]
@@ -24413,19 +24414,20 @@
         {
           "kind": "inductive",
           "name": "GameStatus",
-          "line": 87,
+          "line": 88,
           "called": []
         },
         {
           "kind": "structure",
           "name": "GameState",
-          "line": 107,
+          "line": 108,
           "called": [
             "ActorId",
             "Claim",
             "DisputedRange",
             "GameStatus",
             "TurnSide",
+            "actionsRoot",
             "challenger",
             "deploymentId"
           ]
@@ -24433,22 +24435,23 @@
         {
           "kind": "inductive",
           "name": "GameTransition",
-          "line": 170,
+          "line": 184,
           "called": [
             "KernelStep",
+            "SmtCellProof",
             "StateCommit"
           ]
         },
         {
           "kind": "inductive",
           "name": "GameError",
-          "line": 201,
+          "line": 224,
           "called": []
         },
         {
           "kind": "def",
           "name": "DisputedRange.midpointIdx",
-          "line": 225,
+          "line": 255,
           "called": [
             "DisputedRange",
             "LogIndex"
@@ -24457,7 +24460,7 @@
         {
           "kind": "def",
           "name": "DisputedRange.isSingleStep",
-          "line": 231,
+          "line": 261,
           "called": [
             "DisputedRange"
           ]
@@ -24465,7 +24468,7 @@
         {
           "kind": "instance",
           "name": "instDecidableIsSingleStep",
-          "line": 235,
+          "line": 265,
           "called": [
             "DisputedRange",
             "DisputedRange.isSingleStep"
@@ -24474,7 +24477,7 @@
         {
           "kind": "def",
           "name": "TurnSide.flip",
-          "line": 242,
+          "line": 272,
           "called": [
             "TurnSide",
             "challenger"
@@ -24483,21 +24486,23 @@
         {
           "kind": "def",
           "name": "applyTransition",
-          "line": 249,
+          "line": 279,
           "called": [
             "GameError",
             "GameState",
             "GameTransition",
             "MAX_BISECTION_DEPTH",
+            "actionLeafValue",
             "challenger",
             "kernelStepApply",
-            "step"
+            "step",
+            "verifyActionProof"
           ]
         },
         {
           "kind": "theorem",
           "name": "applyTransition_deterministic",
-          "line": 377,
+          "line": 426,
           "called": [
             "GameState",
             "GameTransition",
@@ -24507,7 +24512,7 @@
         {
           "kind": "def",
           "name": "pendingMidpointInRange",
-          "line": 388,
+          "line": 437,
           "called": [
             "GameState"
           ]
@@ -24515,7 +24520,7 @@
         {
           "kind": "instance",
           "name": "instDecidablePendingMidpointInRange",
-          "line": 395,
+          "line": 444,
           "called": [
             "GameState",
             "pendingMidpointInRange"
@@ -24524,7 +24529,7 @@
         {
           "kind": "def",
           "name": "turnAlignedWithPending",
-          "line": 422,
+          "line": 471,
           "called": [
             "GameState"
           ]
@@ -24532,7 +24537,7 @@
         {
           "kind": "instance",
           "name": "instDecidableTurnAlignedWithPending",
-          "line": 425,
+          "line": 474,
           "called": [
             "GameState",
             "turnAlignedWithPending"
@@ -24541,7 +24546,7 @@
         {
           "kind": "theorem",
           "name": "turn_aligned_of_start",
-          "line": 436,
+          "line": 485,
           "called": [
             "GameState",
             "turnAlignedWithPending"
@@ -24550,7 +24555,7 @@
         {
           "kind": "theorem",
           "name": "turn_aligned_preserved",
-          "line": 446,
+          "line": 495,
           "called": [
             "GameState",
             "GameTransition",
@@ -24564,7 +24569,7 @@
         {
           "kind": "theorem",
           "name": "terminate_owner_is_sequencer",
-          "line": 548,
+          "line": 599,
           "called": [
             "GameState",
             "turnAlignedWithPending"
@@ -24573,7 +24578,7 @@
         {
           "kind": "def",
           "name": "gameWellFormed",
-          "line": 567,
+          "line": 618,
           "called": [
             "GameState",
             "MAX_BISECTION_DEPTH",
@@ -24583,7 +24588,7 @@
         {
           "kind": "instance",
           "name": "instDecidableGameWellFormed",
-          "line": 577,
+          "line": 628,
           "called": [
             "GameState",
             "gameWellFormed"
@@ -24592,7 +24597,7 @@
         {
           "kind": "theorem",
           "name": "applyTransition_respondAgree_shape",
-          "line": 592,
+          "line": 643,
           "called": [
             "Claim",
             "GameState",
@@ -24603,7 +24608,7 @@
         {
           "kind": "theorem",
           "name": "applyTransition_respondDisagree_shape",
-          "line": 613,
+          "line": 664,
           "called": [
             "Claim",
             "GameState",
@@ -24614,19 +24619,19 @@
         {
           "kind": "theorem",
           "name": "nat_sub_lt_sub_left",
-          "line": 631,
+          "line": 682,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "nat_sub_lt_sub_right",
-          "line": 637,
+          "line": 688,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "range_narrows_on_response_agree",
-          "line": 645,
+          "line": 696,
           "called": [
             "Claim",
             "GameState",
@@ -24638,7 +24643,7 @@
         {
           "kind": "theorem",
           "name": "range_narrows_on_response_disagree",
-          "line": 662,
+          "line": 713,
           "called": [
             "Claim",
             "GameState",
@@ -24650,13 +24655,13 @@
         {
           "kind": "theorem",
           "name": "midpoint_halves",
-          "line": 696,
+          "line": 747,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "range_halves_on_response_agree",
-          "line": 703,
+          "line": 754,
           "called": [
             "Claim",
             "DisputedRange.midpointIdx",
@@ -24669,7 +24674,7 @@
         {
           "kind": "theorem",
           "name": "range_halves_on_response_disagree",
-          "line": 720,
+          "line": 771,
           "called": [
             "Claim",
             "DisputedRange.midpointIdx",
@@ -24682,7 +24687,7 @@
         {
           "kind": "theorem",
           "name": "submitMidpoint_installs_canonical",
-          "line": 739,
+          "line": 790,
           "called": [
             "DisputedRange",
             "DisputedRange.midpointIdx",
@@ -27540,7 +27545,7 @@
     {
       "module": "LegalKernel.FaultProof.Settlement",
       "path": "LegalKernel/FaultProof/Settlement.lean",
-      "declaration_count": 11,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "namespace",
@@ -27561,55 +27566,67 @@
           "called": [
             "GameState",
             "KernelStep",
+            "SmtCellProof",
+            "actionLeafValue",
             "applyTransition",
             "challenger",
             "kernelStepApply",
-            "step"
+            "step",
+            "verifyActionProof"
           ]
         },
         {
           "kind": "theorem",
           "name": "terminate_responder_loses_when_step_differs",
-          "line": 103,
+          "line": 109,
           "called": [
             "GameState",
             "KernelStep",
+            "SmtCellProof",
             "StateCommit",
+            "actionLeafValue",
             "applyTransition",
             "challenger",
             "kernelStepApply",
-            "step"
+            "step",
+            "verifyActionProof"
           ]
         },
         {
           "kind": "theorem",
           "name": "terminate_responder_with_invalid_proofs_loses",
-          "line": 124,
+          "line": 136,
           "called": [
             "GameState",
             "KernelStep",
+            "SmtCellProof",
+            "actionLeafValue",
             "applyTransition",
             "challenger",
             "kernelStepApply",
-            "step"
+            "step",
+            "verifyActionProof"
           ]
         },
         {
           "kind": "theorem",
           "name": "terminate_responder_with_wrong_prestate_loses",
-          "line": 150,
+          "line": 168,
           "called": [
             "GameState",
             "KernelStep",
+            "SmtCellProof",
+            "actionLeafValue",
             "applyTransition",
             "challenger",
-            "step"
+            "step",
+            "verifyActionProof"
           ]
         },
         {
           "kind": "def",
           "name": "settlementDisagreement",
-          "line": 185,
+          "line": 208,
           "called": [
             "GameState",
             "LogIndex",
@@ -27619,7 +27636,7 @@
         {
           "kind": "instance",
           "name": "instDecidableSettlementDisagreement",
-          "line": 192,
+          "line": 215,
           "called": [
             "GameState",
             "LogIndex",
@@ -27630,41 +27647,87 @@
         {
           "kind": "theorem",
           "name": "honest_challenger_wins_against_invalid_state_root",
-          "line": 211,
+          "line": 234,
           "called": [
             "GameState",
             "KernelStep",
             "LogIndex",
+            "SmtCellProof",
             "StateCommit",
+            "actionLeafValue",
             "applyTransition",
             "kernelStepApply",
             "settlementDisagreement",
             "step",
-            "terminate_responder_loses_when_step_differs"
+            "terminate_responder_loses_when_step_differs",
+            "verifyActionProof"
           ]
         },
         {
           "kind": "theorem",
           "name": "honest_challenger_wins_of_turn_aligned",
-          "line": 246,
+          "line": 274,
           "called": [
             "GameState",
             "KernelStep",
             "LogIndex",
+            "SmtCellProof",
             "StateCommit",
+            "actionLeafValue",
             "applyTransition",
             "honest_challenger_wins_against_invalid_state_root",
             "kernelStepApply",
             "settlementDisagreement",
             "step",
             "terminate_owner_is_sequencer",
-            "turnAlignedWithPending"
+            "turnAlignedWithPending",
+            "verifyActionProof"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "terminate_ok_requires_authentication",
+          "line": 325,
+          "called": [
+            "GameState",
+            "KernelStep",
+            "SmtCellProof",
+            "actionLeafValue",
+            "applyTransition",
+            "step",
+            "verifyActionProof"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "anchored_challenger_wins",
+          "line": 378,
+          "called": [
+            "GameState",
+            "KernelStep",
+            "LogIndex",
+            "MultiBundle",
+            "SignedAction",
+            "SmtCellProof",
+            "StateCommit",
+            "actionKey",
+            "actionLeafPreimage",
+            "actionLeafValue",
+            "actionProof_binds_action",
+            "applyTransition",
+            "kernelStepApply",
+            "settlementDisagreement",
+            "smtCellProofPreimages",
+            "step",
+            "terminate_ok_requires_authentication",
+            "verifierPostRootMulti",
+            "verifyActionProof"
           ]
         },
         {
           "kind": "theorem",
           "name": "inDisagreementWithTruth_implies_settlementDisagreement",
-          "line": 282,
+          "line": 507,
           "called": [
             "FaultProof",
             "GameState",
@@ -44165,7 +44228,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 182,
+          "line": 184,
           "called": [
             "LegalKernel.Test.AxiomFootprint"
           ]
@@ -48811,7 +48874,7 @@
         {
           "kind": "def",
           "name": "transitionJson",
-          "line": 114,
+          "line": 115,
           "called": [
             "GameTransition",
             "commitHex"
@@ -48820,7 +48883,7 @@
         {
           "kind": "def",
           "name": "outcomeJson",
-          "line": 141,
+          "line": 142,
           "called": [
             "GameError",
             "GameState",
@@ -48830,7 +48893,7 @@
         {
           "kind": "structure",
           "name": "TraceStep",
-          "line": 163,
+          "line": 165,
           "called": [
             "GameError",
             "GameState",
@@ -48840,7 +48903,7 @@
         {
           "kind": "structure",
           "name": "Trace",
-          "line": 172,
+          "line": 174,
           "called": [
             "GameState",
             "TraceStep"
@@ -48849,7 +48912,7 @@
         {
           "kind": "def",
           "name": "traceStepJson",
-          "line": 184,
+          "line": 186,
           "called": [
             "TraceStep",
             "outcomeJson",
@@ -48859,7 +48922,7 @@
         {
           "kind": "def",
           "name": "traceJson",
-          "line": 189,
+          "line": 191,
           "called": [
             "Trace",
             "gameStateJson",
@@ -48869,7 +48932,7 @@
         {
           "kind": "def",
           "name": "mkCommit",
-          "line": 200,
+          "line": 202,
           "called": [
             "StateCommit"
           ]
@@ -48877,17 +48940,18 @@
         {
           "kind": "def",
           "name": "canonicalDeploymentId",
-          "line": 206,
+          "line": 208,
           "called": []
         },
         {
           "kind": "def",
           "name": "mkInitialState",
-          "line": 212,
+          "line": 214,
           "called": [
             "ActorId",
             "GameState",
             "TurnSide",
+            "actionsRoot",
             "canonicalDeploymentId",
             "challenger",
             "deploymentId",
@@ -48897,7 +48961,7 @@
         {
           "kind": "def",
           "name": "step",
-          "line": 231,
+          "line": 237,
           "called": [
             "GameState",
             "GameTransition",
@@ -48908,7 +48972,7 @@
         {
           "kind": "def",
           "name": "runSequence",
-          "line": 241,
+          "line": 247,
           "called": [
             "GameState",
             "GameTransition",
@@ -48919,7 +48983,7 @@
         {
           "kind": "def",
           "name": "mkTrace",
-          "line": 251,
+          "line": 257,
           "called": [
             "GameState",
             "GameTransition",
@@ -48930,7 +48994,7 @@
         {
           "kind": "def",
           "name": "traceSingleStepAgree",
-          "line": 260,
+          "line": 266,
           "called": [
             "Trace",
             "mkCommit",
@@ -48941,7 +49005,7 @@
         {
           "kind": "def",
           "name": "traceSingleStepDisagree",
-          "line": 270,
+          "line": 276,
           "called": [
             "Trace",
             "mkCommit",
@@ -48952,7 +49016,7 @@
         {
           "kind": "def",
           "name": "traceBisection4Agree",
-          "line": 279,
+          "line": 285,
           "called": [
             "Trace",
             "mkCommit",
@@ -48963,7 +49027,7 @@
         {
           "kind": "def",
           "name": "traceTimeoutSequencer",
-          "line": 296,
+          "line": 302,
           "called": [
             "Trace",
             "mkInitialState",
@@ -48973,7 +49037,7 @@
         {
           "kind": "def",
           "name": "traceTimeoutChallenger",
-          "line": 304,
+          "line": 310,
           "called": [
             "Trace",
             "challenger",
@@ -48984,7 +49048,7 @@
         {
           "kind": "def",
           "name": "traceRespondAgreeNoPending",
-          "line": 313,
+          "line": 319,
           "called": [
             "Trace",
             "mkInitialState",
@@ -48994,7 +49058,7 @@
         {
           "kind": "def",
           "name": "traceSubmitWhilePending",
-          "line": 322,
+          "line": 328,
           "called": [
             "Trace",
             "mkCommit",
@@ -49005,7 +49069,7 @@
         {
           "kind": "def",
           "name": "traceMidpointDerived",
-          "line": 344,
+          "line": 350,
           "called": [
             "Trace",
             "mkCommit",
@@ -49016,7 +49080,7 @@
         {
           "kind": "def",
           "name": "traceMidpointSingleStepRange",
-          "line": 354,
+          "line": 360,
           "called": [
             "Trace",
             "mkCommit",
@@ -49027,7 +49091,7 @@
         {
           "kind": "def",
           "name": "traceMidpointEmptyRange",
-          "line": 363,
+          "line": 369,
           "called": [
             "Trace",
             "mkCommit",
@@ -49038,7 +49102,7 @@
         {
           "kind": "def",
           "name": "traceMidpointInvertedRange",
-          "line": 374,
+          "line": 380,
           "called": [
             "Trace",
             "mkCommit",
@@ -49049,7 +49113,7 @@
         {
           "kind": "def",
           "name": "traceTransitionToSettled",
-          "line": 383,
+          "line": 389,
           "called": [
             "Trace",
             "mkCommit",
@@ -49060,7 +49124,7 @@
         {
           "kind": "def",
           "name": "traceRespondDisagreeNoPending",
-          "line": 392,
+          "line": 398,
           "called": [
             "Trace",
             "mkInitialState",
@@ -49070,7 +49134,7 @@
         {
           "kind": "def",
           "name": "traceBisection2ChallengerStart",
-          "line": 400,
+          "line": 406,
           "called": [
             "Trace",
             "challenger",
@@ -49082,7 +49146,7 @@
         {
           "kind": "def",
           "name": "traceBisection8Deep",
-          "line": 411,
+          "line": 417,
           "called": [
             "Trace",
             "mkCommit",
@@ -49093,7 +49157,7 @@
         {
           "kind": "def",
           "name": "happyTraces",
-          "line": 436,
+          "line": 442,
           "called": [
             "GameTransition",
             "Trace",
@@ -49105,7 +49169,7 @@
         {
           "kind": "def",
           "name": "errorTraces",
-          "line": 462,
+          "line": 468,
           "called": [
             "Trace",
             "traceMidpointDerived",
@@ -49121,7 +49185,7 @@
         {
           "kind": "def",
           "name": "timeoutTraces",
-          "line": 473,
+          "line": 479,
           "called": [
             "Trace",
             "traceTimeoutChallenger",
@@ -49131,7 +49195,7 @@
         {
           "kind": "def",
           "name": "singleStepTraces",
-          "line": 477,
+          "line": 483,
           "called": [
             "Trace",
             "traceSingleStepAgree",
@@ -49141,7 +49205,7 @@
         {
           "kind": "def",
           "name": "multiRoundTraces",
-          "line": 481,
+          "line": 487,
           "called": [
             "Trace",
             "mkCommit",
@@ -49155,7 +49219,7 @@
         {
           "kind": "def",
           "name": "variedActorTraces",
-          "line": 499,
+          "line": 505,
           "called": [
             "Trace",
             "challenger",
@@ -49167,7 +49231,7 @@
         {
           "kind": "def",
           "name": "variedBondTraces",
-          "line": 520,
+          "line": 526,
           "called": [
             "Trace",
             "base",
@@ -49180,7 +49244,7 @@
         {
           "kind": "def",
           "name": "depthCapTraces",
-          "line": 540,
+          "line": 546,
           "called": [
             "GameTransition",
             "Trace",
@@ -49194,7 +49258,7 @@
         {
           "kind": "def",
           "name": "baseCorpus",
-          "line": 573,
+          "line": 579,
           "called": [
             "Trace",
             "depthCapTraces",
@@ -49210,7 +49274,7 @@
         {
           "kind": "def",
           "name": "proceduralBatch",
-          "line": 581,
+          "line": 587,
           "called": [
             "Trace",
             "TurnSide",
@@ -49223,7 +49287,7 @@
         {
           "kind": "def",
           "name": "corpus",
-          "line": 612,
+          "line": 618,
           "called": [
             "Trace",
             "baseCorpus",
@@ -49233,7 +49297,7 @@
         {
           "kind": "def",
           "name": "encodeFixture",
-          "line": 618,
+          "line": 624,
           "called": [
             "traceJson"
           ]
@@ -49241,7 +49305,7 @@
         {
           "kind": "def",
           "name": "writeCorpus",
-          "line": 628,
+          "line": 634,
           "called": [
             "encodeFixture"
           ]
@@ -49249,7 +49313,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 634,
+          "line": 640,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.ObserverGameTraces",
             "applyTransition",
@@ -60787,6 +60851,7 @@
           "name": "initialGame",
           "line": 30,
           "called": [
+            "actionsRoot",
             "challenger",
             "deploymentId",
             "initialRange"
@@ -60795,7 +60860,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 44,
+          "line": 45,
           "called": [
             "DisputedRange",
             "LegalKernel.Test.FaultProof.Game",
@@ -61096,7 +61161,7 @@
     {
       "module": "LegalKernel.Test.FaultProof.Settlement",
       "path": "LegalKernel/Test/FaultProof/Settlement.lean",
-      "declaration_count": 14,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "namespace",
@@ -61157,39 +61222,77 @@
         },
         {
           "kind": "def",
+          "name": "testSig",
+          "line": 92,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "trivialSignedAction",
+          "line": 96,
+          "called": [
+            "SignedAction",
+            "testSig",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "settlementLogEntry",
+          "line": 105,
+          "called": [
+            "trivialSignedAction"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "settlementActionsRoot",
+          "line": 111,
+          "called": [
+            "actionsRoot",
+            "settlementLogEntry"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "settlementActionProof",
+          "line": 115,
+          "called": [
+            "SmtCellProof",
+            "buildActionProof",
+            "settlementLogEntry"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "challengerRespondingGame",
-          "line": 91,
+          "line": 120,
           "called": [
             "GameState",
+            "actionsRoot",
             "challenger",
             "deploymentId",
+            "settlementActionsRoot",
             "singleStepRange"
           ]
         },
         {
           "kind": "def",
           "name": "sequencerRespondingGame",
-          "line": 105,
+          "line": 135,
           "called": [
             "GameState",
+            "actionsRoot",
             "challenger",
             "deploymentId",
+            "settlementActionsRoot",
             "singleStepRange"
           ]
         },
         {
           "kind": "def",
-          "name": "trivialSignedAction",
-          "line": 118,
-          "called": [
-            "SignedAction",
-            "transfer"
-          ]
-        },
-        {
-          "kind": "def",
           "name": "stepClaiming",
-          "line": 132,
+          "line": 156,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -61201,7 +61304,7 @@
         {
           "kind": "def",
           "name": "computedFor",
-          "line": 145,
+          "line": 169,
           "called": [
             "StateCommit",
             "commitExtendedState",
@@ -61213,7 +61316,7 @@
         {
           "kind": "def",
           "name": "matchingGame",
-          "line": 150,
+          "line": 174,
           "called": [
             "GameState",
             "TurnSide",
@@ -61225,7 +61328,7 @@
         {
           "kind": "def",
           "name": "mismatchGame",
-          "line": 158,
+          "line": 182,
           "called": [
             "GameState",
             "TurnSide",
@@ -61235,17 +61338,25 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 162,
+          "line": 186,
           "called": [
             "GameState",
             "KernelStep",
             "LegalKernel.Test.FaultProof.Settlement",
             "LogIndex",
+            "MultiBundle",
+            "SignedAction",
+            "SmtCellProof",
             "StateCommit",
             "TestCase",
+            "actionKey",
+            "actionLeafPreimage",
+            "actionLeafValue",
+            "anchored_challenger_wins",
             "applyTransition",
             "assert",
             "assertEq",
+            "buildKernelStep",
             "challenger",
             "challengerRespondingGame",
             "computedFor",
@@ -61256,13 +61367,21 @@
             "matchingGame",
             "mismatchGame",
             "oneCommit",
+            "settlementActionProof",
+            "settlementBase",
             "settlementDisagreement",
+            "smtCellProofPreimages",
             "step",
             "stepClaiming",
+            "terminate_ok_requires_authentication",
             "terminate_responder_loses_when_step_differs",
             "terminate_responder_wins_when_step_reproduces_high",
             "threeCommit",
-            "twoCommit"
+            "transfer",
+            "trivialSignedAction",
+            "twoCommit",
+            "verifierPostRootMulti",
+            "verifyActionProof"
           ]
         }
       ]
@@ -62294,6 +62413,7 @@
           "name": "trivialGameState",
           "line": 36,
           "called": [
+            "actionsRoot",
             "challenger",
             "deploymentId"
           ]
@@ -62301,8 +62421,9 @@
         {
           "kind": "def",
           "name": "disagreeingGameState",
-          "line": 52,
+          "line": 53,
           "called": [
+            "actionsRoot",
             "challenger",
             "deploymentId"
           ]
@@ -62310,7 +62431,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 68,
+          "line": 70,
           "called": [
             "HonestResponseTrace",
             "HonestResponseTrace.toResponseTrace",
@@ -64618,6 +64739,7 @@
             "DisputedRange",
             "Gen",
             "PropInput",
+            "actionsRoot",
             "challenger",
             "deploymentId",
             "genNat"
@@ -64626,7 +64748,7 @@
         {
           "kind": "def",
           "name": "bisectionAgreeNarrowsProp",
-          "line": 93,
+          "line": 94,
           "called": [
             "PropInput",
             "applyTransition",
@@ -64636,7 +64758,7 @@
         {
           "kind": "def",
           "name": "bisectionDisagreeNarrowsProp",
-          "line": 106,
+          "line": 107,
           "called": [
             "PropInput",
             "applyTransition",
@@ -64646,7 +64768,7 @@
         {
           "kind": "def",
           "name": "gameDeterminismProp",
-          "line": 120,
+          "line": 121,
           "called": [
             "PropInput",
             "applyTransition"
@@ -64655,7 +64777,7 @@
         {
           "kind": "def",
           "name": "runBisectionAgreeNarrows",
-          "line": 136,
+          "line": 137,
           "called": [
             "bisectionAgreeNarrowsProp",
             "forAll",
@@ -64667,7 +64789,7 @@
         {
           "kind": "def",
           "name": "runBisectionDisagreeNarrows",
-          "line": 142,
+          "line": 143,
           "called": [
             "bisectionDisagreeNarrowsProp",
             "forAll",
@@ -64679,7 +64801,7 @@
         {
           "kind": "def",
           "name": "runGameDeterminism",
-          "line": 148,
+          "line": 149,
           "called": [
             "forAll",
             "gameDeterminismProp",
@@ -64691,7 +64813,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 155,
+          "line": 156,
           "called": [
             "LegalKernel.Test.Properties.FaultProof",
             "TestCase",
@@ -64727,6 +64849,7 @@
             "DisputedRange",
             "Gen",
             "MultiRoundInput",
+            "actionsRoot",
             "challenger",
             "deploymentId",
             "genNat"
@@ -64735,7 +64858,7 @@
         {
           "kind": "def",
           "name": "simulateRound",
-          "line": 81,
+          "line": 82,
           "called": [
             "applyTransition"
           ]
@@ -64743,7 +64866,7 @@
         {
           "kind": "def",
           "name": "simulateNRounds",
-          "line": 101,
+          "line": 102,
           "called": [
             "simulateRound"
           ]
@@ -64751,7 +64874,7 @@
         {
           "kind": "def",
           "name": "multiRoundDisagreementPersists",
-          "line": 111,
+          "line": 112,
           "called": [
             "MultiRoundInput",
             "simulateNRounds"
@@ -64760,7 +64883,7 @@
         {
           "kind": "def",
           "name": "runMultiRoundDisagreement",
-          "line": 126,
+          "line": 127,
           "called": [
             "forAll",
             "genMultiRoundInput",
@@ -64772,16 +64895,17 @@
         {
           "kind": "structure",
           "name": "BondConservationInput",
-          "line": 139,
+          "line": 140,
           "called": []
         },
         {
           "kind": "def",
           "name": "genBondConservationInput",
-          "line": 147,
+          "line": 148,
           "called": [
             "BondConservationInput",
             "Gen",
+            "actionsRoot",
             "challenger",
             "deploymentId",
             "genNat"
@@ -64790,7 +64914,7 @@
         {
           "kind": "def",
           "name": "bondPoolConserved",
-          "line": 168,
+          "line": 170,
           "called": [
             "BondConservationInput",
             "simulateNRounds"
@@ -64799,7 +64923,7 @@
         {
           "kind": "def",
           "name": "runBondConservation",
-          "line": 177,
+          "line": 179,
           "called": [
             "bondPoolConserved",
             "forAll",
@@ -64811,13 +64935,13 @@
         {
           "kind": "structure",
           "name": "PerfInput",
-          "line": 189,
+          "line": 191,
           "called": []
         },
         {
           "kind": "def",
           "name": "genPerfInput",
-          "line": 195,
+          "line": 197,
           "called": [
             "Gen",
             "PerfInput",
@@ -64827,9 +64951,10 @@
         {
           "kind": "def",
           "name": "roundCountWithinLinearBound",
-          "line": 203,
+          "line": 205,
           "called": [
             "PerfInput",
+            "actionsRoot",
             "challenger",
             "deploymentId",
             "simulateNRounds"
@@ -64838,7 +64963,7 @@
         {
           "kind": "def",
           "name": "runPerfProperty",
-          "line": 227,
+          "line": 230,
           "called": [
             "forAll",
             "genPerfInput",
@@ -64850,7 +64975,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 236,
+          "line": 239,
           "called": [
             "LegalKernel.Test.Properties.FaultProofDeep",
             "TestCase",
@@ -64886,6 +65011,7 @@
             "DisputedRange",
             "Gen",
             "HonestChallengerInput",
+            "actionsRoot",
             "challenger",
             "deploymentId",
             "genNat"
@@ -64894,7 +65020,7 @@
         {
           "kind": "def",
           "name": "disagreementInvariantHoldsAtInit",
-          "line": 74,
+          "line": 75,
           "called": [
             "HonestChallengerInput"
           ]
@@ -64902,7 +65028,7 @@
         {
           "kind": "def",
           "name": "runDisagreementInvariant",
-          "line": 90,
+          "line": 91,
           "called": [
             "disagreementInvariantHoldsAtInit",
             "forAll",
@@ -64914,16 +65040,17 @@
         {
           "kind": "structure",
           "name": "BondAccountingInput",
-          "line": 102,
+          "line": 103,
           "called": []
         },
         {
           "kind": "def",
           "name": "genBondAccountingInput",
-          "line": 108,
+          "line": 109,
           "called": [
             "BondAccountingInput",
             "Gen",
+            "actionsRoot",
             "challenger",
             "deploymentId",
             "genNat"
@@ -64932,7 +65059,7 @@
         {
           "kind": "def",
           "name": "bondAccountingWellFormed",
-          "line": 129,
+          "line": 131,
           "called": [
             "BondAccountingInput"
           ]
@@ -64940,7 +65067,7 @@
         {
           "kind": "def",
           "name": "runBondAccounting",
-          "line": 137,
+          "line": 139,
           "called": [
             "bondAccountingWellFormed",
             "forAll",
@@ -64952,7 +65079,7 @@
         {
           "kind": "def",
           "name": "perRoundNarrowingProperty",
-          "line": 151,
+          "line": 153,
           "called": [
             "BondAccountingInput",
             "Claim",
@@ -64963,7 +65090,7 @@
         {
           "kind": "def",
           "name": "runPerRoundNarrowing",
-          "line": 171,
+          "line": 173,
           "called": [
             "forAll",
             "genBondAccountingInput",
@@ -64975,7 +65102,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 179,
+          "line": 181,
           "called": [
             "LegalKernel.Test.Properties.FaultProofExtended",
             "TestCase",

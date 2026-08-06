@@ -87,6 +87,35 @@ private def singleStepRange : DisputedRange :=
   { low  := { idx := 0, commit := oneCommit },
     high := { idx := 1, commit := twoCommit } }
 
+/-- The fixed 65-byte signature the batch leaf binds (Workstream SB
+    ruling R7; the terminate arm's width gate requires exactly the
+    secp256k1 wire width). -/
+private def testSig : ByteArray :=
+  ByteArray.mk (Array.replicate 65 (0x42 : UInt8))
+
+/-- The action the real step applies. -/
+private def trivialSignedAction : SignedAction :=
+  { action := .transfer 1 7 8 30
+  , signer := 7
+  , nonce  := 3
+  , sig    := testSig }
+
+/-- The disputed batch: ONE entry, the fixture's signed action at
+    absolute log index 0 — which is the range's `low.idx`, exactly
+    where the terminate arm authenticates. -/
+private def settlementLogEntry : Runtime.LogEntry :=
+  { prevHash      := Runtime.zeroHash
+  , signedAction  := trivialSignedAction
+  , postStateHash := Runtime.zeroHash }
+
+/-- The anchored actions root the games below carry. -/
+private def settlementActionsRoot : ByteArray :=
+  actionsRoot 0 [settlementLogEntry]
+
+/-- The inclusion proof for the batch's single action. -/
+private def settlementActionProof : SmtCellProof :=
+  buildActionProof 0 [settlementLogEntry] 0
+
 /-- A game state with the challenger's turn at a single-step
     range. -/
 private def challengerRespondingGame : GameState :=
@@ -99,7 +128,8 @@ private def challengerRespondingGame : GameState :=
   , sequencerBond   := 1_000
   , challengerBond  := 50
   , status          := .inProgress
-  , deploymentId    := ByteArray.empty }
+  , deploymentId    := ByteArray.empty
+  , actionsRoot     := settlementActionsRoot }
 
 /-- A game state with the sequencer's turn at a single-step
     range. -/
@@ -113,14 +143,8 @@ private def sequencerRespondingGame : GameState :=
   , sequencerBond   := 1_000
   , challengerBond  := 50
   , status          := .inProgress
-  , deploymentId    := ByteArray.empty }
-
-/-- The action the real step applies. -/
-private def trivialSignedAction : SignedAction :=
-  { action := .transfer 1 7 8 30
-  , signer := 7
-  , nonce  := 3
-  , sig    := ByteArray.empty }
+  , deploymentId    := ByteArray.empty
+  , actionsRoot     := settlementActionsRoot }
 
 /-- The canonical step from `settlementBase`, with the claim and the
     declared pre-commit left free.
@@ -131,7 +155,7 @@ private def trivialSignedAction : SignedAction :=
     `preStateCommit` DOES matter — the transition refuses a step whose
     declared pre-commit is not the range's `low`. -/
 private def stepClaiming (preCommit postCommit : StateCommit) : KernelStep :=
-  { buildKernelStep settlementBase trivialSignedAction 0 with
+  { buildKernelStep settlementBase trivialSignedAction 1 with
       preStateCommit  := preCommit
     , postStateCommit := postCommit }
 
@@ -144,7 +168,7 @@ private def stepClaiming (preCommit postCommit : StateCommit) : KernelStep :=
     advance — which is the whole point of the flip.  A bundle the
     responder controls no longer sets it. -/
 private def computedFor (_preCommit : StateCommit) : StateCommit :=
-  commitExtendedState (productionApplyBudget settlementBase trivialSignedAction 0)
+  commitExtendedState (productionApplyBudget settlementBase trivialSignedAction 1)
 
 /-- A single-step game whose committed endpoint IS what the step VM
     computes, so the responder's position is upheld. -/
@@ -184,7 +208,7 @@ def tests : List TestCase :=
     , body := do
         let step := stepClaiming oneCommit twoCommit
         match applyTransition (matchingGame .sequencer)
-                (.terminateOnSingleStep step) with
+                (.terminateOnSingleStep step settlementActionProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.sequencerWon) (actual := gs'.status)
             "an honest sequencer defending a true endpoint wins"
@@ -194,7 +218,7 @@ def tests : List TestCase :=
     , body := do
         let step := stepClaiming oneCommit twoCommit
         match applyTransition (matchingGame .challenger)
-                (.terminateOnSingleStep step) with
+                (.terminateOnSingleStep step settlementActionProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
             "the win follows the turn, not the party"
@@ -208,7 +232,7 @@ def tests : List TestCase :=
         -- no adjudicator participates.
         let step := stepClaiming oneCommit twoCommit
         match applyTransition (mismatchGame .sequencer)
-                (.terminateOnSingleStep step) with
+                (.terminateOnSingleStep step settlementActionProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
             "a fabricated endpoint cannot be defended"
@@ -219,7 +243,7 @@ def tests : List TestCase :=
         -- Symmetric: the settlement is turn-based, not party-based.
         let step := stepClaiming oneCommit twoCommit
         match applyTransition (mismatchGame .challenger)
-                (.terminateOnSingleStep step) with
+                (.terminateOnSingleStep step settlementActionProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.sequencerWon) (actual := gs'.status)
             "the determinism is symmetric across turn parities"
@@ -235,8 +259,8 @@ def tests : List TestCase :=
         -- never read and both must settle identically.
         let stepA := stepClaiming oneCommit twoCommit
         let stepB := stepClaiming oneCommit (computedFor oneCommit)
-        match applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepA),
-              applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepB) with
+        match applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepA settlementActionProof),
+              applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepB settlementActionProof) with
         | .ok a, .ok b =>
           assertEq (expected := a.status) (actual := b.status)
             "the responder's own claim must not move the settlement"
@@ -252,7 +276,7 @@ def tests : List TestCase :=
         -- refuses it.  `twoCommit ≠ range.low.commit = oneCommit`.
         let step := stepClaiming twoCommit (computedFor twoCommit)
         match applyTransition (matchingGame .sequencer)
-                (.terminateOnSingleStep step) with
+                (.terminateOnSingleStep step settlementActionProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
             "a step from an uncommitted pre-state loses"
@@ -266,11 +290,146 @@ def tests : List TestCase :=
         let g := { matchingGame .sequencer with
                      pendingMidpoint := some { idx := 1, commit := oneCommit } }
         let step := stepClaiming oneCommit twoCommit
-        match applyTransition g (.terminateOnSingleStep step) with
+        match applyTransition g (.terminateOnSingleStep step settlementActionProof) with
         | .ok _ => assert false "should refuse to terminate mid-bisection"
         | .error e =>
           assertEq (expected := GameError.terminationDuringBisection) (actual := e)
             "got the expected error variant"
+    }
+  , -- ===== The anchor: a substituted action cannot settle =====
+    { name := "substituted action → actionNotInBatch"
+    , body := do
+        -- The audit-22 attack, refused at the model level: the batch
+        -- committed `transfer 1 7 8 30`; a responder executing ANY
+        -- other action — here the same shape with a different amount,
+        -- so its leaf differs — cannot even reach the fold.  On L1
+        -- this is the `ActionNotInBatch` revert.
+        let substituted : SignedAction :=
+          { trivialSignedAction with action := .transfer 1 7 8 29 }
+        let step :=
+          { buildKernelStep settlementBase substituted 1 with
+              preStateCommit := oneCommit }
+        match applyTransition (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof) with
+        | .ok _ => assert false "a substituted action must not settle"
+        | .error e =>
+          assertEq (expected := GameError.actionNotInBatch) (actual := e)
+            "the substituted action is refused by the anchor"
+    }
+  , { name := "committed action under a different signature → actionNotInBatch"
+    , body := do
+        -- The leaf binds the SIGNATURE (ruling R7): the right action
+        -- under different sig bytes has a different leaf, so it does
+        -- not open in the batch either.
+        let resigned : SignedAction :=
+          { trivialSignedAction with
+              sig := ByteArray.mk (Array.replicate 65 (0x43 : UInt8)) }
+        let step :=
+          { buildKernelStep settlementBase resigned 1 with
+              preStateCommit := oneCommit }
+        match applyTransition (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof) with
+        | .ok _ => assert false "a re-signed action must not settle"
+        | .error e =>
+          assertEq (expected := GameError.actionNotInBatch) (actual := e)
+            "the signature is bound, not decorative"
+    }
+  , { name := "non-65-byte signature → actionNotInBatch"
+    , body := do
+        -- The width gate mirrors `ActionSigWrongLength`; it is what
+        -- keeps `actionLeafPreimage`'s split unambiguous.
+        let shortSig : SignedAction :=
+          { trivialSignedAction with
+              sig := ByteArray.mk (Array.replicate 64 (0x42 : UInt8)) }
+        let step :=
+          { buildKernelStep settlementBase shortSig 1 with
+              preStateCommit := oneCommit }
+        match applyTransition (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof) with
+        | .ok _ => assert false "a mis-width signature must not settle"
+        | .error e =>
+          assertEq (expected := GameError.actionNotInBatch) (actual := e)
+            "the 65-byte width is enforced"
+    }
+  , { name := "authenticated step at the wrong log index → responder loses"
+    , body := do
+        -- `l2LogIndex` is the L1's `g.high.idx`, supplied by the game
+        -- there and pinned here: an authenticated action executed at a
+        -- log index of the responder's choosing (which `withdraw`'s
+        -- state-keyed pending cell reads) is a loss, same as a
+        -- fabricated pre-state.
+        let step :=
+          { buildKernelStep settlementBase trivialSignedAction 0 with
+              preStateCommit := oneCommit }
+        match applyTransition (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof) with
+        | .ok gs' =>
+          assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
+            "a caller-chosen log index loses"
+        | .error e => assert false s!"transition should settle; got {repr e}"
+    }
+  , { name := "terminate_ok_requires_authentication type stable"
+    , body := do
+        let _proof :
+            ∀ {gs gs' : GameState} {step : KernelStep}
+              {actionProof : SmtCellProof},
+              applyTransition gs (.terminateOnSingleStep step actionProof)
+                = .ok gs' →
+              step.signedAction.sig.size = 65 ∧
+                verifyActionProof gs.actionsRoot gs.range.low.idx
+                  (actionLeafValue step.signedAction) actionProof = true :=
+          terminate_ok_requires_authentication
+        assert true "authentication-inversion theorem API stable"
+    }
+  , { name := "anchored_challenger_wins type stable"
+    , body := do
+        let _proof :
+            ∀ (truth : LogIndex → StateCommit)
+              (gs gs' : GameState) (step : KernelStep)
+              (actionProof trueProof : SmtCellProof)
+              (trueKind : UInt8) (trueSigner : Nat)
+              (trueFields trueSig : ByteArray),
+              gs.turn = .sequencer →
+              settlementDisagreement truth gs →
+              trueSigner < 2 ^ 64 →
+              trueSig.size = 65 →
+              verifyActionProof gs.actionsRoot gs.range.low.idx
+                (Runtime.hashBytes
+                  (actionLeafPreimage trueKind trueSigner trueFields trueSig))
+                trueProof = true →
+              Bridge.CollisionFreeOn
+                (smtCellProofPreimages (actionKey gs.range.low.idx)
+                  (Runtime.hashBytes
+                    (actionLeafPreimage
+                      (StepVMCoherence.actionKindByte step.signedAction.action)
+                      step.signedAction.signer.toNat
+                      (StepVMCoherence.actionFieldsForL1
+                        step.signedAction.action)
+                      step.signedAction.sig))
+                  (Runtime.hashBytes
+                    (actionLeafPreimage trueKind trueSigner trueFields trueSig))
+                  actionProof trueProof
+                 ++ [actionLeafPreimage
+                       (StepVMCoherence.actionKindByte step.signedAction.action)
+                       step.signedAction.signer.toNat
+                       (StepVMCoherence.actionFieldsForL1
+                         step.signedAction.action)
+                       step.signedAction.sig,
+                     actionLeafPreimage trueKind trueSigner trueFields trueSig])
+                Runtime.hashBytes →
+              (∀ st : SignedAction, ∀ b : MultiBundle,
+                StepVMCoherence.actionKindByte st.action = trueKind →
+                st.signer.toNat = trueSigner →
+                StepVMCoherence.actionFieldsForL1 st.action = trueFields →
+                st.sig = trueSig →
+                ∀ c, verifierPostRootMulti gs.range.low.commit st.action
+                      st.signer gs.range.high.idx b = some c →
+                  c = truth gs.range.high.idx) →
+              applyTransition gs (.terminateOnSingleStep step actionProof)
+                = .ok gs' →
+              gs'.status = .challengerWon :=
+          anchored_challenger_wins
+        assert true "anchored composite theorem API stable"
     }
   , -- ===== Bridge lemma =====
     { name := "inDisagreementWithTruth_implies_settlementDisagreement"
@@ -303,13 +462,19 @@ def tests : List TestCase :=
     { name := "terminate_responder_wins_when_step_reproduces_high type stable"
     , body := do
         let _proof :
-            ∀ (gs gs' : GameState) (step : KernelStep),
+            ∀ (gs gs' : GameState) (step : KernelStep)
+              (actionProof : SmtCellProof),
               gs.status = .inProgress →
               gs.range.isSingleStep →
               gs.pendingMidpoint = none →
+              step.signedAction.sig.size = 65 →
+              verifyActionProof gs.actionsRoot gs.range.low.idx
+                (actionLeafValue step.signedAction) actionProof = true →
               step.preStateCommit = gs.range.low.commit →
+              step.l2LogIndex = gs.range.high.idx →
               kernelStepApply step = some gs.range.high.commit →
-              applyTransition gs (.terminateOnSingleStep step) = .ok gs' →
+              applyTransition gs (.terminateOnSingleStep step actionProof)
+                = .ok gs' →
               gs'.status =
                 (match gs.turn with
                  | .sequencer  => GameStatus.sequencerWon
@@ -320,14 +485,20 @@ def tests : List TestCase :=
   , { name := "terminate_responder_loses_when_step_differs type stable"
     , body := do
         let _proof :
-            ∀ (gs gs' : GameState) (step : KernelStep) (computed : StateCommit),
+            ∀ (gs gs' : GameState) (step : KernelStep)
+              (actionProof : SmtCellProof) (computed : StateCommit),
               gs.status = .inProgress →
               gs.range.isSingleStep →
               gs.pendingMidpoint = none →
+              step.signedAction.sig.size = 65 →
+              verifyActionProof gs.actionsRoot gs.range.low.idx
+                (actionLeafValue step.signedAction) actionProof = true →
               step.preStateCommit = gs.range.low.commit →
+              step.l2LogIndex = gs.range.high.idx →
               kernelStepApply step = some computed →
               computed ≠ gs.range.high.commit →
-              applyTransition gs (.terminateOnSingleStep step) = .ok gs' →
+              applyTransition gs (.terminateOnSingleStep step actionProof)
+                = .ok gs' →
               gs'.status =
                 (match gs.turn with
                  | .sequencer  => GameStatus.challengerWon
@@ -344,15 +515,20 @@ def tests : List TestCase :=
         -- settlement reads both sides from the game state.
         let _proof :
             ∀ (truth : LogIndex → StateCommit) (gs gs' : GameState)
-              (step : KernelStep),
+              (step : KernelStep) (actionProof : SmtCellProof),
               gs.status = .inProgress →
               gs.range.isSingleStep →
               gs.pendingMidpoint = none →
+              step.signedAction.sig.size = 65 →
+              verifyActionProof gs.actionsRoot gs.range.low.idx
+                (actionLeafValue step.signedAction) actionProof = true →
               step.preStateCommit = gs.range.low.commit →
+              step.l2LogIndex = gs.range.high.idx →
               gs.turn = .sequencer →
               settlementDisagreement truth gs →
               kernelStepApply step = some (truth gs.range.high.idx) →
-              applyTransition gs (.terminateOnSingleStep step) = .ok gs' →
+              applyTransition gs (.terminateOnSingleStep step actionProof)
+                = .ok gs' →
               gs'.status = .challengerWon :=
           honest_challenger_wins_against_invalid_state_root
         assert true "composite #232 theorem API stable"

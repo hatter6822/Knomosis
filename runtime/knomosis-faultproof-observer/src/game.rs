@@ -245,6 +245,15 @@ pub struct GameState {
     /// transcripts.  Stored as a 32-byte hash to match the
     /// Solidity contract's `bytes32 deploymentId`.
     pub deployment_id: [u8; 32],
+    /// The disputed batch's ACTIONS ROOT (Workstream SB ruling R7)
+    /// — the anchor the Lean reference model's authenticated
+    /// terminate gates on.  The L1 contract does not store it (it
+    /// reads `roots[disputedLogIndex].actionsRoot` at terminate);
+    /// the observer's terminate path reads its own `BatchRecord`
+    /// store.  Carried here for shape parity with the Lean
+    /// reference; the Rust port never evaluates terminates, so the
+    /// field is inert in `apply_transition`.
+    pub actions_root: [u8; 32],
 }
 
 /// The legal transitions from one game state to the next.  Mirrors
@@ -550,6 +559,7 @@ mod tests {
             challenger_bond: 1_000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         }
     }
 

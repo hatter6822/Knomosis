@@ -32,6 +32,7 @@ cannot violate any kernel invariant.
 -/
 
 import LegalKernel.Disputes.Types
+import LegalKernel.FaultProof.ActionsRoot
 import LegalKernel.FaultProof.Step
 
 namespace LegalKernel
@@ -135,6 +136,19 @@ structure GameState where
       deployment.  Prevents cross-deployment replay of game
       transcripts. -/
   deploymentId    : ByteArray
+  /-- The disputed batch's ACTIONS ROOT (Workstream SB ruling R7):
+      the SMT root over the batch's per-action signature-bound leaf
+      commitments, fixed when the game opens.  On L1 the game reads
+      it from `roots[disputedLogIndex].actionsRoot` at terminate
+      time, and the record is immutable at its key while a game is
+      open (`markDisputed` blocks reclaim, so the R3 overwrite path
+      cannot fire) — so an immutable per-game field is the faithful
+      model.  The `terminateOnSingleStep` arm gates on it: the
+      responder's action must OPEN at the disputed index against
+      this root, which is what stops a losing party from settling on
+      an action the batch never committed (the audit-22 model-chain-
+      binding MAJOR). -/
+  actionsRoot     : ByteArray
   deriving Repr
 
 /-! ## Game transitions (§12.4.2 / WU H.4.2) -/
@@ -181,9 +195,18 @@ inductive GameTransition
   /-- When range is single-step, terminate by executing.  The
       step VM re-executes from the committed pre-state and its
       output is compared against the committed disputed
-      endpoint. -/
+      endpoint.
+
+      `actionProof` is the disputed action's INCLUSION PROOF against
+      the game's anchored `actionsRoot` (Workstream SB ruling R7):
+      the responder must show that the `(kind, signer, fields,
+      65-byte sig)` spelling it is executing is the one the batch
+      committed at `gs.range.low.idx`.  Mirrors the L1's
+      `_requireActionInBatch`; without it the arm adjudicated an
+      unauthenticated, caller-supplied action (the audit-22
+      MAJOR). -/
   | terminateOnSingleStep
-      (kernelStep : KernelStep)
+      (kernelStep : KernelStep) (actionProof : SmtCellProof)
   /-- A party times out (BISECTION_RESPONSE_TIMEOUT exceeded).
       The loser is *derived* from `gs.turn` at apply-time: the
       party whose turn it is when the deadline elapses is the
@@ -217,6 +240,13 @@ inductive GameError
   | rangeNotSingleStep
   /-- Termination attempted during an active bisection. -/
   | terminationDuringBisection
+  /-- The terminate's action does not open at the disputed index
+      against the game's anchored actions root (or its signature is
+      not the fixed 65-byte secp256k1 wire width).  Mirrors the L1's
+      `ActionNotInBatch` / `ActionSigWrongLength` reverts: the
+      responder may retry within its turn window with the committed
+      action, and loses by timeout if it never can. -/
+  | actionNotInBatch
   deriving Repr, DecidableEq
 
 /-! ## State-machine semantics -/
@@ -311,7 +341,7 @@ def applyTransition (gs : GameState) :
   -- step from the COMMITTED pre-state and its output is compared
   -- against the COMMITTED disputed endpoint.  Neither side of that
   -- comparison comes from the caller.
-  | .terminateOnSingleStep step =>
+  | .terminateOnSingleStep step actionProof =>
     if gs.status ≠ .inProgress then .error .gameAlreadyEnded
     else if !gs.range.isSingleStep then
       .error .rangeNotSingleStep
@@ -320,13 +350,32 @@ def applyTransition (gs : GameState) :
       -- open, so the range is not settled enough to terminate on.
       -- This error existed but was unreachable.
       .error .terminationDuringBisection
-    else if step.preStateCommit ≠ gs.range.low.commit then
-      -- On L1 this cannot arise: the contract passes `g.low.commit`
-      -- to the step VM itself.  In the Lean model the pre-state
-      -- travels inside the `KernelStep`, so the mismatch must be
-      -- rejected explicitly — otherwise a party could re-execute the
-      -- disputed step from a pre-state of their own choosing and
-      -- produce whatever post-commit they needed.
+    else if step.signedAction.sig.size ≠ 65
+            ∨ verifyActionProof gs.actionsRoot gs.range.low.idx
+                (actionLeafValue step.signedAction) actionProof ≠ true then
+      -- AUTHENTICATE BEFORE EXECUTING (Workstream SB ruling R7,
+      -- mirroring the L1's `_requireActionInBatch` order): the
+      -- disputed action sits at absolute log index `gs.range.low.idx`
+      -- (the single step carries state `low.idx` to `low.idx + 1`),
+      -- and its signature-bound leaf must open there against the
+      -- game's anchored actions root.  The 65-byte width check
+      -- mirrors `ActionsRoot.actionLeafCommit`'s
+      -- `ActionSigWrongLength` revert and is what keeps the packed
+      -- leaf pre-image's split unambiguous
+      -- (`actionLeafPreimage_inj`).  An unauthenticated action
+      -- REVERTS on L1 — no state change, the responder may retry —
+      -- so it is an `.error` here, not a loss.
+      .error .actionNotInBatch
+    else if step.preStateCommit ≠ gs.range.low.commit
+            ∨ step.l2LogIndex ≠ gs.range.high.idx then
+      -- On L1 neither disjunct can arise: the contract passes
+      -- `g.low.commit` and `g.high.idx` to the step VM itself.  In
+      -- the Lean model both travel inside the `KernelStep`, so the
+      -- mismatches must be rejected explicitly — otherwise a party
+      -- could re-execute the disputed step from a pre-state of its
+      -- own choosing (or at a log index of its own choosing, which
+      -- `withdraw`'s state-keyed pending cell reads) and produce
+      -- whatever post-commit it needed.
       .ok { gs with
               status :=
                 match gs.turn with
@@ -524,10 +573,12 @@ theorem turn_aligned_preserved {gs gs' : GameState}
           subst h_gs
           unfold turnAlignedWithPending
           simp [ht, TurnSide.flip]
-  | terminateOnSingleStep step =>
+  | terminateOnSingleStep step actionProof =>
     -- Every terminal arm is `{ gs with status := … }`: the pending
     -- midpoint and the turn both survive unchanged, so the record
     -- projections the invariant reads are definitionally `gs`'s.
+    -- The authentication guard (Workstream SB) only ADDS an error
+    -- branch, which the `absurd` leg absorbs.
     simp only [applyTransition] at h
     repeat' split at h
     all_goals

@@ -496,6 +496,7 @@ fn game_state_persists_through_sqlite() {
             challenger_bond: 1_000_000,
             status: GameStatus::InProgress,
             deployment_id: [0xDE; 32],
+            actions_root: [0u8; 32],
         },
         me: TurnSide::Challenger,
         last_updated_block: 12345,
@@ -531,6 +532,7 @@ fn settlement_composes_with_state_machine() {
         challenger_bond: 1000,
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
+        actions_root: [0u8; 32],
     };
     let settled = apply_settlement(&state, GameStatus::SequencerWon).unwrap();
     assert_eq!(settled.status, GameStatus::SequencerWon);
@@ -734,6 +736,7 @@ fn cold_start_lifecycle_with_mark_state_known() {
         challenger_bond: 1_000_000,
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
+        actions_root: [0u8; 32],
     };
     let updated = obs
         .mark_state_known(
@@ -821,6 +824,7 @@ fn integration_mark_state_known_rejects_degenerate_range() {
         challenger_bond: 0,
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
+        actions_root: [0u8; 32],
     };
     // Unknown-game branch returns Ok(false) without hitting
     // the range check.

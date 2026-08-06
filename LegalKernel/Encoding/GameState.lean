@@ -31,6 +31,8 @@ sequencerBond     :  9 bytes
 challengerBond    :  9 bytes
 status            :  9 bytes  (CBE uint tag 0..4)
 deploymentId      : 9 + len
+actionsRoot       : 9 + len   (Workstream SB: the disputed batch's
+                               actions-root anchor, appended LAST)
 ```
 
 Every scalar rides a full CBE head — there are no bare 1-byte tags
@@ -154,7 +156,8 @@ def GameState.encode (gs : LegalKernel.FaultProof.GameState) : Stream :=
   Encodable.encode (T := Nat) gs.sequencerBond ++
   Encodable.encode (T := Nat) gs.challengerBond ++
   Encodable.encode (T := LegalKernel.FaultProof.GameStatus) gs.status ++
-  Encodable.encode (T := ByteArray) gs.deploymentId
+  Encodable.encode (T := ByteArray) gs.deploymentId ++
+  Encodable.encode (T := ByteArray) gs.actionsRoot
 
 /-- Decode a `GameState` (best-effort; returns the fields if all
     parts decode successfully). -/
@@ -171,6 +174,7 @@ def GameState.decode (s : Stream) :
   let (chalBond, s) ← Encodable.decode (T := Nat) s
   let (status, s) ← Encodable.decode (T := LegalKernel.FaultProof.GameStatus) s
   let (depId, s) ← Encodable.decode (T := ByteArray) s
+  let (acRoot, s) ← Encodable.decode (T := ByteArray) s
   -- Cap actor ids at UInt64 (2^64).
   if h_seq : seqId < 18446744073709551616 then
     if h_chal : chalId < 18446744073709551616 then
@@ -186,7 +190,8 @@ def GameState.decode (s : Stream) :
         sequencerBond   := seqBond,
         challengerBond  := chalBond,
         status          := status,
-        deploymentId    := depId
+        deploymentId    := depId,
+        actionsRoot     := acRoot
       }, s)
     else
       let _ := h_chal

@@ -107,6 +107,7 @@ struct FixtureGameState {
     challenger_bond: u128,
     status: String,
     deployment_id: String,
+    actions_root: String,
 }
 
 /// Custom deserializer for `u128` from JSON numbers up to
@@ -190,7 +191,9 @@ enum FixtureTransition {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 enum FixtureOutcome {
-    Ok { state: FixtureGameState },
+    // Boxed: the fixture state grew past clippy's variant-size
+    // threshold when the Workstream-SB `actions_root` anchor landed.
+    Ok { state: Box<FixtureGameState> },
     Err { error: String },
 }
 
@@ -275,6 +278,7 @@ impl FixtureGameState {
             challenger_bond: self.challenger_bond,
             status,
             deployment_id: hex_to_bytes32(&self.deployment_id)?,
+            actions_root: [0u8; 32],
         })
     }
 
@@ -302,6 +306,7 @@ impl FixtureGameState {
                 GameStatus::TimedOutChallenger => "TimedOutChallenger".to_string(),
             },
             deployment_id: bytes32_to_hex(&gs.deployment_id),
+            actions_root: bytes32_to_hex(&gs.actions_root),
         }
     }
 }
@@ -371,7 +376,7 @@ fn load_corpus() -> Option<Fixture> {
 fn rust_outcome_to_fixture(o: Result<GameState, GameError>) -> FixtureOutcome {
     match o {
         Ok(gs) => FixtureOutcome::Ok {
-            state: FixtureGameState::encode(&gs),
+            state: Box::new(FixtureGameState::encode(&gs)),
         },
         Err(e) => FixtureOutcome::Err {
             error: format!("{e:?}"),
@@ -561,6 +566,7 @@ fn rust_outcome_round_trips_through_fixture_encoding() {
         challenger_bond: 1000,
         status: GameStatus::InProgress,
         deployment_id: [0xAB; 32],
+        actions_root: [0u8; 32],
     };
     let encoded = FixtureGameState::encode(&gs);
     let decoded = encoded.decode().expect("round-trip decode");
@@ -594,6 +600,7 @@ fn outcome_encoder_recognises_ok_and_err() {
         challenger_bond: 1,
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
+        actions_root: [0u8; 32],
     };
 
     let ok_fixture = rust_outcome_to_fixture(Ok(gs.clone()));

@@ -90,6 +90,7 @@ fn in_progress_game_strategy() -> impl Strategy<Value = GameState> {
                     challenger_bond: 1_000,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 })
             },
         )
@@ -401,6 +402,7 @@ proptest! {
             challenger_bond: 1000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         let mut rounds = 0;
         while !gs.range.is_single_step() && rounds < 64 {
@@ -514,6 +516,7 @@ proptest! {
             challenger_bond: 1000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         // is_single_step is `true` by saturating-add discipline.
         prop_assert!(degenerate.range.is_single_step());

@@ -64,7 +64,8 @@ def genHonestChallengerInput : Gen HonestChallengerInput := fun st =>
       sequencerBond   := 1_000_000,
       challengerBond  := 50_000,
       status          := .inProgress,
-      deploymentId    := ByteArray.empty }
+      deploymentId    := ByteArray.empty
+      actionsRoot     := ByteArray.empty }
   ({ gs := gs,
      truthfulLowCommit := truthfulLow,
      forgedHighCommit := forgedHigh }, st₂)
@@ -120,7 +121,8 @@ def genBondAccountingInput : Gen BondAccountingInput := fun st =>
       sequencerBond   := sb,
       challengerBond  := cb,
       status          := .inProgress,
-      deploymentId    := ByteArray.empty }
+      deploymentId    := ByteArray.empty
+      actionsRoot     := ByteArray.empty }
   ({ gs := gs }, st₂)
 
 /-- Property: `sequencerBond + challengerBond` equals total ETH
