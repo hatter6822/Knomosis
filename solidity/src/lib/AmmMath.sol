@@ -26,6 +26,17 @@ library AmmMath {
     ///         argument is interpreted as a fraction of this.
     uint256 internal constant BPS_DENOMINATOR = 10_000;
 
+    /// @notice The L2 reserve swap's fee (Workstream SB), in basis
+    ///         points — 0.30%, retained in the reserve actor's balances
+    ///         as pool yield.  ONE value across the surfaces:
+    ///         `KnomosisBridge.AMM_SWAP_FEE_BPS` pins the same number
+    ///         for the L1 AMM (their equality is asserted in
+    ///         `StepVMRootReserveSwap.t.sol`, so a drift is a test
+    ///         failure, not a silent re-pricing), and Lean's
+    ///         `Bridge.AmmMath.swapFeeBps` is the cross-stack corpus's
+    ///         authority for the kind-25 rows.
+    uint256 internal constant SWAP_FEE_BPS = 30;
+
     /// @notice Thrown when an input amount is zero (`getAmountOut`) or a
     ///         requested output amount is zero (`getAmountIn`).  A swap
     ///         must move a positive quantity in each direction.

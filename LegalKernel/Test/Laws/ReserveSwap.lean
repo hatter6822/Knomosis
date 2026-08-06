@@ -108,6 +108,28 @@ def tests : List TestCase :=
         assert (¬ decide ((reserveSwap 0 1 9 1000 1 3).pre s))
           "output leg 0 refused"
     }
+  , { name := "precondition: the quote's uint256 domain is enforced"
+    , body := do
+        -- A swap whose fee product `amountIn × 9970` exceeds 2^256 is
+        -- a NO-OP, not a truncated or reverting step: the C-3-style
+        -- `reserveQuoteDomainBounded` conjunct refuses it on the Lean
+        -- side exactly where the uint256 mirror cannot compute it.
+        -- amountIn = 2^255 (representable, and fundable: the user
+        -- holds 2^255 < maxAmount) makes the numerator
+        -- 2^255 × 9970 × rT overflow.
+        let big := 2 ^ 255
+        let s := setBalance (setBalance (setBalance emptyState
+          0 9 big) 0 3 10000) 1 3 10000
+        assert (decide (reserveQuoteDomainBounded s 0 1 3 1000))
+          "a small swap is inside the domain"
+        assert (¬ decide (reserveQuoteDomainBounded s 0 1 3 big))
+          "the 2^255 swap is outside it"
+        assert (¬ decide ((reserveSwap 0 1 9 big 1 3).pre s))
+          "...and the law refuses it"
+        let s' := step_impl s (reserveSwap 0 1 9 big 1 3)
+        assertEq (expected := big) (actual := getBalance s' 0 9)
+          "the out-of-domain swap is a no-op"
+    }
   , { name := "decPre: inferInstance suffices"
     , body := do
         let t := reserveSwap 0 1 9 1000 900 3

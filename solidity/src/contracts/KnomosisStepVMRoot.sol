@@ -489,8 +489,11 @@ contract KnomosisStepVMRoot {
     }
 
     /// @dev The per-variant plan, over PRE-STATE balance values read BY
-    ///      CELL.  Positions 0 and 1 of the WRITE SET are the balance
-    ///      cells the plan's two slots belong to.
+    ///      CELL.  Positions 0..3 of the WRITE SET are the balance
+    ///      cells the plan's four slots belong to — positions 2 and 3
+    ///      exist only for `reserveSwap` (kind 25), the first
+    ///      four-balance-cell variant; every other kind's plan is the
+    ///      familiar pair plus pass-through.
     function _planMulti(
         uint8 actionKind,
         bytes calldata actionFields,
@@ -498,18 +501,28 @@ contract KnomosisStepVMRoot {
         StepWrites.Cell[] memory cells,
         OpenedCell[] calldata opened
     ) private pure returns (StepPlan.Plan memory plan) {
-        uint256 pre0 = cells.length > 0 && cells[0].kind == CELL_BALANCE
-            ? StepWrites.decodeAmount(
-                _openedValue(opened, CELL_BALANCE, cells[0].keyA, cells[0].keyB))
-            : 0;
-        uint256 pre1 = cells.length > 1 && cells[1].kind == CELL_BALANCE
-            ? StepWrites.decodeAmount(
-                _openedValue(opened, CELL_BALANCE, cells[1].keyA, cells[1].keyB))
-            : 0;
-        (plan.newBal0, plan.newBal1) =
-            StepPlan.planBalances(actionKind, actionFields, signer, pre0, pre1);
+        uint256 pre0 = _balancePreAt(cells, opened, 0);
+        uint256 pre1 = _balancePreAt(cells, opened, 1);
+        uint256 pre2 = _balancePreAt(cells, opened, 2);
+        uint256 pre3 = _balancePreAt(cells, opened, 3);
+        (plan.newBal0, plan.newBal1, plan.newBal2, plan.newBal3) =
+            StepPlan.planBalances4(
+                actionKind, actionFields, signer, pre0, pre1, pre2, pre3);
         (plan.grants, plan.grantRecipient, plan.grantAmount, plan.refundExtra) =
             StepPlan.planGrant(actionKind, actionFields, signer);
+    }
+
+    /// @dev Write-set position `i`'s proven pre-value when it is a
+    ///      balance cell, else zero (the plan ignores that slot).
+    function _balancePreAt(
+        StepWrites.Cell[] memory cells,
+        OpenedCell[] calldata opened,
+        uint256 i
+    ) private pure returns (uint256) {
+        return cells.length > i && cells[i].kind == CELL_BALANCE
+            ? StepWrites.decodeAmount(
+                _openedValue(opened, CELL_BALANCE, cells[i].keyA, cells[i].keyB))
+            : 0;
     }
 
     /// @dev Opened cell `i`'s post-value, derived from proven
@@ -543,8 +556,16 @@ contract KnomosisStepVMRoot {
                 && cells[1].keyA == opened[i].keyA && cells[1].keyB == opened[i].keyB) {
                 return CBEEncode.amountValue(plan.newBal1);
             }
+            if (cells.length > 2 && cells[2].kind == CELL_BALANCE
+                && cells[2].keyA == opened[i].keyA && cells[2].keyB == opened[i].keyB) {
+                return CBEEncode.amountValue(plan.newBal2);
+            }
+            if (cells.length > 3 && cells[3].kind == CELL_BALANCE
+                && cells[3].keyA == opened[i].keyA && cells[3].keyB == opened[i].keyB) {
+                return CBEEncode.amountValue(plan.newBal3);
+            }
             // Unreachable: `_requireFrontier` admitted this cell, so it
-            // is in the write set, and only positions 0 and 1 are
+            // is in the write set, and only positions 0..3 are
             // balances.
             revert WriteSetMismatch(i);
         }

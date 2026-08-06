@@ -1373,7 +1373,12 @@ def deriveReserveSwapBalances (read : BalanceReader)
          resToBal Bridge.AmmMath.swapFeeBps ∧
        resFromBal + amountIn < Laws.maxAmount ∧
        userToBal + Bridge.AmmMath.getAmountOut amountIn resFromBal resToBal
-         Bridge.AmmMath.swapFeeBps < Laws.maxAmount then
+         Bridge.AmmMath.swapFeeBps < Laws.maxAmount ∧
+       amountIn * (Bridge.AmmMath.bpsDenominator - Bridge.AmmMath.swapFeeBps)
+           * resToBal < Laws.maxAmount ∧
+       resFromBal * Bridge.AmmMath.bpsDenominator
+           + amountIn * (Bridge.AmmMath.bpsDenominator - Bridge.AmmMath.swapFeeBps)
+           < Laws.maxAmount then
       some [ ((fromResource, user), userFromBal - amountIn)
            , ((fromResource, reserveActor), resFromBal + amountIn)
            , ((toResource, reserveActor), resToBal - Bridge.AmmMath.getAmountOut
@@ -1420,7 +1425,14 @@ theorem deriveReserveSwapBalances_correct
       LegalKernel.getBalance es.base toResource user + Bridge.AmmMath.getAmountOut
         amountIn (LegalKernel.getBalance es.base fromResource reserveActor)
         (LegalKernel.getBalance es.base toResource reserveActor)
-        Bridge.AmmMath.swapFeeBps < Laws.maxAmount)
+        Bridge.AmmMath.swapFeeBps < Laws.maxAmount ∧
+      amountIn * (Bridge.AmmMath.bpsDenominator - Bridge.AmmMath.swapFeeBps)
+          * LegalKernel.getBalance es.base toResource reserveActor
+          < Laws.maxAmount ∧
+      LegalKernel.getBalance es.base fromResource reserveActor
+            * Bridge.AmmMath.bpsDenominator
+          + amountIn * (Bridge.AmmMath.bpsDenominator - Bridge.AmmMath.swapFeeBps)
+          < Laws.maxAmount)
       ↔ (Action.toTransition (.reserveSwap fromResource toResource user amountIn
           minAmountOut reserveActor) st.signer).pre es.base := by
     show _ ↔ (amountIn > 0 ∧ fromResource ≠ toResource ∧ user ≠ reserveActor ∧
@@ -1455,11 +1467,13 @@ theorem deriveReserveSwapBalances_correct
             toResource reserveActor
             - Laws.reserveQuote es.base fromResource toResource reserveActor amountIn))
         toResource user
-        (Laws.reserveQuote es.base fromResource toResource reserveActor amountIn))
-    unfold Laws.AmountBounded Laws.reserveQuote
+        (Laws.reserveQuote es.base fromResource toResource reserveActor amountIn) ∧
+      Laws.reserveQuoteDomainBounded es.base fromResource toResource
+        reserveActor amountIn)
+    unfold Laws.AmountBounded Laws.reserveQuote Laws.reserveQuoteDomainBounded
     constructor
-    · rintro ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9⟩
-      refine ⟨h1, h2, h3, h4, h5, h6, h7, ?_, ?_⟩
+    · rintro ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10a, h10b⟩
+      refine ⟨h1, h2, h3, h4, h5, h6, h7, ?_, ?_, h10a, h10b⟩
       · rw [getBalance_setBalance_other es.base fromResource fromResource user
           reserveActor _ (Or.inr h3)]
         exact h8
@@ -1470,8 +1484,8 @@ theorem deriveReserveSwapBalances_correct
             getBalance_setBalance_other es.base fromResource toResource user user _
               (Or.inl h2)]
         exact h9
-    · rintro ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9⟩
-      refine ⟨h1, h2, h3, h4, h5, h6, h7, ?_, ?_⟩
+    · rintro ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10a, h10b⟩
+      refine ⟨h1, h2, h3, h4, h5, h6, h7, ?_, ?_, h10a, h10b⟩
       · rw [getBalance_setBalance_other es.base fromResource fromResource user
           reserveActor _ (Or.inr h3)] at h8
         exact h8
@@ -1495,7 +1509,14 @@ theorem deriveReserveSwapBalances_correct
       LegalKernel.getBalance es.base toResource user + Bridge.AmmMath.getAmountOut
         amountIn (LegalKernel.getBalance es.base fromResource reserveActor)
         (LegalKernel.getBalance es.base toResource reserveActor)
-        Bridge.AmmMath.swapFeeBps < Laws.maxAmount
+        Bridge.AmmMath.swapFeeBps < Laws.maxAmount ∧
+      amountIn * (Bridge.AmmMath.bpsDenominator - Bridge.AmmMath.swapFeeBps)
+          * LegalKernel.getBalance es.base toResource reserveActor
+          < Laws.maxAmount ∧
+      LegalKernel.getBalance es.base fromResource reserveActor
+            * Bridge.AmmMath.bpsDenominator
+          + amountIn * (Bridge.AmmMath.bpsDenominator - Bridge.AmmMath.swapFeeBps)
+          < Laws.maxAmount
   · rw [if_pos h, if_pos (h_iff.mp h)]
     show _ = some
       [ ((fromResource, user), LegalKernel.getBalance
@@ -2345,7 +2366,13 @@ theorem deriveReserveSwapBalances_alias_consistent (read : BalanceReader)
             resToBal Bridge.AmmMath.swapFeeBps ∧
           resFromBal + amountIn < Laws.maxAmount ∧
           userToBal + Bridge.AmmMath.getAmountOut amountIn resFromBal resToBal
-            Bridge.AmmMath.swapFeeBps < Laws.maxAmount
+            Bridge.AmmMath.swapFeeBps < Laws.maxAmount ∧
+          amountIn * (Bridge.AmmMath.bpsDenominator - Bridge.AmmMath.swapFeeBps)
+              * resToBal < Laws.maxAmount ∧
+          resFromBal * Bridge.AmmMath.bpsDenominator
+              + amountIn * (Bridge.AmmMath.bpsDenominator
+                  - Bridge.AmmMath.swapFeeBps)
+              < Laws.maxAmount
       · rw [if_pos hpre] at h
         simp only [Option.some.injEq] at h
         subst h

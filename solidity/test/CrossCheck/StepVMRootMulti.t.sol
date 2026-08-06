@@ -3,6 +3,7 @@ pragma solidity 0.8.36;
 
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {SmtMultiVerifier} from "src/lib/SmtMultiVerifier.sol";
+import {AmmMath} from "src/lib/AmmMath.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
 import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
@@ -302,7 +303,7 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     function test_bulk_variants_are_refused() public {
         KnomosisStepVMRoot.OpenedCell[] memory none_ =
             new KnomosisStepVMRoot.OpenedCell[](0);
-        uint8[3] memory kinds = [uint8(6), uint8(7), uint8(25)];
+        uint8[3] memory kinds = [uint8(6), uint8(7), uint8(26)];
         for (uint256 i = 0; i < kinds.length; i++) {
             vm.expectRevert(
                 abi.encodeWithSelector(
@@ -327,7 +328,7 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     function test_isAdjudicable_excludes_exactly_the_bulk_pair() public {
         for (uint8 k = 0; k <= 30; k++) {
             beginEntry(string.concat("#", vm.toString(k)));
-            bool expected = k <= 24 && k != 6 && k != 7;
+            bool expected = k <= 25 && k != 6 && k != 7;
             checkEq(
                 StepWrites.isAdjudicable(k), expected,
                 string.concat("adjudicability at kind ", vm.toString(k))
@@ -456,6 +457,21 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         }
         if (s == StepWrites.ActionFieldsTooShort.selector) {
             return _withArgs("ActionFieldsTooShort", err);
+        }
+        // The kind-25 quote reaches `AmmMath` through `StepWrites`'
+        // reserve-swap derivation (Workstream SB).  Its guards are
+        // established before the call — the derivation evaluates the
+        // precondition wrap-free first — so these should be
+        // unreachable there; they are named so an unexpected escape
+        // reads as itself rather than as hex.
+        if (s == AmmMath.AmmMathInsufficientInput.selector) {
+            return _withArgs("AmmMathInsufficientInput", err);
+        }
+        if (s == AmmMath.AmmMathInsufficientLiquidity.selector) {
+            return _withArgs("AmmMathInsufficientLiquidity", err);
+        }
+        if (s == AmmMath.AmmMathFeeTooHigh.selector) {
+            return _withArgs("AmmMathFeeTooHigh", err);
         }
         if (s == SmtMultiVerifier.MultiProofTooManyCells.selector) {
             return _withArgs("MultiProofTooManyCells", err);

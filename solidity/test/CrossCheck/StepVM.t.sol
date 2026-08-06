@@ -1050,12 +1050,13 @@ contract StepVMCrossCheck is CrossCheckFramework {
         proxy.deriveWriteSet(7, fields, 7, 0);
         // An unknown kind is refused too — a new `Action` constructor
         // must be considered rather than defaulting into the
-        // kernel-identity family.
+        // kernel-identity family.  26 is the first unassigned index
+        // (Workstream SB seated `reserveSwap` at 25).
         vm.expectRevert(
-            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(25)));
-        proxy.deriveWriteSet(25, fields, 7, 0);
+            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(26)));
+        proxy.deriveWriteSet(26, fields, 7, 0);
         // ...and every adjudicable kind still derives.
-        for (uint8 k = 0; k <= 24; k++) {
+        for (uint8 k = 0; k <= 25; k++) {
             beginEntry(string.concat("#", vm.toString(k)));
             if (k == 6 || k == 7) continue;
             checkGe(proxy.deriveWriteSet(k, fields, 7, 0).length, 2,

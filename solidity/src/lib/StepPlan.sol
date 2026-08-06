@@ -46,6 +46,14 @@ library StepPlan {
         uint256 newBal0;
         /// @dev ...and of cell 1.
         uint256 newBal1;
+        /// @dev ...and of cells 2 and 3 — used only by `reserveSwap`
+        ///      (kind 25), the first FOUR-balance-cell variant (the
+        ///      user and the reserve each move at both swap
+        ///      resources).  Every other variant leaves them at their
+        ///      pre-values via `planBalances4`'s pass-through.
+        uint256 newBal2;
+        /// @dev See `newBal2`.
+        uint256 newBal3;
         /// @dev Whether this variant grants budget AT ALL.
         ///
         ///      Carried separately from `grantAmount` because a zero
@@ -252,6 +260,50 @@ library StepPlan {
         }
         // The variants that write no balance cell at all.
         return (pre0, pre1);
+    }
+
+    /// @notice The four-cell plan (Workstream SB): `reserveSwap` is
+    ///         the first variant whose balance write set is a QUAD —
+    ///         the user and the reserve each at both swap resources,
+    ///         in the law's write order (user debit at `from`, reserve
+    ///         credit at `from`, reserve debit at `to`, user credit at
+    ///         `to`).
+    ///
+    /// @dev    Every other kind delegates to the two-slot
+    ///         `planBalances` and passes cells 2 and 3 through at
+    ///         their pre-values, so a caller can hold ONE plan shape
+    ///         for every variant.
+    function planBalances4(
+        uint8 actionKind,
+        bytes calldata fields,
+        uint64 signer,
+        uint256 pre0,
+        uint256 pre1,
+        uint256 pre2,
+        uint256 pre3
+    )
+        internal
+        pure
+        returns (uint256 new0, uint256 new1, uint256 new2, uint256 new3)
+    {
+        if (actionKind == 25) {
+            // reserveSwap: fromResource @0, toResource @8, user @16,
+            // amountIn @24 (32), minAmountOut @56 (32),
+            // reserveActor @88.  The quote is re-derived inside from
+            // the two proven reserve pre-values (cells 1 and 2).
+            (new0, new1, new2, new3) = StepWrites.deriveReserveSwapBalances(
+                pre0, pre1, pre2, pre3,
+                uint64(StepWrites.readFieldUint(fields, 0, 8)),
+                uint64(StepWrites.readFieldUint(fields, 8, 8)),
+                uint64(StepWrites.readFieldUint(fields, 16, 8)),
+                uint64(StepWrites.readFieldUint(fields, 88, 8)),
+                StepWrites.readFieldUint(fields, 24, 32),
+                StepWrites.readFieldUint(fields, 56, 32)
+            );
+            return (new0, new1, new2, new3);
+        }
+        (new0, new1) = planBalances(actionKind, fields, signer, pre0, pre1);
+        return (new0, new1, pre2, pre3);
     }
 
     /// @dev `claimBudgetRefund`, split out because its two cells are

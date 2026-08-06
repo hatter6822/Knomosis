@@ -4,6 +4,7 @@
 //  Copyright (C) 2026  Adam Hall
 pragma solidity 0.8.36;
 
+import {AmmMath} from "./AmmMath.sol";
 import {CBEEncode} from "./CBEEncode.sol";
 
 /// @title StepWrites
@@ -607,6 +608,111 @@ library StepWrites {
         return (reserveBal, poolBal);
     }
 
+    /// @notice `reserveSwap` (Workstream SB): the user-facing L2
+    ///         constant-product swap — the four-cell variant.  The
+    ///         quote is RE-DERIVED from the two proven reserve
+    ///         pre-values at the fixed `AmmMath.SWAP_FEE_BPS`, exactly
+    ///         the computation Lean's `Laws.reserveQuote` performs
+    ///         over the pre-state.
+    ///
+    /// @dev    Mirrors `FaultProof.deriveReserveSwapBalances`.  Every
+    ///         conjunct of the law's precondition is EVALUATED, never
+    ///         asserted — a failing one leaves all four cells at their
+    ///         pre-values, because a revert is not a verdict.  That
+    ///         includes the quote's own uint256 DOMAIN: Lean computes
+    ///         in `Nat`, so its law carries the
+    ///         `reserveQuoteDomainBounded` conjunct bounding the
+    ///         constant-product numerator and denominator below
+    ///         `2^256`; this mirror evaluates those bounds wrap-free
+    ///         (the `_planRefundBalances` idiom) BEFORE touching
+    ///         checked arithmetic, so an out-of-domain swap is the
+    ///         same no-op on both stacks.
+    ///
+    /// @param  preUserFrom the user's pre-value at `fromResource`.
+    /// @param  preResFrom  the reserve's pre-value at `fromResource`.
+    /// @param  preResTo    the reserve's pre-value at `toResource`.
+    /// @param  preUserTo   the user's pre-value at `toResource`.
+    function deriveReserveSwapBalances(
+        uint256 preUserFrom,
+        uint256 preResFrom,
+        uint256 preResTo,
+        uint256 preUserTo,
+        uint64 fromResource,
+        uint64 toResource,
+        uint64 user,
+        uint64 reserveActor,
+        uint256 amountIn,
+        uint256 minAmountOut
+    )
+        internal
+        pure
+        returns (
+            uint256 newUserFrom,
+            uint256 newResFrom,
+            uint256 newResTo,
+            uint256 newUserTo
+        )
+    {
+        // The q-free conjuncts, including the two domain bounds —
+        // checked first so the quote below cannot revert.
+        bool ok = amountIn > 0 && fromResource != toResource
+            && user != reserveActor && preUserFrom >= amountIn
+            && preResFrom > 0 && preResTo > 0
+            && creditFits(preResFrom, amountIn)
+            && _reserveSwapDomainOk(amountIn, preResFrom, preResTo);
+        if (!ok) return (preUserFrom, preResFrom, preResTo, preUserTo);
+        // In-domain: every intermediate below fits uint256, so checked
+        // arithmetic cannot revert (and `getAmountOut`'s own guards —
+        // positive input, live reserves, fee < 100% — are established).
+        uint256 q = AmmMath.getAmountOut(
+            amountIn, preResFrom, preResTo, AmmMath.SWAP_FEE_BPS);
+        // The slippage floor (`max 1 minAmountOut <= q` — never a
+        // zero output) and the user-credit ceiling.
+        if ((minAmountOut > 1 ? minAmountOut : 1) > q
+                || !creditFits(preUserTo, q)) {
+            return (preUserFrom, preResFrom, preResTo, preUserTo);
+        }
+        // The four writes, in the law's order.  `q < preResTo`
+        // strictly (the no-drain guarantee of `getAmountOut`), so the
+        // reserve debit cannot underflow.
+        return (
+            preUserFrom - amountIn,
+            preResFrom + amountIn,
+            preResTo - q,
+            preUserTo + q
+        );
+    }
+
+    /// @dev The `reserveQuoteDomainBounded` mirror: the constant-
+    ///      product numerator `amountIn × (10⁴ − fee) × reserveOut`
+    ///      and denominator `reserveIn × 10⁴ + amountIn × (10⁴ − fee)`
+    ///      both fit a uint256, evaluated wrap-free.
+    ///
+    ///      Exactly equivalent to the Lean conjunct WITHIN the law's
+    ///      conjunction: the divide-back checks are blind to a zero
+    ///      operand, but `amountIn > 0`, `reserveIn > 0` and
+    ///      `reserveOut > 0` are conjuncts of the same precondition,
+    ///      so the two evaluations cannot disagree on any input the
+    ///      rest of the conjunction admits.
+    function _reserveSwapDomainOk(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) private pure returns (bool ok) {
+        unchecked {
+            uint256 w = AmmMath.BPS_DENOMINATOR - AmmMath.SWAP_FEE_BPS;
+            uint256 aiw = amountIn * w;
+            bool aiwFits = amountIn == 0 || aiw / amountIn == w;
+            uint256 num = aiw * reserveOut;
+            bool numFits = aiwFits && (aiw == 0 || num / aiw == reserveOut);
+            uint256 ri = reserveIn * AmmMath.BPS_DENOMINATOR;
+            bool riFits =
+                reserveIn == 0 || ri / reserveIn == AmmMath.BPS_DENOMINATOR;
+            uint256 den = ri + aiw;
+            ok = numFits && riFits && den >= ri;
+        }
+    }
+
     /* ---------------------------------------------------------- */
     /* Registry, local-policy and bridge cells                    */
     /* ---------------------------------------------------------- */
@@ -790,7 +896,7 @@ library StepWrites {
     ///         is the actor set at a resource, which an L1 holding only
     ///         the pre-root cannot enumerate — and on unknown kinds.
     function isAdjudicable(uint8 actionKind) internal pure returns (bool) {
-        return actionKind <= 24 && actionKind != 6 && actionKind != 7;
+        return actionKind <= 25 && actionKind != 6 && actionKind != 7;
     }
 
     /// @notice The action fields are shorter than the variant's layout.
@@ -940,6 +1046,24 @@ library StepWrites {
             out[0] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 40)});
             out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 48)});
             _appendUniform(out, 2, signer);
+        } else if (actionKind == 25) {                  // reserveSwap
+            // fromResource @0, toResource @8, user @16, then the two
+            // 32-byte amounts; the reserve actor follows BOTH at @88.
+            // FOUR balance cells, in the law's write order (user debit
+            // at from, reserve credit at from, reserve debit at to,
+            // user credit at to) — the first variant whose plan is a
+            // quad rather than a pair.
+            _need(actionKind, fields, 96);
+            out = new Cell[](6);
+            uint64 fromResource = _fieldUint64(fields, 0);
+            uint64 toResource = _fieldUint64(fields, 8);
+            uint64 user = _fieldUint64(fields, 16);
+            uint64 reserveActor = _fieldUint64(fields, 88);
+            out[0] = Cell({kind: 0, keyA: fromResource, keyB: user});
+            out[1] = Cell({kind: 0, keyA: fromResource, keyB: reserveActor});
+            out[2] = Cell({kind: 0, keyA: toResource, keyB: reserveActor});
+            out[3] = Cell({kind: 0, keyA: toResource, keyB: user});
+            _appendUniform(out, 4, signer);
         } else {
             // The kernel-identity family (3, 8, 9, 10, 11, 17, 18):
             // nothing but the uniform pair.  Enumerated by exclusion

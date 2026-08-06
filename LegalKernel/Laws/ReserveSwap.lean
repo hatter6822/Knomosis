@@ -83,6 +83,44 @@ def reserveQuote (s : State) (fromResource toResource : ResourceId)
     (getBalance s toResource reserveActor)
     AmmMath.swapFeeBps
 
+/-- The quote's INTERMEDIATE products stay under the amount head:
+    the constant-product numerator
+    `amountIn × (10⁴ − fee) × reserveOut` and denominator
+    `reserveIn × 10⁴ + amountIn × (10⁴ − fee)` are both below
+    `maxAmount = 2^256`.
+
+    A precondition conjunct of `reserveSwap`, in the C-3 discipline:
+    Lean computes the quote in `Nat`, where nothing overflows, but
+    the L1 step-VM mirror computes it in `uint256`, where a product
+    past `2^256` REVERTS — and a revert is not a verdict, it costs
+    whoever's turn it is the game by timeout.  Without this conjunct
+    a swap with `amountIn` near `2^255` (admissible — balances range
+    to `maxAmount`) would be a step Lean admits and the mirror cannot
+    execute.  With it, the out-of-domain swap is a NO-OP on both
+    stacks: the mirror evaluates these bounds wrap-free (the
+    `_planRefundBalances` overflow idiom) and no-ops exactly when
+    Lean does.
+
+    Every real economy sits far inside the domain — the bound rejects
+    only quotes whose 256-bit intermediate terms genuinely do not
+    exist on the mirror. -/
+def reserveQuoteDomainBounded (s : State)
+    (fromResource toResource : ResourceId)
+    (reserveActor : ActorId) (amountIn : Amount) : Prop :=
+  amountIn * (AmmMath.bpsDenominator - AmmMath.swapFeeBps)
+      * getBalance s toResource reserveActor < maxAmount ∧
+  getBalance s fromResource reserveActor * AmmMath.bpsDenominator
+      + amountIn * (AmmMath.bpsDenominator - AmmMath.swapFeeBps) < maxAmount
+
+/-- Decidable — two `Nat` comparisons. -/
+instance reserveQuoteDomainBounded.decidable (s : State)
+    (fromResource toResource : ResourceId)
+    (reserveActor : ActorId) (amountIn : Amount) :
+    Decidable (reserveQuoteDomainBounded s fromResource toResource
+      reserveActor amountIn) := by
+  unfold reserveQuoteDomainBounded
+  infer_instance
+
 /-- Swap `amountIn` of `fromResource` for the constant-product quote
     of `toResource`, user against reserve.
 
@@ -98,7 +136,11 @@ def reserveQuote (s : State) (fromResource toResource : ResourceId)
         rule, mirroring the L1 `ZeroSwapOutput` guard);
       - both credits stay under the amount head
         (`AmountBounded`, stated over the same chained intermediate
-        states the apply reads).
+        states the apply reads);
+      - the quote's intermediate products stay under the head too
+        (`reserveQuoteDomainBounded` — the C-3 discipline: the
+        `uint256` mirror must be able to COMPUTE the quote, not just
+        represent its result).
     * Effect: the four chained writes described in the module
       docstring, priced off the pre-state. -/
 def reserveSwap (fromResource toResource : ResourceId)
@@ -137,7 +179,8 @@ def reserveSwap (fromResource toResource : ResourceId)
               fromResource reserveActor + amountIn))
           toResource reserveActor
           - reserveQuote s fromResource toResource reserveActor amountIn))
-      toResource user (reserveQuote s fromResource toResource reserveActor amountIn)
+      toResource user (reserveQuote s fromResource toResource reserveActor amountIn) ∧
+    reserveQuoteDomainBounded s fromResource toResource reserveActor amountIn
   decPre := fun _ => inferInstance
   apply_impl := fun s =>
     let out := reserveQuote s fromResource toResource reserveActor amountIn
