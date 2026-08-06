@@ -53,6 +53,15 @@ interface IStateRootSubmission {
     function deploymentId() external view returns (bytes32);
 }
 
+/// @notice Minimal interface for the V2 dispute verifier's
+///         fault-proof leg (SB ruling R6): on a challenger win the
+///         game calls this, and the verifier — the bridge's
+///         `faultProofRollbackAuthority` — drives the revert
+///         through to the bridge's fund-safety gates.
+interface IDisputeVerifierV2 {
+    function finaliseFromFaultProof(uint256 gameId, uint64 revertFromIdx) external;
+}
+
 /// @title KnomosisFaultProofGame
 /// @notice The bisection game state machine on L1 (Workstream H
 ///         WUs H.6.1 – H.6.3).
@@ -88,6 +97,18 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
 
     /// @notice The state-root submission contract.
     address public immutable stateRootSubmission;
+
+    /// @notice The V2 dispute verifier (SB ruling R6): on a
+    ///         challenger win, `_settle` calls its
+    ///         `finaliseFromFaultProof`, which drives the revert
+    ///         through to the BRIDGE's fund-safety gates — the leg
+    ///         the registry-only revert never reached.  Zero =
+    ///         disabled (a deployment without the bridge wiring).
+    ///         Forward reference (V2 takes this game's address in
+    ///         its own constructor), so no code-existence check is
+    ///         possible; the deploy scripts require-check the
+    ///         predicted address.
+    address public immutable disputeVerifier;
 
     /* ---------------------------------------------------------- */
     /* Game data structures (mirrors Lean's `GameState`)          */
@@ -254,7 +275,8 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         uint64  _minBisectionStepInterval,
         address _treasury,
         address _stepVM,
-        address _stateRootSubmission
+        address _stateRootSubmission,
+        address _disputeVerifier
     ) {
         if (_treasury == address(0)) revert ZeroAddress();
         if (_stepVM == address(0)) revert ZeroAddress();
@@ -287,6 +309,9 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         treasury = _treasury;
         stepVM = KnomosisStepVMRoot(_stepVM);
         stateRootSubmission = _stateRootSubmission;
+        // Zero = disabled; non-zero is a forward reference the
+        // deploy scripts require-check (see the immutable's doc).
+        disputeVerifier = _disputeVerifier;
     }
 
     /* ---------------------------------------------------------- */
@@ -739,6 +764,27 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
                 // Revert call failed; bond redistribution
                 // proceeds.  Operators must reconcile off-chain
                 // (the game settlement event still emits).
+            }
+
+            // Drive the revert THROUGH to the bridge (SB ruling
+            // R6): the registry rollback above never reached the
+            // bridge's fund-safety gates (withdrawals,
+            // redemptions), so `bridge.isStateRootReverted` stayed
+            // false after a challenger win — one of the two
+            // pre-existing defects this workstream closes.  The
+            // path is game → V2 verifier (the bridge's
+            // `faultProofRollbackAuthority`) → bridge.  Try/catch
+            // like the other settlement legs: a mis-wired verifier
+            // must not block bond redistribution, and the operator
+            // reconciles off-chain from the settlement event.
+            if (disputeVerifier != address(0)) {
+                try IDisputeVerifierV2(disputeVerifier)
+                      .finaliseFromFaultProof(gameId, g.disputedLogIndex)
+                {
+                    // Bridge-side reverted range updated.
+                } catch {
+                    // Bridge leg failed; settlement proceeds.
+                }
             }
         } else {
             // Sequencer-wins path: clear the disputed flag on the

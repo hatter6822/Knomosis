@@ -666,6 +666,17 @@ contract DeploySepolia is Script {
         address predV = vm.computeCreateAddress(deployer, nA + 1);
         address predS = vm.computeCreateAddress(deployer, nA + 2);
         address predM = functionalAmm ? vm.computeCreateAddress(deployer, nA + 3) : address(0);
+        // The bridge's R6 `faultProofRollbackAuthority` is the V2
+        // verifier, which deploys in Cluster B — predict its address
+        // ACROSS the cluster by counting the deployments between the
+        // bridge and V2: verifier, stake, [multisig], stepVM,
+        // submission, then V2.  The count is require-checked twice
+        // below (against Cluster B's own prediction before V2
+        // deploys, and against the deployed address after), so an
+        // inserted deployment fails the script rather than shipping
+        // a bridge whose rollback authority points at nothing.
+        address predV2FromA =
+            vm.computeCreateAddress(deployer, nA + (functionalAmm ? 6 : 5));
 
         KnomosisBridge bridge = new KnomosisBridge(
             KnomosisBridge.ConstructorArgs({
@@ -690,6 +701,7 @@ contract DeploySepolia is Script {
                 enableLiquityAutoCircuitTrigger: autoTrigger,
                 ammSeedRatioBps: cfg.ammSeedRatioBps,
                 ammDisasterRecovery: predM,
+                faultProofRollbackAuthority: predV2FromA,
                 erc20ResourceIds: new uint64[](0),
                 erc20TokenAddrs: new address[](0)
             })
@@ -747,6 +759,11 @@ contract DeploySepolia is Script {
         address predSub = vm.computeCreateAddress(deployer, nB);
         address predV2 = vm.computeCreateAddress(deployer, nB + 1);
         address predGame = vm.computeCreateAddress(deployer, nB + 2);
+        // Fail fast if Cluster A's cross-cluster V2 prediction (baked
+        // into the bridge's immutable rollback authority) has drifted
+        // from Cluster B's own — i.e. a deployment was inserted
+        // between the two prediction points.
+        require(predV2 == predV2FromA, "cross-cluster V2 prediction drift");
 
         KnomosisStateRootSubmission submission = new KnomosisStateRootSubmission(
             cfg.stateRootBond,
@@ -780,9 +797,16 @@ contract DeploySepolia is Script {
             cfg.minBisectionStepInterval,
             cfg.treasury,
             address(stepVM),
-            address(submission)
+            address(submission),
+            address(verifierV2)
         );
         require(address(game) == predGame, "game prediction mismatch");
+        // The R6 wiring is closed end-to-end: game → V2 → bridge.
+        require(game.disputeVerifier() == address(verifierV2), "game verifier mismatch");
+        require(
+            bridge.faultProofRollbackAuthority() == address(verifierV2),
+            "bridge rollback authority mismatch"
+        );
 
         // These four revert on inconsistency (they are `view`, return nothing).
         stepVM.assertConsistent();

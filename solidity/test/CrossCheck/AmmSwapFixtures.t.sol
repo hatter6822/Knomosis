@@ -372,6 +372,7 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 8000,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

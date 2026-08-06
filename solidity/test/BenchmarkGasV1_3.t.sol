@@ -261,6 +261,7 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: true,
                 ammSeedRatioBps: SEED_RATIO_BPS,
                 ammDisasterRecovery: recovery_,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

@@ -534,6 +534,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

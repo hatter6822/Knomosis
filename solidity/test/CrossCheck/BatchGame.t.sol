@@ -7,9 +7,12 @@ pragma solidity 0.8.36;
 import {ActionsRoot} from "src/lib/ActionsRoot.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
+import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
+import {KnomosisDisputeVerifierV2} from "src/contracts/KnomosisDisputeVerifierV2.sol";
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
+import {WithdrawalFlowHarness} from "../utils/WithdrawalFlowHarness.sol";
 import {CrossCheckFramework} from "./Framework.t.sol";
 
 /// @title BatchGameCrossCheck
@@ -39,14 +42,20 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 ///         registry's reverted range was a dead end (reverted indices
 ///         could never be resubmitted), so no test could ever drive a
 ///         real challenger win THROUGH to a corrected chain.
-contract BatchGameCrossCheck is CrossCheckFramework {
+contract BatchGameCrossCheck is CrossCheckFramework, WithdrawalFlowHarness {
     KnomosisStepVMRoot private stepVM;
     KnomosisStateRootSubmission private registry;
     KnomosisFaultProofGame private game;
+    KnomosisBridge private bridge;
+    KnomosisDisputeVerifierV2 private verifierV2;
 
     address private treasury = address(0xBEEF);
     address private sequencer = address(0xACE);
     address private challenger = address(0xCAFE);
+    /// @dev A keyed attestor, so the test can drive the bridge's own
+    ///      attested state-root lane (its reverted-range ceiling only
+    ///      covers indices its lane has seen).
+    uint256 private constant ATTESTOR_PK = 0xA77E5;
 
     uint128 private constant STATE_ROOT_BOND = 1 ether;
     uint128 private constant MIN_CHALLENGE_BOND = 0.05 ether;
@@ -102,12 +111,44 @@ contract BatchGameCrossCheck is CrossCheckFramework {
         stepVM = new KnomosisStepVMRoot();
         _loadProbe();
 
-        // The registry needs the game's address and the game needs the
-        // registry's: predict the game's (this test contract deploys
-        // both, so the game lands at this contract's next-plus-one
-        // nonce), exactly as the deploy scripts do.
-        address predictedGame = vm.computeCreateAddress(
-            address(this), vm.getNonce(address(this)) + 1);
+        // The FULL R6 wiring, with the same forward-reference
+        // predictions the deploy scripts use.  Deployment order from
+        // here: bridge(n), registry(n+1), game(n+2), verifierV2(n+3)
+        // — the bridge's rollback authority and the game's dispute
+        // verifier both point at the PREDICTED V2, which is then
+        // require-checked once it exists.
+        uint64 n = vm.getNonce(address(this));
+        address predictedGame = vm.computeCreateAddress(address(this), n + 2);
+        address predictedV2 = vm.computeCreateAddress(address(this), n + 3);
+
+        bridge = new KnomosisBridge(
+            KnomosisBridge.ConstructorArgs({
+                knomosisVersionTag: keccak256("batchgame-test"),
+                attestor: vm.addr(ATTESTOR_PK),
+                disputeVerifier: address(0xDE),
+                sequencerStake: address(0x5E),
+                migration: address(0),
+                disputeWindowBlocks: 100,
+                maxRedemptionWindowBlocks: 50,
+                maxAttestationStaleBlocks: 200,
+                cooldownBlocks: 50,
+                tvlCap: type(uint256).max,
+                minFeeBps: 0,
+                maxFeeBps: 5000,
+                weiPerBudgetUnitEth: 1,
+                weiPerBudgetUnitBold: 0,
+                boldTokenAddress: address(0),
+                boldTvlCap: 0,
+                boldCircuitBreaker: address(0),
+                boldAdmin: address(0),
+                enableLiquityAutoCircuitTrigger: false,
+                ammSeedRatioBps: 0,
+                ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: predictedV2,
+                erc20ResourceIds: new uint64[](0),
+                erc20TokenAddrs: new address[](0)
+            })
+        );
         registry = new KnomosisStateRootSubmission(
             STATE_ROOT_BOND,
             DISPUTE_WINDOW,
@@ -126,10 +167,27 @@ contract BatchGameCrossCheck is CrossCheckFramework {
             MIN_STEP_INTERVAL,
             treasury,
             address(stepVM),
-            address(registry)
+            address(registry),
+            predictedV2
         );
         assertEq(address(game), predictedGame,
             "game address prediction must hold");
+        address[] memory adjudicators = new address[](1);
+        adjudicators[0] = address(0xAD1);
+        verifierV2 = new KnomosisDisputeVerifierV2(
+            address(game),
+            address(registry),
+            adjudicators,
+            1,
+            address(bridge),
+            address(0x5E),          // sequencerStake
+            address(0xA11CE),       // attestor
+            DEPLOYMENT_ID
+        );
+        assertEq(address(verifierV2), predictedV2,
+            "verifier address prediction must hold");
+        assertEq(bridge.faultProofRollbackAuthority(), address(verifierV2),
+            "the bridge's rollback authority is the V2 verifier");
         registry.assertConsistent();
 
         vm.deal(sequencer, 100 ether);
@@ -296,6 +354,8 @@ contract BatchGameCrossCheck is CrossCheckFramework {
         assertFalse(disputed, "sequencer win clears the disputed flag");
         assertFalse(finalised, "not yet finalised");
         assertFalse(registry.isStateRootReverted(4), "nothing reverted");
+        assertFalse(bridge.isStateRootReverted(4),
+            "a sequencer win must not touch the bridge's reverted range");
         assertEq(registry.canonicalTip(), 4, "tip unmoved");
         assertGt(game.pendingWithdrawals(sequencer), 0,
             "winner credited the challenger's forfeited bond share");
@@ -339,6 +399,13 @@ contract BatchGameCrossCheck is CrossCheckFramework {
         registry.submitStateRoot{value: STATE_ROOT_BOND}(
             1, 0, fabricated, actionsRoot);
 
+        // The bridge's own attested state-root lane sees the same
+        // height, so its reverted-range ceiling can cover index 1
+        // once the revert lands (the ceiling rises only to the
+        // lane's latest submitted index).
+        bridge.submitStateRoot(
+            fabricated, 1, _signStateRootAs(ATTESTOR_PK, bridge, fabricated, 1));
+
         // The challenger claims the TRUE root.
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
@@ -357,6 +424,15 @@ contract BatchGameCrossCheck is CrossCheckFramework {
         // tip lowered to the batch start.
         assertTrue(registry.isStateRootReverted(1), "record reverted");
         assertEq(registry.canonicalTip(), 0, "tip lowered to the batch start");
+        // THE R6 WIRING, end-to-end on the real contracts: the
+        // settlement drove game → V2 verifier (the bridge's
+        // `faultProofRollbackAuthority`) → bridge, so the BRIDGE's
+        // own reverted range — the one its fund-safety gates consult
+        // — covers the invalid root.  This is the leg the shipped
+        // wiring lacked: `revertStateRootsFrom` marked the registry
+        // and nothing ever told the bridge.
+        assertTrue(bridge.isStateRootReverted(1),
+            "the challenger win must reach the bridge's reverted range");
         (, , , , uint128 bond, , , , ,) = registry.roots(1);
         assertEq(bond, 0, "sequencer bond slashed");
         uint256 pot = uint256(MIN_CHALLENGE_BOND) + uint256(STATE_ROOT_BOND);

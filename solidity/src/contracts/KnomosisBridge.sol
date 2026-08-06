@@ -265,6 +265,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     address public immutable disputeVerifier;
     address public immutable sequencerStake;
     address public immutable migration;
+    /// @notice The fault-proof rollback authority (SB ruling R6):
+    ///         a second address allowed to call `revertToPriorRoot`,
+    ///         alongside `disputeVerifier`.  Zero = disabled.
+    address public immutable faultProofRollbackAuthority;
 
     uint64 public immutable disputeWindowBlocks;
     uint64 public immutable maxRedemptionWindowBlocks;
@@ -772,6 +776,21 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // only when the AMM cannot function (ratio 0 or BOLD-disabled).
         // Intended to be a multisig; validated `!= address(this)`.
         address ammDisasterRecovery;
+        // Workstream SB ruling R6: a SECOND rollback authority or-ed
+        // into `revertToPriorRoot`'s gate — the fault-proof path's
+        // `KnomosisDisputeVerifierV2`, so a challenger win drives the
+        // reverted range through to THIS contract's fund-safety gates
+        // (withdrawals, redemptions) instead of stopping at the
+        // state-root registry.  A second authority rather than a
+        // rebinding of `disputeVerifier`: V1 quorum upholds call
+        // `revertToPriorRoot` with no try/catch and self-check the
+        // binding, so rebinding would hard-revert every live V1
+        // uphold.  `address(0)` disables the second gate (a
+        // deployment without the fault-proof stack).  Forward
+        // reference (V2 is deployed after the bridge), so no
+        // code-existence check is possible here; the deploy scripts
+        // require-check the predicted address.
+        address faultProofRollbackAuthority;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
     }
@@ -967,6 +986,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         disputeVerifier = args.disputeVerifier;
         sequencerStake = args.sequencerStake;
         migration = args.migration;
+        faultProofRollbackAuthority = args.faultProofRollbackAuthority;
         disputeWindowBlocks = args.disputeWindowBlocks;
         maxRedemptionWindowBlocks = args.maxRedemptionWindowBlocks;
         maxAttestationStaleBlocks = args.maxAttestationStaleBlocks;
@@ -2242,7 +2262,14 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     );
 
     function revertToPriorRoot(uint64 disputedLogIndexHigh) external {
-        if (msg.sender != disputeVerifier) revert NotDisputeVerifier();
+        // Two authorities (SB ruling R6): the V1 dispute verifier
+        // (quorum upholds) and the fault-proof rollback authority
+        // (challenger wins driven through `KnomosisDisputeVerifierV2`).
+        // A zero authority disables the second gate on its own —
+        // `msg.sender` is never the zero address.
+        if (msg.sender != disputeVerifier && msg.sender != faultProofRollbackAuthority) {
+            revert NotDisputeVerifier();
+        }
 
         // O(1) reversion: track the (floor, ceiling) pair.
         //   - floor lowers monotonically (only decreases).

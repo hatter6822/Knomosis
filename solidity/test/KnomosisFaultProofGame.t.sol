@@ -277,7 +277,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
             MIN_STEP_INTERVAL,
             treasury,
             address(stepVM),
-            stateRootSubmission
+            stateRootSubmission, address(0)
         );
         vm.deal(challenger, 100 ether);
         vm.deal(sequencer, 100 ether);
@@ -347,21 +347,21 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.expectRevert(KnomosisFaultProofGame.ZeroAddress.selector);
         new KnomosisFaultProofGame(
             BISECTION_TIMEOUT, MIN_CHALLENGE_BOND, MIN_STEP_INTERVAL,
-            address(0), address(stepVM), stateRootSubmission);
+            address(0), address(stepVM), stateRootSubmission, address(0));
     }
 
     function test_constructor_rejects_zero_stepVM() public {
         vm.expectRevert(KnomosisFaultProofGame.ZeroAddress.selector);
         new KnomosisFaultProofGame(
             BISECTION_TIMEOUT, MIN_CHALLENGE_BOND, MIN_STEP_INTERVAL,
-            treasury, address(0), stateRootSubmission);
+            treasury, address(0), stateRootSubmission, address(0));
     }
 
     function test_constructor_rejects_zero_stateRootSubmission() public {
         vm.expectRevert(KnomosisFaultProofGame.ZeroAddress.selector);
         new KnomosisFaultProofGame(
             BISECTION_TIMEOUT, MIN_CHALLENGE_BOND, MIN_STEP_INTERVAL,
-            treasury, address(stepVM), address(0));
+            treasury, address(stepVM), address(0), address(0));
     }
 
     /// @notice CRITICAL SECURITY TEST: the constructor must
@@ -375,7 +375,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.expectRevert(KnomosisFaultProofGame.ZeroAddress.selector);
         new KnomosisFaultProofGame(
             BISECTION_TIMEOUT, MIN_CHALLENGE_BOND, MIN_STEP_INTERVAL,
-            treasury, address(stepVM), address(0xC0DE));
+            treasury, address(stepVM), address(0xC0DE), address(0));
     }
 
     function test_constants_max_bisection_depth_is_64() public view {
@@ -390,15 +390,15 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         // timeout == interval: rejected.
         vm.expectRevert(KnomosisFaultProofGame.InvalidTimeoutConfig.selector);
         new KnomosisFaultProofGame(
-            10, MIN_CHALLENGE_BOND, 10, treasury, address(stepVM), stateRootSubmission);
+            10, MIN_CHALLENGE_BOND, 10, treasury, address(stepVM), stateRootSubmission, address(0));
         // timeout < interval: rejected.
         vm.expectRevert(KnomosisFaultProofGame.InvalidTimeoutConfig.selector);
         new KnomosisFaultProofGame(
-            5, MIN_CHALLENGE_BOND, 10, treasury, address(stepVM), stateRootSubmission);
+            5, MIN_CHALLENGE_BOND, 10, treasury, address(stepVM), stateRootSubmission, address(0));
         // timeout == 0 (and interval 0): rejected (0 is not > 0).
         vm.expectRevert(KnomosisFaultProofGame.InvalidTimeoutConfig.selector);
         new KnomosisFaultProofGame(
-            0, MIN_CHALLENGE_BOND, 0, treasury, address(stepVM), stateRootSubmission);
+            0, MIN_CHALLENGE_BOND, 0, treasury, address(stepVM), stateRootSubmission, address(0));
     }
 
     /* -------- initiateChallenge -------- */
@@ -1156,7 +1156,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         RevertingReceiver badTreasury = new RevertingReceiver();
         KnomosisFaultProofGame brickGame = new KnomosisFaultProofGame(
             BISECTION_TIMEOUT, MIN_CHALLENGE_BOND, MIN_STEP_INTERVAL,
-            address(badTreasury), address(stepVM), stateRootSubmission);
+            address(badTreasury), address(stepVM), stateRootSubmission, address(0));
 
         vm.prank(challenger);
         uint256 gameId = brickGame.initiateChallenge{value: MIN_CHALLENGE_BOND}(

@@ -127,6 +127,7 @@ contract BridgeFeeSplitBoldTest is
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -216,6 +217,7 @@ contract BridgeFeeSplitBoldTest is
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -418,6 +420,7 @@ contract BridgeFeeSplitBoldTest is
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -837,6 +840,7 @@ contract BridgeFeeSplitBoldTest is
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

@@ -123,6 +123,7 @@ contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness, BoldTestSupport 
                 enableLiquityAutoCircuitTrigger: enableAuto,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1323,6 +1324,7 @@ contract BridgeSelfRoleProbe is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1450,6 +1452,7 @@ contract BoldCircuitBreakerInvariantTest is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

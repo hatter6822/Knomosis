@@ -127,6 +127,7 @@ contract AmmStorageTest is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -167,6 +168,7 @@ contract AmmStorageTest is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

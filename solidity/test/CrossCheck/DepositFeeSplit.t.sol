@@ -421,6 +421,7 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework, DepositEventDecoder, 
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

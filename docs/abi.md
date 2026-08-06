@@ -3059,7 +3059,15 @@ All contracts immutable per Workstream-E §20 discipline.
 `KnomosisDisputeVerifierV2`:
 
   * `fileDispute(bytes32 disputeHash) returns (uint256)`
-  * `finaliseFromFaultProof(uint256 disputeId, uint256 gameId, uint64 revertFromIdx)`
+  * `finaliseFromFaultProof(uint256 gameId, uint64 revertFromIdx)` —
+    gated to the fault-proof game; drives a challenger win's revert
+    through to the BRIDGE (`revertToPriorRoot`), for which this
+    contract is the bridge's `faultProofRollbackAuthority` (SB
+    ruling R6).  Keyed by the game, not a dispute record — no V2
+    dispute is filed for a fault-proof settlement.  (The previous
+    `(disputeId, gameId, revertFromIdx)` form only marked a dispute
+    record nobody ever filed, so a challenger win never reached the
+    bridge's fund-safety gates.)
   * `finaliseFromQuorum(uint256 disputeId, address[] signers)`
 
 `KnomosisFaultProofMigration`:

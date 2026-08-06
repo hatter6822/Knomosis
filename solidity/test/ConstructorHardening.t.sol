@@ -65,6 +65,7 @@ contract ConstructorHardeningTest is Test {
             enableLiquityAutoCircuitTrigger: false,
             ammSeedRatioBps: 0,
             ammDisasterRecovery: address(0),
+            faultProofRollbackAuthority: address(0),
             erc20ResourceIds: new uint64[](0),
             erc20TokenAddrs: new address[](0)
         });
@@ -222,7 +223,7 @@ contract ConstructorHardeningTest is Test {
             5,               // minBisectionStepInterval
             address(0x7EA5), // treasury
             stepVM,
-            submission
+            submission, address(0)
         );
     }
 

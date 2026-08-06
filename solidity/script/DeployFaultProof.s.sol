@@ -142,16 +142,20 @@ contract DeployFaultProof is Script {
 
         // Step 7: deploy game.  Its constructor checks
         // `_stateRootSubmission.code.length > 0` — state-root-sub
-        // is now deployed and has code.
+        // is now deployed and has code.  The verifier deployed in
+        // step 6, so the game's R6 bridge leg takes its REAL
+        // address (no prediction needed for this argument).
         KnomosisFaultProofGame game = new KnomosisFaultProofGame(
             bisectionTimeout,
             minChallengeBond,
             minBisectionStepInterval,
             treasury,
             address(stepVM),
-            address(submission)
+            address(submission),
+            address(verifier)
         );
         require(address(game) == predictedGame, "AddressMismatch");
+        require(game.disputeVerifier() == address(verifier), "VerifierMismatch");
 
         // Post-deploy assert.  Defence-in-depth on every contract's
         // structural invariants.

@@ -72,6 +72,7 @@ contract BridgeFeeSplitTest is FeeSplitBehaviour {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -353,6 +354,7 @@ contract BridgeFeeSplitTest is FeeSplitBehaviour {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

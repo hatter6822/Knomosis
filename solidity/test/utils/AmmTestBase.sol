@@ -84,6 +84,7 @@ abstract contract AmmTestBase is Test, BoldTestSupport {
             enableLiquityAutoCircuitTrigger: false,
             ammSeedRatioBps: 8000,
             ammDisasterRecovery: AMM_DR,
+            faultProofRollbackAuthority: address(0),
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });
@@ -128,6 +129,7 @@ abstract contract AmmTestBase is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 8000,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
