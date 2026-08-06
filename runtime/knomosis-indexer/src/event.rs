@@ -10,7 +10,7 @@
 //! ## Frozen constructor indices
 //!
 //! Per `LegalKernel/Events/Types.lean` (§8.9.2) and `docs/abi.md`
-//! §5.3, the `Event` inductive has 23 constructors with frozen
+//! §5.3, the `Event` inductive has 25 constructors with frozen
 //! indices.  This module exposes the same shape as a Rust enum so
 //! the decoder can produce typed values without reaching into
 //! raw bytes everywhere.
@@ -40,13 +40,18 @@
 //! | 20  | `BudgetConsumed`               | `actor, amount`                                                   |
 //! | 21  | `AmmSwapExecuted`              | `from_resource, to_resource, amount_in, amount_out, amm_actor`    |
 //! | 22  | `AmmReservesReclaimed`         | `resource, amount, reserve_actor, pool_actor`                     |
+//! | 23  | `ReserveSwapExecuted`          | `from_resource, to_resource, user, amount_in, amount_out, ra`     |
+//! | 24  | `ReserveSeeded`                | `resource, amount, reserve_actor, deposit_id`                     |
 //!
 //! Tags 16..=20 are the Workstream-GP "gas pool" family (per
 //! `LegalKernel/Events/Types.lean::Event.tag` 16..=20).  Tags
 //! 16..=19 enable per-actor budget views; tag 20 (added in GP.6.4)
 //! enables per-epoch consumption tracking, completing the
 //! "N actions remaining this epoch" semantics.  Tag 21 (added in
-//! GP.11.4) is the AMM swap execution event.
+//! GP.11.4) is the AMM swap execution event.  Tags 23/24
+//! (Workstream SB) are the USER-swap execution event (unlike the
+//! bridge-attested tag 21, tag 23 has a user party and
+//! kernel-derived amounts) and the deposit-seed attribution event.
 //!
 //! ## Field types (mirrored from Lean)
 //!
@@ -383,6 +388,42 @@ pub enum Event {
         /// The credited gas-pool actor.
         pool_actor: ActorId,
     },
+    /// A USER-signed L2 AMM swap was executed against the reserve
+    /// actor's live balances (Workstream SB; `Laws.reserveSwap`).
+    /// Unlike the bridge-attested `AmmSwapExecuted` (21), this
+    /// event has a user party and `amount_out` is the
+    /// kernel-COMPUTED constant-product quote, not an attested
+    /// value.  Tag 23.
+    ReserveSwapExecuted {
+        /// Source resource (the one the user pays in).
+        from_resource: ResourceId,
+        /// Destination resource (the one the user receives).
+        to_resource: ResourceId,
+        /// The swapping user.
+        user: ActorId,
+        /// Amount paid in by the user.
+        amount_in: Amount,
+        /// The kernel-computed amount credited to the user.
+        amount_out: Amount,
+        /// The AMM reserve actor whose balances back the swap.
+        reserve_actor: ActorId,
+    },
+    /// The AMM reserve was seeded from a deposit's fee split
+    /// (Workstream SB): the `depositWithFee` seed leg credited
+    /// `reserve_actor` by `amount` at `resource`, attributable to
+    /// the L1 deposit `deposit_id`.  Indexers consume this event
+    /// to attribute reserve growth to deposit seeding rather than
+    /// to swap flow.  Tag 24.
+    ReserveSeeded {
+        /// The seeded resource.
+        resource: ResourceId,
+        /// The seed amount.
+        amount: Amount,
+        /// The credited AMM reserve actor.
+        reserve_actor: ActorId,
+        /// The originating L1 deposit id.
+        deposit_id: u64,
+    },
 }
 
 impl Event {
@@ -414,6 +455,8 @@ impl Event {
             Self::BudgetConsumed { .. } => 20,
             Self::AmmSwapExecuted { .. } => 21,
             Self::AmmReservesReclaimed { .. } => 22,
+            Self::ReserveSwapExecuted { .. } => 23,
+            Self::ReserveSeeded { .. } => 24,
         }
     }
 
@@ -459,7 +502,13 @@ impl Event {
             Self::AmmSwapExecuted {
                 amm_reserve_actor, ..
             } => Some(*amm_reserve_actor),
-            Self::AmmReservesReclaimed { reserve_actor, .. } => Some(*reserve_actor),
+            // Tags 22/24 project the reserve actor; tag 23 projects
+            // the swapping USER (per Lean's `Event.actor` — indexers
+            // key trade history on the user; the reserve legs
+            // surface via the accompanying `BalanceChanged`s).
+            Self::AmmReservesReclaimed { reserve_actor, .. }
+            | Self::ReserveSeeded { reserve_actor, .. } => Some(*reserve_actor),
+            Self::ReserveSwapExecuted { user, .. } => Some(*user),
             Self::TimeRecorded { .. }
             | Self::DisputeWithdrawn { .. }
             | Self::VerdictApplied { .. } => None,
@@ -477,7 +526,8 @@ impl Event {
             | Self::DepositCredited { resource, .. }
             | Self::DepositWithFeeCredited { resource, .. }
             | Self::GasPoolClaim { resource, .. }
-            | Self::AmmReservesReclaimed { resource, .. } => Some(*resource),
+            | Self::AmmReservesReclaimed { resource, .. }
+            | Self::ReserveSeeded { resource, .. } => Some(*resource),
             Self::ActionBudgetTopUp { gas_resource, .. }
             | Self::DelegatedActionBudgetTopUp { gas_resource, .. } => Some(*gas_resource),
             _ => None,
@@ -511,8 +561,10 @@ impl Event {
 /// The number of frozen `Event` constructors.  Bumped by amendment
 /// when a new constructor lands.  Useful for exhaustive coverage
 /// tests.  GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`;
-/// GP.11.10 widened 22 → 23 by adding `AmmReservesReclaimed`.
-pub const EVENT_TAG_COUNT: u8 = 23;
+/// GP.11.10 widened 22 → 23 by adding `AmmReservesReclaimed`;
+/// Workstream SB widened 23 → 25 by adding `ReserveSwapExecuted`
+/// and `ReserveSeeded`.
+pub const EVENT_TAG_COUNT: u8 = 25;
 
 #[cfg(test)]
 mod tests {
@@ -696,13 +748,84 @@ mod tests {
             .tag(),
             20
         );
+        // GP.11.4 / GP.11.10: tags 21/22.
+        assert_eq!(
+            Event::AmmSwapExecuted {
+                from_resource: 0,
+                to_resource: 1,
+                amount_in: 0,
+                amount_out: 0,
+                amm_reserve_actor: 3,
+            }
+            .tag(),
+            21
+        );
+        assert_eq!(
+            Event::AmmReservesReclaimed {
+                resource: 0,
+                amount: 0,
+                reserve_actor: 3,
+                pool_actor: 1,
+            }
+            .tag(),
+            22
+        );
+        // Workstream SB: tags 23/24.
+        assert_eq!(
+            Event::ReserveSwapExecuted {
+                from_resource: 0,
+                to_resource: 1,
+                user: 7,
+                amount_in: 0,
+                amount_out: 0,
+                reserve_actor: 3,
+            }
+            .tag(),
+            23
+        );
+        assert_eq!(
+            Event::ReserveSeeded {
+                resource: 0,
+                amount: 0,
+                reserve_actor: 3,
+                deposit_id: 0,
+            }
+            .tag(),
+            24
+        );
     }
 
     /// `EVENT_TAG_COUNT` matches the number of constructors.
-    /// GP.11.4 widened 21 → 22.
+    /// GP.11.4 widened 21 → 22; Workstream SB widened 23 → 25.
     #[test]
     fn tag_count_constant() {
-        assert_eq!(EVENT_TAG_COUNT, 23);
+        assert_eq!(EVENT_TAG_COUNT, 25);
+    }
+
+    /// Workstream SB actor/resource projections: tag 23 projects
+    /// the swapping USER (not the reserve actor) and NO resource
+    /// (two resources are touched; Lean's `Event.resource` returns
+    /// `none`); tag 24 projects the reserve actor and its resource.
+    #[test]
+    fn reserve_swap_and_seed_projections() {
+        let swap = Event::ReserveSwapExecuted {
+            from_resource: 0,
+            to_resource: 1,
+            user: 42,
+            amount_in: 10,
+            amount_out: 9,
+            reserve_actor: 3,
+        };
+        assert_eq!(swap.actor(), Some(42), "tag 23 projects the user");
+        assert_eq!(swap.resource(), None, "tag 23 has no single resource");
+        let seeded = Event::ReserveSeeded {
+            resource: 1,
+            amount: 5,
+            reserve_actor: 3,
+            deposit_id: 77,
+        };
+        assert_eq!(seeded.actor(), Some(3), "tag 24 projects the reserve actor");
+        assert_eq!(seeded.resource(), Some(1));
     }
 
     /// Canonical resource-id constants pinned.

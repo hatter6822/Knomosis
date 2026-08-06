@@ -11,10 +11,11 @@
 LegalKernel.Test.Bridge.CrossCheck.EventCbe — WU GP.6.3 / RH-D.
 
 Generates the `event_subscribe_cbe.json` cross-stack fixture: one
-reference vector per `Events.Event` constructor (frozen tags 0..22,
-including the GP.11.4 `ammSwapExecuted` at tag 21), each carrying the
-constructor's canonical CBE bytes computed by LEAN's
-`Encoding.Event.encode`.
+reference vector per `Events.Event` constructor (frozen tags 0..24,
+including the GP.11.4 `ammSwapExecuted` at tag 21 and the
+Workstream-SB `reserveSwapExecuted` / `reserveSeeded` at tags 23/24),
+each carrying the constructor's canonical CBE bytes computed by
+LEAN's `Encoding.Event.encode`.
 
 **Why this fixture exists.**  The Rust event-subscription server
 (`knomosis-event-subscribe`) reads the leading constructor tag from
@@ -29,7 +30,7 @@ field of every entry is the hex of Lean's `Event.encode`, and the
 Rust consumer
 (`runtime/knomosis-event-subscribe/tests/cross_stack_lean_event.rs`)
 asserts `peek_event_tag` reads exactly `tag` and `classify` resolves
-to the named `EventType` for all 23 constructors.
+to the named `EventType` for all 25 constructors.
 
 **What it catches.**  A Lean encoder change (frozen-index bump,
 field-order edit) drifts the committed JSON — `lake test`'s
@@ -60,9 +61,11 @@ namespace EventCbe
 
 /-- The number of frozen `Event` constructors (mirrors the Rust
     `event_type::KNOWN_EVENT_TAG_COUNT`).  Bumped 21 → 22 by
-    GP.11.4 (the `ammSwapExecuted` event at tag 21) and 22 → 23 by
-    GP.11.10 (the `ammReservesReclaimed` event at tag 22). -/
-def knownTagCount : Nat := 23
+    GP.11.4 (the `ammSwapExecuted` event at tag 21), 22 → 23 by
+    GP.11.10 (the `ammReservesReclaimed` event at tag 22), and
+    23 → 25 by Workstream SB (`reserveSwapExecuted` at tag 23 and
+    `reserveSeeded` at tag 24). -/
+def knownTagCount : Nat := 25
 
 /-- Encode an `Event` with Lean's canonical `Event.encode` and return
     the `0x`-prefixed lowercase hex of the byte stream — the
@@ -97,12 +100,6 @@ def eventKind : Event → String
   | .budgetConsumed ..             => "budgetConsumed"
   | .ammSwapExecuted ..            => "ammSwapExecuted"
   | .ammReservesReclaimed ..       => "ammReservesReclaimed"
-  -- Workstream SB: names for the two new constructors so this match
-  -- stays total.  Their fixture rows (and the `knownTagCount` bump to
-  -- 25, in lockstep with the Rust `KNOWN_EVENT_TAG_COUNT`) land at
-  -- the corpus-cutover phase's single regeneration — this phase is
-  -- corpus-neutral by design, and `writeFixture`'s verify mode would
-  -- flag any earlier drift.
   | .reserveSwapExecuted ..        => "reserveSwapExecuted"
   | .reserveSeeded ..              => "reserveSeeded"
 
@@ -149,7 +146,9 @@ def canonicalEvents : List Event :=
   , .delegatedActionBudgetTopUp 9 7 0 500 10 1
   , .budgetConsumed 42 1
   , .ammSwapExecuted 0 1 500 480 3
-  , .ammReservesReclaimed 0 123456 3 1 ]
+  , .ammReservesReclaimed 0 123456 3 1
+  , .reserveSwapExecuted 0 1 7 500 480 3
+  , .reserveSeeded 0 400 3 42 ]
 
 /-- The six gas-pool-family edge-value events (tags 16..20),
     exercising the Rust head peek across field magnitudes.
@@ -164,7 +163,7 @@ def gasPoolEdgeEvents : List Event :=
   , .budgetConsumed 0 0 ]
 
 /-- The fixture entries: one canonical vector per frozen constructor
-    (tags 0..20, in order), plus the gas-pool edge-value variants. -/
+    (tags 0..24, in order), plus the gas-pool edge-value variants. -/
 def entries : List Json :=
   canonicalEvents.map (mkEntry · "canonical") ++
   gasPoolEdgeEvents.map (mkEntry · "gp-edge")
@@ -189,22 +188,23 @@ def fixtureName : String := "event_subscribe_cbe.json"
 
 /-! ## Test cases -/
 
-/-- The fixture has 29 entries (23 canonical 0..=22 + 6 gas-pool
+/-- The fixture has 31 entries (25 canonical 0..=24 + 6 gas-pool
     edge cases including the `budgetConsumed` edge added in GP.6.4). -/
 def entryCount : TestCase := {
-  name := "GP.11.10: event_subscribe_cbe fixture has 29 entries"
+  name := "SB: event_subscribe_cbe fixture has 31 entries"
   body := do
-    assertEq (29 : Nat) entries.length "entry count"
+    assertEq (31 : Nat) entries.length "entry count"
 }
 
-/-- The 23 canonical entries cover tags 0..22 in order
+/-- The 25 canonical entries cover tags 0..24 in order
     (GP.11.4 widened 21 → 22 with `ammSwapExecuted`; GP.11.10 widened
-    22 → 23 with `ammReservesReclaimed`). -/
+    22 → 23 with `ammReservesReclaimed`; Workstream SB widened
+    23 → 25 with `reserveSwapExecuted` + `reserveSeeded`). -/
 def canonicalCoversAllTags : TestCase := {
-  name := "GP.11.10: canonical entries cover tags 0..22"
+  name := "SB: canonical entries cover tags 0..24"
   body := do
-    assertEq (23 : Nat) canonicalEvents.length "canonical count"
-    assertEq (List.range 23) (canonicalEvents.map Event.tag) "canonical tags 0..22 in order"
+    assertEq (25 : Nat) canonicalEvents.length "canonical count"
+    assertEq (List.range 25) (canonicalEvents.map Event.tag) "canonical tags 0..24 in order"
 }
 
 /-- The serialised JSON contains one entry-record per built entry

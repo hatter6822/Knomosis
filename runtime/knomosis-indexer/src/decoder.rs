@@ -480,6 +480,20 @@ pub fn decode_event(payload: &[u8]) -> Result<Event, DecodeError> {
             reserve_actor: cursor.read_uint()?,
             pool_actor: cursor.read_uint()?,
         },
+        23 => Event::ReserveSwapExecuted {
+            from_resource: cursor.read_uint()?,
+            to_resource: cursor.read_uint()?,
+            user: cursor.read_uint()?,
+            amount_in: cursor.read_amount()?,
+            amount_out: cursor.read_amount()?,
+            reserve_actor: cursor.read_uint()?,
+        },
+        24 => Event::ReserveSeeded {
+            resource: cursor.read_uint()?,
+            amount: cursor.read_amount()?,
+            reserve_actor: cursor.read_uint()?,
+            deposit_id: cursor.read_uint()?,
+        },
         other => return Err(DecodeError::UnknownTag { tag: other }),
     };
     // Reject trailing bytes — the encoder is supposed to produce a
@@ -810,6 +824,32 @@ pub fn encode_event(event: &Event) -> Vec<u8> {
             write_uint(&mut out, *reserve_actor);
             write_uint(&mut out, *pool_actor);
         }
+        Event::ReserveSwapExecuted {
+            from_resource,
+            to_resource,
+            user,
+            amount_in,
+            amount_out,
+            reserve_actor,
+        } => {
+            write_uint(&mut out, *from_resource);
+            write_uint(&mut out, *to_resource);
+            write_uint(&mut out, *user);
+            write_amount(&mut out, *amount_in);
+            write_amount(&mut out, *amount_out);
+            write_uint(&mut out, *reserve_actor);
+        }
+        Event::ReserveSeeded {
+            resource,
+            amount,
+            reserve_actor,
+            deposit_id,
+        } => {
+            write_uint(&mut out, *resource);
+            write_amount(&mut out, *amount);
+            write_uint(&mut out, *reserve_actor);
+            write_uint(&mut out, *deposit_id);
+        }
     }
     out
 }
@@ -1036,6 +1076,32 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_amount(&mut out, *amount);
             write_uint(&mut out, *reserve_actor);
             write_uint(&mut out, *pool_actor);
+        }
+        Event::ReserveSwapExecuted {
+            from_resource,
+            to_resource,
+            user,
+            amount_in,
+            amount_out,
+            reserve_actor,
+        } => {
+            write_uint(&mut out, *from_resource);
+            write_uint(&mut out, *to_resource);
+            write_uint(&mut out, *user);
+            write_amount(&mut out, *amount_in);
+            write_amount(&mut out, *amount_out);
+            write_uint(&mut out, *reserve_actor);
+        }
+        Event::ReserveSeeded {
+            resource,
+            amount,
+            reserve_actor,
+            deposit_id,
+        } => {
+            write_uint(&mut out, *resource);
+            write_amount(&mut out, *amount);
+            write_uint(&mut out, *reserve_actor);
+            write_uint(&mut out, *deposit_id);
         }
     }
     Ok(out)
@@ -1325,6 +1391,65 @@ mod tests {
         };
         let bytes = encode_event(&e);
         assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Workstream SB tag 23: `ReserveSwapExecuted` round-trips.
+    #[test]
+    fn round_trip_reserve_swap_executed() {
+        let e = Event::ReserveSwapExecuted {
+            from_resource: 0,
+            to_resource: 1,
+            user: 7,
+            amount_in: 500,
+            amount_out: 480,
+            reserve_actor: 3,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Workstream SB tag 24: `ReserveSeeded` round-trips.
+    #[test]
+    fn round_trip_reserve_seeded() {
+        let e = Event::ReserveSeeded {
+            resource: 1,
+            amount: 400,
+            reserve_actor: 3,
+            deposit_id: 42,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// SB tag-23 wire-layout: tag(9), fromResource(9), toResource(9),
+    /// user(9), amountIn(33), amountOut(33), reserveActor(9) — 111
+    /// bytes total; the two wei-denominated amounts ride the 33-byte
+    /// amount head, everything else the 9-byte uint head.
+    #[test]
+    fn reserve_swap_executed_byte_layout() {
+        let e = Event::ReserveSwapExecuted {
+            from_resource: 0,
+            to_resource: 1,
+            user: 7,
+            amount_in: 500,
+            amount_out: 480,
+            reserve_actor: 3,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(bytes.len(), 111);
+        // Tag head: 0x00 + 8-byte LE 23.
+        assert_eq!(bytes[0], CBE_TAG_UINT);
+        assert_eq!(&bytes[1..9], &23u64.to_le_bytes());
+        // user at 27..36 on the uint head.
+        assert_eq!(bytes[27], CBE_TAG_UINT);
+        assert_eq!(&bytes[28..36], &7u64.to_le_bytes());
+        // amountIn at 36..69 on the amount head.
+        assert_eq!(bytes[36], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[37..53], &500u128.to_le_bytes());
+        assert_eq!(&bytes[53..69], &[0u8; 16], "amount high half is zero");
+        // reserveActor at 102..111 on the uint head.
+        assert_eq!(bytes[102], CBE_TAG_UINT);
+        assert_eq!(&bytes[103..111], &3u64.to_le_bytes());
     }
 
     /// GP tag-20 wire-layout: `BudgetConsumed` has 2 fields × 9

@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1c61cc2a34ede8cf15d8ca8a4244e38bea6aa0fea744a556e6167434dca63c75"
+    "source_digest": "5dca3843e365dcccecf88948dd509ee0f91835c336064bf97906eb0f198c13cd"
   },
   "summary": {
     "module_count": 348,
@@ -47496,7 +47496,7 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.CrossCheck",
-          "line": 50,
+          "line": 51,
           "called": [
             "LegalKernel",
             "LegalKernel.Test"
@@ -47505,19 +47505,19 @@
         {
           "kind": "namespace",
           "name": "EventCbe",
-          "line": 58,
+          "line": 59,
           "called": []
         },
         {
           "kind": "def",
           "name": "knownTagCount",
-          "line": 64,
+          "line": 67,
           "called": []
         },
         {
           "kind": "def",
           "name": "encodeEventHex",
-          "line": 69,
+          "line": 72,
           "called": [
             "Event",
             "hexFromBytes"
@@ -47526,7 +47526,7 @@
         {
           "kind": "def",
           "name": "eventKind",
-          "line": 75,
+          "line": 78,
           "called": [
             "Event"
           ]
@@ -47534,13 +47534,13 @@
         {
           "kind": "def",
           "name": "sampleAddr",
-          "line": 110,
+          "line": 107,
           "called": []
         },
         {
           "kind": "def",
           "name": "mkEntry",
-          "line": 117,
+          "line": 114,
           "called": [
             "Event",
             "Event.tag",
@@ -47552,7 +47552,7 @@
         {
           "kind": "def",
           "name": "canonicalEvents",
-          "line": 128,
+          "line": 125,
           "called": [
             "Event",
             "sampleAddr"
@@ -47561,7 +47561,7 @@
         {
           "kind": "def",
           "name": "gasPoolEdgeEvents",
-          "line": 157,
+          "line": 156,
           "called": [
             "Event"
           ]
@@ -47569,7 +47569,7 @@
         {
           "kind": "def",
           "name": "entries",
-          "line": 167,
+          "line": 166,
           "called": [
             "Json",
             "mkEntry"
@@ -47578,7 +47578,7 @@
         {
           "kind": "def",
           "name": "buildFixture",
-          "line": 172,
+          "line": 171,
           "called": [
             "Json",
             "entries",
@@ -47588,13 +47588,13 @@
         {
           "kind": "def",
           "name": "fixtureName",
-          "line": 187,
+          "line": 186,
           "called": []
         },
         {
           "kind": "def",
           "name": "entryCount",
-          "line": 193,
+          "line": 192,
           "called": [
             "TestCase",
             "assertEq"

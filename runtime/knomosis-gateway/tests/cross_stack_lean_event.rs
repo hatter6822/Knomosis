@@ -18,7 +18,7 @@
 //! `knomosis-event-subscribe` tag-head pin consume).
 //!
 //! This pin proves the gateway agrees with that authority **end to end**: for
-//! every frozen constructor (tags `0..=22`), the gateway
+//! every frozen constructor (tags `0..=24`), the gateway
 //!
 //!   * renders the real Lean bytes to a well-formed §6.2 envelope (never a
 //!     `Corrupt` / `Unparseable` error), and
@@ -38,10 +38,10 @@ use std::path::PathBuf;
 use knomosis_gateway::events::decode::render_event;
 use serde::Deserialize;
 
-/// The highest event tag the frozen Lean `Event` set defines (GP.11.10:
-/// `AmmReservesReclaimed` at tag 22).  A fixture tag above this means the Lean
+/// The highest event tag the frozen Lean `Event` set defines (Workstream SB:
+/// `ReserveSeeded` at tag 24).  A fixture tag above this means the Lean
 /// corpus grew ahead of this pin — update both in lockstep.
-const MAX_KNOWN_TAG: u64 = 22;
+const MAX_KNOWN_TAG: u64 = 24;
 
 /// Pinned generator identifier (a Lean-side version bump forces an explicit
 /// update here, so the fixture can never silently change shape).
@@ -64,7 +64,7 @@ struct Entry {
     /// The Lean constructor name — the canonical §11A.5 event-type name the
     /// gateway must render (e.g. `"balanceChanged"`, `"ammReservesReclaimed"`).
     kind: String,
-    /// The frozen constructor tag (`0..=22`).
+    /// The frozen constructor tag (`0..=24`).
     tag: u64,
     /// `"canonical"` (one per tag) or an edge-case label.
     category: String,
@@ -186,7 +186,7 @@ fn gateway_renders_every_frozen_lean_event_type() {
         assert!(obj.contains_key("payload"));
         tags_seen.insert(e.tag);
     }
-    // Every frozen tag 0..=22 is exercised (the corpus is complete).
+    // Every frozen tag 0..=24 is exercised (the corpus is complete).
     let expected: std::collections::BTreeSet<u64> = (0..=MAX_KNOWN_TAG).collect();
     assert_eq!(
         tags_seen,

@@ -88,14 +88,16 @@ pub const EVENT_TAG_HEAD_LEN: usize = 9;
 
 /// The number of frozen `Event` constructor tags currently defined
 /// on the Lean side (`LegalKernel/Events/Types.lean::Event.tag`,
-/// indices `0..=22`).  Bumped by amendment when the Lean inductive
+/// indices `0..=24`).  Bumped by amendment when the Lean inductive
 /// grows; GP.11.4 widened it from 21 → 22 (adding `AmmSwapExecuted`
-/// at tag 21) and GP.11.10 from 22 → 23 (adding
-/// `AmmReservesReclaimed` at tag 22).  The streaming path treats any
+/// at tag 21), GP.11.10 from 22 → 23 (adding
+/// `AmmReservesReclaimed` at tag 22), and Workstream SB from
+/// 23 → 25 (adding `ReserveSwapExecuted` at tag 23 and
+/// `ReserveSeeded` at tag 24).  The streaming path treats any
 /// tag `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and
 /// forwards it verbatim (additive-extension policy, `docs/abi.md`
 /// §11).
-pub const KNOWN_EVENT_TAG_COUNT: u64 = 23;
+pub const KNOWN_EVENT_TAG_COUNT: u64 = 25;
 
 /// A canonical `Events.Event` constructor, identified by its frozen
 /// wire tag.
@@ -173,13 +175,22 @@ pub enum EventType {
     /// exact sweep that fires only after the L1 kill switch is
     /// mirrored on L2).  Tag 22.
     AmmReservesReclaimed,
+    /// A USER-signed L2 AMM swap was executed against the reserve
+    /// actor's live balances (Workstream SB; `Laws.reserveSwap`).
+    /// Unlike the bridge-attested tag 21, this event carries a user
+    /// party and a kernel-computed quote.  Tag 23.
+    ReserveSwapExecuted,
+    /// The AMM reserve was seeded from a deposit's fee split — the
+    /// `depositWithFee` seed leg's attribution event (Workstream
+    /// SB).  Tag 24.
+    ReserveSeeded,
 }
 
 /// Every [`EventType`] in frozen tag order.  `ALL[i].tag() == i`
 /// for every index, so iterating this array enumerates the tag
 /// space `0..KNOWN_EVENT_TAG_COUNT`.  Used by exhaustive coverage
 /// tests and by tooling that needs to walk the registry.
-pub const ALL_EVENT_TYPES: [EventType; 23] = [
+pub const ALL_EVENT_TYPES: [EventType; 25] = [
     EventType::BalanceChanged,
     EventType::NonceAdvanced,
     EventType::IdentityRegistered,
@@ -203,6 +214,8 @@ pub const ALL_EVENT_TYPES: [EventType; 23] = [
     EventType::BudgetConsumed,
     EventType::AmmSwapExecuted,
     EventType::AmmReservesReclaimed,
+    EventType::ReserveSwapExecuted,
+    EventType::ReserveSeeded,
 ];
 
 impl EventType {
@@ -234,6 +247,8 @@ impl EventType {
             Self::BudgetConsumed => 20,
             Self::AmmSwapExecuted => 21,
             Self::AmmReservesReclaimed => 22,
+            Self::ReserveSwapExecuted => 23,
+            Self::ReserveSeeded => 24,
         }
     }
 
@@ -267,6 +282,8 @@ impl EventType {
             Self::BudgetConsumed => "budgetConsumed",
             Self::AmmSwapExecuted => "ammSwapExecuted",
             Self::AmmReservesReclaimed => "ammReservesReclaimed",
+            Self::ReserveSwapExecuted => "reserveSwapExecuted",
+            Self::ReserveSeeded => "reserveSeeded",
         }
     }
 
@@ -586,8 +603,9 @@ mod tests {
         assert_eq!(CBE_TAG_UINT, 0x00);
         assert_eq!(EVENT_TAG_HEAD_LEN, 9);
         // GP.11.4 widened 21 → 22 (`AmmSwapExecuted`); GP.11.10
-        // widened 22 → 23 (`AmmReservesReclaimed`).
-        assert_eq!(KNOWN_EVENT_TAG_COUNT, 23);
+        // widened 22 → 23 (`AmmReservesReclaimed`); Workstream SB
+        // widened 23 → 25 (`ReserveSwapExecuted` + `ReserveSeeded`).
+        assert_eq!(KNOWN_EVENT_TAG_COUNT, 25);
     }
 
     /// `ALL_EVENT_TYPES[i].tag() == i` — the array is in frozen tag
@@ -611,11 +629,11 @@ mod tests {
 
     /// `from_tag` returns `None` for tags beyond the known set
     /// (forward-compatibility: future tags are not errors here).
-    /// GP.11.4 widened known tags 0..=20 → 0..=21, and GP.11.10
-    /// 0..=21 → 0..=22, so the first unknown tag is 23.
+    /// Workstream SB widened known tags 0..=22 → 0..=24, so the
+    /// first unknown tag is 25.
     #[test]
     fn from_tag_unknown_returns_none() {
-        for tag in [23u64, 24, 99, 1_000, u64::MAX] {
+        for tag in [25u64, 26, 99, 1_000, u64::MAX] {
             assert_eq!(
                 EventType::from_tag(tag),
                 None,

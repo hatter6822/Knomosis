@@ -9,11 +9,11 @@
 //! §11A.5 `Event` contract shape.
 //!
 //! **Classification (additive-extension policy, §11.1).**
-//!   * A **known** tag (`0..=22`) is decoded (`knomosis_indexer::decoder`)
+//!   * A **known** tag (`0..=24`) is decoded (`knomosis_indexer::decoder`)
 //!     and rendered to typed JSON.  A decode *failure* on a known tag is a
 //!     corruption signal and **fails closed** ([`DecodeError::Corrupt`]) —
 //!     never silently skipped, never mislabelled (§2 principle 7).
-//!   * An **unknown** tag (`≥23`, a future constructor) is forwarded
+//!   * An **unknown** tag (`≥25`, a future constructor) is forwarded
 //!     verbatim as `type:"unknown"` + base64 `raw` — never rejected.
 //!   * An **unparseable** head fails closed ([`DecodeError::Unparseable`]).
 //!
@@ -425,6 +425,44 @@ fn render_known(event: &Event) -> Rendered {
                 "poolActor": pool_actor.to_string(),
             }),
         },
+        // Workstream SB tag 23: the subject actor is the swapping
+        // USER (per Lean's `Event.actor` — trade history is keyed on
+        // the user); no single subject resource (two are touched).
+        Event::ReserveSwapExecuted {
+            from_resource,
+            to_resource,
+            user,
+            amount_in,
+            amount_out,
+            reserve_actor,
+        } => Rendered {
+            actor: Some(user.to_string()),
+            resource: None,
+            payload: json!({
+                "fromResource": from_resource.to_string(),
+                "toResource": to_resource.to_string(),
+                "user": user.to_string(),
+                "amountIn": amount_in.to_string(),
+                "amountOut": amount_out.to_string(),
+                "reserveActor": reserve_actor.to_string(),
+            }),
+        },
+        // Workstream SB tag 24: the seed leg's attribution event.
+        Event::ReserveSeeded {
+            resource,
+            amount,
+            reserve_actor,
+            deposit_id,
+        } => Rendered {
+            actor: Some(reserve_actor.to_string()),
+            resource: Some(resource.to_string()),
+            payload: json!({
+                "resource": resource.to_string(),
+                "amount": amount.to_string(),
+                "reserveActor": reserve_actor.to_string(),
+                "depositId": deposit_id.to_string(),
+            }),
+        },
     }
 }
 
@@ -543,12 +581,10 @@ mod tests {
     /// here.  (The type name is cross-checked against the §11A.5 registry,
     /// so it need not be re-transcribed.)
     ///
-    /// NOTE: the bytes come from the Rust `encode_event` (the canonical CBE
-    /// format by convention — see `knomosis-indexer::decoder`).  The true
-    /// cross-stack pin against `knomosis extract-events` output (plan G3.2c)
-    /// remains blocked on the Lean side shipping an `Encodable Event`
-    /// instance, which is deferred (RH-D.2); this pin closes the
-    /// gateway-side §6.2 shape guarantee in the meantime.
+    /// NOTE: the bytes come from the Rust `encode_event` (byte-identical to
+    /// the Lean `Encodable Event` authority — the shipped G3.2c pin in
+    /// `tests/cross_stack_lean_event.rs` proves that equality per tag);
+    /// this test owns the gateway-side §6.2 SHAPE guarantee.
     #[test]
     fn every_tag_pins_the_full_v62_envelope() {
         let samples = sample_events();
@@ -579,7 +615,7 @@ mod tests {
     /// order — paired one-to-one with [`sample_events`].  Transcribed from
     /// the contract, *independent* of `render_known`, so the two cannot
     /// drift together.
-    #[allow(clippy::too_many_lines)] // a flat 23-entry golden table; splitting hurts the pin
+    #[allow(clippy::too_many_lines)] // a flat 25-entry golden table; splitting hurts the pin
     fn expected_envelopes() -> Vec<(Option<&'static str>, Option<&'static str>, Value)> {
         let l1 = format!("0x{}", "01".repeat(20));
         vec![
@@ -662,13 +698,23 @@ mod tests {
                 Some("0"),
                 json!({"resource":"0","amount":"5","reserveActor":"2","poolActor":"3"}),
             ),
+            (
+                Some("7"),
+                None,
+                json!({"fromResource":"0","toResource":"1","user":"7","amountIn":"5","amountOut":"4","reserveActor":"3"}),
+            ),
+            (
+                Some("3"),
+                Some("0"),
+                json!({"resource":"0","amount":"5","reserveActor":"3","depositId":"42"}),
+            ),
         ]
     }
 
     #[test]
     fn unknown_tag_is_forwarded_as_base64_raw() {
         // A well-formed 9-byte CBE uint head (the 0x00 marker byte + an
-        // 8-byte little-endian tag) carrying a future tag (99 ≥ 23)
+        // 8-byte little-endian tag) carrying a future tag (99 ≥ 25)
         // classifies Unknown → forwarded verbatim, never rejected.
         let mut payload = vec![0x00];
         payload.extend_from_slice(&99u64.to_le_bytes());
@@ -820,6 +866,20 @@ mod tests {
                 amount: 5,
                 reserve_actor: 2,
                 pool_actor: 3,
+            },
+            Event::ReserveSwapExecuted {
+                from_resource: 0,
+                to_resource: 1,
+                user: 7,
+                amount_in: 5,
+                amount_out: 4,
+                reserve_actor: 3,
+            },
+            Event::ReserveSeeded {
+                resource: 0,
+                amount: 5,
+                reserve_actor: 3,
+                deposit_id: 42,
             },
         ]
     }

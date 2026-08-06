@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1adeac811a7b4aebf63f83a70460ff45d953f4f8c97bc7c1ff8add284bb5d2e3"
+    "source_digest": "9ade3678652af59d7c57781a6682a9cbe74a820f0cc553da8b0c3dce24b81571"
   },
   "summary": {
     "module_count": 193,
-    "declaration_count": 6156
+    "declaration_count": 6160
   },
   "modules": [
     {
@@ -5334,19 +5334,19 @@
         {
           "kind": "const",
           "name": "KNOWN_EVENT_TAG_COUNT",
-          "line": 97,
+          "line": 99,
           "called": []
         },
         {
           "kind": "enum",
           "name": "EventType",
-          "line": 113,
+          "line": 115,
           "called": []
         },
         {
           "kind": "const",
           "name": "ALL_EVENT_TYPES",
-          "line": 181,
+          "line": 192,
           "called": [
             "EventType"
           ]
@@ -5354,25 +5354,25 @@
         {
           "kind": "impl",
           "name": "EventType",
-          "line": 207,
+          "line": 220,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tag",
-          "line": 211,
+          "line": 224,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 244,
+          "line": 259,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_tag",
-          "line": 283,
+          "line": 300,
           "called": [
             "ALL_EVENT_TYPES",
             "len",
@@ -5382,13 +5382,13 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 301,
+          "line": 318,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Display for EventType",
-          "line": 313,
+          "line": 330,
           "called": [
             "EventType"
           ]
@@ -5396,7 +5396,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 314,
+          "line": 331,
           "called": [
             "_",
             "name"
@@ -5405,7 +5405,7 @@
         {
           "kind": "enum",
           "name": "EventTagError",
-          "line": 324,
+          "line": 341,
           "called": [
             "error",
             "len"
@@ -5414,7 +5414,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag",
-          "line": 358,
+          "line": 375,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -5426,7 +5426,7 @@
         {
           "kind": "enum",
           "name": "EventClass",
-          "line": 389,
+          "line": 406,
           "called": [
             "EventTagError",
             "EventType",
@@ -5436,13 +5436,13 @@
         {
           "kind": "impl",
           "name": "EventClass",
-          "line": 402,
+          "line": 419,
           "called": []
         },
         {
           "kind": "fn",
           "name": "classify",
-          "line": 409,
+          "line": 426,
           "called": [
             "Err",
             "event_type",
@@ -5453,7 +5453,7 @@
         {
           "kind": "fn",
           "name": "event_type",
-          "line": 421,
+          "line": 438,
           "called": [
             "EventType",
             "_"
@@ -5462,7 +5462,7 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 431,
+          "line": 448,
           "called": [
             "_",
             "event_type"
@@ -5471,7 +5471,7 @@
         {
           "kind": "impl",
           "name": "std::fmt::Display for EventClass",
-          "line": 439,
+          "line": 456,
           "called": [
             "EventClass"
           ]
@@ -5479,7 +5479,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 440,
+          "line": 457,
           "called": [
             "_",
             "event_type",
@@ -5491,7 +5491,7 @@
         {
           "kind": "struct",
           "name": "EventStreamStats",
-          "line": 464,
+          "line": 481,
           "called": [
             "KNOWN_EVENT_TAG_COUNT"
           ]
@@ -5499,7 +5499,7 @@
         {
           "kind": "impl",
           "name": "Default for EventStreamStats",
-          "line": 473,
+          "line": 490,
           "called": [
             "EventStreamStats"
           ]
@@ -5507,19 +5507,19 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 474,
+          "line": 491,
           "called": []
         },
         {
           "kind": "impl",
           "name": "EventStreamStats",
-          "line": 479,
+          "line": 496,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 482,
+          "line": 499,
           "called": [
             "_"
           ]
@@ -5527,7 +5527,7 @@
         {
           "kind": "fn",
           "name": "record",
-          "line": 491,
+          "line": 508,
           "called": [
             "EventClass",
             "_",
@@ -5539,7 +5539,7 @@
         {
           "kind": "fn",
           "name": "record_payload",
-          "line": 511,
+          "line": 528,
           "called": [
             "record"
           ]
@@ -5547,7 +5547,7 @@
         {
           "kind": "fn",
           "name": "count",
-          "line": 517,
+          "line": 534,
           "called": [
             "EventType",
             "event_type",
@@ -5559,7 +5559,7 @@
         {
           "kind": "fn",
           "name": "unknown_count",
-          "line": 525,
+          "line": 542,
           "called": [
             "load"
           ]
@@ -5567,7 +5567,7 @@
         {
           "kind": "fn",
           "name": "unparseable_count",
-          "line": 531,
+          "line": 548,
           "called": [
             "load"
           ]
@@ -5575,7 +5575,7 @@
         {
           "kind": "fn",
           "name": "total",
-          "line": 537,
+          "line": 554,
           "called": [
             "iter",
             "load",
@@ -5586,7 +5586,7 @@
         {
           "kind": "fn",
           "name": "summary",
-          "line": 546,
+          "line": 563,
           "called": [
             "ALL_EVENT_TYPES",
             "count",
@@ -5601,7 +5601,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 567,
+          "line": 584,
           "called": [
             "ALL_EVENT_TYPES",
             "CBE_TAG_UINT",
@@ -5617,7 +5617,7 @@
         {
           "kind": "fn",
           "name": "head",
-          "line": 575,
+          "line": 592,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -5628,7 +5628,7 @@
         {
           "kind": "fn",
           "name": "constants_pinned",
-          "line": 584,
+          "line": 601,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -5638,7 +5638,7 @@
         {
           "kind": "fn",
           "name": "all_array_is_in_tag_order",
-          "line": 595,
+          "line": 613,
           "called": [
             "ALL_EVENT_TYPES",
             "KNOWN_EVENT_TAG_COUNT",
@@ -5650,7 +5650,7 @@
         {
           "kind": "fn",
           "name": "from_tag_round_trips_all_known",
-          "line": 605,
+          "line": 623,
           "called": [
             "ALL_EVENT_TYPES",
             "tag"
@@ -5659,7 +5659,7 @@
         {
           "kind": "fn",
           "name": "from_tag_unknown_returns_none",
-          "line": 616,
+          "line": 634,
           "called": [
             "tag"
           ]
@@ -5667,7 +5667,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_tags_are_frozen",
-          "line": 629,
+          "line": 647,
           "called": [
             "tag"
           ]
@@ -5675,7 +5675,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_classification",
-          "line": 640,
+          "line": 658,
           "called": [
             "ALL_EVENT_TYPES",
             "is_gas_pool_family",
@@ -5686,7 +5686,7 @@
         {
           "kind": "fn",
           "name": "names_match_lean_constructors",
-          "line": 656,
+          "line": 674,
           "called": [
             "name"
           ]
@@ -5694,7 +5694,7 @@
         {
           "kind": "fn",
           "name": "tags_and_names_are_distinct",
-          "line": 674,
+          "line": 692,
           "called": [
             "ALL_EVENT_TYPES",
             "iter",
@@ -5706,7 +5706,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_reads_every_known_tag",
-          "line": 693,
+          "line": 711,
           "called": [
             "ALL_EVENT_TYPES",
             "head",
@@ -5717,7 +5717,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_ignores_trailing_field_bytes",
-          "line": 703,
+          "line": 721,
           "called": [
             "CBE_TAG_UINT",
             "head",
@@ -5728,7 +5728,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_truncated",
-          "line": 717,
+          "line": 735,
           "called": [
             "CBE_TAG_UINT",
             "Err",
@@ -5739,7 +5739,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_bad_head_tag",
-          "line": 732,
+          "line": 750,
           "called": [
             "Err",
             "head",
@@ -5749,7 +5749,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_head_byte_layout_pinned",
-          "line": 749,
+          "line": 767,
           "called": [
             "peek_event_tag"
           ]
@@ -5757,7 +5757,7 @@
         {
           "kind": "fn",
           "name": "classify_known_gas_pool_family",
-          "line": 765,
+          "line": 783,
           "called": [
             "event_type",
             "head",
@@ -5768,7 +5768,7 @@
         {
           "kind": "fn",
           "name": "classify_unknown_and_unparseable",
-          "line": 783,
+          "line": 801,
           "called": [
             "event_type",
             "head",
@@ -5780,7 +5780,7 @@
         {
           "kind": "fn",
           "name": "classify_never_panics",
-          "line": 814,
+          "line": 832,
           "called": [
             "_"
           ]
@@ -5788,13 +5788,13 @@
         {
           "kind": "fn",
           "name": "display_event_type",
-          "line": 830,
+          "line": 848,
           "called": []
         },
         {
           "kind": "fn",
           "name": "display_event_class",
-          "line": 841,
+          "line": 859,
           "called": [
             "len",
             "tag"
@@ -5803,7 +5803,7 @@
         {
           "kind": "fn",
           "name": "error_message_format",
-          "line": 857,
+          "line": 875,
           "called": [
             "len"
           ]
@@ -5811,7 +5811,7 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_records_by_class",
-          "line": 876,
+          "line": 894,
           "called": [
             "count",
             "head",
@@ -5825,7 +5825,7 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_summary",
-          "line": 896,
+          "line": 914,
           "called": [
             "head",
             "record_payload",
@@ -5836,13 +5836,13 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_send_sync",
-          "line": 911,
+          "line": 929,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 912,
+          "line": 930,
           "called": [
             "EventStreamStats"
           ]
@@ -25471,7 +25471,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 431,
+          "line": 469,
           "called": [
             "DecodeError",
             "EventJson",
@@ -25482,7 +25482,7 @@
         {
           "kind": "fn",
           "name": "render",
-          "line": 439,
+          "line": 477,
           "called": [
             "Event",
             "EventJson",
@@ -25495,7 +25495,7 @@
         {
           "kind": "fn",
           "name": "balance_changed_matches_the_contract_example",
-          "line": 445,
+          "line": 483,
           "called": [
             "actor",
             "event_type",
@@ -25507,7 +25507,7 @@
         {
           "kind": "fn",
           "name": "bigints_render_as_decimal_strings",
-          "line": 464,
+          "line": 502,
           "called": [
             "actor",
             "amount",
@@ -25519,7 +25519,7 @@
         {
           "kind": "fn",
           "name": "byte_fields_render_as_0x_hex",
-          "line": 488,
+          "line": 526,
           "called": [
             "actor",
             "amount",
@@ -25532,7 +25532,7 @@
         {
           "kind": "fn",
           "name": "verdict_outcome_renders_as_a_name",
-          "line": 510,
+          "line": 548,
           "called": [
             "json",
             "name",
@@ -25543,7 +25543,7 @@
         {
           "kind": "fn",
           "name": "every_known_tag_renders_with_its_registry_name",
-          "line": 522,
+          "line": 560,
           "called": [
             "ALL_EVENT_TYPES",
             "Event",
@@ -25562,7 +25562,7 @@
         {
           "kind": "fn",
           "name": "every_tag_pins_the_full_v62_envelope",
-          "line": 552,
+          "line": 588,
           "called": [
             "ALL_EVENT_TYPES",
             "actor",
@@ -25583,7 +25583,7 @@
         {
           "kind": "fn",
           "name": "expected_envelopes",
-          "line": 582,
+          "line": 618,
           "called": [
             "json"
           ]
@@ -25591,7 +25591,7 @@
         {
           "kind": "fn",
           "name": "unknown_tag_is_forwarded_as_base64_raw",
-          "line": 668,
+          "line": 714,
           "called": [
             "actor",
             "event_type",
@@ -25603,7 +25603,7 @@
         {
           "kind": "fn",
           "name": "corrupt_known_tag_fails_closed",
-          "line": 683,
+          "line": 729,
           "called": [
             "Err",
             "render_event",
@@ -25613,7 +25613,7 @@
         {
           "kind": "fn",
           "name": "empty_payload_is_unparseable",
-          "line": 695,
+          "line": 741,
           "called": [
             "Err",
             "render_event"
@@ -25622,7 +25622,7 @@
         {
           "kind": "fn",
           "name": "sample_events",
-          "line": 706,
+          "line": 752,
           "called": [
             "Event",
             "actor",
@@ -48837,7 +48837,7 @@
     {
       "module": "runtime::knomosis-indexer::src::decoder",
       "path": "runtime/knomosis-indexer/src/decoder.rs",
-      "declaration_count": 85,
+      "declaration_count": 88,
       "declarations": [
         {
           "kind": "const",
@@ -49077,7 +49077,7 @@
         {
           "kind": "fn",
           "name": "write_uint",
-          "line": 496,
+          "line": 510,
           "called": [
             "CBE_TAG_UINT",
             "push"
@@ -49086,7 +49086,7 @@
         {
           "kind": "fn",
           "name": "write_amount_head",
-          "line": 505,
+          "line": 519,
           "called": [
             "CBE_TAG_AMOUNT",
             "push"
@@ -49095,7 +49095,7 @@
         {
           "kind": "fn",
           "name": "write_byte_string",
-          "line": 512,
+          "line": 526,
           "called": [
             "CBE_TAG_BYTES",
             "len",
@@ -49105,7 +49105,7 @@
         {
           "kind": "enum",
           "name": "EncodeError",
-          "line": 521,
+          "line": 535,
           "called": [
             "error"
           ]
@@ -49113,7 +49113,7 @@
         {
           "kind": "fn",
           "name": "write_amount",
-          "line": 542,
+          "line": 556,
           "called": [
             "Amount",
             "amount",
@@ -49123,7 +49123,7 @@
         {
           "kind": "fn",
           "name": "write_budget_units",
-          "line": 549,
+          "line": 563,
           "called": [
             "BudgetUnits",
             "write_uint"
@@ -49132,7 +49132,7 @@
         {
           "kind": "fn",
           "name": "write_nonce",
-          "line": 557,
+          "line": 571,
           "called": [
             "Nonce",
             "nonce",
@@ -49142,7 +49142,7 @@
         {
           "kind": "fn",
           "name": "write_nonce_checked",
-          "line": 567,
+          "line": 581,
           "called": [
             "EncodeError",
             "Err",
@@ -49154,7 +49154,7 @@
         {
           "kind": "fn",
           "name": "write_budget_units_checked",
-          "line": 577,
+          "line": 591,
           "called": [
             "BudgetUnits",
             "EncodeError",
@@ -49165,7 +49165,7 @@
         {
           "kind": "fn",
           "name": "write_eth_address",
-          "line": 588,
+          "line": 602,
           "called": [
             "EthAddress",
             "addr",
@@ -49175,7 +49175,7 @@
         {
           "kind": "fn",
           "name": "encode_event",
-          "line": 605,
+          "line": 619,
           "called": [
             "Event",
             "actor",
@@ -49199,7 +49199,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked",
-          "line": 832,
+          "line": 872,
           "called": [
             "EncodeError",
             "Event",
@@ -49224,7 +49224,7 @@
         {
           "kind": "fn",
           "name": "amount_to_be_bytes",
-          "line": 1049,
+          "line": 1115,
           "called": [
             "Amount",
             "amount"
@@ -49233,7 +49233,7 @@
         {
           "kind": "fn",
           "name": "amount_from_be_bytes",
-          "line": 1057,
+          "line": 1123,
           "called": [
             "ActorId",
             "Amount",
@@ -49244,7 +49244,7 @@
         {
           "kind": "type",
           "name": "_Aliases",
-          "line": 1067,
+          "line": 1133,
           "called": [
             "DepositId",
             "Nonce",
@@ -49254,7 +49254,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1077,
+          "line": 1143,
           "called": [
             "CBE_TAG_AMOUNT",
             "CBE_TAG_UINT",
@@ -49270,7 +49270,7 @@
         {
           "kind": "fn",
           "name": "constants",
-          "line": 1086,
+          "line": 1152,
           "called": [
             "ETH_ADDRESS_BYTES",
             "HARD_MAX_BYTE_STRING_LEN",
@@ -49280,7 +49280,7 @@
         {
           "kind": "fn",
           "name": "round_trip_balance_changed",
-          "line": 1094,
+          "line": 1160,
           "called": [
             "actor",
             "bytes",
@@ -49292,7 +49292,7 @@
         {
           "kind": "fn",
           "name": "round_trip_nonce_advanced",
-          "line": 1107,
+          "line": 1173,
           "called": [
             "actor",
             "bytes",
@@ -49303,7 +49303,7 @@
         {
           "kind": "fn",
           "name": "round_trip_identity_registered",
-          "line": 1118,
+          "line": 1184,
           "called": [
             "actor",
             "bytes",
@@ -49315,7 +49315,7 @@
         {
           "kind": "fn",
           "name": "round_trip_identity_revoked",
-          "line": 1128,
+          "line": 1194,
           "called": [
             "actor",
             "bytes",
@@ -49326,7 +49326,7 @@
         {
           "kind": "fn",
           "name": "round_trip_time_recorded",
-          "line": 1135,
+          "line": 1201,
           "called": [
             "bytes",
             "decode_event",
@@ -49336,7 +49336,7 @@
         {
           "kind": "fn",
           "name": "round_trip_dispute_filed",
-          "line": 1144,
+          "line": 1210,
           "called": [
             "bytes",
             "decode_event",
@@ -49346,7 +49346,7 @@
         {
           "kind": "fn",
           "name": "round_trip_dispute_withdrawn",
-          "line": 1154,
+          "line": 1220,
           "called": [
             "bytes",
             "decode_event",
@@ -49356,7 +49356,7 @@
         {
           "kind": "fn",
           "name": "round_trip_verdict_applied",
-          "line": 1161,
+          "line": 1227,
           "called": [
             "bytes",
             "decode_event",
@@ -49366,7 +49366,7 @@
         {
           "kind": "fn",
           "name": "round_trip_reward_issued",
-          "line": 1171,
+          "line": 1237,
           "called": [
             "amount",
             "bytes",
@@ -49378,7 +49378,7 @@
         {
           "kind": "fn",
           "name": "round_trip_withdrawal_requested",
-          "line": 1182,
+          "line": 1248,
           "called": [
             "amount",
             "bytes",
@@ -49390,7 +49390,7 @@
         {
           "kind": "fn",
           "name": "round_trip_deposit_credited",
-          "line": 1195,
+          "line": 1261,
           "called": [
             "amount",
             "bytes",
@@ -49402,7 +49402,7 @@
         {
           "kind": "fn",
           "name": "round_trip_local_policy_declared",
-          "line": 1207,
+          "line": 1273,
           "called": [
             "actor",
             "bytes",
@@ -49414,7 +49414,7 @@
         {
           "kind": "fn",
           "name": "round_trip_local_policy_revoked",
-          "line": 1217,
+          "line": 1283,
           "called": [
             "actor",
             "bytes",
@@ -49425,7 +49425,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_game_opened",
-          "line": 1224,
+          "line": 1290,
           "called": [
             "bytes",
             "decode_event",
@@ -49436,7 +49436,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_bisection_step",
-          "line": 1237,
+          "line": 1303,
           "called": [
             "bytes",
             "commit",
@@ -49448,7 +49448,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_game_settled",
-          "line": 1250,
+          "line": 1316,
           "called": [
             "bytes",
             "decode_event",
@@ -49459,7 +49459,7 @@
         {
           "kind": "fn",
           "name": "round_trip_deposit_with_fee_credited",
-          "line": 1263,
+          "line": 1329,
           "called": [
             "bytes",
             "decode_event",
@@ -49470,7 +49470,7 @@
         {
           "kind": "fn",
           "name": "round_trip_action_budget_top_up",
-          "line": 1279,
+          "line": 1345,
           "called": [
             "bytes",
             "decode_event",
@@ -49481,7 +49481,7 @@
         {
           "kind": "fn",
           "name": "round_trip_gas_pool_claim",
-          "line": 1293,
+          "line": 1359,
           "called": [
             "amount",
             "bytes",
@@ -49493,7 +49493,7 @@
         {
           "kind": "fn",
           "name": "round_trip_delegated_action_budget_top_up",
-          "line": 1305,
+          "line": 1371,
           "called": [
             "bytes",
             "decode_event",
@@ -49504,7 +49504,7 @@
         {
           "kind": "fn",
           "name": "round_trip_budget_consumed",
-          "line": 1320,
+          "line": 1386,
           "called": [
             "actor",
             "amount",
@@ -49515,8 +49515,42 @@
         },
         {
           "kind": "fn",
+          "name": "round_trip_reserve_swap_executed",
+          "line": 1397,
+          "called": [
+            "bytes",
+            "decode_event",
+            "encode_event"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "round_trip_reserve_seeded",
+          "line": 1412,
+          "called": [
+            "amount",
+            "bytes",
+            "decode_event",
+            "encode_event",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reserve_swap_executed_byte_layout",
+          "line": 1428,
+          "called": [
+            "CBE_TAG_AMOUNT",
+            "CBE_TAG_UINT",
+            "bytes",
+            "encode_event",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "budget_consumed_byte_layout",
-          "line": 1333,
+          "line": 1458,
           "called": [
             "actor",
             "amount",
@@ -49528,7 +49562,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_credited_byte_layout",
-          "line": 1355,
+          "line": 1480,
           "called": [
             "CBE_TAG_AMOUNT",
             "CBE_TAG_UINT",
@@ -49541,7 +49575,7 @@
         {
           "kind": "fn",
           "name": "delegated_action_budget_top_up_byte_layout",
-          "line": 1400,
+          "line": 1525,
           "called": [
             "CBE_TAG_AMOUNT",
             "CBE_TAG_UINT",
@@ -49554,7 +49588,7 @@
         {
           "kind": "fn",
           "name": "tag_17_and_19_byte_distinct",
-          "line": 1435,
+          "line": 1560,
           "called": [
             "encode_event",
             "len",
@@ -49564,7 +49598,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_gp_family",
-          "line": 1466,
+          "line": 1591,
           "called": [
             "amount",
             "decode_event",
@@ -49578,7 +49612,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_oversize_budget_grant",
-          "line": 1509,
+          "line": 1634,
           "called": [
             "Err",
             "encode_event_checked",
@@ -49588,7 +49622,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_oversize_budget_increment_tag17",
-          "line": 1530,
+          "line": 1655,
           "called": [
             "Err",
             "encode_event_checked",
@@ -49598,7 +49632,7 @@
         {
           "kind": "fn",
           "name": "empty_payload_truncated",
-          "line": 1546,
+          "line": 1671,
           "called": [
             "Err",
             "decode_event",
@@ -49608,7 +49642,7 @@
         {
           "kind": "fn",
           "name": "trailing_bytes_rejected",
-          "line": 1555,
+          "line": 1680,
           "called": [
             "Err",
             "actor",
@@ -49621,7 +49655,7 @@
         {
           "kind": "fn",
           "name": "unknown_tag_rejected",
-          "line": 1568,
+          "line": 1693,
           "called": [
             "Err",
             "bytes",
@@ -49633,7 +49667,7 @@
         {
           "kind": "fn",
           "name": "bad_head_tag_rejected",
-          "line": 1582,
+          "line": 1707,
           "called": [
             "Err",
             "bytes",
@@ -49645,7 +49679,7 @@
         {
           "kind": "fn",
           "name": "truncated_mid_payload",
-          "line": 1602,
+          "line": 1727,
           "called": [
             "Err",
             "actor",
@@ -49659,7 +49693,7 @@
         {
           "kind": "fn",
           "name": "byte_string_too_long_rejected",
-          "line": 1620,
+          "line": 1745,
           "called": [
             "Err",
             "HARD_MAX_BYTE_STRING_LEN",
@@ -49671,7 +49705,7 @@
         {
           "kind": "fn",
           "name": "eth_address_wrong_length_rejected",
-          "line": 1643,
+          "line": 1768,
           "called": [
             "CBE_TAG_AMOUNT",
             "CBE_TAG_UINT",
@@ -49684,7 +49718,7 @@
         {
           "kind": "fn",
           "name": "encode_event_deterministic",
-          "line": 1679,
+          "line": 1804,
           "called": [
             "amount",
             "b",
@@ -49695,7 +49729,7 @@
         {
           "kind": "fn",
           "name": "balance_changed_byte_layout",
-          "line": 1694,
+          "line": 1819,
           "called": [
             "CBE_TAG_AMOUNT",
             "CBE_TAG_UINT",
@@ -49709,7 +49743,7 @@
         {
           "kind": "fn",
           "name": "balance_above_narrow_bound_round_trips",
-          "line": 1729,
+          "line": 1854,
           "called": [
             "actor",
             "bytes",
@@ -49721,7 +49755,7 @@
         {
           "kind": "fn",
           "name": "balance_on_narrow_head_is_rejected",
-          "line": 1743,
+          "line": 1868,
           "called": [
             "CBE_TAG_AMOUNT",
             "CBE_TAG_UINT",
@@ -49737,7 +49771,7 @@
         {
           "kind": "fn",
           "name": "decoder_does_not_panic_on_random_input",
-          "line": 1773,
+          "line": 1898,
           "called": [
             "_",
             "decode_event"
@@ -49746,7 +49780,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_bounded",
-          "line": 1789,
+          "line": 1914,
           "called": [
             "actor",
             "bytes",
@@ -49758,7 +49792,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_full_width_amount",
-          "line": 1804,
+          "line": 1929,
           "called": [
             "actor",
             "bytes",
@@ -49770,7 +49804,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_out_of_range_budget_units",
-          "line": 1824,
+          "line": 1949,
           "called": [
             "Err",
             "encode_event_checked",
@@ -49780,7 +49814,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_the_old_boundary",
-          "line": 1842,
+          "line": 1967,
           "called": [
             "amount",
             "bytes",
@@ -49792,7 +49826,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_max_u64",
-          "line": 1858,
+          "line": 1983,
           "called": [
             "amount",
             "bytes",
@@ -49804,7 +49838,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_matches_unchecked_in_range",
-          "line": 1872,
+          "line": 1997,
           "called": [
             "actor",
             "amount",
@@ -49820,60 +49854,60 @@
     {
       "module": "runtime::knomosis-indexer::src::event",
       "path": "runtime/knomosis-indexer/src/event.rs",
-      "declaration_count": 28,
+      "declaration_count": 29,
       "declarations": [
         {
           "kind": "type",
           "name": "ActorId",
-          "line": 69,
+          "line": 74,
           "called": []
         },
         {
           "kind": "type",
           "name": "ResourceId",
-          "line": 72,
+          "line": 77,
           "called": []
         },
         {
           "kind": "type",
           "name": "Amount",
-          "line": 78,
+          "line": 83,
           "called": []
         },
         {
           "kind": "type",
           "name": "Nonce",
-          "line": 81,
+          "line": 86,
           "called": []
         },
         {
           "kind": "type",
           "name": "WithdrawalId",
-          "line": 84,
+          "line": 89,
           "called": []
         },
         {
           "kind": "type",
           "name": "DepositId",
-          "line": 87,
+          "line": 92,
           "called": []
         },
         {
           "kind": "type",
           "name": "EthAddress",
-          "line": 90,
+          "line": 95,
           "called": []
         },
         {
           "kind": "type",
           "name": "BudgetUnits",
-          "line": 96,
+          "line": 101,
           "called": []
         },
         {
           "kind": "const",
           "name": "RESOURCE_ID_ETH",
-          "line": 104,
+          "line": 109,
           "called": [
             "ResourceId"
           ]
@@ -49881,7 +49915,7 @@
         {
           "kind": "const",
           "name": "RESOURCE_ID_BOLD",
-          "line": 110,
+          "line": 115,
           "called": [
             "ResourceId"
           ]
@@ -49889,7 +49923,7 @@
         {
           "kind": "enum",
           "name": "Event",
-          "line": 120,
+          "line": 125,
           "called": [
             "ActorId",
             "Amount",
@@ -49912,19 +49946,19 @@
         {
           "kind": "impl",
           "name": "Event",
-          "line": 387,
+          "line": 428,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tag",
-          "line": 391,
+          "line": 432,
           "called": []
         },
         {
           "kind": "fn",
           "name": "actor",
-          "line": 431,
+          "line": 474,
           "called": [
             "ActorId",
             "signer"
@@ -49933,7 +49967,7 @@
         {
           "kind": "fn",
           "name": "resource",
-          "line": 471,
+          "line": 520,
           "called": [
             "ResourceId",
             "_"
@@ -49942,25 +49976,25 @@
         {
           "kind": "fn",
           "name": "is_balance_change",
-          "line": 489,
+          "line": 539,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 498,
+          "line": 548,
           "called": []
         },
         {
           "kind": "const",
           "name": "EVENT_TAG_COUNT",
-          "line": 514,
+          "line": 566,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 517,
+          "line": 569,
           "called": [
             "EVENT_TAG_COUNT",
             "Event",
@@ -49971,7 +50005,7 @@
         {
           "kind": "fn",
           "name": "tags_are_frozen",
-          "line": 523,
+          "line": 575,
           "called": [
             "actor",
             "amount",
@@ -49987,15 +50021,26 @@
         {
           "kind": "fn",
           "name": "tag_count_constant",
-          "line": 703,
+          "line": 800,
           "called": [
             "EVENT_TAG_COUNT"
           ]
         },
         {
           "kind": "fn",
+          "name": "reserve_swap_and_seed_projections",
+          "line": 809,
+          "called": [
+            "actor",
+            "amount",
+            "resource",
+            "seeded"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "resource_id_constants",
-          "line": 709,
+          "line": 832,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH"
@@ -50004,7 +50049,7 @@
         {
           "kind": "fn",
           "name": "actor_projection",
-          "line": 716,
+          "line": 839,
           "called": [
             "actor",
             "resource"
@@ -50013,7 +50058,7 @@
         {
           "kind": "fn",
           "name": "resource_projection",
-          "line": 740,
+          "line": 863,
           "called": [
             "actor",
             "resource"
@@ -50022,7 +50067,7 @@
         {
           "kind": "fn",
           "name": "is_balance_change_exhaustive",
-          "line": 764,
+          "line": 887,
           "called": [
             "actor",
             "is_balance_change",
@@ -50032,7 +50077,7 @@
         {
           "kind": "fn",
           "name": "gp_family_actor_projection",
-          "line": 778,
+          "line": 901,
           "called": [
             "actor",
             "amount",
@@ -50043,7 +50088,7 @@
         {
           "kind": "fn",
           "name": "gp_family_resource_projection",
-          "line": 841,
+          "line": 964,
           "called": [
             "amount",
             "resource",
@@ -50053,7 +50098,7 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family_selects_gp_tags",
-          "line": 893,
+          "line": 1016,
           "called": [
             "actor",
             "amount",
@@ -51200,19 +51245,19 @@
         {
           "kind": "const",
           "name": "INDEXER_MAX_KNOWN_TAG",
-          "line": 39,
+          "line": 40,
           "called": []
         },
         {
           "kind": "const",
           "name": "EXPECTED_FIXTURE_IDENTIFIER",
-          "line": 43,
+          "line": 44,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Header",
-          "line": 47,
+          "line": 48,
           "called": [
             "count",
             "identifier"
@@ -51221,7 +51266,7 @@
         {
           "kind": "struct",
           "name": "Entry",
-          "line": 58,
+          "line": 59,
           "called": [
             "kind",
             "tag"
@@ -51230,7 +51275,7 @@
         {
           "kind": "struct",
           "name": "Fixture",
-          "line": 67,
+          "line": 68,
           "called": [
             "Entry",
             "Header",
@@ -51240,7 +51285,7 @@
         {
           "kind": "fn",
           "name": "locate_fixture",
-          "line": 73,
+          "line": 74,
           "called": [
             "fixture"
           ]
@@ -51248,7 +51293,7 @@
         {
           "kind": "fn",
           "name": "load_fixture",
-          "line": 90,
+          "line": 91,
           "called": [
             "Fixture",
             "bytes",
@@ -51259,13 +51304,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 105,
+          "line": 106,
           "called": []
         },
         {
           "kind": "fn",
           "name": "lean_event_fixture_header_ok",
-          "line": 114,
+          "line": 115,
           "called": [
             "EXPECTED_FIXTURE_IDENTIFIER",
             "count",
@@ -51278,7 +51323,7 @@
         {
           "kind": "fn",
           "name": "lean_event_bytes_round_trip_through_indexer",
-          "line": 129,
+          "line": 130,
           "called": [
             "INDEXER_MAX_KNOWN_TAG",
             "bytes",
@@ -51293,7 +51338,7 @@
         {
           "kind": "fn",
           "name": "gp_family_field_projections_consistent",
-          "line": 206,
+          "line": 211,
           "called": [
             "actor",
             "bytes",

@@ -36,8 +36,9 @@ use serde::Deserialize;
 
 /// The highest event tag the indexer's `Event` mirror models.
 /// GP.11.4 widened this to 21 (`AmmSwapExecuted`); GP.11.10 to 22
-/// (`AmmReservesReclaimed`).
-const INDEXER_MAX_KNOWN_TAG: u64 = 22;
+/// (`AmmReservesReclaimed`); Workstream SB to 24
+/// (`ReserveSwapExecuted` at 23, `ReserveSeeded` at 24).
+const INDEXER_MAX_KNOWN_TAG: u64 = 24;
 
 /// Pinned generator identifier (a Lean-side version bump forces an
 /// explicit update here).
@@ -203,6 +204,10 @@ fn lean_event_bytes_round_trip_through_indexer() {
 ///   * `AmmSwapExecuted`: `tag() == 21`, `actor()` returns the
 ///     `amm_reserve_actor`, `resource()` returns `None` (the
 ///     event is multi-resource: `from_resource` / `to_resource`).
+///   * `ReserveSwapExecuted`: `tag() == 23`, `actor()` returns the
+///     swapping USER, `resource()` returns `None` (multi-resource).
+///   * `ReserveSeeded`: `tag() == 24`, `actor()` returns the
+///     reserve actor, `resource()` returns the seeded resource.
 #[test]
 fn gp_family_field_projections_consistent() {
     let Some(fx) = load_fixture() else { return };
@@ -224,9 +229,11 @@ fn gp_family_field_projections_consistent() {
         );
         // Most GP-family events have a `resource()`, EXCEPT tag
         // 20 (`BudgetConsumed`) which is resource-independent
-        // (budget units, not a resource) and tag 21
-        // (`AmmSwapExecuted`) which is multi-resource (from/to).
-        if e.tag != 20 && e.tag != 21 {
+        // (budget units, not a resource) and tags 21 / 23
+        // (`AmmSwapExecuted` / `ReserveSwapExecuted`) which are
+        // multi-resource (from/to; Lean's `Event.resource` returns
+        // `none` for both).
+        if e.tag != 20 && e.tag != 21 && e.tag != 23 {
             assert!(
                 decoded.resource().is_some(),
                 "tag-{} event {} ({}) has no resource",
@@ -265,6 +272,21 @@ fn gp_family_field_projections_consistent() {
                 decoded.actor(),
                 Some(*recipient),
                 "tag 19 must project recipient, not signer (got recipient={recipient}, signer={signer})"
+            );
+        }
+        // Per-variant: `ReserveSwapExecuted` returns the swapping
+        // USER (NOT the reserve actor) from `actor()`.
+        if let Event::ReserveSwapExecuted {
+            user,
+            reserve_actor,
+            ..
+        } = &decoded
+        {
+            assert_eq!(
+                decoded.actor(),
+                Some(*user),
+                "tag 23 must project the user, not the reserve actor \
+                 (got user={user}, reserve_actor={reserve_actor})"
             );
         }
     }
