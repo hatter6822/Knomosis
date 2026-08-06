@@ -96,7 +96,7 @@ Secrets (the auth token file) are passed **by path, never argv/env value**.
 | `--upstream-subscriptions` (`…_UPSTREAM_SUBSCRIPTIONS`) | `1` | Shared live-tail subscriptions feeding the single SSE ring; `>1` is a redundancy knob, deduped on `(seq,index)`. Range `1..=64`. |
 | `--auth-token-file` (`…_AUTH_TOKEN_FILE`) | unset → **fail-closed** | Bearer token(s), one per line.  Must **not** be world-readable. |
 | `--rate-limit-rps` (`…_RATE_LIMIT_RPS`) | `100` (`0`=off) | Per-credential token-bucket cap → `429` + `Retry-After`. |
-| `--idempotency-ttl-secs` | `120` (`0`=off) | `Idempotency-Key` response-cache TTL. |
+| `--idempotency-ttl-secs` | `120` (`0`=off) | `Idempotency-Key` response-cache TTL.  Entries are scoped per credential AND bound to a SHA-256 of the request body: a genuine retry replays, a key reused for different bytes is `422` (§8). |
 | `--tls-listen` (`…_TLS_LISTEN`) | unset → HTTPS off | Native HTTPS listen address (rustls 0.23, TLS 1.3); runs **alongside** `--listen`. Requires `--tls-cert` + `--tls-key`. |
 | `--tls-cert` / `--tls-key` (`…_TLS_CERT` / `…_TLS_KEY`) | unset | PEM cert chain (leaf first) + private key (PKCS#8 / RSA / SEC1) for `--tls-listen`. Required when it is set. Key bytes by **path**, never argv/env. |
 | `--mtls-client-ca` (`…_MTLS_CLIENT_CA`) | unset → no client auth | PEM CA bundle; presence **requires** a client cert chaining to it (mTLS). |
@@ -219,6 +219,7 @@ stops the process (without the drain).
 | `503` `reads-unavailable` on read endpoints | No `--indexer-db`. | Configure the read DB; restart. |
 | `503` `upstream-unavailable` storms | Host / event-subscribe upstream down or rejecting; `/readyz` red. | Check the upstream; the gateway recovers automatically when it returns. |
 | `503` `Busy` storms on `POST /v1/actions` | Host worker queue saturated (`Verdict::Busy`) or the connection pool exhausted. | Honour `Retry-After`; raise host capacity / `--host-pool-size`; investigate the host. |
+| `422` `idempotency-key-reuse` on `POST /v1/actions` | The client sent an `Idempotency-Key` it had already used, within the TTL, for a DIFFERENT body — a retry wrapper keyed on something that is not the request, or a nonce counter that reset. | **A client bug the gateway is surfacing rather than absorbing.**  Replaying the earlier verdict would return `Ok` for an action that was never submitted, so the gateway refuses instead.  The client either retries with byte-identical content (which replays normally) or uses a fresh key.  A rising rate here means a client is losing actions somewhere — chase it, do not suppress it by lowering `--idempotency-ttl-secs`. |
 | `409` `truncated-cursor` on `/v1/events` | A backfill cursor predates the upstream history window. | Client re-requests from the returned `oldestSeq` (the gateway does the right thing; this is informational). |
 | SSE `event: error{behind}` | A live client fell behind the fan-out ring. | Client follows the steer to `GET /events` backfill, then reconnects with `Last-Event-ID`. |
 | SSE `event: error{lag_exceeded}` | A slow client exceeded `max_client_lag` or stalled its socket. | Client reconnects; if chronic, the consumer is too slow / the network is degraded. |

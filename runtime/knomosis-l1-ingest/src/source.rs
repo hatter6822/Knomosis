@@ -776,6 +776,26 @@ pub mod json_rpc {
                     SourceError::Malformed(format!("malformed log address: {address_str}"))
                 })?;
                 let address = EthAddress(address_bytes);
+                // Defence-in-depth, the same argument the
+                // `blockHash` check below makes and for a strictly
+                // worse failure: the `address` filter went out in
+                // the request, but a provider that ignores it
+                // returns logs from OTHER contracts, and every
+                // downstream decoder keys on `topics[0]` alone.
+                // Anyone can deploy a contract emitting the bridge's
+                // event signatures, so an unchecked address turns a
+                // provider bug into forged deposits, forged state
+                // roots and forged game moves — read as genuine
+                // because they arrived on the contract's own log
+                // stream.  A wrong-block log is a re-org artefact; a
+                // wrong-address log is an attacker's.
+                if &address != contract {
+                    return Err(SourceError::Malformed(format!(
+                        "RPC returned log from contract 0x{} when filter requested 0x{}",
+                        address.to_hex(),
+                        contract.to_hex()
+                    )));
+                }
                 let topics_arr = obj
                     .get("topics")
                     .and_then(|v| v.as_array())

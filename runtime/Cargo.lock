@@ -394,6 +394,7 @@ dependencies = [
  "knomosis-indexer",
  "knomosis-storage",
  "proptest",
+ "ring",
  "rustls",
  "serde",
  "serde_json",

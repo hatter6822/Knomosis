@@ -60,6 +60,14 @@ knomosis-event-subscribe = { path = "../knomosis-event-subscribe" }
 # cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders.  No new
 # crate enters the graph (knomosis-host already pulls rustls 0.23).
 rustls = { workspace = true }
+# `ring` supplies the SHA-256 the idempotency cache fingerprints request
+# bodies with (G2.4).  It is ALREADY compiled into this binary as rustls
+# 0.23's crypto backend — the direct edge adds no new crate and no new
+# code, only a name to call.  The fingerprint must be cryptographic:
+# `DefaultHasher` (what `credential_key` uses, where a collision is
+# harmless) would let a colliding body replay another action's verdict,
+# which is precisely the failure the fingerprint exists to prevent.
+ring = { version = "0.17", default-features = false, features = ["alloc"] }
 # PEM certificate-revocation-list parsing for the mTLS `--mtls-crl` gate goes
 # through rustls 0.23's re-exported `pki_types::pem::PemObject` — the same
 # maintained parser `knomosis-host` uses for certs/keys — so no separate PEM

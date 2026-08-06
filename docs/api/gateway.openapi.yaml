@@ -122,6 +122,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/IdempotencyKeyReuse' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '502': { $ref: '#/components/responses/UpstreamUnavailable' }
         '503': { $ref: '#/components/responses/Busy' }
@@ -546,6 +547,11 @@ components:
         replayed to the same bearer token that produced it, so two clients
         independently choosing the same value (nonce `1`, say) do not collide
         and neither observes the other's verdict.
+
+        Bound to the request body: each cached entry carries a SHA-256
+        fingerprint of the exact bytes that produced it, and reusing a key for
+        a different body is answered `422` rather than replayed. A genuine
+        retry sends identical bytes and replays normally.
       schema: { type: string, maxLength: 255 }
     LastEventId:
       name: Last-Event-ID
@@ -622,6 +628,30 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    IdempotencyKeyReuse:
+      description: >-
+        The supplied `Idempotency-Key` was already used, within the TTL and by
+        this same credential, for a request with a DIFFERENT body.
+
+        Neither available answer is correct — replaying the earlier verdict
+        would mean this action is silently never submitted, and processing it
+        would break the guarantee the key asked for — so the gateway refuses
+        and says why. Retry with the identical body to replay, or use a fresh
+        key to submit. A genuine retry (identical bytes) is unaffected.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            reuse:
+              value:
+                type: "https://knomosis.dev/problems/idempotency-key-reuse"
+                title: "Idempotency-Key Reused"
+                status: 422
+                detail: >-
+                  this Idempotency-Key was already used for a different request
+                  body; replaying the earlier verdict would mean this action is
+                  never submitted. Retry with the identical body, or use a fresh
+                  key
     UnsupportedMediaType:
       description: >-
         The submit Content-Type is neither application/octet-stream (raw CBE

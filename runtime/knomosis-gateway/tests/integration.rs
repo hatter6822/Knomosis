@@ -679,6 +679,58 @@ fn idempotency_key_replays_cached_response_without_resubmit() {
     assert_eq!(mock.served.load(Ordering::Relaxed), 2);
 }
 
+/// **The reused-key case, end to end.**  Presenting a key that was
+/// already used for a DIFFERENT body must not replay the earlier
+/// verdict.
+///
+/// The client would read `Ok` and its second action would never have
+/// reached the host — a silent loss it has no way to detect.  That is
+/// not exotic misuse: a retry wrapper keyed on a form id, a nonce
+/// counter reset by a restart, or an ordinary bug all produce it.  `422`
+/// says exactly what happened and leaves the client able to fix it.
+#[test]
+fn a_reused_idempotency_key_with_a_different_body_is_refused() {
+    let mock = MockHost::start(Verdict::Ok, "");
+    let h = start_harness_full(0, Some(mock.addr));
+    let ct = "application/octet-stream";
+
+    let first = http_post_idem(h.addr, "/v1/actions", ct, b"action-one", Some(TOKEN), "k");
+    assert_eq!(first.status, 200);
+    assert_eq!(mock.served.load(Ordering::Relaxed), 1);
+
+    // Same key, different action.
+    let reused = http_post_idem(h.addr, "/v1/actions", ct, b"action-two", Some(TOKEN), "k");
+    assert_eq!(
+        reused.status, 422,
+        "key reuse must be reported, not replayed"
+    );
+    assert_eq!(
+        reused.header("Content-Type"),
+        Some("application/problem+json")
+    );
+    assert!(
+        reused.body.contains("idempotency-key-reuse"),
+        "the problem type should name the cause: {}",
+        reused.body
+    );
+    assert_ne!(
+        reused.body, first.body,
+        "the earlier verdict must not be replayed"
+    );
+    assert_eq!(
+        mock.served.load(Ordering::Relaxed),
+        1,
+        "the conflicting action is refused, not submitted twice"
+    );
+
+    // The genuine retry of the FIRST action still replays, so the
+    // conflict did not evict or poison the entry.
+    let retry = http_post_idem(h.addr, "/v1/actions", ct, b"action-one", Some(TOKEN), "k");
+    assert_eq!(retry.status, 200);
+    assert_eq!(retry.body, first.body);
+    assert_eq!(mock.served.load(Ordering::Relaxed), 1);
+}
+
 #[test]
 fn rate_limit_returns_429_with_retry_after() {
     // A 1-rps cap: the first authed read is admitted, but a rapid burst
