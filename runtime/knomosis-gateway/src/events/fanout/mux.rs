@@ -170,8 +170,19 @@ impl Mux {
                     oldest_available_seq,
                 } => {
                     // History truncated: resume from the oldest available,
-                    // NOT the watermark (which predates the window). The ring
-                    // classifies a client spanning the gap as `Behind`.
+                    // NOT the watermark (which predates the window).
+                    //
+                    // TELL THE RING.  This comment used to assert that the
+                    // ring "classifies a client spanning the gap as
+                    // `Behind`", and it did not — nothing informed it a gap
+                    // had happened.  The mux resubscribed past the missing
+                    // range and pushed post-gap records into the same ring,
+                    // leaving a HOLE below them; `position` reasons from
+                    // eviction history and the ring's floor, neither of
+                    // which moved, so a cursor below the hole read
+                    // `InWindow` and that client was streamed the post-gap
+                    // suffix having silently lost the gap's contents.
+                    self.state.ring().note_gap(oldest_available_seq);
                     return EpochEnd::Resubscribe {
                         resume_from: oldest_available_seq,
                         progressed,
