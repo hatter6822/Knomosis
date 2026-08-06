@@ -119,6 +119,19 @@ pub struct GameRecord {
     /// pre-v0.2.3 game records (which had no such field).
     #[serde(default)]
     pub state_known: bool,
+    /// The L1 block number after which the party whose turn it is
+    /// loses by timeout, as of the last contract read.  `None`
+    /// means "not known": either the record predates the field, or
+    /// the observer has moved since the last read and the contract
+    /// will have pushed the deadline out by an amount only it
+    /// knows (`BISECTION_RESPONSE_TIMEOUT` is a per-deployment
+    /// `immutable`, not a shared constant).
+    ///
+    /// It is a TRIGGER, never an authority: the observer re-reads
+    /// the contract before claiming a timeout, so a stale value
+    /// costs one `eth_call` rather than a wrong transaction.
+    #[serde(default)]
+    pub turn_deadline: Option<u64>,
 }
 
 /// One persisted response-submission record.
@@ -192,6 +205,15 @@ pub enum MoveKind {
     Respond,
     /// `HonestMove::TerminateOnSingleStep` — the terminal step.
     Terminate,
+    /// `claimTimeout(uint256)` — settle a game whose opponent let
+    /// its turn deadline lapse.
+    ///
+    /// Not a `HonestMove`: it is not a bisection transition and has
+    /// no counterpart in Lean's `GameTransition`, which models the
+    /// pure state machine.  It is an L1 settlement call, and it
+    /// shares the dedup / intent / broadcast machinery with the
+    /// honest moves because the discipline it needs is identical.
+    Timeout,
 }
 
 /// Serializable mirror of `knomosis_l1_ingest::reorg::BlockHeader`
@@ -762,6 +784,7 @@ mod tests {
             me: TurnSide::Challenger,
             last_updated_block: 100,
             state_known: true,
+            turn_deadline: None,
         }
     }
 

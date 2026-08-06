@@ -21,6 +21,7 @@ use knomosis_faultproof_observer::game::{
 };
 use knomosis_faultproof_observer::observer::{Observer, ObserverConfig};
 use knomosis_faultproof_observer::persistence::{GameRecord, Persistence};
+use knomosis_faultproof_observer::state_reader::ObservedGame;
 use knomosis_faultproof_observer::strategy::MemoryTruthOracle;
 use knomosis_faultproof_observer::submitter::mock::MockSubmitter;
 use knomosis_faultproof_observer::watcher::WatcherConfig;
@@ -499,6 +500,7 @@ fn game_state_persists_through_sqlite() {
         me: TurnSide::Challenger,
         last_updated_block: 12345,
         state_known: true,
+        turn_deadline: None,
     };
     persistence.store_game(&rec).unwrap();
     let loaded = persistence.load_game(1).unwrap().unwrap();
@@ -732,7 +734,16 @@ fn cold_start_lifecycle_with_mark_state_known() {
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
     };
-    let updated = obs.mark_state_known(42, full_state, 150).unwrap();
+    let updated = obs
+        .mark_state_known(
+            42,
+            ObservedGame {
+                state: full_state,
+                turn_deadline: u64::MAX,
+            },
+            150,
+        )
+        .unwrap();
     assert!(updated);
     let rec_after_mark = obs.games().get(&42).unwrap();
     assert!(rec_after_mark.state_known);
@@ -811,7 +822,16 @@ fn integration_mark_state_known_rejects_degenerate_range() {
     };
     // Unknown-game branch returns Ok(false) without hitting
     // the range check.
-    let updated = obs.mark_state_known(99, dummy_state, 100).unwrap();
+    let updated = obs
+        .mark_state_known(
+            99,
+            ObservedGame {
+                state: dummy_state,
+                turn_deadline: u64::MAX,
+            },
+            100,
+        )
+        .unwrap();
     assert!(!updated);
 }
 

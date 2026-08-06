@@ -287,7 +287,7 @@ fn read_and_validate_accepts_matching_deployment_id() {
     let state = reader
         .read_and_validate(7, deployment_id)
         .expect("validate ok");
-    assert_eq!(state.deployment_id, deployment_id);
+    assert_eq!(state.state.deployment_id, deployment_id);
 }
 
 #[test]

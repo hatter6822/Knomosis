@@ -280,10 +280,25 @@ operator's L2 replay.
 **Symptom**: `turnDeadline` exceeded with no response.
 
 **Response**:
-  1. Anyone may call `claimTimeout(gameId)` — typically the
-     challenger does this to avoid paying gas in vain.
-  2. Game settles as `TimedOutSequencer` ⇒ bridge revert ⇒
+  1. A running observer does this for you.  Each iteration it
+     re-derives the games where the OPPONENT is on the clock and
+     the deadline looks lapsed, confirms with one `eth_call`
+     against `games(gameId)`, and submits `claimTimeout(gameId)`
+     only if the fresh read still shows the game in progress, the
+     turn still the opponent's, and the deadline genuinely past.
+     No operator action is required.
+  2. Failing that, anyone may call `claimTimeout(gameId)` by hand.
+  3. Game settles as `TimedOutSequencer` ⇒ bridge revert ⇒
      bond redistributed per 95/5 split.
+
+**Why the confirming read.**  `claimTimeout` settles against
+WHOEVER's turn it is, so calling it on your OWN lapsed turn hands
+the opponent the win and both bonds.  The observer's cached
+deadline is a trigger only: the contract resets `turnDeadline` by
+`BISECTION_RESPONSE_TIMEOUT`, a per-deployment `immutable` the
+observer cannot compute, so any cached value is stale-early after a
+move.  Operators calling `claimTimeout` manually should apply the
+same discipline — read `games(gameId)` first and check `turn`.
 
 ### 4.3 Bug discovered in deployed contracts
 
@@ -514,6 +529,36 @@ The observer logs detected divergences and (when configured with
 `--chain-id` + a keystore) automatically files challenges.
 Operators should run at least 2 observers per deployment to
 satisfy the "1-of-anyone honest" trust assumption.
+
+### 7.5 Liveness: what the observer does on its own
+
+Each iteration, after processing the L1 events it just read, the
+observer sweeps its own game map for two things nothing else will
+prompt:
+
+  * **Moves it owes.**  A move is not always a reply.  A
+    sequencer-side observer opens the bisection with nothing
+    preceding it, and any move deferred for a transient reason (an
+    un-hydrated game, a truth oracle that has not caught up, an
+    absent terminate bundle, a signing failure) has no later event
+    to retry it — it is our turn until we move or time out.  The
+    sweep replays both.  It is idempotent: a pivot already
+    submitted is skipped.
+  * **Timeouts the opponent has forfeited** — see §4.2.
+
+Two failure modes an operator should watch the logs for:
+
+  * `pivot released for retry on the next iteration` (warn) — a
+    broadcast failed and will be re-signed.  Transient RPC trouble;
+    self-healing.  The attempt counter is in the log line.
+  * `broadcast failed N times; giving up on this move — OPERATOR
+    ACTION REQUIRED` (error) — the retry budget
+    (`--max-broadcast-attempts`, default 8) is exhausted.  The
+    observer will NOT retry and may lose the game by timeout.
+    Investigate the submitter: an unfunded wallet, a persistently
+    rejected gas price, an RPC that refuses the transaction.  Raise
+    the budget only after understanding why the broadcast fails —
+    the cap exists to surface a permanent fault, not to hide it.
 
 ---
 
