@@ -129,6 +129,17 @@ ROWS: list[tuple[str, str]] = [
         "executeStepToRootMulti_duplicateCell",
         "`executeStepToRootMulti` (terminal step, one cell deduped to four)",
     ),
+    # Workstream SB — the batched rollup pipeline: one submission per
+    # batch (amortised over its actions), and the full terminal
+    # transaction of a batch dispute (inclusion proof + adjudication).
+    (
+        "submitStateRoot_batch",
+        "`submitStateRoot` (one batched record; amortise over the batch size)",
+    ),
+    (
+        "terminateOnSingleStep_withInclusion",
+        "`terminateOnSingleStep` (action inclusion proof + adjudicated step)",
+    ),
 ]
 
 

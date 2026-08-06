@@ -428,7 +428,7 @@ benchmark:
   transaction target pre-warmed (EIP-2929).  Test-harness overhead is
   excluded by construction.  This is measured, not modelled — the
   isolated-vs-unisolated deltas decode to the gas as
-  `21 000 + calldata − refunds` on all 21 benchmarks (e.g.
+  `21 000 + calldata − refunds` on all 21 GP.11.9 benchmarks (e.g.
   `closeBoldCircuit` +21 064 = 21 000 + 64 calldata;
   `depositBoldWithFee` +13 816 = 21 000 + 416 − 2 800
   reentrancy-guard reset − 4 800 allowance-clear refund).
@@ -491,31 +491,33 @@ round trip (see §9.3).
 
 | Operation (scenario) | User tx (gas, measured) | of which calldata (gas) | $ @ 30 gwei, $3k/ETH |
 |---|---:|---:|---:|
-| `depositETH` (v1.0 reference, first deposit) | 57 993 | 64 | ~$5.2 |
-| `depositETHWithFee` (first deposit) | 66 664 | 204 | ~$6.0 |
-| `depositETHWithFee` (repeat deposit) | 49 564 | 204 | ~$4.5 |
-| `depositETHWithFee` (repeat, migration-wired bridge) | 52 667 | 204 | ~$4.7 |
-| `depositBoldWithFee` (first deposit) | 94 504 | 416 | ~$8.5 |
-| `depositBoldWithFee` (repeat deposit) | 77 404 | 416 | ~$7.0 |
+| `depositETH` (v1.0 reference, first deposit) | 58 015 | 64 | ~$5.2 |
+| `depositETHWithFee` (first deposit) | 61 623 | 204 | ~$5.5 |
+| `depositETHWithFee` (repeat deposit) | 44 523 | 204 | ~$4.0 |
+| `depositETHWithFee` (repeat, migration-wired bridge) | 47 626 | 204 | ~$4.3 |
+| `depositBoldWithFee` (first deposit) | 89 451 | 416 | ~$8.1 |
+| `depositBoldWithFee` (repeat deposit) | 72 351 | 416 | ~$6.5 |
 | BOLD `approve` (prerequisite, fresh allowance) | 45 961 | 644 | ~$4.1 |
 | `ammSwap` ETH→BOLD (first-ever BOLD recipient) | 75 937 | 684 | ~$6.8 |
 | `ammSwap` ETH→BOLD (repeat recipient) | 58 837 | 684 | ~$5.3 |
 | `ammSwap` ETH→BOLD (repeat, migration-wired bridge) | 61 943 | 684 | ~$5.6 |
 | `ammSwap` BOLD→ETH (exact approval) | 68 304 | 708 | ~$6.1 |
 | `ammSwap` BOLD→ETH (infinite approval) | 69 973 | 708 | ~$6.3 |
-| `withdrawWithProof` ETH (canonical 64-sibling proof) | 247 682 | 38 148 | ~$22.3 |
-| `withdrawWithProof` BOLD (canonical 64-sibling proof) | 264 092 | 38 172 | ~$23.8 |
+| `withdrawWithProof` ETH (canonical 64-sibling proof) | 247 780 | 38 148 | ~$22.3 |
+| `withdrawWithProof` BOLD (canonical 64-sibling proof) | 264 190 | 38 172 | ~$23.8 |
 | `closeBoldCircuit` | 44 858 | 64 | ~$4.0 |
 | `openBoldCircuit` | 23 040 | 64 | ~$2.1 |
 | `setBoldTvlCap` | 28 146 | 276 | ~$2.5 |
 | `emergencyDisableAmm` | 49 656 | 64 | ~$4.5 |
 | `confirmDisable` (3-of-N multisig, non-final confirmation) | 59 615 | 64 | ~$5.4 |
 | `confirmDisable` (3-of-N multisig, threshold-th — executes disable) | 112 645 | 64 | ~$10.1 |
-| Auto-trigger close (first branch, ETH, in shutdown) | 53 844 | 64 | ~$4.8 |
-| Auto-trigger close (last branch, rETH, in shutdown) | 69 100 | 64 | ~$6.2 |
-| Auto-trigger probe (no shutdown — reverts) | 47 301 | 64 | ~$4.3 |
-| `executeStepToRootMulti` (terminal step, 4 distinct cells + policy) | 762 694 | 9 368 | ~$68.6 |
-| `executeStepToRootMulti` (terminal step, one cell deduped to four) | 631 099 | 8 656 | ~$56.8 |
+| Auto-trigger close (first branch, ETH, in shutdown) | 53 866 | 64 | ~$4.8 |
+| Auto-trigger close (last branch, rETH, in shutdown) | 69 122 | 64 | ~$6.2 |
+| Auto-trigger probe (no shutdown — reverts) | 47 323 | 64 | ~$4.3 |
+| `executeStepToRootMulti` (terminal step, 4 distinct cells + policy) | 764 819 | 9 368 | ~$68.8 |
+| `executeStepToRootMulti` (terminal step, one cell deduped to four) | 633 257 | 8 656 | ~$57.0 |
+| `submitStateRoot` (one batched record; amortise over the batch size) | 238 963 | 1 368 | ~$21.5 |
+| `terminateOnSingleStep` (action inclusion proof + adjudicated step) | 1 019 177 | 10 756 | ~$91.7 |
 <!-- END GP.11.9 GENERATED BASELINE TABLE -->
 
 ### 9.3 Cost-structure observations
@@ -596,6 +598,76 @@ the committed baseline, which is why adjacent variant rows exist):
   sketched envelope (e.g. deposits "~80–120k" vs a measured 66 261
   first fee-split deposit; the no-shutdown probe "up to ~100k" vs a
   measured 47 250).
+
+### 9.5 Rollup economics: batched submission amortisation (Workstream SB)
+
+Batched state-root submission changed the L2's cost structure from
+**one L1 record per action** to **one L1 record per batch**.  A
+`submitStateRoot(end, prevEnd, stateCommit, actionsRoot)` covers every
+L2 action in `[prevEnd, end)` with one fixed-size record, one bond,
+and one chain-link fold — its gas is **batch-size-independent** (the
+measured `submitStateRoot_batch` row: 238 963 gas, of which 1 368 is
+the fixed 4-word calldata).  The amortised L1 cost per L2 action is
+therefore that constant divided by the batch size:
+
+| Batch size B | Amortised L1 gas / action | $ / action @ 30 gwei, $3k/ETH |
+|---:|---:|---:|
+| 1 (the retired per-action regime) | 238 963 | $21.51 |
+| 10 | 23 896 | $2.15 |
+| 100 | 2 390 | $0.215 |
+| 1 000 | **239** | **$0.0215** |
+| 10 000 | 23.9 | $0.00215 |
+| 65 536 (the default `MAX_ACTIONS_PER_BATCH`) | 3.6 | $0.00033 |
+
+At the reference cadence (a batch of 1 000 actions), an L2 action
+carries **≈239 gas of amortised L1 cost ≈ 2.2¢** — the same class as
+established optimistic rollups, versus ~$21.5/action under the
+retired one-record-per-action regime.  The batch size is an
+operational choice: larger batches amortise further but delay
+finalisation (the whole batch shares one dispute window) and
+concentrate more actions under one bond.
+
+**The dispute path is priced separately and paid only when a batch is
+disputed.**  The measured `terminateOnSingleStep_withInclusion` row —
+1 019 177 gas ≈ $91.7 — is the terminal transaction of a batch
+dispute: the disputed action re-derived as its signature-bound leaf,
+verified by inclusion against the batch's submitted actions root, and
+adjudicated on the step VM's deduplicating multiproof.  Bisection
+moves before it are small fixed-cost calls (a midpoint store, an
+agree/disagree flag).  On the honest path nobody pays any of this;
+the game's bond economics (§`deployment_parameters.md`) make the
+loser fund the winner, so the expected cost of DEFENDING a correct
+batch is the bond's opportunity cost, not the gas.
+
+### 9.6 L1/L2 AMM price independence
+
+The deployment now runs **two AMM venues with independent prices**:
+
+* the **L1 embedded AMM** (`KnomosisBridge.ammSwap`, §9.2 rows) over
+  the bridge's pre-existing L1-local reserves — under the SB
+  L2-primary topology, deposits no longer grow these books, so this
+  venue's depth is whatever L1 liquidity the deployment already held;
+* the **L2 reserve swap** (`Laws.reserveSwap`, Action 25) over the
+  L2 reserve actor's live balances, which the deposit fee-split's
+  seed leg funds (`ammSeedAmount` credited on L2).
+
+The two constant-product curves share the fee constant
+(`AmmMath.swapFeeBps = 30`, corpus-pinned across all three stacks)
+but hold **separate reserves, so their spot prices move
+independently** — nothing in the kernel or the bridge equalises them.
+Divergence is closed by ARBITRAGE, not by protocol action: an L2 swap
+costs ~239 gas of amortised L1 (§9.5) against ~$6.6 for an L1
+`ammSwap`, so the economic pressure pushes flow — and therefore price
+discovery — to the L2 venue, with the L1 pool serving as a
+gas-denominated fallback.  Operators should monitor the two spot
+prices (`ammReserveEth/ammReserveBold` on L1; the reserve actor's
+balance ratio on L2) and expect a persistent gap no larger than the
+round-trip arbitrage cost (one deposit + one withdrawal + both swap
+fees); a wider persistent gap means arbitrage is blocked (bridge
+halted, deposits paused) and is a monitoring signal, not a defect.
+The deliberate NON-goal: the L1→L2 swap-mirror ingest is unbuilt —
+L1 swaps do not replay onto L2 books (`ammSwap` L2 Action 23 remains
+the bridge-attested mirror vocabulary, not a live pipeline).
 
 ---
 

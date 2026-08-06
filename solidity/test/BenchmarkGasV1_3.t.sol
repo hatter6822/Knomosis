@@ -8,7 +8,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisAmmDisasterRecoveryMultisig} from
     "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
+import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
+import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
+import {ActionsRoot} from "src/lib/ActionsRoot.sol";
+import {CBEEncode} from "src/lib/CBEEncode.sol";
+import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
 import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
@@ -68,8 +73,8 @@ contract InactiveMigration {
 ///            Test-harness overhead (pranks, asserts, calldata
 ///            abi-encoding) is excluded by construction.  Empirically
 ///            verified: isolated-vs-unisolated deltas decode to the gas
-///            as `21 000 + calldata − refunds` on all 21 benchmarks
-///            (e.g. `closeBoldCircuit` +21 064 = 21 000 + 64;
+///            as `21 000 + calldata − refunds` on all 21 GP.11.9
+///            benchmarks (e.g. `closeBoldCircuit` +21 064 = 21 000 + 64;
 ///            `depositBoldWithFee` +13 816 = 21 000 + 416 − 2 800
 ///            reentrancy-guard reset − 4 800 allowance-clear refund).
 ///         2. Alongside every gas entry the helper records
@@ -1413,4 +1418,311 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
         root = abi.decode(out, (bytes32));
     }
 
+}
+
+/// @title BenchmarkGasV1_3BatchSubmissionTest
+/// @notice Workstream SB — the batched `submitStateRoot`: ONE L1
+///         record covering `[prevEnd, end)` L2 actions, its chain
+///         link folded from the batch's actions root.  The measured
+///         gas is BATCH-SIZE-INDEPENDENT (one record, one fold, a
+///         fixed 4-word calldata), which is the whole economic point:
+///         the amortised L1 cost per L2 action is this number divided
+///         by the batch size — the `docs/gas_pool_runbook.md` §9
+///         amortisation table is derived from exactly this benchmark.
+contract BenchmarkGasV1_3BatchSubmissionTest is BenchmarkGasV1_3Base {
+    KnomosisStateRootSubmission internal registry;
+
+    uint128 internal constant ROOT_BOND = 1 ether;
+    /// @dev The batch size the runbook's headline amortisation quotes.
+    ///      The measured gas does not depend on it (the record is one
+    ///      fixed-size store either way); it parameterises the sanity
+    ///      pin that ONE record really covers this many entries.
+    uint64 internal constant BATCH_SIZE = 1000;
+    address internal constant SEQUENCER = address(0xACE);
+
+    bytes32 internal batchCommit;
+    bytes32 internal batchActionsRoot;
+
+    function setUp() public {
+        registry = new KnomosisStateRootSubmission(
+            ROOT_BOND,
+            100, // dispute window
+            1, // min submission interval
+            10, // max outstanding roots
+            SEQUENCER,
+            address(this), // fault-proof game (unused by the benchmark)
+            bytes32(uint256(0xBA7C4)),
+            100, // withdrawal finalisation window
+            keccak256("knomosis.bench.genesis"),
+            65_536 // max actions per batch (the operational default)
+        );
+        batchCommit = keccak256("knomosis.bench.batch.commit");
+        batchActionsRoot = keccak256("knomosis.bench.batch.actionsRoot");
+        vm.deal(SEQUENCER, 10 ether);
+    }
+
+    /// @notice One batched submission: entries `[0, 1000)` under one
+    ///         record, one bond, one chain-link fold.
+    function test_gas_submitStateRoot_batch() public {
+        _bench(
+            "submitStateRoot_batch",
+            SEQUENCER,
+            address(registry),
+            ROOT_BOND,
+            abi.encodeCall(
+                KnomosisStateRootSubmission.submitStateRoot,
+                (BATCH_SIZE, 0, batchCommit, batchActionsRoot)
+            ),
+            true
+        );
+    }
+
+    /// @notice Pins what the benchmark measures: the single submission
+    ///         extends the canonical tip across the WHOLE batch, and
+    ///         the one record carries the batch bounds, the commit,
+    ///         the actions root, and the bond.
+    function test_sanity_batchSubmissionEffects() public {
+        vm.prank(SEQUENCER);
+        registry.submitStateRoot{value: ROOT_BOND}(
+            BATCH_SIZE, 0, batchCommit, batchActionsRoot
+        );
+        assertEq(
+            registry.canonicalTip(),
+            BATCH_SIZE,
+            "one record extends the tip across the whole batch"
+        );
+        (
+            address seq,
+            bytes32 commit,
+            ,
+            ,
+            uint128 bond,
+            ,
+            bool finalised,
+            bool disputed,
+            uint64 prevEnd,
+            bytes32 ar
+        ) = registry.roots(BATCH_SIZE);
+        assertEq(seq, SEQUENCER, "record keyed to the sequencer");
+        assertEq(commit, batchCommit, "record carries the batch commit");
+        assertEq(bond, ROOT_BOND, "record holds the one batch bond");
+        assertEq(prevEnd, 0, "batch covers [0, BATCH_SIZE)");
+        assertEq(ar, batchActionsRoot, "record carries the actions root");
+        assertFalse(finalised, "not yet finalised");
+        assertFalse(disputed, "not disputed");
+    }
+}
+
+/// @title BenchmarkGasV1_3TerminateInclusionTest
+/// @notice Workstream SB — the batched game's terminal step with its
+///         action INCLUSION PROOF: `terminateOnSingleStep` re-derives
+///         the disputed action's signature-bound leaf, verifies it
+///         against the batch's submitted actions root (ruling R7),
+///         and adjudicates the step on `KnomosisStepVMRoot`.  The
+///         scenario stages the full dispute — a 4-entry batch
+///         submitted on the REAL registry, challenged, and bisected
+///         down to its first step — in `setUp`, so the benchmark
+///         measures exactly the terminal transaction an honest
+///         sequencer pays to defend a batch.  Driven by the corpus's
+///         `transfer` probe (a real pre-root/action/wire/post-root
+///         quintuple); the batch tree is the single-leaf cell SMT,
+///         so the inclusion wire is its minimal shape (a 32-byte
+///         zero bitmask, no siblings).
+contract BenchmarkGasV1_3TerminateInclusionTest is
+    BenchmarkGasV1_3Base,
+    StepVMRootProbeHarness
+{
+    KnomosisStepVMRoot internal vmRoot;
+    KnomosisStateRootSubmission internal registry;
+    KnomosisFaultProofGame internal game;
+
+    address internal constant TREASURY = address(0xBEEF);
+    address internal constant SEQUENCER = address(0xACE);
+    address internal constant CHALLENGER = address(0xCAFE);
+    uint128 internal constant ROOT_BOND = 1 ether;
+    uint128 internal constant CHALLENGE_BOND = 0.05 ether;
+    uint64 internal constant STEP_INTERVAL = 1;
+
+    string internal raw;
+    string internal probeBase;
+    uint256 internal gameId;
+
+    function setUp() public {
+        vmRoot = new KnomosisStepVMRoot();
+        raw = readFixture(STEP_VM_FIXTURE);
+        _requireKeccakLinked(raw, ".isKeccak256Linked");
+        probeBase = findMultiProbeBase(raw, "transfer");
+        ProbeInput memory probe = loadProbeInput(raw, probeBase);
+
+        uint64 n = vm.getNonce(address(this));
+        address predictedGame = vm.computeCreateAddress(address(this), n + 1);
+        registry = new KnomosisStateRootSubmission(
+            ROOT_BOND,
+            100,
+            STEP_INTERVAL,
+            10,
+            SEQUENCER,
+            predictedGame,
+            bytes32(uint256(0xBA7C4)),
+            100,
+            probe.preRoot, // genesis = the probe's pre-root
+            65_536
+        );
+        game = new KnomosisFaultProofGame(
+            100, // bisection response timeout
+            CHALLENGE_BOND,
+            STEP_INTERVAL,
+            TREASURY,
+            address(vmRoot),
+            address(registry),
+            address(0) // dispute-verifier forwarding disabled
+        );
+        assertEq(address(game), predictedGame, "game address prediction holds");
+        vm.deal(SEQUENCER, 10 ether);
+        vm.deal(CHALLENGER, 10 ether);
+
+        // A 4-entry batch whose first step is the probe; the later
+        // commits are bisection scaffolding no step VM ever runs on.
+        bytes32[5] memory commits;
+        commits[0] = probe.preRoot;
+        commits[1] = probePostRoot(raw, probeBase);
+        for (uint8 i = 2; i < 5; i++) {
+            commits[i] = keccak256(abi.encodePacked(commits[i - 1], i));
+        }
+        vm.prank(SEQUENCER);
+        registry.submitStateRoot{value: ROOT_BOND}(
+            4, 0, commits[4], _probeActionsRoot(probe)
+        );
+
+        // Challenge + bisect INSIDE the batch: [0,4] → [0,2] → [0,1].
+        vm.prank(CHALLENGER);
+        gameId = game.initiateChallenge{value: CHALLENGE_BOND}(
+            4, bytes32(uint256(0xC1)), probe.preRoot, 0
+        );
+        _rollPastInterval();
+        vm.prank(SEQUENCER);
+        game.submitMidpoint(gameId, commits[2]);
+        _rollPastInterval();
+        vm.prank(CHALLENGER);
+        game.respondToMidpoint(gameId, false);
+        _rollPastInterval();
+        vm.prank(SEQUENCER);
+        game.submitMidpoint(gameId, commits[1]);
+        _rollPastInterval();
+        vm.prank(CHALLENGER);
+        game.respondToMidpoint(gameId, false);
+        _rollPastInterval();
+    }
+
+    /// @notice The terminal step: leaf re-derivation + single-leaf
+    ///         inclusion verification + the step VM's multiproof fold.
+    function test_gas_terminateOnSingleStep_withInclusion() public {
+        ProbeInput memory probe = loadProbeInput(raw, probeBase);
+        _bench(
+            "terminateOnSingleStep_withInclusion",
+            SEQUENCER,
+            address(game),
+            0,
+            abi.encodeCall(
+                KnomosisFaultProofGame.terminateOnSingleStep,
+                (
+                    gameId,
+                    probe.actionKind,
+                    probe.actionFields,
+                    probe.signer,
+                    _testSig(),
+                    _singleEntryProof(),
+                    probe.cells,
+                    probe.gapMask,
+                    probe.siblings
+                )
+            ),
+            true
+        );
+    }
+
+    /// @notice Pins the staged scenario and the benchmarked call's
+    ///         effects: the terminate settles `SequencerWon` on the
+    ///         REAL registry — record cleared, tip unmoved, nothing
+    ///         reverted — so the measured transaction is the honest
+    ///         defence, not a revert path.
+    function test_sanity_terminateInclusionEffects() public {
+        ProbeInput memory probe = loadProbeInput(raw, probeBase);
+        vm.prank(SEQUENCER);
+        game.terminateOnSingleStep(
+            gameId,
+            probe.actionKind,
+            probe.actionFields,
+            probe.signer,
+            _testSig(),
+            _singleEntryProof(),
+            probe.cells,
+            probe.gapMask,
+            probe.siblings
+        );
+        (, , , , uint128 bond, , bool finalised, bool disputed, ,) =
+            registry.roots(4);
+        assertEq(bond, ROOT_BOND, "bond stays until finalisation");
+        assertFalse(disputed, "sequencer win clears the disputed flag");
+        assertFalse(finalised, "not yet finalised");
+        assertFalse(registry.isStateRootReverted(4), "nothing reverted");
+        assertEq(registry.canonicalTip(), 4, "tip unmoved");
+        assertGt(
+            game.pendingWithdrawals(SEQUENCER),
+            0,
+            "winner credited the forfeited challenger bond share"
+        );
+    }
+
+    /// @dev The suite's fixed 65-byte action signature (hashed into
+    ///      the leaf per ruling R7).
+    function _testSig() private pure returns (bytes memory sig) {
+        sig = new bytes(65);
+        for (uint256 i = 0; i < 65; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            sig[i] = bytes1(uint8(i + 1));
+        }
+    }
+
+    /// @dev The single-leaf batch tree's inclusion proof: an all-zero
+    ///      32-byte bitmask and no siblings.
+    function _singleEntryProof() private pure returns (bytes memory) {
+        return new bytes(32);
+    }
+
+    /// @dev The actions root of a batch holding ONE action at absolute
+    ///      index 0 — the cell SMT with a single leaf, every path
+    ///      sibling the canonical empty sub-tree (the same spelling
+    ///      the batch-game cross-check suite pins against
+    ///      `ActionsRoot.verifyActionInclusion`).
+    function _probeActionsRoot(ProbeInput memory probe)
+        private
+        pure
+        returns (bytes32 root)
+    {
+        bytes32 leafCommit = keccak256(
+            abi.encodePacked(
+                probe.actionKind, probe.signer, probe.actionFields, _testSig()
+            )
+        );
+        bytes memory keyBytes = abi.encodePacked(ActionsRoot.actionKey(0));
+        root = keccak256(
+            bytes.concat(
+                CBEEncode.bytesValue(keyBytes),
+                CBEEncode.bytesValue(abi.encodePacked(leafCommit))
+            )
+        );
+        bytes32[256] memory empties =
+            SmtCellVerifier.precomputeEmptySubtreeHashes();
+        for (uint256 d = 0; d < 256; d++) {
+            root = SmtCellVerifier.readKeyBitMSBFirst(keyBytes, d) == 1
+                ? keccak256(abi.encodePacked(empties[d], root))
+                : keccak256(abi.encodePacked(root, empties[d]));
+        }
+    }
+
+    /// @dev Roll past the per-move step interval.
+    function _rollPastInterval() private {
+        vm.roll(vm.getBlockNumber() + STEP_INTERVAL + 1);
+    }
 }
