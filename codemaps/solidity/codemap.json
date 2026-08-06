@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "cae333a5186d44901c01dd11f71466f92f3bfc45724aa9740e7001d4cb183b74"
+    "source_digest": "ae88cdc3502e38ee50a482efd079d6fd829101302870818a4acebca40ac51a4e"
   },
   "summary": {
-    "module_count": 110,
-    "declaration_count": 2265
+    "module_count": 112,
+    "declaration_count": 2289
   },
   "modules": [
     {
@@ -4554,6 +4554,77 @@
           "name": "nextEntryHash",
           "line": 97,
           "called": []
+        }
+      ]
+    },
+    {
+      "module": "Secp256k1",
+      "path": "solidity/src/lib/Secp256k1.sol",
+      "declaration_count": 9,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "Secp256k1",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PubkeyWrongLength",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PubkeyBadPrefix",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PubkeyXNotInField",
+          "line": 53,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PubkeyNotOnCurve",
+          "line": 56,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ModExpFailed",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_modSqrtCandidate",
+          "line": 64,
+          "called": [
+            "ModExpFailed"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "decompress",
+          "line": 81,
+          "called": [
+            "PubkeyBadPrefix",
+            "PubkeyNotOnCurve",
+            "PubkeyWrongLength",
+            "PubkeyXNotInField",
+            "_modSqrtCandidate"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "toAddress",
+          "line": 120,
+          "called": [
+            "decompress"
+          ]
         }
       ]
     },
@@ -17097,6 +17168,119 @@
             "_commitOf",
             "_submit"
           ]
+        }
+      ]
+    },
+    {
+      "module": "Secp256k1.t",
+      "path": "solidity/test/Secp256k1.t.sol",
+      "declaration_count": 15,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "Secp256k1Test",
+          "line": 22,
+          "called": [
+            "Secp256k1Caller"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 41,
+          "called": [
+            "Secp256k1Caller"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_compressed",
+          "line": 45,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_decompresses_generator",
+          "line": 54,
+          "called": [
+            "_compressed"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_parity_selects_root",
+          "line": 62,
+          "called": [
+            "_compressed"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_decompresses_verify_check_key",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_toAddress_agrees_with_ecrecover",
+          "line": 78,
+          "called": [
+            "digest"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rejects_off_curve_x",
+          "line": 92,
+          "called": [
+            "_compressed"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rejects_x_at_field_prime",
+          "line": 100,
+          "called": [
+            "_compressed"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rejects_bad_prefixes",
+          "line": 110,
+          "called": [
+            "_compressed"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rejects_wrong_lengths",
+          "line": 123,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_toAddress_matches_vm_addr",
+          "line": 137,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "Secp256k1Caller",
+          "line": 160,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "decompress",
+          "line": 161,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "toAddress",
+          "line": 169,
+          "called": []
         }
       ]
     },
