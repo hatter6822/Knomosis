@@ -422,6 +422,36 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`.
     uint16 public constant MAX_AMM_SEED_RATIO_BPS = 8000;
 
+    /// @notice The liquidity floor neither AMM reserve may be drawn below.
+    ///
+    /// @dev    Uniswap-V2's `MINIMUM_LIQUIDITY` idea, adapted to a
+    ///         reserve-pair AMM that has no LP tokens to burn against.
+    ///         V2 locks its floor by burning the first mint; here the
+    ///         reserves accrue INCREMENTALLY from deposit fee splits, so
+    ///         there is no first mint — the equivalent guarantee is a
+    ///         permanent floor enforced on every swap, in both
+    ///         directions.
+    ///
+    ///         Without it the constant-product curve is exploitable at a
+    ///         dust ratio: `getAmountOut` is
+    ///         `amountIn·reserveOut / (reserveIn + amountIn)` net of fee,
+    ///         so at `reserveIn = 1` a modest input takes a share of
+    ///         `reserveOut` approaching all of it.  An attacker who
+    ///         arranges for one leg to sit at dust — cheap, since seeding
+    ///         is proportional to deposits and the legs seed
+    ///         independently — drains the other.  `AmmEmpty` only ever
+    ///         refused a reserve of exactly ZERO, which is the one dust
+    ///         value the attack does not need.
+    ///
+    ///         1000 units, matching V2.  Denominated in the reserve's own
+    ///         base unit (wei for ETH, 1e-18 BOLD), so the locked value is
+    ///         negligible while the ratio it forbids is not.
+    ///
+    /// @dev    Constitutional cap; a change is a Genesis-Plan §13.6
+    ///         amendment, pinned in source by
+    ///         `scripts/audit_compile_time_caps.sh`.
+    uint256 public constant AMM_MINIMUM_LIQUIDITY = 1000;
+
     // ---- BOLD constitutional pins (Workstream GP.5.4) ----
 
     /// @notice Compile-time pin on the canonical Ethereum-MAINNET Liquity V2
@@ -1617,6 +1647,18 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         in which case the BOLD reserve is permanently zero), so no
     ///         constant-product swap is possible.
     error AmmEmpty();
+
+    /// @notice A swap was attempted while a reserve sits below
+    ///         `AMM_MINIMUM_LIQUIDITY`.
+    /// @param  reserveIn  the input-side reserve at the time of the call.
+    /// @param  reserveOut the output-side reserve.
+    error AmmBelowMinimumLiquidity(uint256 reserveIn, uint256 reserveOut);
+
+    /// @notice The swap's output would draw the output reserve below
+    ///         `AMM_MINIMUM_LIQUIDITY`.
+    /// @param  amountOut  the computed output.
+    /// @param  reserveOut the output reserve before the swap.
+    error AmmWouldBreachMinimumLiquidity(uint256 amountOut, uint256 reserveOut);
     /// @notice The computed output is below the caller's `minAmountOut`
     ///         (slippage protection).
     error SlippageExceeded(uint256 actualOut, uint256 minOut);
@@ -1809,6 +1851,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
         // Both reserves must be seeded for the constant-product curve.
         if (reserveIn == 0 || reserveOut == 0) revert AmmEmpty();
+        // ...and seeded PAST the floor.  A reserve of exactly zero was the
+        // only dust the `AmmEmpty` check above refused, and it is the one
+        // value the dust-ratio drain does not need: at `reserveIn = 1` the
+        // curve hands out almost all of `reserveOut`.
+        if (reserveIn < AMM_MINIMUM_LIQUIDITY || reserveOut < AMM_MINIMUM_LIQUIDITY) {
+            revert AmmBelowMinimumLiquidity(reserveIn, reserveOut);
+        }
 
         // Constant-product output net of the retained 0.30% fee.  `AmmMath`
         // guarantees `amountOut < reserveOut` strictly.
@@ -1819,6 +1868,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (amountOut < minAmountOut) revert SlippageExceeded(amountOut, minAmountOut);
         // Defence-in-depth; provably unreachable (see `ReserveExhausted`).
         if (amountOut >= reserveOut) revert ReserveExhausted();
+        // The floor is PERMANENT: it bounds the post-swap reserve, not
+        // just the pre-swap one.  Checking only on entry would let a
+        // single large swap step straight over the floor and leave the
+        // pair at dust for the next caller.
+        if (reserveOut - amountOut < AMM_MINIMUM_LIQUIDITY) {
+            revert AmmWouldBreachMinimumLiquidity(amountOut, reserveOut);
+        }
 
         // ---- Effects ----
         // `newReserveIn` is a CHECKED add (reverts on the physically-

@@ -37,6 +37,14 @@
 #
 #   AMM_SWAP_FEE_BPS       = 30   (uint16; 0.30% Uniswap-v2-standard fee)
 #   MAX_AMM_SEED_RATIO_BPS = 8000 (uint16; 80% max pool->AMM seed ratio)
+#   AMM_MINIMUM_LIQUIDITY  = 1000 (uint256; the reserve floor no swap may
+#                                  cross -- Uniswap-v2's MINIMUM_LIQUIDITY
+#                                  adapted to a reserve-pair AMM with no LP
+#                                  token to burn against.  Without it the
+#                                  constant-product curve is drainable at a
+#                                  dust ratio, which `AmmEmpty` did not
+#                                  refuse: it only ever rejected a reserve of
+#                                  exactly zero.)
 #
 # Changing any of these values is a Genesis-Plan §13.6 amendment and
 # triggers the two-reviewer rule.  This gate is the fast tripwire that
@@ -141,6 +149,7 @@ CAPS=(
     "LIQUITY_ORACLE_READ_GAS|uint256|100000"
     "AMM_SWAP_FEE_BPS|uint16|30"
     "MAX_AMM_SEED_RATIO_BPS|uint16|8000"
+    "AMM_MINIMUM_LIQUIDITY|uint256|1000"
 )
 
 failures=0
@@ -331,4 +340,20 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "audit_compile_time_caps: 6 compile-time caps + 4 address pins + 1 symbol pin + 3 multisig governance constants verified."
+# Counts are DERIVED from the tables above, not written out.  The
+# summary previously carried a hardcoded "6 compile-time caps" and this
+# gate grew a seventh without it moving — a gate whose own report drifts
+# from what it actually checked is the shape of problem it exists to
+# catch.
+#
+# `CONFIRMATION_WINDOW` is verified by its own block rather than from
+# `MULTISIG_CAPS`, because it carries a time-unit literal (`7 days`)
+# that the numeric pattern cannot match — hence the `+ 1`.  The multisig
+# section is conditional, so the array may be unset; `${#ARR[@]}` is 0
+# then and the whole term collapses to 0 rather than mis-reporting.
+if [[ -n "${MULTISIG_CAPS+x}" ]]; then
+    MULTISIG_VERIFIED=$(( ${#MULTISIG_CAPS[@]} + 1 ))
+else
+    MULTISIG_VERIFIED=0
+fi
+echo "audit_compile_time_caps: ${#CAPS[@]} compile-time caps + ${#ADDRESS_PINS[@]} address pins + 1 symbol pin + ${MULTISIG_VERIFIED} multisig governance constants verified."
