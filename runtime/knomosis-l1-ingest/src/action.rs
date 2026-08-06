@@ -44,29 +44,20 @@
 //!
 //! ## What this crate models
 //!
-//! The L1 ingestor only ever emits two Action variants:
-//! `RegisterIdentity` (for first-time identity registrations) and
-//! `ReplaceKey` (for key rotations).  Even so, we include every
-//! constructor's tag definition so the byte-level encoder can
-//! validate decoded fixtures via the full tag table, and so future
-//! work units (deposit translation, withdraw translation) extend
-//! this enum without breaking ABI.
+//! The L1 ingestor emits `RegisterIdentity` (first-time identity
+//! registrations), `ReplaceKey` (key rotations), and — with the
+//! opt-in `--materialise-deposits` flag (Workstream SB.9) —
+//! `Deposit` / `DepositWithFee` (the materialised L1 deposit
+//! credits; see `translation::preview_ingest_materialising`).
+//! Every other constructor's tag definition is included so the
+//! byte-level encoder can validate decoded fixtures via the full
+//! tag table and future work units extend this enum without
+//! breaking ABI.
 //!
-//! `Deposit` and `Withdraw` (tags 13 / 14) are sketched here as
-//! constructors for forward-compatibility — the
-//! `Bridge/Ingest.lean::ingest` function returns `none` for
-//! deposit events in MVP scope (deposit translation goes
-//! through `applyActionToBridgeState` at the kernel level, not
-//! through `ingest`).  The ingestor never emits these today; the
-//! variants live here to keep the action-tag map complete and
-//! make the encoder's exhaustive match obviously total.
-//!
-//! `DepositWithFee`, `TopUpActionBudget`, `TopUpActionBudgetFor`
-//! (tags 19 / 20 / 21, Workstream GP) are similarly sketched here
-//! for encoder completeness.  Like `Deposit`, `Bridge/Ingest.lean::
-//! ingest` returns `none` for `DepositWithFeeInitiated` events
-//! (deposit materialisation is the sequencer's responsibility,
-//! chain-level follow-up) so the ingestor never emits them, but
+//! `Withdraw` (tag 14) is sketched here for forward-compatibility;
+//! the ingestor never emits it (withdrawals originate on the L2).
+//! `TopUpActionBudget` / `TopUpActionBudgetFor` (tags 20 / 21,
+//! Workstream GP) are similarly encoder-completeness constructors:
 //! the encoder must be able to produce their CBE bytes
 //! byte-equivalent to Lean for the kernel-layer admission path
 //! that `bridgeActor` uses with these constructors.
@@ -275,10 +266,10 @@ pub enum Action {
         /// The actor's initial public key.
         pk: PublicKey,
     },
-    /// `deposit(r, recipient, amount, depositId)`.  Tag 13.  The
-    /// L1 ingestor does *not* emit this — deposit translation
-    /// goes through `applyActionToBridgeState` at the kernel
-    /// layer.  Included for encoder completeness.
+    /// `deposit(r, recipient, amount, depositId)`.  Tag 13.
+    /// Emitted by the ingestor for `DepositInitiated` events when
+    /// deposit materialisation is enabled (`--materialise-deposits`,
+    /// Workstream SB.9); `NoAction` otherwise.
     Deposit {
         /// The resource id being credited.
         r: ResourceId,
@@ -333,11 +324,10 @@ pub enum Action {
     /// GP).  The fee-split deposit credits the recipient with
     /// `userAmount` of resource `r` and the gas-pool actor with
     /// `poolAmount` of resource `r`, AND grants the recipient
-    /// `budgetGrant` units of action-budget headroom.  Currently
-    /// not emitted by the ingestor (deposit materialisation is
-    /// the sequencer's responsibility); included for encoder
-    /// completeness because the kernel admission path produces
-    /// `bridgeActor`-signed `DepositWithFee` actions internally.
+    /// `budgetGrant` units of action-budget headroom.  Emitted by
+    /// the ingestor for `DepositWithFeeInitiated` events when
+    /// deposit materialisation is enabled (`--materialise-deposits`,
+    /// Workstream SB.9); `NoAction` otherwise.
     DepositWithFee {
         /// The resource id being credited (0 = native ETH, 1 = BOLD).
         r: ResourceId,

@@ -44,10 +44,14 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     daemon.  Library + binary.  Watches `KnomosisBridge` /
     `KnomosisIdentityRegistry` event logs via Ethereum JSON-RPC,
     translates events to Knomosis `Action`s via the Rust mirror of
-    `Bridge.Ingest.ingest`, signs with a zeroize-protected
-    bridge-actor key, and forwards CBE-encoded `SignedAction`s
-    to `knomosis-host` via length-prefixed HTTP.  Idempotent
-    re-org-tolerant up to a configurable window depth.
+    `Bridge.Ingest.ingest` — plus, with the opt-in
+    `--materialise-deposits` flag (Workstream SB.9), the two
+    deposit events into bridge-signed `Deposit` / `DepositWithFee`
+    actions (content-derived deposit ids, range-checked amounts,
+    fresh-id assignment for unregistered depositors) — signs with
+    a zeroize-protected bridge-actor key, and forwards CBE-encoded
+    `SignedAction`s to `knomosis-host` via length-prefixed HTTP.
+    Idempotent re-org-tolerant up to a configurable window depth.
     Cross-stack equivalence enforced by 12-record
     `l1_ingest.cxsf` corpus.
   * **`knomosis-host`** — RH-C network adaptor.  Library + binary.

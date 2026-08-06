@@ -324,11 +324,12 @@ pub enum IngestedEvent {
         log_index: u64,
     },
     /// `DepositInitiated` — a deposit was registered on L1.
-    /// `Bridge.Ingest.ingest` returns `none` for this variant in
-    /// MVP scope (deposit translation goes through
-    /// `applyActionToBridgeState` at the kernel level); the
-    /// translator records the event in the watcher's audit log
-    /// and emits no `Action`.
+    /// In the default (Lean-mirror) mode `Bridge.Ingest.ingest`
+    /// returns `none` for this variant and the translator records
+    /// the event in the watcher's audit log only; with the opt-in
+    /// `--materialise-deposits` flag (Workstream SB.9) the
+    /// translator constructs a bridge-signed `Action::Deposit`
+    /// crediting the depositor's book-resolved L2 actor.
     DepositInitiated {
         /// The depositor's Ethereum address.
         depositor: EthAddress,
@@ -352,12 +353,12 @@ pub enum IngestedEvent {
     },
     /// `DepositWithFeeInitiated` — a user-chosen fee-split deposit was
     /// registered on L1 (Workstream GP.5.1).  Like `DepositInitiated`,
-    /// `Bridge.Ingest.ingest` returns `none` for this variant: deposit
-    /// materialisation is the sequencer's responsibility (chain-level
-    /// follow-up), not the ingestor's, so the translator emits no
-    /// `Action` and records it only in the watcher's audit log.  The
-    /// ingestor decodes it for observability + dedup symmetry with
-    /// `DepositInitiated`.
+    /// the default (Lean-mirror) mode emits no `Action` and records
+    /// the event only in the watcher's audit log; with the opt-in
+    /// `--materialise-deposits` flag (Workstream SB.9) the translator
+    /// constructs a bridge-signed `Action::DepositWithFee` carrying
+    /// the fee split and the seed leg lifted verbatim from this
+    /// event's fields.
     DepositWithFeeInitiated {
         /// The depositor's Ethereum address (`msg.sender`).
         sender: EthAddress,

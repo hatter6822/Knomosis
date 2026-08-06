@@ -44,6 +44,7 @@
 //! | `--identity-registry <HEX>`     | yes      | 20-byte hex address of the L1 `KnomosisIdentityRegistry.sol` instance  |
 //! | `--state-file <PATH>`           | yes      | Watcher persistent-state file (JSONL)                                |
 //! | `--emit-signer-hints`           | no       | Emit Rung-1 `KNH2` signer hints (raw-TCP only; default off, FQ.13a)  |
+//! | `--materialise-deposits`        | no       | Translate the two deposit events into bridge-signed `Deposit` / `DepositWithFee` actions (SB.9; default off — fail-closed) |
 //! | `--deployment-id <HEX>`         | no       | 32-byte deployment id for signing input (default: empty)            |
 //! | `--confirmation-depth <N>`      | no       | L1 confirmations before forwarding (default: 12)                    |
 //! | `--poll-interval-ms <N>`        | no       | Polling interval in milliseconds (default: 12000)                   |
@@ -169,6 +170,7 @@ fn main() -> ExitCode {
     );
     config.confirmation_depth = parsed.confirmation_depth;
     config.poll_interval = Duration::from_millis(parsed.poll_interval_ms);
+    config.materialise_deposits = parsed.materialise_deposits;
     // Default reorg-window capacity to confirmation_depth + 4 unless the user opts in differently.
     config.reorg_window_capacity = (config.confirmation_depth as usize) + 4;
 
@@ -233,6 +235,12 @@ struct ParsedArgs {
     /// per-frame signer hints on the raw-TCP submitter (requires
     /// `knomosis_host_tcp`).
     emit_signer_hints: bool,
+    /// `--materialise-deposits` (SB.9): opt-in translation of the
+    /// two deposit events into bridge-signed `Deposit` /
+    /// `DepositWithFee` actions.  Default off (fail-closed): absent
+    /// the flag, deposit events remain `NoAction` per the
+    /// Lean-mirror contract.
+    materialise_deposits: bool,
     bridge_contract: EthAddress,
     identity_registry: EthAddress,
     state_file: PathBuf,
@@ -260,6 +268,7 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
     let mut knomosis_host_url = None;
     let mut knomosis_host_tcp = None;
     let mut emit_signer_hints = false;
+    let mut materialise_deposits = false;
     let mut bridge_contract = None;
     let mut identity_registry = None;
     let mut state_file = None;
@@ -293,6 +302,7 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
                 );
             }
             "--emit-signer-hints" => emit_signer_hints = true,
+            "--materialise-deposits" => materialise_deposits = true,
             "--bridge-contract" => {
                 let hex = iter.next().ok_or_else(|| missing("--bridge-contract"))?;
                 bridge_contract = Some(parse_address(hex).map_err(ParseExit::Error)?);
@@ -364,6 +374,7 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
         knomosis_host_url,
         knomosis_host_tcp,
         emit_signer_hints,
+        materialise_deposits,
         bridge_contract: bridge_contract
             .ok_or_else(|| ParseExit::Error("--bridge-contract is required".into()))?,
         identity_registry: identity_registry
@@ -451,6 +462,7 @@ fn print_help(prog: &str) {
     println!();
     println!("Optional options:");
     println!("  --emit-signer-hints             Emit Rung-1 KNH2 signer hints (requires --knomosis-host-tcp; default off)");
+    println!("  --materialise-deposits          Translate deposit events into bridge-signed actions (SB.9; default off)");
     println!("  --deployment-id <HEX>           Deployment id for signing input (default: empty)");
     println!("  --confirmation-depth <N>        L1 confirmations before forwarding (default: 12)");
     println!("  --poll-interval-ms <N>          Polling interval in ms (default: 12000)");
@@ -556,5 +568,17 @@ mod tests {
         assert_eq!(parsed.knomosis_host_tcp.as_deref(), Some("127.0.0.1:7654"));
         assert!(parsed.knomosis_host_url.is_none());
         assert!(parsed.emit_signer_hints);
+    }
+
+    /// SB.9: `--materialise-deposits` defaults off and parses on.
+    #[test]
+    fn materialise_deposits_flag_parses_and_defaults_off() {
+        let mut args = base();
+        args.extend_from_slice(&["--knomosis-host-tcp", "127.0.0.1:7654"]);
+        let parsed = parse_args(&argv(&args)).expect("parses");
+        assert!(!parsed.materialise_deposits, "defaults off (fail-closed)");
+        args.push("--materialise-deposits");
+        let parsed = parse_args(&argv(&args)).expect("parses");
+        assert!(parsed.materialise_deposits);
     }
 }

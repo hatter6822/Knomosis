@@ -3286,21 +3286,43 @@ gate).
 ### 16.7 Contract event ABIs (L1 ↔ off-chain ingestor)
 
 The off-chain L1 ingestor (`runtime/knomosis-l1-ingest`, RH-B) decodes
-four event signatures from L1 logs and translates them to Knomosis
-`SignedAction`s:
+the Knomosis event signatures from L1 logs and translates them to
+Knomosis `SignedAction`s:
 
-**`KnomosisBridge`:**
+**`KnomosisBridge`** (deposit translation is opt-in via
+`--materialise-deposits`, Workstream SB.9; absent the flag both
+deposit events translate to no action, per the Lean-mirror default):
 
-  * `Deposited(address indexed depositor, address indexed token, uint256 amount, bytes32 indexed receiptHash)`
+  * `DepositInitiated(address indexed depositor, uint64 indexed resourceId, address token, uint256 amount, uint64 depositorNonce, bytes32 receiptHash)`
     → `Action.deposit r recipient amount depositId` where:
-      - `r` is derived from the `token` address via the deployment's
-        resource registry;
+      - `r` is the event's `resourceId` (carried directly; no
+        token-address derivation);
       - `recipient` is the `AddressBook`-resolved `ActorId` for
-        `depositor`;
-      - `amount` is the deposit amount;
-      - `depositId` is `receiptHash` interpreted as a big-endian
-        `Nat` (the canonical injective conversion at the bridge
-        boundary).
+        `depositor` (a fresh id is assigned — committed only after
+        submission succeeds — when the depositor has no book entry,
+        so no deposit is dropped; the owner's later L1 registration
+        lands as `replaceKey`, whose authority-layer effect is the
+        same registry insert);
+      - `amount` is the deposit amount, range-checked into the
+        runtime's `Amount` representation (an over-range value is
+        refused with a typed error, never truncated);
+      - `depositId` is the first 8 bytes of `receiptHash`,
+        big-endian.  The 8-byte width is forced by the frozen
+        encoding bound (`Action.fieldsBounded` pins
+        `depositId < 2^64`; the step-VM L1 wire carries it as
+        `uint64BE`).  Content-derived, so a restart or re-org
+        re-delivery re-derives the same id and the kernel's
+        `consumed`-set conjunct refuses the replay; a prefix
+        collision (~`N²/2⁶⁵`) fails closed — the second deposit is
+        refused admission, never double-credited.
+  * `DepositWithFeeInitiated(address indexed sender, uint64 indexed resourceId, address indexed token, uint256 userAmount, uint256 poolAmount, uint256 ammSeedAmount, uint64 budgetGrant, uint64 depositorNonce, bytes32 receiptHash)`
+    → `Action.depositWithFee r recipient poolActor userAmount
+    poolAmount budgetGrant depositId seedAmount` with the same
+    recipient/depositId/range-check rules, `poolActor` the canonical
+    gas-pool actor (id 1), and `seedAmount` lifted verbatim from the
+    event's `ammSeedAmount` (the L2 law splits the pool credit as
+    `poolAmount − seedAmount` to the pool actor and `seedAmount` to
+    the AMM reserve actor, matching the L1 event exactly).
 
 **`KnomosisIdentityRegistry`:**
 
