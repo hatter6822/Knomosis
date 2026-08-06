@@ -208,6 +208,20 @@ def Event.encode : Event → Stream
       encodeAmount amount ++
       Encodable.encode (T := Nat) reserveActor.toNat ++
       Encodable.encode (T := Nat) poolActor.toNat
+  | .reserveSwapExecuted fromResource toResource user amountIn amountOut reserveActor =>
+      Encodable.encode (T := Nat) 23 ++
+      Encodable.encode (T := Nat) fromResource.toNat ++
+      Encodable.encode (T := Nat) toResource.toNat ++
+      Encodable.encode (T := Nat) user.toNat ++
+      encodeAmount amountIn ++
+      encodeAmount amountOut ++
+      Encodable.encode (T := Nat) reserveActor.toNat
+  | .reserveSeeded resource amount reserveActor depositId =>
+      Encodable.encode (T := Nat) 24 ++
+      Encodable.encode (T := Nat) resource.toNat ++
+      encodeAmount amount ++
+      Encodable.encode (T := Nat) reserveActor.toNat ++
+      Encodable.encode (T := Nat) depositId
 
 /-! ## `Event.decode` (§8.9.2)
 
@@ -504,6 +518,41 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
         | .error e => .error e
       | .error e => .error e
     | .error e => .error e
+  | .ok (23, s₁) =>
+    match Action.readUInt64Field s₁ with
+    | .ok (fromResource, s₂) =>
+      match Action.readUInt64Field s₂ with
+      | .ok (toResource, s₃) =>
+        match Action.readUInt64Field s₃ with
+        | .ok (user, s₄) =>
+          match Action.readAmountField s₄ with
+          | .ok (amountIn, s₅) =>
+            match Action.readAmountField s₅ with
+            | .ok (amountOut, s₆) =>
+              match Action.readUInt64Field s₆ with
+              | .ok (reserveActor, s₇) =>
+                .ok (.reserveSwapExecuted fromResource toResource user
+                      amountIn amountOut reserveActor, s₇)
+              | .error e => .error e
+            | .error e => .error e
+          | .error e => .error e
+        | .error e => .error e
+      | .error e => .error e
+    | .error e => .error e
+  | .ok (24, s₁) =>
+    match Action.readUInt64Field s₁ with
+    | .ok (resource, s₂) =>
+      match Action.readAmountField s₂ with
+      | .ok (amount, s₃) =>
+        match Action.readUInt64Field s₃ with
+        | .ok (reserveActor, s₄) =>
+          match Action.readNatField s₄ with
+          | .ok (depositId, s₅) =>
+            .ok (.reserveSeeded resource amount reserveActor depositId, s₅)
+          | .error e => .error e
+        | .error e => .error e
+      | .error e => .error e
+    | .error e => .error e
   | .ok (n, _) => .error (.invalidConstructorIndex n)
 
 /-- `Encodable Event` — the symmetric CBE codec used by the
@@ -552,6 +601,8 @@ theorem Event.tag_matches_encode_tag (e : Event) :
   | budgetConsumed _ _                  => exact ⟨_, rfl⟩
   | ammSwapExecuted _ _ _ _ _           => exact ⟨_, rfl⟩
   | ammReservesReclaimed _ _ _ _        => exact ⟨_, rfl⟩
+  | reserveSwapExecuted _ _ _ _ _ _     => exact ⟨_, rfl⟩
+  | reserveSeeded _ _ _ _               => exact ⟨_, rfl⟩
 
 end Encoding
 end LegalKernel

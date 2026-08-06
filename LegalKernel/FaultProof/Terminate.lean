@@ -163,6 +163,9 @@ def plannedBalances (read : BalanceReader)
         amountIn amountOut reserveActor
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       deriveReclaimBalances read r reserveActor poolActor amount
+  | .reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      deriveReserveSwapBalances read fromResource toResource user amountIn
+        minAmountOut reserveActor
   -- The thirteen variants that write no balance cell at all.
   | _ => some []
 
@@ -301,6 +304,9 @@ theorem plannedBalances_alias_consistent (read : BalanceReader) (a : Action)
   | reclaimAmmReserves r amount reserveActor poolActor =>
       exact deriveReclaimBalances_alias_consistent read r reserveActor poolActor
         amount plan h
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      exact deriveReserveSwapBalances_alias_consistent read fromResource toResource
+        user amountIn minAmountOut reserveActor plan h
   -- The thirteen variants that write no balance cell at all.
   | _ => simp only [Option.some.injEq] at h; subst h; exact aliasConsistent_nil
 
@@ -682,6 +688,13 @@ theorem plannedBalances_stepMultiBundle (es : ExtendedState) (st : SignedAction)
       exact deriveReclaimBalances_congr _ _ r reserveActor poolActor amount
         (key r reserveActor (by rw [h_act]; simp [Action.writeCells]))
         (key r poolActor (by rw [h_act]; simp [Action.writeCells]))
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      exact deriveReserveSwapBalances_congr _ _ fromResource toResource user
+        amountIn minAmountOut reserveActor
+        (key fromResource user (by rw [h_act]; simp [Action.writeCells]))
+        (key fromResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
+        (key toResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
+        (key toResource user (by rw [h_act]; simp [Action.writeCells]))
   -- The thirteen variants that write no balance cell at all.
   | _ => rfl
 
@@ -881,6 +894,26 @@ theorem plannedBalanceAt_correct (es : ExtendedState) (st : SignedAction) (idx :
       · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
       · exact plannedBalanceAt?_of_mem _ _ _ _
           (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      -- Workstream SB: the four-cell plan, in the write set's own
+      -- order (user@from, reserve@from, reserve@to, user@to).
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveReserveSwapBalances_correct es st idx fromResource toResource
+        user amountIn minAmountOut reserveActor h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self))
+          h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+            (List.mem_cons_of_mem _ List.mem_cons_self))) h_cons
   -- The thirteen variants that write no balance cell at all: the
   -- membership hypothesis is false.
   | _ => rw [h_act] at h_mem; simp [Action.writeCells] at h_mem
@@ -1077,7 +1110,8 @@ theorem plannedBalances_stateBalanceReader_isSome (es : ExtendedState)
       deriveCreditBalance, deriveBurnBalance, deriveDepositBalance,
       deriveWithdrawBalance, deriveDepositWithFeeBalances, deriveChainPair,
       deriveTopUpBalances, deriveDelegatedTopUpBalances, deriveRefundBalances,
-      deriveAmmSwapBalances, deriveReclaimBalances] <;>
+      deriveAmmSwapBalances, deriveReclaimBalances,
+      deriveReserveSwapBalances] <;>
     (repeat' split) <;> simp_all
 
 /-- **The verifier's post-side leaves are the post-state's own.**

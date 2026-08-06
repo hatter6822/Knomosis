@@ -144,6 +144,14 @@ elab "#assert_canonical_axioms " id:ident : command => do
 #assert_canonical_axioms LegalKernel.FaultProof.actionLeafPreimage_inj
 #assert_canonical_axioms LegalKernel.FaultProof.StepVMCoherence.uint64BE_inj
 
+/-! ## The user-facing L2 swap (Workstream SB) -/
+
+#assert_canonical_axioms LegalKernel.Laws.reserveSwap_no_reserve_drain
+#assert_canonical_axioms LegalKernel.Laws.reserveSwap_k_nondecreasing
+#assert_canonical_axioms LegalKernel.Laws.reserveSwap_conserves_from
+#assert_canonical_axioms LegalKernel.Laws.reserveSwap_conserves_to
+#assert_canonical_axioms LegalKernel.FaultProof.deriveReserveSwapBalances_correct
+
 /-! ## Bridge and chain-level accounting -/
 
 #assert_canonical_axioms LegalKernel.Bridge.bridge_chain_conserves

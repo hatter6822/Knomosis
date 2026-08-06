@@ -486,6 +486,14 @@ def bridgeAuthorizedAction : Action → Bool
   -- threaded actors to the canonical reserved slots and requires the
   -- L2 `ammDisabled` state-root mirror to be set.
   | .reclaimAmmReserves _ _ _ _   => true
+  -- Workstream SB: `reserveSwap` (index 25) is USER-initiated — a
+  -- user trades their own balance against the AMM reserve, priced
+  -- in-kernel, under the deployment `AuthorityPolicy`'s
+  -- `user = signer` binding (`reserveSwapUserBinding`).  It is never
+  -- a bridge attestation: the bridge has no role in an L2-native
+  -- swap, and authorising it here would let a compromised bridge
+  -- key trade against the reserve in an arbitrary user's name.
+  | .reserveSwap _ _ _ _ _ _      => false
 
 /-- The bridge actor's authorisation policy.  Authorises an action
     iff:

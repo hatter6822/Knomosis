@@ -188,6 +188,7 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- an admission-layer effect `kernelOnlyApply` deliberately doesn't
   -- model.
   | .reclaimAmmReserves _ _ _ _    => es''
+  | .reserveSwap _ _ _ _ _ _       => es''
 
 /-- **Bridge-scope invariant.**  `kernelOnlyApply` leaves the bridge
     sub-state (`consumed` / `pending` / `nextWdId`) completely
@@ -663,6 +664,7 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- directly to `Laws.reclaimAmmReserves`); both paths wrap the same
   -- transition in `step_impl`, so they stay byte-identical.
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 

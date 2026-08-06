@@ -481,9 +481,9 @@ set_option linter.unusedSimpArgs false in
     pending cell lets these name their recipients.
 
     The linter option is scoped to this proof and is about the shared
-    automation: one `simp only` list serves all twenty-five arms, and
+    automation: one `simp only` list serves all twenty-six arms, and
     only three have a non-empty state-keyed write list, so the
-    append-elimination lemma is idle in the other twenty-two. -/
+    append-elimination lemma is idle in the other twenty-three. -/
 theorem productionApplyBudget_getBalance_of_not_written
     (es : ExtendedState) (st : SignedAction) (idx : Nat)
     (r : ResourceId) (a : ActorId)
@@ -611,6 +611,24 @@ theorem productionApplyBudget_getBalance_of_not_written
     rw [getBalance_setBalance_of_ne _ r' pa _ r a
       (balance_pair_ne h.2.1)]
     exact getBalance_setBalance_of_ne _ r' ra _ r a
+      (balance_pair_ne h.1)
+  | reserveSwap fr tr user amountIn minAmountOut ra =>
+    -- Workstream SB: four declared balance cells, stripped
+    -- outermost-first (user credit at `tr`, reserve debit at `tr`,
+    -- reserve credit at `fr`, user debit at `fr`).
+    rw [hact] at h
+    simp only [Action.writeCells, Action.stateWriteCells, List.append_nil,
+      List.mem_append, List.mem_cons, List.not_mem_nil, or_false, not_or] at h
+    show LegalKernel.getBalance
+      ((Laws.reserveSwap fr tr user amountIn minAmountOut ra).apply_impl es.base) r a = _
+    simp only [Laws.reserveSwap]
+    rw [getBalance_setBalance_of_ne _ tr user _ r a
+      (balance_pair_ne h.2.2.2.1)]
+    rw [getBalance_setBalance_of_ne _ tr ra _ r a
+      (balance_pair_ne h.2.2.1)]
+    rw [getBalance_setBalance_of_ne _ fr ra _ r a
+      (balance_pair_ne h.2.1)]
+    exact getBalance_setBalance_of_ne _ fr user _ r a
       (balance_pair_ne h.1)
   -- The two bulk variants.  Their write set is state-keyed
   -- (`Action.stateWriteCells` enumerates `Laws.bulkRecipients`), so

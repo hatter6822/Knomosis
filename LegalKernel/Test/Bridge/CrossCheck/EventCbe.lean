@@ -97,6 +97,14 @@ def eventKind : Event → String
   | .budgetConsumed ..             => "budgetConsumed"
   | .ammSwapExecuted ..            => "ammSwapExecuted"
   | .ammReservesReclaimed ..       => "ammReservesReclaimed"
+  -- Workstream SB: names for the two new constructors so this match
+  -- stays total.  Their fixture rows (and the `knownTagCount` bump to
+  -- 25, in lockstep with the Rust `KNOWN_EVENT_TAG_COUNT`) land at
+  -- the corpus-cutover phase's single regeneration — this phase is
+  -- corpus-neutral by design, and `writeFixture`'s verify mode would
+  -- flag any earlier drift.
+  | .reserveSwapExecuted ..        => "reserveSwapExecuted"
+  | .reserveSeeded ..              => "reserveSeeded"
 
 /-- A non-zero 20-byte `EthAddress` for the `withdrawalRequested`
     entry. -/

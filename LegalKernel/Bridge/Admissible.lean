@@ -224,6 +224,7 @@ theorem applyActionToBridgeState_non_bridge
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-- A `.depositWithFee` admission persists the `depositId` in
     `bridge.consumed`.  Companion to `applyActionToBridgeState`'s

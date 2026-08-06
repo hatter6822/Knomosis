@@ -87,6 +87,7 @@ import LegalKernel.Laws.TopUpActionBudgetFor
 import LegalKernel.Laws.ClaimBudgetRefund
 import LegalKernel.Laws.AmmSwap
 import LegalKernel.Laws.ReclaimAmmReserves
+import LegalKernel.Laws.ReserveSwap
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.AddressBook
@@ -498,6 +499,34 @@ inductive Action
       action index 24. -/
   | reclaimAmmReserves (r : ResourceId) (amount : Amount)
                        (reserveActor poolActor : ActorId)
+  /-- Workstream SB: the USER-facing L2 constant-product swap.  A user
+      exchanges `amountIn` of `fromResource` for `toResource` against
+      the AMM-reserve actor's live balances, priced IN THE KERNEL by
+      `Bridge.AmmMath.getAmountOut` at the fixed `AmmMath.swapFeeBps`
+      (see `Laws.reserveSwap` — unlike the bridge-attested `ammSwap`
+      mirror at index 23, this action has a user party, computes its
+      own price, and conserves BOTH resources).
+
+      Fields:
+        * `fromResource` / `toResource` — the swap pair.
+        * `user`         — the swapping actor.  The deployment
+                            `AuthorityPolicy` binds `user = signer`
+                            (`Bridge.reserveSwapUserBinding`), so a
+                            third party cannot name someone else.
+        * `amountIn`     — the user's input, debited at `fromResource`.
+        * `minAmountOut` — the user's slippage floor; the law refuses
+                            a quote below `max 1 minAmountOut`.
+        * `reserveActor` — the counterparty reserve.  Carried as a
+                            field (the `ammSwap` / `reclaimAmmReserves`
+                            pattern) and pinned to the canonical
+                            `Bridge.ammReserveActor` by the same
+                            `reserveSwapUserBinding` policy — an
+                            unpinned field would let a signer name an
+                            arbitrary VICTIM as the swap counterparty.
+
+      Frozen action index 25. -/
+  | reserveSwap (fromResource toResource : ResourceId) (user : ActorId)
+                (amountIn minAmountOut : Amount) (reserveActor : ActorId)
   -- Workstream-LX (LX.17): codegen-managed Lex constructors land
   -- between the fence markers below.  M1's example law (frozen
   -- index 17) deliberately does not extend `Action` — it lives
@@ -507,8 +536,9 @@ inductive Action
   -- Workstream H reserves indices 17 and 18; Workstream GP reserves
   -- indices 19 (`depositWithFee`), 20 (`topUpActionBudget`),
   -- 21 (`topUpActionBudgetFor`), 22 (`claimBudgetRefund`),
-  -- 23 (`ammSwap`), and 24 (`reclaimAmmReserves`).
-  -- Future Lex-generated ctors (M2+) will append at index 25+.
+  -- 23 (`ammSwap`), and 24 (`reclaimAmmReserves`); Workstream SB
+  -- reserves index 25 (`reserveSwap`).
+  -- Future Lex-generated ctors (M2+) will append at index 26+.
   -- BEGIN LEX-GENERATED (do not edit by hand)
   -- END LEX-GENERATED
   deriving Repr, DecidableEq
@@ -626,6 +656,13 @@ def Action.compileTransition : Action → Transition
   -- are bridge-attested action fields), so it compiles directly to the
   -- kernel law.
   | .reclaimAmmReserves r amt ra pa => Laws.reclaimAmmReserves r amt ra pa
+  -- Workstream SB: the user-facing L2 swap.  The kernel-level effect
+  -- (four chained balance writes, priced in-kernel off the pre-state)
+  -- is fully determined by the action's fields — the signer enters
+  -- only through the AuthorityPolicy's `user = signer` binding
+  -- (`Bridge.reserveSwapUserBinding`), never through the law's
+  -- parameters — so it compiles directly to the kernel law.
+  | .reserveSwap fr tr user ai mao ra => Laws.reserveSwap fr tr user ai mao ra
   -- Workstream-LX (LX.17): codegen-managed Lex `compileTransition`
   -- arms land between the fence markers below.  Empty in M1;
   -- populated in M2 once the kernel-built-in laws are re-expressed
@@ -752,6 +789,7 @@ theorem Action.toTransition_eq_compileTransition_of_ne_topUp
   | depositWithFee _ _ _ _ _ _ _  => rfl
   | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-- For `topUpActionBudget` specifically, `toTransition` produces
     the signer-bound `Laws.topUpActionBudget` form. -/
@@ -951,6 +989,10 @@ example (gr : ResourceId) (bu : Nat) (w : Nat) (pa : ActorId) :
 example (r : ResourceId) (amt : Amount) (ra pa : ActorId) :
     (Action.compile (.reclaimAmmReserves r amt ra pa)).source =
       .reclaimAmmReserves r amt ra pa := rfl
+
+example (fr tr : ResourceId) (user : ActorId) (ai mao : Amount) (ra : ActorId) :
+    (Action.compile (.reserveSwap fr tr user ai mao ra)).source =
+      .reserveSwap fr tr user ai mao ra := rfl
 
 end Authority
 end LegalKernel

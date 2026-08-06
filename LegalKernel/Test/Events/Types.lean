@@ -341,6 +341,16 @@ example (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
 example (r : ResourceId) (amt : Amount) (ra pa : ActorId) :
     Event.tag (.ammReservesReclaimed r amt ra pa) = 22 := rfl
 
+/-- AR.6 regression pin: `reserveSwapExecuted` holds frozen index 23
+    (Workstream SB). -/
+example (fr tr : ResourceId) (user : ActorId) (ai ao : Amount) (ra : ActorId) :
+    Event.tag (.reserveSwapExecuted fr tr user ai ao ra) = 23 := rfl
+
+/-- AR.6 regression pin: `reserveSeeded` holds frozen index 24
+    (Workstream SB). -/
+example (r : ResourceId) (amt : Amount) (ra : ActorId) (d : Bridge.DepositId) :
+    Event.tag (.reserveSeeded r amt ra d) = 24 := rfl
+
 /-- All tests. -/
 def tests : List TestCase :=
   [isBalanceChangeT, isBalanceChangeF, isRegistryChangeT, isRegistryChangeRevoked,

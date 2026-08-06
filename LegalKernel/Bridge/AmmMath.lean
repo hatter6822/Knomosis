@@ -43,6 +43,23 @@ namespace LegalKernel.Bridge.AmmMath
     Solidity `AmmMath.BPS_DENOMINATOR`. -/
 def bpsDenominator : Nat := 10000
 
+/-- The swap fee, in basis points, of the L2 reserve swap
+    (`Laws.reserveSwap`) — 0.30%, retained in the reserve actor's
+    balances as pool yield.
+
+    ONE constant for both stacks: this is the value Solidity's
+    `KnomosisBridge.AMM_SWAP_FEE_BPS` pins compile-time and the
+    step-VM kind-25 arm consumes, and the cross-stack AMM corpus
+    carries it as an explicit column so a drift on either side fails
+    a byte comparison rather than silently re-pricing swaps. -/
+def swapFeeBps : Nat := 30
+
+/-- The swap fee sits strictly inside the denominator — the
+    hypothesis `getAmountOut_lt_reserveOut` and `k_nondecreasing`
+    take, discharged once here by `decide`. -/
+theorem swapFeeBps_lt_bpsDenominator : swapFeeBps < bpsDenominator := by
+  decide
+
 /-- Constant-product output, net of a `feeBps` fee retained in the
     pool.  Byte-for-byte the `solidity/src/lib/AmmMath.sol`
     `getAmountOut` formula over `Nat`:

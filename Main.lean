@@ -830,6 +830,15 @@ def cmdHelp : IO UInt32 := do
   IO.println "        log replays correctly only under the producing rate), so a"
   IO.println "        forgotten/changed flag fails with a clear `refund-rate"
   IO.println "        error` rather than a silently-rejected refund."
+  IO.println "  --amm-reserve"
+  IO.println "        Enable the Workstream-SB AMM-reserve genesis wiring:"
+  IO.println "        declares ammReservePolicy for ammReserveActor (ActorId 3)"
+  IO.println "        at genesis AND intersects ammReserveAuthorityPolicy plus"
+  IO.println "        reserveSwapBindingPolicy into the deployment policy, so"
+  IO.println "        the reserve key may sign only self-targeted ammSwaps and"
+  IO.println "        a user-signed reserveSwap (index 25) must name its own"
+  IO.println "        signer as `user` and the canonical reserve as its"
+  IO.println "        counterparty.  Off by default (genesis unchanged)."
   IO.println ""
   IO.println "Where:"
   IO.println "  LOG       path to the append-only transition log."
@@ -1051,6 +1060,13 @@ structure GlobalFlags where
   /-- `--wei-per-budget-unit-bold <n>` value (GP.9.1): the BOLD-leg
       (resource 1) refund exchange rate.  See `refundRateEth`. -/
   refundRateBold : Option Nat := none
+  /-- `--amm-reserve` presence (Workstream SB / GP.11.6): opt the
+      deployment into the AMM-reserve genesis wiring — declare
+      `ammReservePolicy` for `ammReserveActor`, intersect
+      `ammReserveAuthorityPolicy` AND `reserveSwapBindingPolicy` into
+      the deployment policy.  Off by default (the genesis stays
+      byte-identical to the pre-SB one). -/
+  ammReserveEnabled : Bool := false
   /-- First malformed numeric budget flag encountered, if any (e.g.
       `--free-tier ten`).  Recorded rather than silently dropped so
       `main` can FAIL loudly instead of running under a different
@@ -1095,25 +1111,47 @@ def gasPoolConfig? (g : GlobalFlags) : Option Bridge.GasPoolConfig :=
     some { maxDrainPerActionEth := g.gasPoolEthCap.getD 0
          , maxDrainPerActionBold := g.gasPoolBoldCap.getD 0 }
 
+/-- The deployment's opt-in AMM-reserve config implied by the flags
+    (Workstream SB / GP.11.6): `some {}` when `--amm-reserve` is
+    supplied (the config carries no parameters today), `none`
+    otherwise (the AMM-reserve wiring is disabled, preserving the
+    pre-SB genesis byte-for-byte). -/
+def ammReserveConfig? (g : GlobalFlags) : Option Bridge.AmmReserveConfig :=
+  if g.ammReserveEnabled then some {} else none
+
 /-- The genesis `ExtendedState` to bootstrap / replay against: the demo
-    genesis with the parsed budget policy stamped in, and — when the
-    deployment opts into the gas pool (GP.7.4) — `gasPoolPolicy` declared
-    for `gasPoolActor` in `localPolicies`.  Both wirings are no-ops when
-    their flags are absent, so the default is the unchanged demo
-    genesis. -/
+    genesis with the parsed budget policy stamped in; — when the
+    deployment opts into the gas pool (GP.7.4) — `gasPoolPolicy`
+    declared for `gasPoolActor` in `localPolicies`; and — when it opts
+    into the AMM reserve (`--amm-reserve`, Workstream SB / GP.11.6) —
+    `ammReservePolicy` declared for `ammReserveActor`.  Every wiring is
+    a no-op when its flag is absent, so the default is the unchanged
+    demo genesis. -/
 def genesis (g : GlobalFlags) : ExtendedState :=
   let budgetGenesis :=
     match g.budgetPolicy? with
     | some bp => { demoGenesis with budgetPolicy := bp }
     | none => demoGenesis
-  Bridge.gasPoolGenesisStateOfConfig budgetGenesis g.gasPoolConfig?
+  Bridge.ammReserveGenesisStateOfConfig
+    (Bridge.gasPoolGenesisStateOfConfig budgetGenesis g.gasPoolConfig?)
+    g.ammReserveConfig?
 
 /-- The deployment `AuthorityPolicy` to admit against: the demo
     (`unrestricted`) policy, narrowed by `gasPoolAuthorityPolicy` when
-    the deployment opts into the gas pool (GP.7.4).  A no-op when the
-    gas-pool flags are absent (the plain `demoPolicy`). -/
+    the deployment opts into the gas pool (GP.7.4), and — when it opts
+    into the AMM reserve (Workstream SB / GP.11.6) — further narrowed
+    by `ammReserveAuthorityPolicy` (the reserve key may sign only
+    self-targeted `ammSwap`s) AND `reserveSwapBindingPolicy` (a
+    `reserveSwap` must name its SIGNER as the user and the canonical
+    `ammReserveActor` as the counterparty).  A no-op when the flags are
+    absent (the plain `demoPolicy`). -/
 def policy (g : GlobalFlags) : AuthorityPolicy :=
-  Bridge.gasPoolGenesisPolicyOfConfig demoPolicy g.gasPoolConfig?
+  let base := Bridge.gasPoolGenesisPolicyOfConfig demoPolicy g.gasPoolConfig?
+  match g.ammReserveConfig? with
+  | none => base
+  | some cfg =>
+    (Bridge.ammReserveGenesisPolicyOfConfig base (some cfg)).intersect
+      Bridge.reserveSwapBindingPolicy
 
 /-- `true` iff a `--budget-policy` value other than `"bounded"` was
     supplied (used to emit an operator warning). -/
@@ -1179,6 +1217,7 @@ def parseGlobalFlags (args : List String) : GlobalFlags :=
     | "--gas-pool-bold-cap" :: n :: rest => recordNatFlag (go rest) "--gas-pool-bold-cap" n (fun g v => { g with gasPoolBoldCap := some v })
     | "--wei-per-budget-unit-eth" :: n :: rest => recordNatFlag (go rest) "--wei-per-budget-unit-eth" n (fun g v => { g with refundRateEth := some v })
     | "--wei-per-budget-unit-bold" :: n :: rest => recordNatFlag (go rest) "--wei-per-budget-unit-bold" n (fun g v => { g with refundRateBold := some v })
+    | "--amm-reserve" :: rest => { go rest with ammReserveEnabled := true }
     | x :: rest =>
       let g := go rest
       { g with rest := x :: g.rest }

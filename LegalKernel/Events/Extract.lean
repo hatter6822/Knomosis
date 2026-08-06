@@ -351,6 +351,34 @@ def actionEvents
                     [Event.balanceChanged resource poolActor poolOld poolNew]
                   else []
     evRes ++ evPool
+  | .reserveSwap fromResource toResource user _amountIn _minAmountOut reserveActor =>
+    -- Workstream SB: the user-facing L2 swap.  Four legs move — the
+    -- user and the reserve each at both resources; emit
+    -- delta-filtered `balanceChanged` events for all four.  The
+    -- semantic `reserveSwapExecuted` event is emitted by
+    -- `extractEvents` (which recomputes the quote from the
+    -- pre-state, exactly as the law's apply did).
+    let userFromOld := LegalKernel.getBalance preState  fromResource user
+    let userFromNew := LegalKernel.getBalance postState fromResource user
+    let resFromOld  := LegalKernel.getBalance preState  fromResource reserveActor
+    let resFromNew  := LegalKernel.getBalance postState fromResource reserveActor
+    let resToOld    := LegalKernel.getBalance preState  toResource reserveActor
+    let resToNew    := LegalKernel.getBalance postState toResource reserveActor
+    let userToOld   := LegalKernel.getBalance preState  toResource user
+    let userToNew   := LegalKernel.getBalance postState toResource user
+    let evUserFrom := if userFromOld != userFromNew then
+                        [Event.balanceChanged fromResource user userFromOld userFromNew]
+                      else []
+    let evResFrom  := if resFromOld != resFromNew then
+                        [Event.balanceChanged fromResource reserveActor resFromOld resFromNew]
+                      else []
+    let evResTo    := if resToOld != resToNew then
+                        [Event.balanceChanged toResource reserveActor resToOld resToNew]
+                      else []
+    let evUserTo   := if userToOld != userToNew then
+                        [Event.balanceChanged toResource user userToOld userToNew]
+                      else []
+    evUserFrom ++ evResFrom ++ evResTo ++ evUserTo
   -- Workstream-LX (LX.19): codegen-managed Lex `actionEvents`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no `Action` constructor, so it has no
@@ -458,6 +486,17 @@ def extractEvents
       -- consume it to close out AMM reserve views and attribute the
       -- pool credit to the disaster-recovery flow.
       [Event.ammReservesReclaimed resource amount reserveActor poolActor]
+    | .reserveSwap fromResource toResource user amountIn _minAmountOut reserveActor =>
+      -- Workstream SB: user-swap semantic event.  Emitted
+      -- UNCONDITIONALLY like its bridge-family siblings.  The
+      -- `amountOut` is the COMPUTED quote, recomputed here from the
+      -- PRE-state exactly as `Laws.reserveSwap`'s apply priced it —
+      -- one formula (`Laws.reserveQuote`), read by the law's pre,
+      -- its apply, and this event.
+      [Event.reserveSwapExecuted fromResource toResource user amountIn
+        (Laws.reserveQuote preState.base fromResource toResource
+          reserveActor amountIn)
+        reserveActor]
     | _                                     => []
   -- Workstream GP §15E (v1.0): for `topUpActionBudget`, also emit
   -- the signer's gas-balance change as a delta-filtered

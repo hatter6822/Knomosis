@@ -296,8 +296,7 @@ theorem uint256BE_size (n : Nat) : (uint256BE n).size = 32 := by
 /-- The constructor-index dispatcher byte for an `Action`.  Mirrors
     the Solidity `ActionKind` enum and `Encoding.Action.encode`'s
     leading-tag emission.  Frozen, append-only: a new variant takes
-    the next index (currently `0..21`; `21` =
-    `topUpActionBudgetFor`). -/
+    the next index (currently `0..25`; `25` = `reserveSwap`). -/
 def actionKindByte : Action → UInt8
   | .transfer _ _ _ _              => 0
   | .mint _ _ _                    => 1
@@ -346,24 +345,12 @@ def actionKindByte : Action → UInt8
   -- `_stepReclaimAmmReserves` decoder, and the cross-stack fixtures
   -- ship alongside, so kind 24 is L1-fault-proof-*executable*.
   | .reclaimAmmReserves _ _ _ _     => 24
-
-/-- The `stepVMHash`-*dispatched* kind range, `0..24` — the 25
-    variants for which the L1 step-VM has a real execution arm with a
-    cross-stack Solidity counterpart.  Used by the coverage regression
-    test (`for kind in actionKindByteCases`) to assert each dispatched
-    kind yields a non-empty hash.
-
-    Note (GP.11.10): index `24` (`reclaimAmmReserves`) joined this
-    list once its `stepVMHash` execution arm
-    (`stepCommitReclaimAmmReserves`) and the Solidity
-    `_stepReclaimAmmReserves` decoder + cross-stack fixtures landed;
-    `stepVMHash` now returns the empty-hash sentinel only for kinds
-    `≥ 25` (see `stepVMHash_unknown_kind_empty`).  This list
-    enumerates the kinds that are currently
-    L1-fault-proof-*executable*, which is the property the coverage
-    test needs. -/
-def actionKindByteCases : List UInt8 :=
-  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+  -- Workstream SB: the user-facing L2 swap.  Dispatcher index 25.
+  -- The verifier-side derivation (`VerifierWrites`) and the Solidity
+  -- root-computing kind-25 arm re-derive the constant-product quote
+  -- from the opened pre-value cells at the shared
+  -- `AmmMath.swapFeeBps`.
+  | .reserveSwap _ _ _ _ _ _        => 25
 
 /-! ## `actionFieldsForL1` — canonical byte layout per variant
 
@@ -524,6 +511,21 @@ def actionFieldsForL1 : Action → ByteArray
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       uint64BE r.toNat ++ uint256BE amount ++
       uint64BE reserveActor.toNat ++ uint64BE poolActor.toNat
+  -- Workstream SB: reserveSwap is a structured variant:
+  -- `uint64BE fromResource || uint64BE toResource || uint64BE user ||
+  -- uint256BE amountIn || uint256BE minAmountOut || uint64BE
+  -- reserveActor` (96 bytes: fromResource@0, toResource@8, user@16,
+  -- amountIn@24, minAmountOut@56, reserveActor@88).  The kernel-state
+  -- effect (the four chained balance writes priced by the
+  -- constant-product quote over the reserve's opened pre-values) is
+  -- re-derived — not read from the fields — by both stacks'
+  -- verifier-side write derivations; `minAmountOut` is decoded so the
+  -- evaluated precondition can check the slippage floor exactly as
+  -- the law does.
+  | .reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      uint64BE fromResource.toNat ++ uint64BE toResource.toNat ++
+      uint64BE user.toNat ++ uint256BE amountIn ++ uint256BE minAmountOut ++
+      uint64BE reserveActor.toNat
 
 /-! ## The L1 log-entry chain
 

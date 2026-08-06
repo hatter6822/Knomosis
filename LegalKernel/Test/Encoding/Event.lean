@@ -73,7 +73,9 @@ def sampleEvents : List Event :=
   , .delegatedActionBudgetTopUp 9 7 0 500 10 1
   , .budgetConsumed 42 1
   , .ammSwapExecuted 0 1 1000 995 77
-  , .ammReservesReclaimed 0 5000 77 88 ]
+  , .ammReservesReclaimed 0 5000 77 88
+  , .reserveSwapExecuted 0 1 9 1000 993 3
+  , .reserveSeeded 0 2500 3 12 ]
 
 /-- The frozen tag every `Event` constructor must carry, spelled out
     by hand rather than read back from `Event.tag` — so this table is
@@ -111,6 +113,8 @@ def requiredTag : Event → Nat
   | .budgetConsumed             .. => 20
   | .ammSwapExecuted            .. => 21
   | .ammReservesReclaimed       .. => 22
+  | .reserveSwapExecuted        .. => 23
+  | .reserveSeeded              .. => 24
 
 /-- Assert that `e` encodes and decodes back to itself, consuming
     the whole stream (no trailing bytes). -/
@@ -125,23 +129,23 @@ def assertRoundtrips (e : Event) : IO Unit := do
 
 /-- Every frozen constructor round-trips encode→decode. -/
 def roundtripAllConstructors : TestCase := {
-  name := "Event codec round-trips all 23 constructors"
+  name := "Event codec round-trips all 25 constructors"
   body := do
     for e in sampleEvents do
       assertRoundtrips e
 }
 
-/-- The round-trip sweep covers exactly the 23 frozen tags 0..22,
+/-- The round-trip sweep covers exactly the 25 frozen tags 0..24,
     one event per tag (catches an omitted / duplicated constructor
     in `sampleEvents`), and each sample's `Event.tag` agrees with the
     hand-spelled `requiredTag` table (catches a renumbering). -/
 def roundtripCoversAllTags : TestCase := {
-  name := "Event round-trip sweep covers tags 0..22"
+  name := "Event round-trip sweep covers tags 0..24"
   body := do
     let tags := (sampleEvents.map Event.tag)
-    assertEq (23 : Nat) tags.length "sample count"
-    -- Tags are exactly 0..22 in order.
-    assertEq (List.range 23) tags "sample tags are 0..22 in order"
+    assertEq (25 : Nat) tags.length "sample count"
+    -- Tags are exactly 0..24 in order.
+    assertEq (List.range 25) tags "sample tags are 0..24 in order"
     -- Non-circular cross-check against the total `requiredTag` match:
     -- `Event.tag` must agree with the independently spelled table, so
     -- a renumbering of either is caught here rather than silently

@@ -1316,6 +1316,7 @@ theorem apply_admissible_base
   | depositWithFee _ _ _ _ _ _ _  => simp_all [step_impl]
   | ammSwap _ _ _ _ _             => simp_all [step_impl]
   | reclaimAmmReserves _ _ _ _    => simp_all [step_impl]
+  | reserveSwap _ _ _ _ _ _       => simp_all [step_impl]
 
 /-- The post-application `base` state for `topUpActionBudget`
     actions specifically.  The kernel step is signer-aware
@@ -1604,6 +1605,7 @@ theorem admission_consumes_budget_on_success
     | faultProofResolution _ _ _ _  => rw [← hsuc]
     | ammSwap _ _ _ _ _             => rw [← hsuc]
     | reclaimAmmReserves _ _ _ _    => rw [← hsuc]
+    | reserveSwap _ _ _ _ _ _       => rw [← hsuc]
   rw [hgrant]
   exact EpochBudgetState.currentBudget_after_consume_self
     es.epochBudgets st.signer currentEpoch freeTier actionCost ebs' hconsume
@@ -1782,6 +1784,7 @@ theorem bridgeActor_budget_exempt
   | faultProofResolution _ _ _ _  => rfl
   | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-- §15E (v1.0) / GP.3.2.g — `depositWithFee_grants_budget`.
 
@@ -2142,6 +2145,7 @@ theorem admission_locality_in_budget
     | faultProofResolution _ _ _ _  => rw [← hsuc]
     | ammSwap _ _ _ _ _             => rw [← hsuc]
     | reclaimAmmReserves _ _ _ _    => rw [← hsuc]
+    | reserveSwap _ _ _ _ _ _       => rw [← hsuc]
   rw [hgrant]
   exact EpochBudgetState.currentBudget_after_consume_other
     es.epochBudgets st.signer other currentEpoch freeTier actionCost
@@ -2936,6 +2940,7 @@ theorem non_registry_mutating_preserves_registry
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
   -- Workstream-LX (LX.19): codegen-managed Lex
   -- `non_registry_mutating_preserves_registry` proof arms land
   -- between the fence markers below.  Each Lex law that compiles
@@ -3157,6 +3162,7 @@ theorem non_meta_preserves_localPolicies
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-- LP.5: a different actor's `localPolicies` entry is unchanged by
     `apply_admissible` regardless of the action.  The local-policy
@@ -3204,6 +3210,7 @@ theorem localPolicies_other_actor_untouched
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-- LP.5: field-projection: the post-application `localPolicies`
     equals the result of `applyActionToLocalPolicies` applied to
@@ -3260,14 +3267,14 @@ class RegistryPreserving (a : Action) : Prop where
 
 /-! ### Per-action instances (LX.3)
 
-Fifteen instances cover every kernel-built-in `Action`
-constructor that does NOT mutate the registry.  Each reduces to
-`rfl` via the catch-all `_ => kr` branch of
-`applyActionToRegistry`.  The two deliberate absences
-(`replaceKey`, `registerIdentity`) make Lean's `inferInstance`
-fail for those constructors; downstream callers needing
-"this action preserves the registry" automatically discover the
-exclusion. -/
+One instance per kernel-built-in `Action` constructor that does
+NOT mutate the registry — every constructor except the two
+registry-mutating ones.  Each reduces to `rfl` via the catch-all
+`_ => kr` branch of `applyActionToRegistry`.  The two deliberate
+absences (`replaceKey`, `registerIdentity`) make Lean's
+`inferInstance` fail for those constructors; downstream callers
+needing "this action preserves the registry" automatically
+discover the exclusion. -/
 
 /-- `transfer` preserves the registry. -/
 instance transfer_registryPreserving
@@ -3400,6 +3407,42 @@ instance topUpActionBudgetFor_registryPreserving
     (budgetIncrement : Nat) (poolActor : ActorId) :
     RegistryPreserving (.topUpActionBudgetFor recipient gasResource gasAmount
                           budgetIncrement poolActor) where
+  preserves := fun _ => rfl
+
+/-- Workstream GP (GP.9.1): `claimBudgetRefund` preserves the
+    registry.  The pool-to-claimant gas credit and the budget debit
+    neither touch the `KeyRegistry`. -/
+instance claimBudgetRefund_registryPreserving
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor : ActorId) :
+    RegistryPreserving (.claimBudgetRefund gasResource budgetUnits
+                          weiPerBudgetUnit poolActor) where
+  preserves := fun _ => rfl
+
+/-- Workstream GP (GP.11.4): `ammSwap` preserves the registry.  Both
+    reserve-balance legs live in `State.balances`, never the
+    `KeyRegistry`. -/
+instance ammSwap_registryPreserving
+    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+    (ammReserveActor : ActorId) :
+    RegistryPreserving (.ammSwap fromResource toResource amountIn amountOut
+                          ammReserveActor) where
+  preserves := fun _ => rfl
+
+/-- Workstream GP (GP.11.10): `reclaimAmmReserves` preserves the
+    registry.  The reserve sweep moves balances only. -/
+instance reclaimAmmReserves_registryPreserving
+    (r : ResourceId) (amount : Amount) (reserveActor poolActor : ActorId) :
+    RegistryPreserving (.reclaimAmmReserves r amount reserveActor poolActor) where
+  preserves := fun _ => rfl
+
+/-- Workstream SB: `reserveSwap` preserves the registry.  All four
+    swap legs live in `State.balances`, never the `KeyRegistry`. -/
+instance reserveSwap_registryPreserving
+    (fromResource toResource : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (reserveActor : ActorId) :
+    RegistryPreserving (.reserveSwap fromResource toResource user amountIn
+                          minAmountOut reserveActor) where
   preserves := fun _ => rfl
 
 end Authority

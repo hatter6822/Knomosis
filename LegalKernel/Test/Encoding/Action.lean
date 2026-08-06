@@ -618,7 +618,7 @@ def sampleAddr : Bridge.EthAddress :=
 
 /-! ## Per-constructor completeness oracle
 
-`Action` has 25 frozen constructors.  Before this, the suite pinned only
+`Action` has 26 frozen constructors.  Before this, the suite pinned only
 spot-checks, so nothing mechanically established that a sweep touched
 every variant — a constructor could be added, or an existing one's
 encoding changed, without any test noticing.
@@ -671,7 +671,8 @@ def sampleActions : List Action :=
   , .topUpActionBudgetFor 20 1 2 3 4
   , .claimBudgetRefund 0 89 1000 1
   , .ammSwap 0 1 1000 995 77
-  , .reclaimAmmReserves 0 5000 77 88 ]
+  , .reclaimAmmReserves 0 5000 77 88
+  , .reserveSwap 0 1 9 1000 990 3 ]
 
 /-- The frozen tag every `Action` constructor must carry.  Total over
     `Action` — see the section note above. -/
@@ -701,15 +702,16 @@ def requiredActionTag : Action → Nat
   | .claimBudgetRefund    .. => 22
   | .ammSwap              .. => 23
   | .reclaimAmmReserves   .. => 24
+  | .reserveSwap          .. => 25
 
-/-- The sweep covers exactly the 25 frozen tags 0..24, one action per
+/-- The sweep covers exactly the 26 frozen tags 0..25, one action per
     tag, and `Action.tag` agrees with the hand-spelled table. -/
 def actionSweepCoversAllTags : TestCase := {
-  name := "Action sweep covers tags 0..24"
+  name := "Action sweep covers tags 0..25"
   body := do
     let tags := sampleActions.map Action.tag
-    assertEq (25 : Nat) tags.length "sample count"
-    assertEq (List.range 25) tags "sample tags are 0..24 in order"
+    assertEq (26 : Nat) tags.length "sample count"
+    assertEq (List.range 26) tags "sample tags are 0..25 in order"
     for a in sampleActions do
       assertEq (requiredActionTag a) (Action.tag a)
         s!"Action.tag agrees with requiredActionTag for tag {requiredActionTag a}"
@@ -717,7 +719,7 @@ def actionSweepCoversAllTags : TestCase := {
 
 /-- Every frozen constructor round-trips encode→decode. -/
 def actionSweepRoundtrips : TestCase := {
-  name := "Action codec round-trips all 25 constructors"
+  name := "Action codec round-trips all 26 constructors"
   body := do
     for a in sampleActions do
       let bytes := Encodable.encode (T := Action) a

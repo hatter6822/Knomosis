@@ -111,6 +111,12 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   -- admission-layer checks (`BridgeAdmissibleWith` conjunct 9 over the
   -- L2 `ammDisabled` mirror), not L1 step-VM cell reads.
   | .reclaimAmmReserves _ _ _ _,   signer => [.registry signer]
+  -- Workstream SB: the user swap.  Reads only the signer's registry
+  -- entry — every cell the quote is priced FROM (the reserve's two
+  -- balances, the user's from-balance) is also WRITTEN, so they live
+  -- in `writeCells`, whose openings carry the pre-values the L1
+  -- verifier re-derives the quote from.
+  | .reserveSwap _ _ _ _ _ _,      signer => [.registry signer]
 
 /-- The cell tags an action writes.  Per the §4.13 contract,
     every action advances the signer's nonce; the per-action
@@ -222,6 +228,15 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- credit the pool actor) plus the signer's nonce.
   | .reclaimAmmReserves r _ ra pa, signer =>
       [.balance r ra, .balance r pa, .nonce signer, .epochBudget signer]
+  -- Workstream SB: the user swap writes FOUR balance cells — the user
+  -- and the reserve each at both resources, listed in the law's write
+  -- order (user debit at `fr`, reserve credit at `fr`, reserve debit
+  -- at `tr`, user credit at `tr`) — plus the signer's nonce.  The
+  -- openings of these four cells carry exactly the pre-values the L1
+  -- verifier needs to re-derive the constant-product quote.
+  | .reserveSwap fr tr user _ _ ra, signer =>
+      [.balance fr user, .balance fr ra, .balance tr ra, .balance tr user,
+       .nonce signer, .epochBudget signer]
 
 /-- The cells an action writes whose KEY is a function of the
     pre-state rather than of the action.
