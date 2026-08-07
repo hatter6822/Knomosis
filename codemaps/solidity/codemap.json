@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "e06f75274ee3502aeda0d6ef8876dc991dc1f131341ff7380140231206a0733e"
+    "source_digest": "7de899d05e776dbcaf42e5e45058dc8afe4de018aa16810acba8f7dda4d83f15"
   },
   "summary": {
     "module_count": 107,
@@ -12160,13 +12160,13 @@
         {
           "kind": "function",
           "name": "test_canonicalAbsence_rejects_present_values",
-          "line": 864,
+          "line": 872,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_the_fold_reaches_the_published_root",
-          "line": 900,
+          "line": 908,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12180,7 +12180,7 @@
         {
           "kind": "function",
           "name": "test_leafPreimage_is_reconstructible",
-          "line": 954,
+          "line": 962,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12190,7 +12190,7 @@
         {
           "kind": "function",
           "name": "test_writeSet_matches_lean",
-          "line": 982,
+          "line": 990,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12200,7 +12200,7 @@
         {
           "kind": "function",
           "name": "assertWriteSetExternal",
-          "line": 997,
+          "line": 1005,
           "called": [
             "beginEntry",
             "checkEq"
@@ -12209,7 +12209,7 @@
         {
           "kind": "function",
           "name": "test_writeSet_refuses_the_bulk_pair_and_the_retired_kind",
-          "line": 1048,
+          "line": 1056,
           "called": [
             "beginEntry",
             "checkGe"
@@ -12218,7 +12218,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 1081,
+          "line": 1089,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12229,7 +12229,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 1110,
+          "line": 1118,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -12242,7 +12242,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 1141,
+          "line": 1149,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -12255,7 +12255,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 1191,
+          "line": 1199,
           "called": [
             "_skipWithReason",
             "beginEntry",
@@ -12267,7 +12267,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 1239,
+          "line": 1247,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12277,13 +12277,13 @@
         {
           "kind": "function",
           "name": "_tryActionCommit",
-          "line": 1269,
+          "line": 1277,
           "called": []
         },
         {
           "kind": "function",
           "name": "describeRevert",
-          "line": 1282,
+          "line": 1290,
           "called": [
             "revertSelector"
           ]
@@ -12291,7 +12291,7 @@
         {
           "kind": "function",
           "name": "test_every_declared_error_is_described",
-          "line": 1297,
+          "line": 1305,
           "called": [
             "assertEveryDeclaredErrorIsDescribed"
           ]

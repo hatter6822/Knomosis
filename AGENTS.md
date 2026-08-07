@@ -877,11 +877,15 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 303 | 172 | `lake test` |
-| Rust | ~2 497 | across 13 crates | `cargo test --workspace` |
-| Solidity | ~997 passed | 73 forge suites | `cd solidity && forge test` |
+| Lean | ~3 235 | 172 | `lake test` |
+| Rust | ~2 483 | across 13 crates | `cargo test --workspace` |
+| Solidity | ~909 passed | 64 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **997 passed / 0 failed / 0 skipped** — the
+(The Solidity count dropped from ~997 with the Workstream AX
+excision — the six L1-AMM swap suites and the kind-23 corpus rows
+went with the venue they exercised.)
+
+`forge test` runs **909 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -902,11 +906,11 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 987 / 0 / 0.  It is not redundant: a bare `lake test`
-runs on the FALLBACK hash, where 10 Lean cross-stack assertions report
-`SKIPPED` rather than comparing anything.  Under the keccak lane that
-count is **zero** — every corpus is checked against real keccak256 on
-both sides.
+reports the same 909 / 0 / 0.  It is not redundant: a bare `lake test`
+runs on the FALLBACK hash, where the hash-dependent Lean cross-stack
+assertions report `SKIPPED` rather than comparing anything.  Under the
+keccak lane that count is **zero** — every corpus is checked against
+real keccak256 on both sides.
 
 Only monotonic growth is enforced — no global gate pins the count.
 

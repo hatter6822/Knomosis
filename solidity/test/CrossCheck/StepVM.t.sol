@@ -836,6 +836,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 string.concat(".absentValueGoldens[", vm.toString(i), "]");
             uint8 cellKind =
                 uint8(vm.parseJsonUint(raw, string.concat(base, ".cellKind")));
+            // Cell kinds 7/8 (the excised bridgeAmmReserve* books) are
+            // permanent holes — a corpus carrying one has drifted.
+            checkTrue(
+                cellKind != 7 && cellKind != 8,
+                string.concat("retired cell kind in the corpus at ", base)
+            );
             bytes memory expected =
                 vm.parseJsonBytes(raw, string.concat(base, ".absentValueHex"));
             try proxy.canonicalAbsence(cellKind) returns (
@@ -851,7 +857,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
                     string.concat("canonicalAbsentValue reverted ", describeRevert(err)));
             }
         }
-        assertEq(n, 15, "every cell kind must be covered");
+        // 15 assigned cell kinds (0..14) minus the two permanent holes
+        // left by the excised bridgeAmmReserve* books (7, 8).
+        assertEq(n, 13, "every live cell kind must be covered");
     }
 
     /// @notice A NON-marker value is not classified as absent.
