@@ -370,9 +370,16 @@ batch of 1 000; the dispute path (1 206 393-gas terminate incl. the
 inclusion proof AND the F-A signature check) is paid only when a
 batch is disputed, by the party the bond economics already price.
 
-Deferred by design: on-chain signature VERIFICATION at terminate
-(the leaf binds the bytes; verification needs an L1 actorId→key
-surface).  The Lean game model's actions-root anchor — formerly the
+Nothing in the terminal step is deferred any more.  On-chain
+signature VERIFICATION landed with Workstream F-A: the "L1
+actorId→key surface" the original deferral called missing is the
+REGISTRY CELL itself, opened against the state root the game already
+anchors.  The terminal step recomputes the §8.8.5 digest from the
+packed action fields, resolves the signer's registered key from that
+opening, and requires `ecrecover` to land on it — and an entry whose
+signature does not verify adjudicates to the PRE-root, because an
+inadmissible entry's truthful post-state is the state before it.
+The Lean game model mirrors the gate (`applyTransitionWith`).  The Lean game model's actions-root anchor — formerly the
 second deferral here (the standing audit-22 MAJOR) — is built:
 `GameState.actionsRoot` anchors the disputed batch's root,
 `terminateOnSingleStep` carries the responder's inclusion proof and

@@ -43,6 +43,25 @@ open LegalKernel.Test
 
 namespace LegalKernel.Test.FaultProof.Settlement
 
+/-! ## F-A fixtures: the registry opening and the verifier stubs
+
+The model's signature gate resolves the signer's key by opening its
+registry cell against the disputed range's PRE-state root, then calls
+the deployment-supplied verifier.  The opening below is the REAL one
+(so the gate's own proof check is exercised rather than stubbed);
+the verifier is stubbed at its two extremes because what these cases
+test is the gate's effect on ADJUDICATION, not the cryptography —
+which `Bridge/VerifyAdaptor.lean` and the Rust adaptor own. -/
+
+/-- A verifier that accepts everything: the honest-signature world. -/
+private def acceptingVerify : PublicKey → ByteArray → Signature → Bool :=
+  fun _ _ _ => true
+
+/-- A verifier that accepts nothing: the forged-signature world — and
+    also exactly what the fail-closed production fallback does. -/
+private def rejectingVerify : PublicKey → ByteArray → Signature → Bool :=
+  fun _ _ _ => false
+
 /-- A second non-zero commit, distinct from `oneCommit`. -/
 private def twoCommit : StateCommit :=
   ByteArray.mk #[2, 2, 2, 2, 2, 2, 2, 2,
@@ -115,6 +134,17 @@ private def settlementActionsRoot : ByteArray :=
 /-- The inclusion proof for the batch's single action. -/
 private def settlementActionProof : SmtCellProof :=
   buildActionProof 0 [settlementLogEntry] 0
+
+/-- The signer's registry cell at the settlement pre-state — a CBE
+    byte string wrapping the registered key, so the F-A gate can
+    decode it. -/
+private def settlementRegistryValue : ByteArray :=
+  getCellValue settlementBase (.registry 7)
+
+/-- Its single-cell opening against `oneCommit`, the disputed range's
+    `low` — the F-A calldata the terminate transition carries. -/
+private def settlementRegistryProof : SmtCellProof :=
+  buildStateCellProof settlementBase (.registry 7)
 
 /-- A game state with the challenger's turn at a single-step
     range. -/
@@ -207,8 +237,9 @@ def tests : List TestCase :=
     { name := "sequencer responder, step reproduces high → sequencerWon"
     , body := do
         let step := stepClaiming oneCommit twoCommit
-        match applyTransition (matchingGame .sequencer)
-                (.terminateOnSingleStep step settlementActionProof) with
+        match applyTransitionWith acceptingVerify (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.sequencerWon) (actual := gs'.status)
             "an honest sequencer defending a true endpoint wins"
@@ -217,8 +248,9 @@ def tests : List TestCase :=
   , { name := "challenger responder, step reproduces high → challengerWon"
     , body := do
         let step := stepClaiming oneCommit twoCommit
-        match applyTransition (matchingGame .challenger)
-                (.terminateOnSingleStep step settlementActionProof) with
+        match applyTransitionWith acceptingVerify (matchingGame .challenger)
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
             "the win follows the turn, not the party"
@@ -232,7 +264,8 @@ def tests : List TestCase :=
         -- no adjudicator participates.
         let step := stepClaiming oneCommit twoCommit
         match applyTransition (mismatchGame .sequencer)
-                (.terminateOnSingleStep step settlementActionProof) with
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
             "a fabricated endpoint cannot be defended"
@@ -243,7 +276,8 @@ def tests : List TestCase :=
         -- Symmetric: the settlement is turn-based, not party-based.
         let step := stepClaiming oneCommit twoCommit
         match applyTransition (mismatchGame .challenger)
-                (.terminateOnSingleStep step settlementActionProof) with
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.sequencerWon) (actual := gs'.status)
             "the determinism is symmetric across turn parities"
@@ -259,8 +293,10 @@ def tests : List TestCase :=
         -- never read and both must settle identically.
         let stepA := stepClaiming oneCommit twoCommit
         let stepB := stepClaiming oneCommit (computedFor oneCommit)
-        match applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepA settlementActionProof),
-              applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepB settlementActionProof) with
+        match applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepA settlementActionProof
+                  settlementRegistryValue settlementRegistryProof),
+              applyTransition (mismatchGame .sequencer) (.terminateOnSingleStep stepB settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok a, .ok b =>
           assertEq (expected := a.status) (actual := b.status)
             "the responder's own claim must not move the settlement"
@@ -275,8 +311,9 @@ def tests : List TestCase :=
         -- would let them manufacture any post-commit; the transition
         -- refuses it.  `twoCommit ≠ range.low.commit = oneCommit`.
         let step := stepClaiming twoCommit (computedFor twoCommit)
-        match applyTransition (matchingGame .sequencer)
-                (.terminateOnSingleStep step settlementActionProof) with
+        match applyTransitionWith acceptingVerify (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
             "a step from an uncommitted pre-state loses"
@@ -290,7 +327,8 @@ def tests : List TestCase :=
         let g := { matchingGame .sequencer with
                      pendingMidpoint := some { idx := 1, commit := oneCommit } }
         let step := stepClaiming oneCommit twoCommit
-        match applyTransition g (.terminateOnSingleStep step settlementActionProof) with
+        match applyTransition g (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok _ => assert false "should refuse to terminate mid-bisection"
         | .error e =>
           assertEq (expected := GameError.terminationDuringBisection) (actual := e)
@@ -309,8 +347,9 @@ def tests : List TestCase :=
         let step :=
           { buildKernelStep settlementBase substituted 1 with
               preStateCommit := oneCommit }
-        match applyTransition (matchingGame .sequencer)
-                (.terminateOnSingleStep step settlementActionProof) with
+        match applyTransitionWith acceptingVerify (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok _ => assert false "a substituted action must not settle"
         | .error e =>
           assertEq (expected := GameError.actionNotInBatch) (actual := e)
@@ -327,8 +366,9 @@ def tests : List TestCase :=
         let step :=
           { buildKernelStep settlementBase resigned 1 with
               preStateCommit := oneCommit }
-        match applyTransition (matchingGame .sequencer)
-                (.terminateOnSingleStep step settlementActionProof) with
+        match applyTransitionWith acceptingVerify (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok _ => assert false "a re-signed action must not settle"
         | .error e =>
           assertEq (expected := GameError.actionNotInBatch) (actual := e)
@@ -344,8 +384,9 @@ def tests : List TestCase :=
         let step :=
           { buildKernelStep settlementBase shortSig 1 with
               preStateCommit := oneCommit }
-        match applyTransition (matchingGame .sequencer)
-                (.terminateOnSingleStep step settlementActionProof) with
+        match applyTransitionWith acceptingVerify (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok _ => assert false "a mis-width signature must not settle"
         | .error e =>
           assertEq (expected := GameError.actionNotInBatch) (actual := e)
@@ -361,19 +402,110 @@ def tests : List TestCase :=
         let step :=
           { buildKernelStep settlementBase trivialSignedAction 0 with
               preStateCommit := oneCommit }
-        match applyTransition (matchingGame .sequencer)
-                (.terminateOnSingleStep step settlementActionProof) with
+        match applyTransitionWith acceptingVerify (matchingGame .sequencer)
+                (.terminateOnSingleStep step settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
         | .ok gs' =>
           assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
             "a caller-chosen log index loses"
         | .error e => assert false s!"transition should settle; got {repr e}"
     }
+  , { name := "forged signature ⇒ the entry is a no-op, so the responder loses"
+    , body := do
+        -- The F-A verdict.  The action IS in the batch (the leaf
+        -- binds these very bytes, so authentication passes), but no
+        -- registered key authorises it.  An entry the L2 admission
+        -- gate would have refused has no state change to defend: its
+        -- truthful post-state is the PRE-state, so the adjudicated
+        -- root is `low.commit`, which cannot equal a disputed `high`
+        -- that claims the transfer happened.  On the sequencer's turn
+        -- that is a challenger win.
+        match applyTransitionWith rejectingVerify (matchingGame .sequencer)
+                (.terminateOnSingleStep (stepClaiming oneCommit twoCommit)
+                  settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
+        | .ok gs' =>
+          assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
+            "an unauthorised entry cannot be defended"
+        | .error e => assert false s!"transition should settle; got {repr e}"
+    }
+  , { name := "forged signature is a NO-OP, not an automatic loss"
+    , body := do
+        -- The other half, and the one that pins the semantics: with
+        -- the disputed endpoint set to the PRE-root — what an honest
+        -- transcript records for an inadmissible entry — the same
+        -- forged-signature step WINS.  Together the two cases pin the
+        -- verdict to the no-op rather than to "invalid ⇒ responder
+        -- loses", which would be a different and wrong rule.
+        let noOpGame : GameState :=
+          { matchingGame .sequencer with
+              range := { low  := { idx := 0, commit := oneCommit }
+                       , high := { idx := 1, commit := oneCommit } } }
+        match applyTransitionWith rejectingVerify noOpGame
+                (.terminateOnSingleStep (stepClaiming oneCommit twoCommit)
+                  settlementActionProof
+                  settlementRegistryValue settlementRegistryProof) with
+        | .ok gs' =>
+          assertEq (expected := GameStatus.sequencerWon) (actual := gs'.status)
+            "the no-op root is defensible; the entry simply did nothing"
+        | .error e => assert false s!"transition should settle; got {repr e}"
+    }
+  , { name := "unregistered signer ⇒ no key can authorise the entry"
+    , body := do
+        -- Same verdict by a different route: the registry cell is
+        -- ABSENT at the pre-state, so `registryCellKey` yields none
+        -- and the gate refuses before any verifier is consulted —
+        -- which is why even the ACCEPTING verifier loses here.
+        let unregBase : ExtendedState :=
+          { settlementBase with registry := (∅ : KeyRegistry) }
+        let unregCommit := commitExtendedState unregBase
+        let unregGame : GameState :=
+          { matchingGame .sequencer with
+              range := { low  := { idx := 0, commit := unregCommit }
+                       , high := { idx := 1, commit := twoCommit } } }
+        let step :=
+          { buildKernelStep unregBase trivialSignedAction 1 with
+              preStateCommit := unregCommit }
+        let absentValue := getCellValue unregBase (.registry 7)
+        let absentProof := buildStateCellProof unregBase (.registry 7)
+        if absentValue.size ≠ 0 then
+          assert false "the unregistered fixture's registry cell must be absent"
+        match applyTransitionWith acceptingVerify unregGame
+                (.terminateOnSingleStep step settlementActionProof
+                  absentValue absentProof) with
+        | .ok gs' =>
+          assertEq (expected := GameStatus.challengerWon) (actual := gs'.status)
+            "an unregistered signer cannot authorise an entry"
+        | .error e => assert false s!"transition should settle; got {repr e}"
+    }
+  , { name := "a registry opening that does not verify is REFUSED, not lost"
+    , body := do
+        -- The one calldata defect in the gate.  The true opening
+        -- exists for both a present and an absent cell, so the
+        -- responsible party retries with it; losing the game on a
+        -- malformed proof would be a different rule, and the wrong
+        -- one.  Mirrors the L1's `RegistryOpeningInvalid` revert.
+        let wrongValue : ByteArray :=
+          getCellValue settlementBase (.registry 8)   -- a DIFFERENT cell
+        match applyTransitionWith acceptingVerify (matchingGame .sequencer)
+                (.terminateOnSingleStep (stepClaiming oneCommit twoCommit)
+                  settlementActionProof
+                  wrongValue settlementRegistryProof) with
+        | .ok _ => assert false "a forged registry opening must not settle"
+        | .error e =>
+          assertEq (expected := GameError.registryOpeningInvalid) (actual := e)
+            "the opening is checked against the pre-state root"
+    }
   , { name := "terminate_ok_requires_authentication type stable"
     , body := do
         let _proof :
-            ∀ {gs gs' : GameState} {step : KernelStep}
-              {actionProof : SmtCellProof},
-              applyTransition gs (.terminateOnSingleStep step actionProof)
+            ∀ {verify : PublicKey → ByteArray → Signature → Bool}
+              {gs gs' : GameState} {step : KernelStep}
+              {actionProof : SmtCellProof} {registryValue : ByteArray}
+              {registryProof : SmtCellProof},
+              applyTransitionWith verify gs
+                (.terminateOnSingleStep step actionProof registryValue
+                  registryProof)
                 = .ok gs' →
               step.signedAction.sig.size = 65 ∧
                 verifyActionProof gs.actionsRoot gs.range.low.idx
@@ -385,8 +517,10 @@ def tests : List TestCase :=
     , body := do
         let _proof :
             ∀ (truth : LogIndex → StateCommit)
+              (verify : PublicKey → ByteArray → Signature → Bool)
               (gs gs' : GameState) (step : KernelStep)
               (actionProof trueProof : SmtCellProof)
+              (registryValue : ByteArray) (registryProof : SmtCellProof)
               (trueKind : UInt8) (trueSigner : Nat)
               (trueFields trueSig : ByteArray),
               gs.turn = .sequencer →
@@ -425,7 +559,11 @@ def tests : List TestCase :=
                 ∀ c, verifierPostRootMulti gs.range.low.commit st.action
                       st.signer gs.range.high.idx b = some c →
                   c = truth gs.range.high.idx) →
-              applyTransition gs (.terminateOnSingleStep step actionProof)
+              signatureAdmissible verify gs.deploymentId step registryValue
+                = true →
+              applyTransitionWith verify gs
+                (.terminateOnSingleStep step actionProof registryValue
+                  registryProof)
                 = .ok gs' →
               gs'.status = .challengerWon :=
           anchored_challenger_wins
@@ -462,8 +600,10 @@ def tests : List TestCase :=
     { name := "terminate_responder_wins_when_step_reproduces_high type stable"
     , body := do
         let _proof :
-            ∀ (gs gs' : GameState) (step : KernelStep)
-              (actionProof : SmtCellProof),
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (gs gs' : GameState) (step : KernelStep)
+              (actionProof : SmtCellProof)
+              (registryValue : ByteArray) (registryProof : SmtCellProof),
               gs.status = .inProgress →
               gs.range.isSingleStep →
               gs.pendingMidpoint = none →
@@ -473,7 +613,14 @@ def tests : List TestCase :=
               step.preStateCommit = gs.range.low.commit →
               step.l2LogIndex = gs.range.high.idx →
               kernelStepApply step = some gs.range.high.commit →
-              applyTransition gs (.terminateOnSingleStep step actionProof)
+              verifyStateCellProof gs.range.low.commit
+                (.registry step.signedAction.signer) registryValue
+                registryProof = true →
+              signatureAdmissible verify gs.deploymentId step registryValue
+                = true →
+              applyTransitionWith verify gs
+                (.terminateOnSingleStep step actionProof registryValue
+                  registryProof)
                 = .ok gs' →
               gs'.status =
                 (match gs.turn with
@@ -485,8 +632,10 @@ def tests : List TestCase :=
   , { name := "terminate_responder_loses_when_step_differs type stable"
     , body := do
         let _proof :
-            ∀ (gs gs' : GameState) (step : KernelStep)
-              (actionProof : SmtCellProof) (computed : StateCommit),
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (gs gs' : GameState) (step : KernelStep)
+              (actionProof : SmtCellProof)
+              (registryValue : ByteArray) (registryProof : SmtCellProof) (computed : StateCommit),
               gs.status = .inProgress →
               gs.range.isSingleStep →
               gs.pendingMidpoint = none →
@@ -497,7 +646,14 @@ def tests : List TestCase :=
               step.l2LogIndex = gs.range.high.idx →
               kernelStepApply step = some computed →
               computed ≠ gs.range.high.commit →
-              applyTransition gs (.terminateOnSingleStep step actionProof)
+              verifyStateCellProof gs.range.low.commit
+                (.registry step.signedAction.signer) registryValue
+                registryProof = true →
+              signatureAdmissible verify gs.deploymentId step registryValue
+                = true →
+              applyTransitionWith verify gs
+                (.terminateOnSingleStep step actionProof registryValue
+                  registryProof)
                 = .ok gs' →
               gs'.status =
                 (match gs.turn with
@@ -514,8 +670,11 @@ def tests : List TestCase :=
         -- and no response-branch disjunction any more — the
         -- settlement reads both sides from the game state.
         let _proof :
-            ∀ (truth : LogIndex → StateCommit) (gs gs' : GameState)
-              (step : KernelStep) (actionProof : SmtCellProof),
+            ∀ (truth : LogIndex → StateCommit)
+              (verify : PublicKey → ByteArray → Signature → Bool)
+              (gs gs' : GameState)
+              (step : KernelStep) (actionProof : SmtCellProof)
+              (registryValue : ByteArray) (registryProof : SmtCellProof),
               gs.status = .inProgress →
               gs.range.isSingleStep →
               gs.pendingMidpoint = none →
@@ -527,7 +686,14 @@ def tests : List TestCase :=
               gs.turn = .sequencer →
               settlementDisagreement truth gs →
               kernelStepApply step = some (truth gs.range.high.idx) →
-              applyTransition gs (.terminateOnSingleStep step actionProof)
+              verifyStateCellProof gs.range.low.commit
+                (.registry step.signedAction.signer) registryValue
+                registryProof = true →
+              signatureAdmissible verify gs.deploymentId step registryValue
+                = true →
+              applyTransitionWith verify gs
+                (.terminateOnSingleStep step actionProof registryValue
+                  registryProof)
                 = .ok gs' →
               gs'.status = .challengerWon :=
           honest_challenger_wins_against_invalid_state_root

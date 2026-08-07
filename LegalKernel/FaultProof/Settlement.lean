@@ -78,7 +78,9 @@ claim and the contract awards the challenger.  This is the
     the responder's own field.  Both sides came from the responder,
     so the theorem held for every responder, honest or not. -/
 theorem terminate_responder_wins_when_step_reproduces_high
+        (verify : PublicKey → ByteArray → Signature → Bool)
     (gs gs' : GameState) (step : KernelStep) (actionProof : SmtCellProof)
+    (registryValue : ByteArray) (registryProof : SmtCellProof)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
     (h_no_pending : gs.pendingMidpoint = none)
@@ -88,15 +90,20 @@ theorem terminate_responder_wins_when_step_reproduces_high
     (h_prestate : step.preStateCommit = gs.range.low.commit)
     (h_idx : step.l2LogIndex = gs.range.high.idx)
     (h_reproduces : kernelStepApply step = some gs.range.high.commit)
-    (h_apply : applyTransition gs (.terminateOnSingleStep step actionProof)
+    (h_reg : verifyStateCellProof gs.range.low.commit
+      (.registry step.signedAction.signer) registryValue registryProof = true)
+    (h_sig_ok : signatureAdmissible verify gs.deploymentId step registryValue
+      = true)
+    (h_apply : applyTransitionWith verify gs
+      (.terminateOnSingleStep step actionProof registryValue registryProof)
       = .ok gs') :
     gs'.status =
       (match gs.turn with
        | .sequencer  => GameStatus.sequencerWon
        | .challenger => GameStatus.challengerWon) := by
-  unfold applyTransition at h_apply
-  simp [h_status, h_single_step, h_no_pending, h_sig, h_auth, h_prestate,
-    h_idx, h_reproduces] at h_apply
+  unfold applyTransitionWith at h_apply
+  simp [h_status, h_single_step, h_no_pending, h_sig, h_auth, h_reg, h_sig_ok,
+    h_prestate, h_idx, h_reproduces] at h_apply
   rw [← h_apply]
   rfl
 
@@ -108,7 +115,9 @@ theorem terminate_responder_wins_when_step_reproduces_high
     step VM agree with it, so it loses without any adjudicator
     participating. -/
 theorem terminate_responder_loses_when_step_differs
+        (verify : PublicKey → ByteArray → Signature → Bool)
     (gs gs' : GameState) (step : KernelStep) (actionProof : SmtCellProof)
+    (registryValue : ByteArray) (registryProof : SmtCellProof)
     (computed : StateCommit)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
@@ -120,22 +129,29 @@ theorem terminate_responder_loses_when_step_differs
     (h_idx : step.l2LogIndex = gs.range.high.idx)
     (h_computes : kernelStepApply step = some computed)
     (h_mismatch : computed ≠ gs.range.high.commit)
-    (h_apply : applyTransition gs (.terminateOnSingleStep step actionProof)
+    (h_reg : verifyStateCellProof gs.range.low.commit
+      (.registry step.signedAction.signer) registryValue registryProof = true)
+    (h_sig_ok : signatureAdmissible verify gs.deploymentId step registryValue
+      = true)
+    (h_apply : applyTransitionWith verify gs
+      (.terminateOnSingleStep step actionProof registryValue registryProof)
       = .ok gs') :
     gs'.status =
       (match gs.turn with
        | .sequencer  => GameStatus.challengerWon
        | .challenger => GameStatus.sequencerWon) := by
-  unfold applyTransition at h_apply
-  simp [h_status, h_single_step, h_no_pending, h_sig, h_auth, h_prestate,
-    h_idx, h_computes, h_mismatch] at h_apply
+  unfold applyTransitionWith at h_apply
+  simp [h_status, h_single_step, h_no_pending, h_sig, h_auth, h_reg, h_sig_ok,
+    h_prestate, h_idx, h_computes, h_mismatch] at h_apply
   rw [← h_apply]
   rfl
 
 /-- The responder loses when its cell proofs fail to verify
     against the committed pre-state. -/
 theorem terminate_responder_with_invalid_proofs_loses
+        (verify : PublicKey → ByteArray → Signature → Bool)
     (gs gs' : GameState) (step : KernelStep) (actionProof : SmtCellProof)
+    (registryValue : ByteArray) (registryProof : SmtCellProof)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
     (h_no_pending : gs.pendingMidpoint = none)
@@ -145,15 +161,18 @@ theorem terminate_responder_with_invalid_proofs_loses
     (h_prestate : step.preStateCommit = gs.range.low.commit)
     (h_idx : step.l2LogIndex = gs.range.high.idx)
     (h_kernel_fails : kernelStepApply step = none)
-    (h_apply : applyTransition gs (.terminateOnSingleStep step actionProof)
+    (h_reg : verifyStateCellProof gs.range.low.commit
+      (.registry step.signedAction.signer) registryValue registryProof = true)
+    (h_apply : applyTransitionWith verify gs
+      (.terminateOnSingleStep step actionProof registryValue registryProof)
       = .ok gs') :
     gs'.status =
       (match gs.turn with
        | .sequencer  => GameStatus.challengerWon
        | .challenger => GameStatus.sequencerWon) := by
-  unfold applyTransition at h_apply
-  simp [h_status, h_single_step, h_no_pending, h_sig, h_auth, h_prestate,
-    h_idx, h_kernel_fails] at h_apply
+  unfold applyTransitionWith at h_apply
+  simp [h_status, h_single_step, h_no_pending, h_sig, h_auth, h_reg,
+    h_prestate, h_idx, h_kernel_fails] at h_apply
   rw [← h_apply]
   rfl
 
@@ -167,7 +186,9 @@ theorem terminate_responder_with_invalid_proofs_loses
     disputed step from a fabricated pre-state and manufacture
     whatever post-commit it needed. -/
 theorem terminate_responder_with_wrong_prestate_loses
+        (verify : PublicKey → ByteArray → Signature → Bool)
     (gs gs' : GameState) (step : KernelStep) (actionProof : SmtCellProof)
+    (registryValue : ByteArray) (registryProof : SmtCellProof)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
     (h_no_pending : gs.pendingMidpoint = none)
@@ -175,13 +196,14 @@ theorem terminate_responder_with_wrong_prestate_loses
     (h_auth : verifyActionProof gs.actionsRoot gs.range.low.idx
       (actionLeafValue step.signedAction) actionProof = true)
     (h_prestate : step.preStateCommit ≠ gs.range.low.commit)
-    (h_apply : applyTransition gs (.terminateOnSingleStep step actionProof)
+    (h_apply : applyTransitionWith verify gs
+      (.terminateOnSingleStep step actionProof registryValue registryProof)
       = .ok gs') :
     gs'.status =
       (match gs.turn with
        | .sequencer  => GameStatus.challengerWon
        | .challenger => GameStatus.sequencerWon) := by
-  unfold applyTransition at h_apply
+  unfold applyTransitionWith at h_apply
   simp [h_status, h_single_step, h_no_pending, h_sig, h_auth, h_prestate]
     at h_apply
   rw [← h_apply]
@@ -234,7 +256,9 @@ instance instDecidableSettlementDisagreement
     honestly so that the sequencer owes the terminate. -/
 theorem honest_challenger_wins_against_invalid_state_root
     (truth : LogIndex → StateCommit)
+        (verify : PublicKey → ByteArray → Signature → Bool)
     (gs gs' : GameState) (step : KernelStep) (actionProof : SmtCellProof)
+    (registryValue : ByteArray) (registryProof : SmtCellProof)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
     (h_no_pending : gs.pendingMidpoint = none)
@@ -247,15 +271,21 @@ theorem honest_challenger_wins_against_invalid_state_root
     (h_disagree : settlementDisagreement truth gs)
     (h_kernel_truthful :
         kernelStepApply step = some (truth gs.range.high.idx))
-    (h_apply : applyTransition gs (.terminateOnSingleStep step actionProof)
+    (h_reg : verifyStateCellProof gs.range.low.commit
+      (.registry step.signedAction.signer) registryValue registryProof = true)
+    (h_sig_ok : signatureAdmissible verify gs.deploymentId step registryValue
+      = true)
+    (h_apply : applyTransitionWith verify gs
+      (.terminateOnSingleStep step actionProof registryValue registryProof)
       = .ok gs') :
     gs'.status = .challengerWon := by
   have h_mismatch : truth gs.range.high.idx ≠ gs.range.high.commit :=
     Ne.symm h_disagree
   have h := terminate_responder_loses_when_step_differs
-              gs gs' step actionProof (truth gs.range.high.idx)
+              verify gs gs' step actionProof registryValue registryProof
+              (truth gs.range.high.idx)
               h_status h_single_step h_no_pending h_sig h_auth h_prestate
-              h_idx h_kernel_truthful h_mismatch h_apply
+              h_idx h_kernel_truthful h_mismatch h_reg h_sig_ok h_apply
   rw [h, h_turn]
 
 /-- `honest_challenger_wins_against_invalid_state_root` with the bare
@@ -274,7 +304,9 @@ theorem honest_challenger_wins_against_invalid_state_root
     accepts — no pending midpoint — it forces `turn = sequencer`. -/
 theorem honest_challenger_wins_of_turn_aligned
     (truth : LogIndex → StateCommit)
+        (verify : PublicKey → ByteArray → Signature → Bool)
     (gs gs' : GameState) (step : KernelStep) (actionProof : SmtCellProof)
+    (registryValue : ByteArray) (registryProof : SmtCellProof)
     (h_status : gs.status = .inProgress)
     (h_single_step : gs.range.isSingleStep)
     (h_no_pending : gs.pendingMidpoint = none)
@@ -287,13 +319,19 @@ theorem honest_challenger_wins_of_turn_aligned
     (h_disagree : settlementDisagreement truth gs)
     (h_kernel_truthful :
         kernelStepApply step = some (truth gs.range.high.idx))
-    (h_apply : applyTransition gs (.terminateOnSingleStep step actionProof)
+    (h_reg : verifyStateCellProof gs.range.low.commit
+      (.registry step.signedAction.signer) registryValue registryProof = true)
+    (h_sig_ok : signatureAdmissible verify gs.deploymentId step registryValue
+      = true)
+    (h_apply : applyTransitionWith verify gs
+      (.terminateOnSingleStep step actionProof registryValue registryProof)
       = .ok gs') :
     gs'.status = .challengerWon :=
-  honest_challenger_wins_against_invalid_state_root truth gs gs' step
-    actionProof h_status h_single_step h_no_pending h_sig h_auth h_prestate
+  honest_challenger_wins_against_invalid_state_root truth verify gs gs' step
+    actionProof registryValue registryProof
+    h_status h_single_step h_no_pending h_sig h_auth h_prestate
     h_idx (terminate_owner_is_sequencer h_aligned h_no_pending)
-    h_disagree h_kernel_truthful h_apply
+    h_disagree h_kernel_truthful h_reg h_sig_ok h_apply
 
 /-! ## The anchor's inversion + the anchored composite (Workstream SB
 follow-up: the audit-22 model-chain-binding MAJOR)
@@ -324,13 +362,16 @@ not a settlement. -/
     its signature-bound leaf opens at the disputed index against the
     game's anchored actions root. -/
 theorem terminate_ok_requires_authentication
+    {verify : PublicKey → ByteArray → Signature → Bool}
     {gs gs' : GameState} {step : KernelStep} {actionProof : SmtCellProof}
-    (h_apply : applyTransition gs (.terminateOnSingleStep step actionProof)
+    {registryValue : ByteArray} {registryProof : SmtCellProof}
+    (h_apply : applyTransitionWith verify gs
+      (.terminateOnSingleStep step actionProof registryValue registryProof)
       = .ok gs') :
     step.signedAction.sig.size = 65 ∧
       verifyActionProof gs.actionsRoot gs.range.low.idx
         (actionLeafValue step.signedAction) actionProof = true := by
-  simp only [applyTransition] at h_apply
+  simp only [applyTransitionWith] at h_apply
   split at h_apply
   · exact absurd h_apply (by simp)      -- gameAlreadyEnded
   · split at h_apply
@@ -378,8 +419,10 @@ theorem terminate_ok_requires_authentication
     is a challenger win. -/
 theorem anchored_challenger_wins
     (truth : LogIndex → StateCommit)
+    (verify : PublicKey → ByteArray → Signature → Bool)
     (gs gs' : GameState) (step : KernelStep)
     (actionProof trueProof : SmtCellProof)
+    (registryValue : ByteArray) (registryProof : SmtCellProof)
     (trueKind : UInt8) (trueSigner : Nat) (trueFields trueSig : ByteArray)
     (h_turn : gs.turn = .sequencer)
     (h_disagree : settlementDisagreement truth gs)
@@ -415,7 +458,10 @@ theorem anchored_challenger_wins
         ∀ c, verifierPostRootMulti gs.range.low.commit st.action st.signer
               gs.range.high.idx b = some c →
           c = truth gs.range.high.idx)
-    (h_apply : applyTransition gs (.terminateOnSingleStep step actionProof)
+    (h_sig_ok : signatureAdmissible verify gs.deploymentId step registryValue
+      = true)
+    (h_apply : applyTransitionWith verify gs
+      (.terminateOnSingleStep step actionProof registryValue registryProof)
       = .ok gs') :
     gs'.status = .challengerWon := by
   -- The `.ok` outcome forces the authentication gate.
@@ -441,7 +487,7 @@ theorem anchored_challenger_wins
   -- Walk the arm: the remaining branches are the Lean-model-only
   -- refusal (a challenger win at the sequencer's turn) and the fold,
   -- which `h_truthful` pins to the truth.
-  simp only [applyTransition] at h_apply
+  simp only [applyTransitionWith] at h_apply
   split at h_apply
   · exact absurd h_apply (by simp)      -- gameAlreadyEnded
   · split at h_apply
@@ -456,36 +502,44 @@ theorem anchored_challenger_wins
             injection h_apply with h_gs
             rw [← h_gs]
             simp [h_turn]
-          · -- The fold ran.  Its result, if any, is the truth.
+          · -- Name the pre-state / log-index guard BEFORE the F-A
+            -- registry split, or `rename_i` grabs the registry
+            -- guard introduced after it.
             rename_i h_pre_idx
-            rw [not_or] at h_pre_idx
-            obtain ⟨h_pre, h_idx⟩ := h_pre_idx
-            have h_pre' : step.preStateCommit = gs.range.low.commit :=
-              Decidable.of_not_not h_pre
-            have h_idx' : step.l2LogIndex = gs.range.high.idx :=
-              Decidable.of_not_not h_idx
-            cases h_fold : kernelStepApply step with
-            | none =>
-              rw [h_fold] at h_apply
-              injection h_apply with h_gs
-              rw [← h_gs]
-              simp [h_turn]
-            | some c =>
-              have h_c : c = truth gs.range.high.idx := by
-                refine h_truthful step.signedAction step.bundle h_k h_s h_f
-                  h_g c ?_
-                have h_run := h_fold
-                unfold kernelStepApply at h_run
-                rw [h_pre', h_idx'] at h_run
-                exact h_run
-              rw [h_fold] at h_apply
-              have h_ne : c ≠ gs.range.high.commit := by
-                rw [h_c]
-                exact Ne.symm h_disagree
-              simp only [h_ne, if_false] at h_apply
-              injection h_apply with h_gs
-              rw [← h_gs]
-              simp [h_turn]
+            split at h_apply
+            · exact absurd h_apply (by simp)  -- registryOpeningInvalid
+            · -- The fold ran.  Its result, if any, is the truth.
+              rw [not_or] at h_pre_idx
+              obtain ⟨h_pre, h_idx⟩ := h_pre_idx
+              have h_pre' : step.preStateCommit = gs.range.low.commit :=
+                Decidable.of_not_not h_pre
+              have h_idx' : step.l2LogIndex = gs.range.high.idx :=
+                Decidable.of_not_not h_idx
+              cases h_fold : kernelStepApply step with
+              | none =>
+                rw [h_fold] at h_apply
+                injection h_apply with h_gs
+                rw [← h_gs]
+                simp [h_turn]
+              | some c =>
+                have h_c : c = truth gs.range.high.idx := by
+                  refine h_truthful step.signedAction step.bundle h_k h_s h_f
+                    h_g c ?_
+                  have h_run := h_fold
+                  unfold kernelStepApply at h_run
+                  rw [h_pre', h_idx'] at h_run
+                  exact h_run
+                have h_ne : c ≠ gs.range.high.commit := by
+                  rw [h_c]
+                  exact Ne.symm h_disagree
+                -- The adjudicated root is the FOLD's (the signature
+                -- verifies), and the fold's is the truth — which the
+                -- fabricated endpoint disagrees with.
+                rw [h_fold] at h_apply
+                simp only [h_ne, if_false] at h_apply
+                injection h_apply with h_gs
+                rw [← h_gs]
+                simp [h_turn]
 
 /-! ## Trace-level composition with `disagreement_persists_along_trace`
 

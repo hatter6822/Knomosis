@@ -127,7 +127,7 @@ def transitionJson (t : GameTransition) : Test.Bridge.CrossCheck.Json :=
     .obj [ ("kind", .str "RespondAgree") ]
   | .respondDisagree =>
     .obj [ ("kind", .str "RespondDisagree") ]
-  | .terminateOnSingleStep _ _ =>
+  | .terminateOnSingleStep _ _ _ _ =>
     -- Nothing but the tag.  The step itself stays off the wire (the
     -- L1 step VM is the authority), and there is no
     -- `claimed_post_commit` any more: the contract compares the step
@@ -156,6 +156,7 @@ def outcomeJson (e : Except GameError GameState) :
       | .bisectionDepthExceeded   => "BisectionDepthExceeded"
       | .terminationDuringBisection => "TerminationDuringBisection"
       | .actionNotInBatch           => "ActionNotInBatch"
+      | .registryOpeningInvalid     => "RegistryOpeningInvalid"
     .obj [ ("kind", .str "Err"), ("error", .str tag) ]
 
 /-! ## Trace structure -/
@@ -730,7 +731,7 @@ def tests : List Test.TestCase :=
         for t in corpus do
           for s in t.steps do
             match s.transition with
-            | .terminateOnSingleStep _ _ =>
+            | .terminateOnSingleStep _ _ _ _ =>
               throw (IO.userError
                 s!"trace {t.id} emits TerminateOnSingleStep; this is disallowed (Lean/Rust diverge on terminate outcome — see transitionJson docstring)")
             | .submitMidpoint _   => pure ()

@@ -163,6 +163,19 @@ structure TerminateBundle where
       step's writes cannot move it and the pre- and post-folds share
       it — `multiSiblings_congr` is the Lean statement of that. -/
   wire              : SmtMultiProof
+  /-- Workstream F-A: the SIGNER'S REGISTRY CELL at the pre-state —
+      a CBE byte string wrapping the registered public key, or EMPTY
+      when the signer is unregistered (a real, adjudicable state: no
+      key can have authorised the entry).  CALLDATA: the L1 resolves
+      the signer's key from it before verifying the committed
+      signature. -/
+  registryValue     : ByteArray
+  /-- Workstream F-A: that cell's single-cell opening against the
+      disputed range's PRE-state root.  CALLDATA.  Present for BOTH
+      the registered and unregistered cases — an absent cell opens
+      from the canonical empty leaf — so it is what decides whether a
+      bundle carries an F-A opening at all. -/
+  registryProof     : SmtCellProof
   deriving Repr
 
 /-! ## Bundle builder
@@ -200,7 +213,9 @@ def buildTerminateBundle
       (stepMultiPostRoot preState entry.signedAction l2LogIndex).getD
         ByteArray.empty,
     openedCells       := (stepMultiBundle preState entry.signedAction).cells,
-    wire              := (stepMultiBundle preState entry.signedAction).proof }
+    wire              := (stepMultiBundle preState entry.signedAction).proof,
+    registryValue     := getCellValue preState (.registry signer),
+    registryProof     := buildStateCellProof preState (.registry signer) }
 
 /-! ## Well-formedness theorems -/
 
@@ -488,7 +503,13 @@ def formatTerminateBundleJson (fixtureId : String)
     q ++ "gap_mask_hex" ++ q, ":", q ++ bytesHex bundle.wire.gapMask ++ q, ",",
     q ++ "siblings_hex" ++ q, ":",
       q ++ bytesHex (bundle.wire.siblings.foldl (fun acc s => acc ++ s)
-                       (ByteArray.mk #[])) ++ q,
+                       (ByteArray.mk #[])) ++ q, ",",
+    q ++ "registry_value_hex" ++ q, ":",
+      q ++ bytesHex bundle.registryValue ++ q, ",",
+    q ++ "registry_proof_hex" ++ q, ":",
+      q ++ bytesHex (bundle.registryProof.bitmask ++
+             bundle.registryProof.siblings.foldl (fun acc s => acc ++ s)
+               (ByteArray.mk #[])) ++ q,
     batchFields,
     "}"
   ]

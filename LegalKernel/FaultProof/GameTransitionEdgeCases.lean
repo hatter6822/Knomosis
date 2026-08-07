@@ -53,7 +53,7 @@ theorem applyTransition_rejects_response_without_pendingMidpoint
     (h_no_mp : gs.pendingMidpoint = none)
     (h_status : gs.status = .inProgress) :
     ∃ e, applyTransition gs .respondAgree = .error e := by
-  unfold applyTransition
+  unfold applyTransition applyTransitionWith
   by_cases h_cap : MAX_BISECTION_DEPTH ≤ gs.depth
   · -- Depth-cap branch.
     rw [h_status]
@@ -70,7 +70,7 @@ theorem applyTransition_rejects_disagree_without_pendingMidpoint
     (h_no_mp : gs.pendingMidpoint = none)
     (h_status : gs.status = .inProgress) :
     ∃ e, applyTransition gs .respondDisagree = .error e := by
-  unfold applyTransition
+  unfold applyTransition applyTransitionWith
   by_cases h_cap : MAX_BISECTION_DEPTH ≤ gs.depth
   · rw [h_status]
     simp [h_cap]
@@ -86,7 +86,7 @@ theorem applyTransition_rejects_post_settlement
     (t : GameTransition)
     (h_settled : gs.status ≠ .inProgress) :
     ∃ e, applyTransition gs t = .error e := by
-  unfold applyTransition
+  unfold applyTransition applyTransitionWith
   cases h_status_eq : gs.status with
   | inProgress => exact absurd h_status_eq h_settled
   | sequencerWon => cases t <;> exact ⟨_, rfl⟩
@@ -134,7 +134,7 @@ theorem applyTransition_submitMidpoint_rejects_iff_degenerate
         ∨ gs.range.high.idx ≤ gs.range.midpointIdx) ↔
       gs.range.high.idx ≤ gs.range.low.idx + 1 :=
     midpointIdx_degenerate_iff gs.range.low.idx gs.range.high.idx
-  unfold applyTransition
+  unfold applyTransition applyTransitionWith
   rw [h_status, h_no_pending]
   simp only [if_neg h_depth]
   constructor

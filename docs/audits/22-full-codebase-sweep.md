@@ -1318,7 +1318,10 @@ used for `CollisionFreeOn`.
 > registry-cell opening against the pre-root and requires
 > `ecrecover` of the recomputed §8.8.5 digest to land on it, with an
 > invalid signature adjudicated as the no-op it is.  The Lean game
-> model's mirror of that gate is the remaining piece.
+> model MIRRORS that gate too (amendment 1.36): `applyTransitionWith`
+> carries the verifier, the terminate arm opens the signer's registry
+> cell against the pre-root, and an unauthorised entry adjudicates to
+> `low.commit` — so F-A is closed on both stacks.
 
 `applyTransition gs (.terminateOnSingleStep step)` calls
 `kernelStepApply step` and compares the result against

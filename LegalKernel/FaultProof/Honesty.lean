@@ -150,7 +150,7 @@ theorem applyTransition_sequencer_timeout_settles
     (h_turn : gs.turn = .sequencer) :
     ∃ gs', applyTransition gs .timeoutLoss = .ok gs' ∧
            gs'.status = .timedOutSequencer := by
-  unfold applyTransition
+  unfold applyTransition applyTransitionWith
   simp [h_status, h_turn]
 
 /-- #269 — Honest challenger wins via sequencer timeout: if
