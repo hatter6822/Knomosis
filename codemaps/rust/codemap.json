@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c054b2e9055386fdbbccbfda0050fc9ab00d7dcd40b4809bf2be40944ab8c193"
+    "source_digest": "4b5762db4af9c63071c2a90cee5df0d3957ee5703646306ce672d624020b6d3c"
   },
   "summary": {
     "module_count": 194,
@@ -10692,12 +10692,15 @@
             "append_log_frame",
             "as_bytes",
             "clone",
+            "count",
             "encode_inbound",
             "handle",
+            "is_empty",
             "iter",
             "len",
             "log_path",
             "make_server",
+            "max",
             "parse",
             "path",
             "push",
@@ -10713,7 +10716,7 @@
         {
           "kind": "fn",
           "name": "symlinked_log_path_rejected",
-          "line": 1044,
+          "line": 1094,
           "called": [
             "EventClass",
             "EventStreamStats",
@@ -10725,7 +10728,7 @@
         {
           "kind": "fn",
           "name": "cbe_uint",
-          "line": 1074,
+          "line": 1124,
           "called": [
             "push",
             "to_le_bytes"
@@ -10734,7 +10737,7 @@
         {
           "kind": "fn",
           "name": "cbe_event",
-          "line": 1085,
+          "line": 1135,
           "called": [
             "cbe_uint",
             "tag"
@@ -10743,7 +10746,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_events_stream_verbatim",
-          "line": 1102,
+          "line": 1152,
           "called": [
             "EventType",
             "_",
@@ -10772,7 +10775,7 @@
         {
           "kind": "fn",
           "name": "future_unknown_event_tag_streams_verbatim",
-          "line": 1182,
+          "line": 1232,
           "called": [
             "addr",
             "append_log_frame",
@@ -10796,7 +10799,7 @@
         {
           "kind": "fn",
           "name": "mixed_legacy_and_gas_pool_batch_streams_in_order",
-          "line": 1226,
+          "line": 1276,
           "called": [
             "addr",
             "append_log_frame",
@@ -10821,7 +10824,7 @@
         {
           "kind": "fn",
           "name": "extractor_records_event_type_stats",
-          "line": 1279,
+          "line": 1329,
           "called": [
             "_",
             "addr",
