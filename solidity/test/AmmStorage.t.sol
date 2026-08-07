@@ -9,41 +9,33 @@ import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
 import {MockBold} from "test/utils/MockBold.sol";
 
 /// @title AmmStorageTest
-/// @notice Workstream GP.11.1 — the embedded ETH<->BOLD AMM's L1 state
-///         variables, reserves, and the immutable seed-ratio cap.
+/// @notice Workstream GP.11.1 — the AMM seed configuration surface: the
+///         immutable `ammSeedRatioBps`, its constitutional cap, and the
+///         deposit-time seed split the ratio drives.
 ///
-/// @dev    GP.11.1 declared the two AMM reserve storage slots
-///         (`ammReserveEth` / `ammReserveBold`), the immutable
-///         `ammSeedRatioBps`, and the two constitutional caps
-///         (`AMM_SWAP_FEE_BPS`, `MAX_AMM_SEED_RATIO_BPS`), plus the
-///         constructor validation that pins the seed ratio under the cap.
-///         This suite pins that GP.11.1 STORAGE surface: the caps are
-///         pinned, the seed ratio is stored / validated over the whole
-///         `uint16` domain, the reserves start at zero with NO write path
-///         other than deposit seeding, the AMM state has no admin setter,
-///         and the constructor guard ordering is fixed.  The acceptance
-///         criterion GP.11.1.c — "`ammSeedRatioBps = 0` preserves v1.2
-///         behaviour" — is pinned by `test_deposit_doesNotSeedReserves_whenDisabled`
+/// @dev    GP.11.1 declared the immutable `ammSeedRatioBps`, the
+///         constitutional cap `MAX_AMM_SEED_RATIO_BPS`, and the
+///         constructor validation that pins the ratio under the cap.
+///         Under the one-AMM L2-primary topology the L1 reserve books
+///         the ratio used to feed (`ammReserveEth` / `ammReserveBold`,
+///         with the swap-side cap pair) are EXCISED: the seed leg is
+///         reported in the canonical `DepositWithFeeInitiated` event's
+///         `ammSeedAmount` field (bound in the `receiptHash`) and
+///         credited to the L2 reserve actor by the kernel, while the
+///         wei stays in general escrow.  This suite pins what remains
+///         of the STORAGE surface: the cap is pinned, the seed ratio
+///         is stored / validated over the whole `uint16` domain, the
+///         AMM state has no admin setter, and the constructor guard
+///         ordering is fixed.  The acceptance criterion GP.11.1.c —
+///         "`ammSeedRatioBps = 0` preserves v1.2 behaviour" — is
+///         pinned by `test_deposit_doesNotSeedReserves_whenDisabled`
 ///         (a disabled deposit seeds nothing and matches the
-///         `FeeSplitMath` reference) and `test_coreSplit_ratioInvariant_butAmmSeedScales`
+///         `FeeSplitMath` reference) and
+///         `test_coreSplit_ratioInvariant_butAmmSeedScales`
 ///         (the core `(userAmount, poolAmount, budgetGrant)` triple is
-///         ratio-invariant while the GP.11.2 `ammSeedAmount` field of the
-///         canonical `DepositWithFeeInitiated` event — and the receiptHash —
-///         scales with the ratio).
-///
-///         GP.11.2 has since landed deposit-side SEEDING: a non-zero seed
-///         ratio now moves `floor(poolAmount * ratio / 10000)` of every
-///         fee-split deposit into the matching reserve, and the canonical
-///         `DepositWithFeeInitiated` event carries the `ammSeedAmount` (bound
-///         in the `receiptHash`).  The comprehensive seeding behaviour
-///         (conservation fuzz, both legs, the event's `ammSeedAmount` field,
-///         monotonic accumulation, the reserve-subset-of-TVL invariant) lives
-///         in `AmmDepositSeeding.t.sol`;
-///         this file keeps only minimal positive seeding sanity checks
-///         (`test_deposit_seedsReserves_whenRatioNonZero`,
-///         `test_boldDeposit_seedsReserve`,
-///         `test_ammSeedRatio_immutable_reservesGrowAcrossDeposits`) so the
-///         storage-surface tests stay self-contained.
+///         ratio-invariant while the `ammSeedAmount` field — and the
+///         receiptHash — scales with the ratio).  The comprehensive
+///         seed-split behaviour lives in `AmmDepositSeeding.t.sol`.
 contract AmmStorageTest is Test, BoldTestSupport {
     address private alice = address(0xA1);
 
@@ -140,8 +132,8 @@ contract AmmStorageTest is Test, BoldTestSupport {
     ///         while balances are seeded after the etch via `mint`.
     /// @notice Deploy a BOLD-ENABLED bridge with a chosen `ammSeedRatioBps`.
     ///         Requires a BOLD mock etched at the pinned address first
-    ///         (`_etchBold`).  Used to prove the BOLD deposit leg also
-    ///         leaves `ammReserveBold` untouched at GP.11.1.
+    ///         (`_etchBold`).  Used by the seed-leg tests that need a
+    ///         functional (BOLD-enabled) AMM configuration.
     function _deployBoldEnabled(uint16 ammSeedRatioBps) internal returns (KnomosisBridge) {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
@@ -217,19 +209,21 @@ contract AmmStorageTest is Test, BoldTestSupport {
     }
 
     // ------------------------------------------------------------------
-    // GP.11.1.a / GP.11.1.b — constitutional caps are pinned
+    // GP.11.1.a / GP.11.1.b — the constitutional cap is pinned
     // ------------------------------------------------------------------
 
-    /// @notice The two embedded-AMM compile-time caps carry their
-    ///         canonical values.  This is the runtime half of the
-    ///         two-layer cap protection; the source half is the GP.5.2
-    ///         `scripts/audit_compile_time_caps.sh` gate (which now also
-    ///         pins these two constants).
+    /// @notice The seed-ratio compile-time cap carries its canonical
+    ///         value.  This is the runtime half of the two-layer cap
+    ///         protection; the source half is the GP.5.2
+    ///         `scripts/audit_compile_time_caps.sh` gate (which also
+    ///         pins this constant).  The swap-side pair that used to
+    ///         sit beside it lives on as `AmmMath.SWAP_FEE_BPS` /
+    ///         `AmmMath.MINIMUM_LIQUIDITY` (pinned by `AmmMath.t.sol`,
+    ///         `StepVMRootReserveSwap.t.sol` and the kind-25
+    ///         cross-stack corpus); the bridge itself no longer
+    ///         carries a swap surface.
     function test_ammCompileTimeCaps_pinned() public {
         KnomosisBridge bridge = _deploy(0);
-        // The swap fee lives on as `AmmMath.SWAP_FEE_BPS` (pinned by
-        // `AmmMath.t.sol` + the kind-25 cross-stack corpus); the bridge
-        // itself no longer carries a swap surface.
         assertEq(bridge.MAX_AMM_SEED_RATIO_BPS(), 8000, "MAX_AMM_SEED_RATIO_BPS == 8000 bps (80%)");
     }
 
@@ -279,26 +273,13 @@ contract AmmStorageTest is Test, BoldTestSupport {
     }
 
     // ------------------------------------------------------------------
-    // GP.11.1.a — reserves start at zero and have no direct setter
-    // ------------------------------------------------------------------
-
-    /// @notice Both AMM reserves are zero on a fresh deployment,
-    ///         independent of the configured seed ratio (no deposit has
-    ///         occurred yet, and there is no constructor-side seeding).
-    function test_ammReserves_startAtZero() public {
-        KnomosisBridge disabled = _deploy(0);
-
-        KnomosisBridge enabled = _deploy(5000);
-    }
-
-    // ------------------------------------------------------------------
     // GP.11.1.c — `ammSeedRatioBps = 0` preserves v1.2 behaviour
     // ------------------------------------------------------------------
 
     /// @notice With the AMM disabled, a fee-split deposit behaves exactly
     ///         as in v1.2: the emitted split matches the `FeeSplitMath`
     ///         reference, TVL grows by the full deposit, the per-depositor
-    ///         nonce advances, and neither reserve is touched.
+    ///         nonce advances, and the emitted `ammSeedAmount` is 0.
     function test_deposit_doesNotSeedReserves_whenDisabled() public {
         KnomosisBridge bridge = _deploy(0);
 
@@ -333,12 +314,12 @@ contract AmmStorageTest is Test, BoldTestSupport {
     }
 
     /// @notice GP.11.3 review fix (comment 1): a BOLD-DISABLED deployment
-    ///         seeds NOTHING even with a positive `ammSeedRatioBps`, because the
-    ///         ETH<->BOLD AMM can never swap without a BOLD leg, so any seeded
-    ///         ETH would be permanently unswappable.  Every ETH fee therefore
-    ///         stays sequencer-claimable free pool: `ammReserveEth` stays 0 and
-    ///         the emitted `ammSeedAmount` is 0, while the FULL deposit still
-    ///         credits TVL.  Pins the `_seedAmmReserves` `!boldEnabled` guard.
+    ///         seeds NOTHING even with a positive `ammSeedRatioBps`, because
+    ///         an ETH<->BOLD pool can never swap without a BOLD leg, so any
+    ///         seeded ETH would be permanently unswappable.  Every ETH fee
+    ///         therefore stays sequencer-claimable free pool: the emitted
+    ///         `ammSeedAmount` is 0, while the FULL deposit still credits
+    ///         TVL.  Pins the `_ammSeedSplit` `!boldEnabled` guard.
     function test_boldDisabled_seedsNothing_despitePositiveRatio() public {
         // BOLD disabled (boldTokenAddress == 0) BUT a max seed ratio: the
         // constructor allows this combination, and the fix makes seeding inert.
@@ -367,12 +348,13 @@ contract AmmStorageTest is Test, BoldTestSupport {
         assertEq(bridge.totalLockedValue(), value, "full deposit still credited to TVL");
     }
 
-    /// @notice GP.11.2: a non-zero seed ratio now seeds the matching
-    ///         reserve while the FULL deposit is still credited to TVL (the
-    ///         seed is a reclassification of pool fee already inside the
-    ///         escrow, not new value).  A minimal positive sanity check;
-    ///         the exhaustive seeding behaviour lives in
-    ///         `AmmDepositSeeding.t.sol`.
+    /// @notice GP.11.2: a non-zero seed ratio carves a seed leg out of
+    ///         the pool fee (reported in the event, credited to the L2
+    ///         reserve actor by the kernel) while the FULL deposit is
+    ///         still credited to TVL — the seed is a reclassification of
+    ///         pool fee already inside the escrow, not new value.  A
+    ///         minimal positive sanity check; the exhaustive seed-split
+    ///         behaviour lives in `AmmDepositSeeding.t.sol`.
     function test_deposit_seedsReserves_whenRatioNonZero() public {
         // ETH seeding accrues only on a FUNCTIONAL AMM (BOLD-enabled): a
         // BOLD-disabled deployment seeds nothing regardless of ratio (see
@@ -450,16 +432,13 @@ contract AmmStorageTest is Test, BoldTestSupport {
 
     // ------------------------------------------------------------------
     // Immutability of the seed RATIO across deposits (the `immutable`
-    // keyword guarantees it at compile time; the reserves, by contrast,
-    // grow with each GP.11.2 seed — the only AMM write path).
+    // keyword guarantees it at compile time).
     // ------------------------------------------------------------------
 
     /// @notice `ammSeedRatioBps` is `immutable` (no setter can exist) and
-    ///         stays fixed across deposits, while the matching reserve
-    ///         grows by exactly the per-deposit seed each time — the seed
-    ///         is the SOLE AMM write path, and it is deterministic in the
-    ///         (fixed) ratio.
-    function test_ammSeedRatio_immutable_reservesGrowAcrossDeposits() public {
+    ///         stays fixed across deposits, so the per-deposit seed leg
+    ///         is deterministic in the (fixed) ratio.
+    function test_ammSeedRatio_immutable_acrossDeposits() public {
         // BOLD-enabled so ETH seeding actually accrues (a BOLD-disabled
         // deployment seeds nothing).
         _etchBold();
@@ -486,7 +465,7 @@ contract AmmStorageTest is Test, BoldTestSupport {
     // ------------------------------------------------------------------
 
     /// @notice Any ratio within `[0, MAX_AMM_SEED_RATIO_BPS]` deploys and
-    ///         stores the exact value; the reserves start empty.
+    ///         stores the exact value.
     function testFuzz_constructor_withinCap_accepted(uint16 ratio) public {
         ratio = uint16(bound(uint256(ratio), 0, 8000));
         KnomosisBridge bridge = _deploy(ratio);
@@ -509,17 +488,16 @@ contract AmmStorageTest is Test, BoldTestSupport {
     // even via admin functions" (the plan's GP.11.1 test criterion).
     // ------------------------------------------------------------------
 
-    /// @notice The bridge exposes NO arbitrary mutator for the AMM RESERVES
-    ///         (`ammReserveEth` / `ammReserveBold`) or the seed ratio:
-    ///         `ammSeedRatioBps` is `immutable`, the reserves' only write
-    ///         paths are deposit seeding (GP.11.2) and `ammSwap` (GP.11.3),
-    ///         and there is no direct setter.  This probes a battery of
-    ///         plausible AMM setter selectors via low-level `call` and
-    ///         asserts every one is unroutable — the bridge has a
-    ///         `receive()` but no `fallback()`, so a 4-byte (non-empty)
-    ///         selector that matches no function reverts.  The ONE intentional
-    ///         AMM-state mutator, the GP.11.3 `emergencyDisableAmm` kill
-    ///         switch, is verified ROLE-GATED (not open) below.  Mirrors
+    /// @notice The bridge exposes NO arbitrary mutator for the AMM
+    ///         configuration: `ammSeedRatioBps` is `immutable` and the
+    ///         excised reserve books left no setter behind.  This probes
+    ///         a battery of plausible AMM setter selectors via low-level
+    ///         `call` and asserts every one is unroutable — the bridge
+    ///         has a `receive()` but no `fallback()`, so a 4-byte
+    ///         (non-empty) selector that matches no function reverts.
+    ///         The ONE intentional AMM-state mutator, the GP.11.3
+    ///         `emergencyDisableAmm` kill switch, is verified ROLE-GATED
+    ///         (not open) below.  Mirrors
     ///         `KnomosisBridge.t.sol::test_no_admin_surface` for the AMM
     ///         surface specifically.
     function test_ammState_hasNoSetterSurface() public {
@@ -552,17 +530,17 @@ contract AmmStorageTest is Test, BoldTestSupport {
     }
 
     // ------------------------------------------------------------------
-    // BOLD leg: a real BOLD deposit on a BOLD-ENABLED bridge seeds the
-    // BOLD reserve only (the ETH-leg tests run BOLD-disabled).
+    // BOLD leg: a real BOLD deposit on a BOLD-ENABLED bridge carries a
+    // BOLD seed leg (the ETH-leg tests run BOLD-disabled).
     // ------------------------------------------------------------------
 
     /// @notice GP.11.2 on the BOLD leg: a `depositBoldWithFee` on a
-    ///         BOLD-enabled bridge seeds the BOLD reserve by
-    ///         `floor(poolAmount * ratio / 10000)` and leaves the ETH
-    ///         reserve untouched, while the deposit credits the global and
-    ///         per-BOLD TVL by the FULL amount.  Exercises the BOLD seeding
-    ///         path the ETH-leg tests cannot; the exhaustive BOLD seeding
-    ///         coverage lives in `AmmDepositSeeding.t.sol`.
+    ///         BOLD-enabled bridge computes a seed leg of
+    ///         `floor(poolAmount * ratio / 10000)` while the deposit
+    ///         credits the global and per-BOLD TVL by the FULL amount.
+    ///         Exercises the BOLD seed path the ETH-leg tests cannot;
+    ///         the exhaustive BOLD seed coverage lives in
+    ///         `AmmDepositSeeding.t.sol`.
     function test_boldDeposit_seedsReserve() public {
         _etchBold();
         KnomosisBridge bridge = _deployBoldEnabled(8000);

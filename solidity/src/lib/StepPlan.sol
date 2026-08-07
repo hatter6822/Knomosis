@@ -226,18 +226,9 @@ library StepPlan {
         if (actionKind == 22) {
             return _planRefundBalances(fields, signer, pre0, pre1);
         }
-        if (actionKind == 23) {
-            // ammSwap: fromResource @0, toResource @8, amountIn @16
-            // (32), amountOut @48 (32).  The one variant touching two
-            // DIFFERENT resources, so the cells are independent.
-            return StepWrites.deriveAmmSwapBalances(
-                pre0, pre1,
-                uint64(StepWrites.readFieldUint(fields, 0, 8)),
-                uint64(StepWrites.readFieldUint(fields, 8, 8)),
-                StepWrites.readFieldUint(fields, 16, 32),
-                StepWrites.readFieldUint(fields, 48, 32)
-            );
-        }
+        // Kind 23 (the retired L1-AMM ammSwap mirror) is a permanent
+        // hole: `StepWrites.isAdjudicable(23)` is false, so a step
+        // carrying it is refused upstream and no arm exists here.
         if (actionKind == 24) {
             // reclaimAmmReserves: amount @8 (32), reserveActor @40,
             // poolActor @48.  The precondition is an EQUALITY, not a

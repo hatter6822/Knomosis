@@ -368,7 +368,7 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         (uint256 s4, uint256 f4) = FeeSplitMath.ammSeedSplit(777, 0);
         assertEq(s4, 0, "disabled seed");
         assertEq(f4, 777, "disabled free == pool");
-        // floor(1e18 * 30 / 10000) = 3e15 (the AMM_SWAP_FEE_BPS=30 shape);
+        // floor(1e18 * 30 / 10000) = 3e15 (the AmmMath.SWAP_FEE_BPS=30 shape);
         // free = 1e18 - 3e15.
         (uint256 s5, uint256 f5) = FeeSplitMath.ammSeedSplit(1e18, 30);
         assertEq(s5, 3e15, "seed 30bps of 1e18");

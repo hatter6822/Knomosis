@@ -328,7 +328,10 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     function test_isAdjudicable_excludes_exactly_the_bulk_pair() public {
         for (uint8 k = 0; k <= 30; k++) {
             beginEntry(string.concat("#", vm.toString(k)));
-            bool expected = k <= 25 && k != 6 && k != 7;
+            // The bulk pair (6, 7) by the write-set decision; 23 as the
+            // retired L1-AMM ammSwap mirror, a permanent hole refused
+            // like a never-assigned kind.
+            bool expected = k <= 25 && k != 6 && k != 7 && k != 23;
             checkEq(
                 StepWrites.isAdjudicable(k), expected,
                 string.concat("adjudicability at kind ", vm.toString(k))

@@ -20,7 +20,8 @@ pragma solidity ^0.8.36;
 ///         overflows, and a hypothetical overflow reverts rather than
 ///         wrapping.  The library validates its OWN inputs (defence in
 ///         depth) so it is a faithful, self-contained reference even though
-///         `KnomosisBridge.ammSwap` pre-validates before every call.
+///         its callers (the step VM's kind-25 arm mirroring the L2
+///         `Laws.reserveSwap`) pre-validate before every call.
 library AmmMath {
     /// @notice Basis-points denominator (100% == 10000 bps).  A `feeBps`
     ///         argument is interpreted as a fraction of this.
@@ -88,8 +89,7 @@ library AmmMath {
     /// @dev    The flooring rounds the output DOWN, which can only make
     ///         `k = reserveIn * reserveOut` increase (less leaves the pool),
     ///         never decrease — the formal basis for the k-monotonicity
-    ///         invariant.  See `KnomosisBridge.ammSwap`'s on-chain
-    ///         belt-and-braces k-check and `AmmInvariants.t.sol`.
+    ///         invariant (`reserveSwap_k_nondecreasing` on the Lean side).
     function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut, uint256 feeBps)
         internal
         pure
@@ -123,7 +123,7 @@ library AmmMath {
     /// @return amountIn    The minimum input (rounded up) for `amountOut`.
     /// @dev    Provided for completeness / symmetry (the standard Uniswap v2
     ///         pair) and exercised by `AmmMath.t.sol`'s round-trip tests;
-    ///         `KnomosisBridge.ammSwap` uses only `getAmountOut`.
+    ///         the production swap path uses only `getAmountOut`.
     function getAmountIn(uint256 amountOut, uint256 reserveIn, uint256 reserveOut, uint256 feeBps)
         internal
         pure

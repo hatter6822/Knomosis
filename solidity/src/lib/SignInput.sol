@@ -262,19 +262,10 @@ library SignInput {
                 CBEEncode.uintValue(_u64BE(fields, 48))
             );
         }
-        if (kind == 23) {
-            // ammSwap: u64 fromResource ‖ u64 toResource ‖ u256 amountIn
-            // ‖ u256 amountOut ‖ u64 ammReserveActor.
-            _requireLen(kind, fields, 88);
-            return bytes.concat(
-                tag,
-                CBEEncode.uintValue(_u64BE(fields, 0)),
-                CBEEncode.uintValue(_u64BE(fields, 8)),
-                CBEEncode.amountValue(_u256BE(fields, 16)),
-                CBEEncode.amountValue(_u256BE(fields, 48)),
-                CBEEncode.uintValue(_u64BE(fields, 80))
-            );
-        }
+        // Kind 23 (the retired L1-AMM ammSwap mirror) is a permanent
+        // hole: the Lean encoder has no tag-23 arm and its decoder
+        // refuses the tag, so this mirror falls through to
+        // `UnknownActionKind` like any never-assigned kind.
         if (kind == 24) {
             // reclaimAmmReserves: u64 r ‖ u256 amount ‖ u64 reserveActor
             // ‖ u64 poolActor.

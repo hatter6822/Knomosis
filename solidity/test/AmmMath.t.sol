@@ -30,7 +30,8 @@ contract AmmMathHarness {
 
 /// @title AmmMathTest
 /// @notice Workstream GP.11.3.a — the pure constant-product (Uniswap
-///         v2-style) swap-math library backing `KnomosisBridge.ammSwap`.
+///         v2-style) swap-math library pricing the L2 `Laws.reserveSwap`
+///         (the step VM's kind-25 arm re-derives its quotes with it).
 ///
 /// @dev    Three property layers:
 ///           1. exact hand-computed vectors (non-circular ground truth);
@@ -40,7 +41,7 @@ contract AmmMathHarness {
 ///           3. the headline k-monotonicity invariant under fuzzed inputs.
 contract AmmMathTest is Test {
     /// @dev The production swap fee (0.30%); mirrors
-    ///      `KnomosisBridge.AMM_SWAP_FEE_BPS`.
+    ///      `AmmMath.SWAP_FEE_BPS`.
     uint256 private constant FEE = 30;
     uint256 private constant BPS = 10_000;
 

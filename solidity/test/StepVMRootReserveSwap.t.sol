@@ -93,13 +93,12 @@ contract StepVMRootReserveSwapTest is Test {
     /* The fee constant is ONE value                              */
     /* ---------------------------------------------------------- */
 
-    /// @notice `AmmMath.SWAP_FEE_BPS` is pinned to 30 — the same
-    ///         number `AmmStorage.t.sol` pins for the bridge's
-    ///         `AMM_SWAP_FEE_BPS` and the cap-audit gate pins in
-    ///         source, so a re-pricing on either surface is a test
-    ///         failure rather than a silent cross-venue divergence
-    ///         (and the Lean `AmmMath.swapFeeBps` is the corpus's
-    ///         authority for the kind-25 rows).
+    /// @notice `AmmMath.SWAP_FEE_BPS` is pinned to 30, so a
+    ///         re-pricing is a test failure rather than a silent
+    ///         divergence from the Lean `AmmMath.swapFeeBps` — the
+    ///         corpus's authority for the kind-25 rows.  (With the L1
+    ///         embedded AMM excised, this library constant IS the
+    ///         production fee — the bridge no longer carries one.)
     function test_swapFeeBps_is_one_value_across_surfaces() public pure {
         assertEq(AmmMath.SWAP_FEE_BPS, 30, "AmmMath.SWAP_FEE_BPS == 30");
         assertLt(
@@ -109,23 +108,18 @@ contract StepVMRootReserveSwapTest is Test {
         );
     }
 
-    /// @notice `MINIMUM_LIQUIDITY` is ONE value across the surfaces
-    ///         that enforce it.
-    /// @dev    The bridge already floored the L1 pool; the step VM
-    ///         had to gain the same floor because the L2 law did.  A
-    ///         drift between the two is a cross-venue divergence in
-    ///         which swaps are ADMISSIBLE, which is the one
-    ///         disagreement a fault proof cannot survive — so the two
-    ///         constants are pinned equal here rather than trusted to
-    ///         stay in step.  The two are pinned to the same LITERAL
-    ///         from two independent places — this case pins the step
-    ///         VM's, and `scripts/audit_compile_time_caps.sh` pins the
-    ///         bridge's `AMM_MINIMUM_LIQUIDITY` as a constitutional
-    ///         cap — so a drift on either side fails one of them.
-    ///         Exactly the arrangement `SWAP_FEE_BPS` already uses; a
-    ///         direct cross-reference is not possible because the
-    ///         library's constant is `internal` while the gate matches
-    ///         `public constant` on a contract.
+    /// @notice `MINIMUM_LIQUIDITY` is pinned to the literal the Lean
+    ///         law floors by.
+    /// @dev    The floor keeps the constant-product curve from being
+    ///         drained to a dust ratio — a swap whose quote would draw
+    ///         the output leg below it is inadmissible on the L2, so
+    ///         the step VM's derivation must refuse the same swap or
+    ///         the two stacks disagree on ADMISSIBILITY, which is the
+    ///         one disagreement a fault proof cannot survive.  With
+    ///         the L1 embedded AMM excised this library constant is
+    ///         the only Solidity spelling of the floor, and this pin
+    ///         is what keeps it in step with the Lean side (the
+    ///         kind-25 corpus rows exercise the refusal itself).
     function test_minimumLiquidity_is_one_value_across_surfaces() public pure {
         assertEq(AmmMath.MINIMUM_LIQUIDITY, 1000, "AmmMath.MINIMUM_LIQUIDITY == 1000");
     }

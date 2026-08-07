@@ -32,19 +32,17 @@
 #   LIQUITY_V2_TROVE_MANAGER_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22
 #   LIQUITY_V2_TROVE_MANAGER_RETH   = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e
 #
-# Workstream GP.11.1 adds two constitutional embedded-AMM caps (checked
-# by the CAPS loop's uintN / decimal-literal pattern):
+# Workstream GP.11.1 adds one constitutional AMM cap (checked by the
+# CAPS loop's uintN / decimal-literal pattern):
 #
-#   AMM_SWAP_FEE_BPS       = 30   (uint16; 0.30% Uniswap-v2-standard fee)
 #   MAX_AMM_SEED_RATIO_BPS = 8000 (uint16; 80% max pool->AMM seed ratio)
-#   AMM_MINIMUM_LIQUIDITY  = 1000 (uint256; the reserve floor no swap may
-#                                  cross -- Uniswap-v2's MINIMUM_LIQUIDITY
-#                                  adapted to a reserve-pair AMM with no LP
-#                                  token to burn against.  Without it the
-#                                  constant-product curve is drainable at a
-#                                  dust ratio, which `AmmEmpty` did not
-#                                  refuse: it only ever rejected a reserve of
-#                                  exactly zero.)
+#
+# The swap-side pair that used to sit beside it (AMM_SWAP_FEE_BPS,
+# AMM_MINIMUM_LIQUIDITY) left the bridge with the embedded L1 AMM under
+# the one-AMM L2-primary topology; the values live on as the AmmMath
+# library constants (`AmmMath.SWAP_FEE_BPS`, `AmmMath.MINIMUM_LIQUIDITY`)
+# the L2 kernel prices `Laws.reserveSwap` by, corpus-pinned against the
+# Lean `swapFeeBps` rather than grep-pinned here.
 #
 # Changing any of these values is a Genesis-Plan §13.6 amendment and
 # triggers the two-reviewer rule.  This gate is the fast tripwire that
@@ -147,9 +145,7 @@ CAPS=(
     "MIN_WEI_PER_BUDGET_UNIT|uint64|1"
     "MAX_BUDGET_PER_DEPOSIT|uint64|1000000000000"
     "LIQUITY_ORACLE_READ_GAS|uint256|100000"
-    "AMM_SWAP_FEE_BPS|uint16|30"
     "MAX_AMM_SEED_RATIO_BPS|uint16|8000"
-    "AMM_MINIMUM_LIQUIDITY|uint256|1000"
 )
 
 failures=0

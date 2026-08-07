@@ -10,8 +10,8 @@ import {StepWrites} from "src/lib/StepWrites.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
-///         `step_vm.json` fixture (278 entries post-GP.11.10, after the
-///         ammSwap kind-23 arm added 10; #226 / #251
+///         `step_vm.json` fixture (278 entries after the L1-AMM
+///         excision retired kind 23 and its 10 rows; #226 / #251
 ///         coherence corpus).
 ///
 /// @dev    **One commit per entry.**  Each fixture entry carries
@@ -168,10 +168,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 count = vm.parseJsonUint(raw, ".count");
         uint256 countTransfer = vm.parseJsonUint(raw, ".countTransfer");
         uint256 countMint = vm.parseJsonUint(raw, ".countMint");
-        // Workstream SB: the corpus widened from 278 → 288 entries
-        // (+reserveSwap at 10 entries, on top of the 278 entries that
-        // already carried +ammSwap and +reclaimAmmReserves).
-        assertEq(count, 288, "SB: total corpus is 288 entries");
+        // 48 transfer/mint + 23 further variants at 10 each: the
+        // Workstream SB reserveSwap rows are in, the retired kind-23
+        // ammSwap rows are out (the L1-AMM excision).
+        assertEq(count, 278, "total corpus is 278 entries");
         assertEq(countTransfer, 24, "transfer count");
         assertEq(countMint, 24, "mint count");
         // The ONE swap-fee constant: the Lean value the corpus's
@@ -185,9 +185,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
 
     /// @notice GP.11.8 — verify the per-variant count fields are
     ///         the expected 10 each for the 17 SVC.5.e variants
-    ///         plus the 5 Workstream-GP variants
+    ///         plus the 4 Workstream-GP budget variants
     ///         (depositWithFee + topUpActionBudget +
-    ///         topUpActionBudgetFor + claimBudgetRefund + ammSwap).
+    ///         topUpActionBudgetFor + claimBudgetRefund), the
+    ///         GP.11.10 reclaim and the Workstream SB reserveSwap.
     function test_perVariant_counts() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             revert("fixture missing");
@@ -218,10 +219,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
             ".countTopUpActionBudgetFor",
             // GP.9.1: refund-on-exit at index 22.
             ".countClaimBudgetRefund",
-            // GP.11.7: AMM swap at index 23.
-            ".countAmmSwap",
+            // Kind 23 (the retired L1-AMM ammSwap) is a permanent hole:
+            // the corpus carries no rows and no count for it.
             // GP.11.10: post-disable reserve sweep at index 24.
-            ".countReclaimAmmReserves"
+            ".countReclaimAmmReserves",
+            // Workstream SB: user-facing L2 swap at index 25.
+            ".countReserveSwap"
         ];
         for (uint256 i = 0; i < variantKeys.length; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -276,10 +279,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 adversarialCount++;
             }
         }
-        // Workstream SB: 8 adversarial transfer + 8 adversarial mint +
-        // 24 x4 = 96 adversarial new-variant entries = 112 total
-        // (+reserveSwap on the 23 variants GP.11.10 left).
-        assertEq(adversarialCount, 112, "112 adversarial entries total (16 + 24 x4)");
+        // 8 adversarial transfer + 8 adversarial mint + 23 x4 = 92
+        // adversarial further-variant entries = 108 total (reserveSwap
+        // in, the retired kind-23 ammSwap out).
+        assertEq(adversarialCount, 108, "108 adversarial entries total (16 + 23 x4)");
     }
 
     /// @notice Per-entry happy-path check: every entry whose
@@ -306,10 +309,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 happyCount++;
             }
         }
-        // Workstream SB: 16 happy transfer + 16 happy mint + 24 x6 =
-        // 176 happy entries total (+reserveSwap on the 23 variants
-        // GP.11.10 left).
-        assertEq(happyCount, 176, "176 happy entries total (32 + 24 x6)");
+        // 16 happy transfer + 16 happy mint + 23 x6 = 138 happy
+        // further-variant entries = 170 total (reserveSwap in, the
+        // retired kind-23 ammSwap out).
+        assertEq(happyCount, 170, "170 happy entries total (32 + 23 x6)");
     }
 
     /// @notice **The bespoke-hash byte-equivalence driver is gone.**
@@ -715,13 +718,6 @@ contract StepVMCrossCheck is CrossCheckFramework {
         } else if (k == keccak256("topUp")) {
             (gotX, gotY) = StepWrites.deriveTopUpBalances(
                 xPre, yPre, x, y, amountA, amountA <= xPre);
-        } else if (k == keccak256("ammSwap")) {
-            // `x` / `y` are the two RESOURCES here, not actors: the
-            // swap is the only variant whose cells sit at different
-            // resources, which is what makes them independent.
-            (gotX, gotY) = StepWrites.deriveAmmSwapBalances(
-                xPre, yPre, x, y, amountA,
-                vm.parseJsonUint(raw, string.concat(base, ".amountB")));
         } else {
             revert(string.concat("unknown balance golden kind at ", base));
         }
@@ -1045,11 +1041,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice The bulk pair is refused, and only the bulk pair.
+    /// @notice The bulk pair and the retired kind 23 are refused, and
+    ///         only those.
     /// @dev    The deployment decision made executable.  A gate never
     ///         observed to fire is indistinguishable from an absent
     ///         one, so both directions are checked.
-    function test_writeSet_refuses_only_the_bulk_pair() public {
+    function test_writeSet_refuses_the_bulk_pair_and_the_retired_kind() public {
         // Long enough for EVERY adjudicable kind's `_need` floor: the
         // widest is `depositWithFee` at 136 bytes once all three
         // amounts — the Workstream SB seed included — ride the
@@ -1061,6 +1058,11 @@ contract StepVMCrossCheck is CrossCheckFramework {
         vm.expectRevert(
             abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(7)));
         proxy.deriveWriteSet(7, fields, 7, 0);
+        // The retired kind 23 (the L1-AMM ammSwap mirror) is a
+        // permanent hole, refused exactly like a never-assigned kind.
+        vm.expectRevert(
+            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(23)));
+        proxy.deriveWriteSet(23, fields, 7, 0);
         // An unknown kind is refused too — a new `Action` constructor
         // must be considered rather than defaulting into the
         // kernel-identity family.  26 is the first unassigned index
@@ -1071,7 +1073,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         // ...and every adjudicable kind still derives.
         for (uint8 k = 0; k <= 25; k++) {
             beginEntry(string.concat("#", vm.toString(k)));
-            if (k == 6 || k == 7) continue;
+            if (k == 6 || k == 7 || k == 23) continue;
             checkGe(proxy.deriveWriteSet(k, fields, 7, 0).length, 2,
                 "every adjudicable kind writes at least the uniform pair");
         }
@@ -1098,12 +1100,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
     /// @notice GP.11.8 — cross-stack byte-equivalence for
     ///         the actionKind dispatch path.  Every happy fixture's
     ///         `actionKindByte` (the dispatcher byte) must be in
-    ///         0..24 (the Solidity `ActionKind` enum's valid range
-    ///         post-Workstream-GP: 0..18 SVC.5.e variants + 19
-    ///         (DepositWithFee) + 20 (TopUpActionBudget) + 21
+    ///         0..25 excluding the retired 23: 0..18 SVC.5.e variants
+    ///         + 19 (DepositWithFee) + 20 (TopUpActionBudget) + 21
     ///         (TopUpActionBudgetFor) + 22 (ClaimBudgetRefund) +
-    ///         23 (AmmSwap) + 24 (ReclaimAmmReserves) +
-    ///         25 (ReserveSwap, Workstream SB)).
+    ///         24 (ReclaimAmmReserves) + 25 (ReserveSwap, Workstream
+    ///         SB); 23 is the retired L1-AMM ammSwap mirror, a
+    ///         permanent hole no happy fixture may carry.
     ///         An out-of-range dispatcher would revert in
     ///         `_toActionKind`.
     function test_perEntry_actionKindByte_in_range() public {
@@ -1125,6 +1127,11 @@ contract StepVMCrossCheck is CrossCheckFramework {
             }
             uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
             checkLe(kind, 25, string.concat("actionKindByte out of range for ", base));
+            checkEq(
+                kind == 23 ? 1 : 0,
+                0,
+                string.concat("retired kind 23 must carry no happy fixture at ", base)
+            );
         }
     }
 

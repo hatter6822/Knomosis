@@ -604,28 +604,6 @@ library StepWrites {
         );
     }
 
-    /// @notice `ammSwap`: credit the reserve at `fromResource`, debit
-    ///         it at `toResource`.
-    /// @dev    The one variant touching two DIFFERENT resources, so the
-    ///         cells are independent and `deriveChainPair` does not
-    ///         apply.  That is sound only because
-    ///         `fromResource != toResource` is a precondition conjunct
-    ///         rather than an assumption — it is checked here.
-    function deriveAmmSwapBalances(
-        uint256 fromBal,
-        uint256 toBal,
-        uint64 fromResource,
-        uint64 toResource,
-        uint256 amountIn,
-        uint256 amountOut
-    ) internal pure returns (uint256 newFrom, uint256 newTo) {
-        if (toBal >= amountOut && fromResource != toResource && amountIn > 0
-                && creditFits(fromBal, amountIn)) {
-            return (fromBal + amountIn, toBal - amountOut);
-        }
-        return (fromBal, toBal);
-    }
-
     /// @notice `reclaimAmmReserves`: the post-disable exact sweep.
     /// @dev    The precondition is an EQUALITY (`balance == amount`),
     ///         not a sufficiency, so a partial reclaim is a no-op.
@@ -943,9 +921,13 @@ library StepWrites {
     ///
     ///         False on exactly the two bulk variants — whose write set
     ///         is the actor set at a resource, which an L1 holding only
-    ///         the pre-root cannot enumerate — and on unknown kinds.
+    ///         the pre-root cannot enumerate — on the retired kind 23
+    ///         (the L1-AMM `ammSwap` mirror, a permanent hole the L2
+    ///         decoder refuses like a never-assigned tag), and on
+    ///         unknown kinds.
     function isAdjudicable(uint8 actionKind) internal pure returns (bool) {
-        return actionKind <= 25 && actionKind != 6 && actionKind != 7;
+        return actionKind <= 25 && actionKind != 6 && actionKind != 7
+            && actionKind != 23;
     }
 
     /// @notice The action fields are shorter than the variant's layout.
@@ -1085,14 +1067,6 @@ library StepWrites {
             out[1] = Cell({kind: 0, keyA: gr, keyB: _fieldUint64(fields, 56)});
             _appendUniform(out, 2, signer);
             out[4] = Cell({kind: 13, keyA: _fieldUint64(fields, 0), keyB: 0});
-        } else if (actionKind == 23) {                  // ammSwap
-            // The reserve actor follows BOTH 32-byte amounts.
-            _need(actionKind, fields, 88);
-            out = new Cell[](4);
-            uint64 reserveActor = _fieldUint64(fields, 80);
-            out[0] = Cell({kind: 0, keyA: _fieldUint64(fields, 0), keyB: reserveActor});
-            out[1] = Cell({kind: 0, keyA: _fieldUint64(fields, 8), keyB: reserveActor});
-            _appendUniform(out, 2, signer);
         } else if (actionKind == 24) {                  // reclaimAmmReserves
             // Both actors follow the 32-byte amount at offset 8.
             _need(actionKind, fields, 56);

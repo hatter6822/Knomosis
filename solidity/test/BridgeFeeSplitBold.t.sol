@@ -849,10 +849,10 @@ contract BridgeFeeSplitBoldTest is
 
     /// @notice GP.11.2 (SB L2-primary topology) — the seed's BACKING
     ///         survives a withdrawal.  An AMM-enabled (80% ratio) BOLD
-    ///         fee-split deposit reports `ammSeedAmount` in its event but
-    ///         credits the L1 `ammReserveBold` book with NOTHING — the seed
-    ///         is credited to the L2 reserve actor, and its backing stays in
-    ///         the bridge's general escrow (ordinary TVL).  A recipient then
+    ///         fee-split deposit reports `ammSeedAmount` in its event and
+    ///         keeps no L1-side book — the seed is credited to the L2
+    ///         reserve actor, and its backing stays in the bridge's
+    ///         general escrow (ordinary TVL).  A recipient then
     ///         withdraws ALL non-seed value (`amount - seed`), draining TVL
     ///         down to exactly the seed's backing: the irreducible escrow
     ///         floor behind the L2 reserve actor.  This exercises the
