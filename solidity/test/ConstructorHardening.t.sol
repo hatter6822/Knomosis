@@ -171,9 +171,10 @@ contract ConstructorHardeningTest is Test {
 
     // ---- KnomosisStateRootSubmission: the submission breaker (EG.2) -----
 
-    /// @notice A zero breaker is refused.  Without this the automatic
-    ///         latch would be a one-way door: a challenger win halts
-    ///         submission and nobody can ever clear it.
+    /// @notice A zero breaker is refused.  Without it the halt would
+    ///         be a one-way door: nothing could ever clear one, and
+    ///         `haltSubmissions` would brick the chain rather than
+    ///         pause it.
     function test_state_root_rejects_zero_breaker() public {
         vm.expectRevert(KnomosisStateRootSubmission.ZeroAddress.selector);
         new KnomosisStateRootSubmission(
@@ -183,11 +184,11 @@ contract ConstructorHardeningTest is Test {
     }
 
     /// @notice A breaker equal to the sequencer is refused.
-    /// @dev    The load-bearing one.  The latch fires precisely when a
-    ///         challenger proves the SEQUENCER wrong, so a sequencer
-    ///         able to clear its own halt makes the breaker
-    ///         decorative — it could resume and keep submitting the
-    ///         moment it was caught.
+    /// @dev    The load-bearing one.  A halt is reached on suspicion
+    ///         of the SEQUENCER at least as often as for its benefit,
+    ///         so a sequencer able to clear its own halt makes the
+    ///         breaker decorative — it could resume and keep
+    ///         submitting the moment it was stopped.
     function test_state_root_rejects_breaker_equals_sequencer() public {
         address seq = address(0x5E9);
         vm.expectRevert(KnomosisStateRootSubmission.BreakerIsSequencer.selector);

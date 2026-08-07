@@ -333,9 +333,10 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     error SequencerIsFaultProofGame();
 
     /// @notice The constructor was handed a `submissionBreaker` equal
-    ///         to the `sequencer`.  Refused: the breaker latches on a
-    ///         proven-faulty sequencer, so that sequencer must not be
-    ///         able to clear its own halt.
+    ///         to the `sequencer`.  Refused: a halt is reached on
+    ///         suspicion of the sequencer at least as often as for its
+    ///         benefit, so that sequencer must not be able to clear
+    ///         its own halt.
     error BreakerIsSequencer();
 
     /// @notice `submitStateRoot` was called while submissions are
@@ -374,9 +375,9 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         if (_sequencer == address(0)) revert ZeroAddress();
         if (_faultProofGame == address(0)) revert ZeroAddress();
         if (_submissionBreaker == address(0)) revert ZeroAddress();
-        // The breaker latches exactly when a challenger proves the
-        // sequencer wrong, so a sequencer able to clear its own halt
-        // would make it decorative.
+        // A halt is reached on suspicion of the sequencer at least as
+        // often as for its benefit, so a sequencer able to clear its
+        // own halt would make the breaker decorative.
         if (_submissionBreaker == _sequencer) revert BreakerIsSequencer();
         // Privilege separation: the sequencer and the fault-proof game are
         // distinct principals (one submits roots, the other adjudicates).
