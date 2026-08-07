@@ -346,6 +346,6 @@ namespace LegalKernel
     Lives outside `LegalKernel.Kernel` so that the trusted-core file
     contains only the §4.12 listing — the TCB audit tool can therefore
     enumerate `Kernel.lean` without seeing convenience constants. -/
-def kernelVersion : String := "0.17.0"
+def kernelVersion : String := "0.14.0"
 
 end LegalKernel

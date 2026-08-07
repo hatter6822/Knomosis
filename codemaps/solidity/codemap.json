@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6a30ff8388f93cdbd573a84b1fe184c88a0a6975c0a4321337112cb9c3cc81e4"
+    "source_digest": "5a0f77183cd8f0ab7d036065b2ba127e20f95dceb93a5a3c2e14b29882938eb1"
   },
   "summary": {
     "module_count": 113,
@@ -3186,7 +3186,7 @@
         {
           "kind": "struct",
           "name": "SubmittedRoot",
-          "line": 137,
+          "line": 146,
           "called": [
             "roots",
             "sequencer"
@@ -3195,7 +3195,7 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 219,
+          "line": 228,
           "called": [
             "sequencer"
           ]
@@ -3203,19 +3203,19 @@
         {
           "kind": "event",
           "name": "SubmissionsHalted",
-          "line": 233,
-          "called": []
-        },
-        {
-          "kind": "event",
-          "name": "SubmissionsResumed",
           "line": 238,
           "called": []
         },
         {
           "kind": "event",
+          "name": "SubmissionsResumed",
+          "line": 242,
+          "called": []
+        },
+        {
+          "kind": "event",
           "name": "StateRootBondReclaimed",
-          "line": 245,
+          "line": 249,
           "called": [
             "sequencer"
           ]
@@ -3223,7 +3223,7 @@
         {
           "kind": "event",
           "name": "StateRootFinalised",
-          "line": 251,
+          "line": 255,
           "called": [
             "sequencer"
           ]
@@ -3231,13 +3231,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 256,
+          "line": 260,
           "called": []
         },
         {
           "kind": "event",
           "name": "StateRootDisputed",
-          "line": 264,
+          "line": 268,
           "called": [
             "sequencer"
           ]
@@ -3245,7 +3245,7 @@
         {
           "kind": "event",
           "name": "SequencerBondSlashed",
-          "line": 272,
+          "line": 276,
           "called": [
             "sequencer"
           ]
@@ -3253,169 +3253,169 @@
         {
           "kind": "error",
           "name": "NotSequencer",
-          "line": 283,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "NotFaultProofGame",
-          "line": 284,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "SubmissionTooFrequent",
-          "line": 285,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "TooManyOutstandingRoots",
-          "line": 286,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AlreadyClaimed",
           "line": 287,
           "called": []
         },
         {
           "kind": "error",
-          "name": "InvalidBond",
+          "name": "NotFaultProofGame",
           "line": 288,
           "called": []
         },
         {
           "kind": "error",
-          "name": "RootMissing",
+          "name": "SubmissionTooFrequent",
           "line": 289,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AlreadyDisputed",
+          "name": "TooManyOutstandingRoots",
           "line": 290,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AlreadySlashed",
+          "name": "AlreadyClaimed",
           "line": 291,
           "called": []
         },
         {
           "kind": "error",
-          "name": "BondAlreadyZero",
+          "name": "InvalidBond",
           "line": 292,
           "called": []
         },
         {
           "kind": "error",
-          "name": "SlashTransferFailed",
+          "name": "RootMissing",
           "line": 293,
           "called": []
         },
         {
           "kind": "error",
-          "name": "NotYetFinalisable",
+          "name": "AlreadyDisputed",
           "line": 294,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AlreadyFinalised",
+          "name": "AlreadySlashed",
           "line": 295,
           "called": []
         },
         {
           "kind": "error",
-          "name": "DisputeInProgress",
+          "name": "BondAlreadyZero",
           "line": 296,
           "called": []
         },
         {
           "kind": "error",
-          "name": "ZeroAddress",
+          "name": "SlashTransferFailed",
           "line": 297,
           "called": []
         },
         {
           "kind": "error",
-          "name": "WindowTooShort",
+          "name": "NotYetFinalisable",
           "line": 298,
           "called": []
         },
         {
           "kind": "error",
+          "name": "AlreadyFinalised",
+          "line": 299,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DisputeInProgress",
+          "line": 300,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 301,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WindowTooShort",
+          "line": 302,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "NotCanonicalTip",
-          "line": 305,
+          "line": 309,
           "called": []
         },
         {
           "kind": "error",
           "name": "EmptyBatch",
-          "line": 308,
+          "line": 312,
           "called": []
         },
         {
           "kind": "error",
           "name": "BatchTooLarge",
-          "line": 311,
+          "line": 315,
           "called": []
         },
         {
           "kind": "error",
           "name": "BondNotReclaimed",
-          "line": 316,
+          "line": 320,
           "called": []
         },
         {
           "kind": "error",
           "name": "RootReverted",
-          "line": 319,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "ZeroGenesisCommit",
           "line": 323,
           "called": []
         },
         {
           "kind": "error",
+          "name": "ZeroGenesisCommit",
+          "line": 327,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "SequencerIsFaultProofGame",
-          "line": 328,
+          "line": 332,
           "called": []
         },
         {
           "kind": "error",
           "name": "BreakerIsSequencer",
-          "line": 334,
+          "line": 338,
           "called": []
         },
         {
           "kind": "error",
           "name": "SubmissionsAreHalted",
-          "line": 339,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "NotSubmissionBreaker",
           "line": 343,
           "called": []
         },
         {
           "kind": "error",
+          "name": "NotSubmissionBreaker",
+          "line": 347,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "HaltStateUnchanged",
-          "line": 350,
+          "line": 354,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 356,
+          "line": 360,
           "called": [
             "BatchTooLarge",
             "BreakerIsSequencer",
@@ -3435,7 +3435,7 @@
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 463,
+          "line": 467,
           "called": [
             "AlreadyClaimed",
             "BatchTooLarge",
@@ -3457,7 +3457,7 @@
         {
           "kind": "function",
           "name": "finaliseStateRoot",
-          "line": 554,
+          "line": 558,
           "called": [
             "AlreadyFinalised",
             "DisputeInProgress",
@@ -3473,7 +3473,7 @@
         {
           "kind": "function",
           "name": "markDisputed",
-          "line": 599,
+          "line": 603,
           "called": [
             "AlreadyDisputed",
             "AlreadyFinalised",
@@ -3489,7 +3489,7 @@
         {
           "kind": "function",
           "name": "clearDisputed",
-          "line": 628,
+          "line": 632,
           "called": [
             "NotFaultProofGame",
             "RootMissing",
@@ -3500,7 +3500,7 @@
         {
           "kind": "function",
           "name": "slashSequencerBond",
-          "line": 654,
+          "line": 658,
           "called": [
             "AlreadyFinalised",
             "BondAlreadyZero",
@@ -3516,7 +3516,7 @@
         {
           "kind": "function",
           "name": "haltSubmissions",
-          "line": 695,
+          "line": 700,
           "called": [
             "HaltStateUnchanged",
             "NotSubmissionBreaker",
@@ -3526,7 +3526,7 @@
         {
           "kind": "function",
           "name": "resumeSubmissions",
-          "line": 710,
+          "line": 712,
           "called": [
             "HaltStateUnchanged",
             "NotSubmissionBreaker",
@@ -3536,18 +3536,17 @@
         {
           "kind": "function",
           "name": "revertStateRootsFrom",
-          "line": 741,
+          "line": 743,
           "called": [
             "NotFaultProofGame",
             "StateRootRangeReverted",
-            "SubmissionsHalted",
             "roots"
           ]
         },
         {
           "kind": "function",
           "name": "reclaimRevertedBond",
-          "line": 800,
+          "line": 791,
           "called": [
             "AlreadyFinalised",
             "BondAlreadyZero",
@@ -3563,7 +3562,7 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 837,
+          "line": 828,
           "called": [
             "_isRecordReverted"
           ]
@@ -3571,7 +3570,7 @@
         {
           "kind": "function",
           "name": "_isRecordReverted",
-          "line": 851,
+          "line": 842,
           "called": [
             "roots"
           ]
@@ -3579,7 +3578,7 @@
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 872,
+          "line": 863,
           "called": [
             "roots",
             "sequencer"
@@ -17066,12 +17065,6 @@
           "kind": "contract",
           "name": "KnomosisStateRootSubmissionTest",
           "line": 19,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "_clearHaltAfterRevert",
-          "line": 31,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -17080,7 +17073,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 59,
+          "line": 47,
           "called": [
             "_deploy",
             "sequencer"
@@ -17089,7 +17082,7 @@
         {
           "kind": "function",
           "name": "_deploy",
-          "line": 68,
+          "line": 56,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -17098,7 +17091,7 @@
         {
           "kind": "function",
           "name": "_submit",
-          "line": 88,
+          "line": 76,
           "called": [
             "sequencer"
           ]
@@ -17106,19 +17099,19 @@
         {
           "kind": "function",
           "name": "_commitOf",
-          "line": 97,
+          "line": 85,
           "called": []
         },
         {
           "kind": "function",
           "name": "_expectedNextHashOf",
-          "line": 101,
+          "line": 89,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_constructor_sets_immutables",
-          "line": 111,
+          "line": 99,
           "called": [
             "sequencer"
           ]
@@ -17126,13 +17119,13 @@
         {
           "kind": "function",
           "name": "test_genesis_anchor_written_by_constructor",
-          "line": 126,
+          "line": 114,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_genesis_commit",
-          "line": 147,
+          "line": 135,
           "called": [
             "_deploy"
           ]
@@ -17140,7 +17133,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_batch_cap",
-          "line": 152,
+          "line": 140,
           "called": [
             "_deploy"
           ]
@@ -17148,7 +17141,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_sequencer",
-          "line": 157,
+          "line": 145,
           "called": [
             "KnomosisStateRootSubmission"
           ]
@@ -17156,7 +17149,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_faultProofGame",
-          "line": 166,
+          "line": 154,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -17165,7 +17158,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_dispute_window_too_short",
-          "line": 175,
+          "line": 163,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -17174,7 +17167,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_bond",
-          "line": 188,
+          "line": 176,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -17183,7 +17176,7 @@
         {
           "kind": "function",
           "name": "test_submit_batch_extends_the_tip",
-          "line": 202,
+          "line": 190,
           "called": [
             "_commitOf",
             "_submit",
@@ -17193,7 +17186,7 @@
         {
           "kind": "function",
           "name": "test_submit_chains_structurally",
-          "line": 225,
+          "line": 213,
           "called": [
             "_commitOf",
             "_expectedNextHashOf",
@@ -17203,7 +17196,7 @@
         {
           "kind": "function",
           "name": "test_submit_rejects_non_sequencer",
-          "line": 235,
+          "line": 223,
           "called": [
             "_commitOf"
           ]
@@ -17211,7 +17204,7 @@
         {
           "kind": "function",
           "name": "test_submit_rejects_wrong_bond",
-          "line": 242,
+          "line": 230,
           "called": [
             "_commitOf",
             "sequencer"
@@ -17220,7 +17213,7 @@
         {
           "kind": "function",
           "name": "test_submit_rejects_empty_batch",
-          "line": 249,
+          "line": 237,
           "called": [
             "_commitOf",
             "sequencer"
@@ -17229,7 +17222,7 @@
         {
           "kind": "function",
           "name": "test_submit_rejects_oversized_batch",
-          "line": 255,
+          "line": 243,
           "called": [
             "_commitOf",
             "sequencer"
@@ -17238,7 +17231,7 @@
         {
           "kind": "function",
           "name": "test_submit_rejects_fork",
-          "line": 265,
+          "line": 253,
           "called": [
             "_commitOf",
             "_submit",
@@ -17248,7 +17241,7 @@
         {
           "kind": "function",
           "name": "test_submit_rejects_gap",
-          "line": 273,
+          "line": 261,
           "called": [
             "_commitOf",
             "sequencer"
@@ -17257,7 +17250,7 @@
         {
           "kind": "function",
           "name": "test_submit_rate_limited",
-          "line": 280,
+          "line": 268,
           "called": [
             "_commitOf",
             "_submit",
@@ -17267,7 +17260,7 @@
         {
           "kind": "function",
           "name": "test_submit_outstanding_cap",
-          "line": 289,
+          "line": 277,
           "called": [
             "_commitOf",
             "_submit",
@@ -17277,7 +17270,7 @@
         {
           "kind": "function",
           "name": "test_finalise_after_window_releases_bond",
-          "line": 304,
+          "line": 292,
           "called": [
             "_commitOf",
             "_submit"
@@ -17286,7 +17279,7 @@
         {
           "kind": "function",
           "name": "test_finalise_rejects_before_window",
-          "line": 315,
+          "line": 303,
           "called": [
             "_commitOf",
             "_submit"
@@ -17295,19 +17288,19 @@
         {
           "kind": "function",
           "name": "test_finalise_rejects_missing",
-          "line": 321,
+          "line": 309,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_finalise_rejects_genesis_anchor",
-          "line": 326,
+          "line": 314,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_finalise_rejects_disputed",
-          "line": 331,
+          "line": 319,
           "called": [
             "_commitOf",
             "_submit"
@@ -17316,9 +17309,8 @@
         {
           "kind": "function",
           "name": "test_revert_recovery_resubmits_the_corrected_chain",
-          "line": 346,
+          "line": 334,
           "called": [
-            "_clearHaltAfterRevert",
             "_commitOf",
             "_submit"
           ]
@@ -17326,9 +17318,8 @@
         {
           "kind": "function",
           "name": "test_reverted_descendant_cannot_finalise",
-          "line": 375,
+          "line": 362,
           "called": [
-            "_clearHaltAfterRevert",
             "_commitOf",
             "_submit"
           ]
@@ -17336,9 +17327,8 @@
         {
           "kind": "function",
           "name": "test_tip_is_monotone_down_across_reverts",
-          "line": 390,
+          "line": 376,
           "called": [
-            "_clearHaltAfterRevert",
             "_commitOf",
             "_submit"
           ]
@@ -17346,9 +17336,8 @@
         {
           "kind": "function",
           "name": "test_markDisputed_rejects_reverted",
-          "line": 410,
+          "line": 393,
           "called": [
-            "_clearHaltAfterRevert",
             "_commitOf",
             "_submit"
           ]
@@ -17356,9 +17345,8 @@
         {
           "kind": "function",
           "name": "test_reclaim_returns_a_reverted_records_bond",
-          "line": 422,
+          "line": 404,
           "called": [
-            "_clearHaltAfterRevert",
             "_commitOf",
             "_submit"
           ]
@@ -17366,7 +17354,7 @@
         {
           "kind": "function",
           "name": "test_reclaim_rejects_canonical_record",
-          "line": 442,
+          "line": 423,
           "called": [
             "_commitOf",
             "_submit"
@@ -17375,9 +17363,8 @@
         {
           "kind": "function",
           "name": "test_reclaim_rejects_disputed_record",
-          "line": 448,
+          "line": 429,
           "called": [
-            "_clearHaltAfterRevert",
             "_commitOf",
             "_submit"
           ]
@@ -17385,9 +17372,8 @@
         {
           "kind": "function",
           "name": "test_overwrite_requires_the_bond_out_first",
-          "line": 464,
+          "line": 444,
           "called": [
-            "_clearHaltAfterRevert",
             "_commitOf",
             "_submit",
             "sequencer"
@@ -17396,9 +17382,8 @@
         {
           "kind": "function",
           "name": "test_live_record_is_never_overwritten",
-          "line": 487,
+          "line": 466,
           "called": [
-            "_clearHaltAfterRevert",
             "_commitOf",
             "_submit",
             "sequencer"
@@ -17407,7 +17392,7 @@
         {
           "kind": "function",
           "name": "test_slash_forwards_bond",
-          "line": 512,
+          "line": 490,
           "called": [
             "_commitOf",
             "_submit"
@@ -17416,7 +17401,7 @@
         {
           "kind": "function",
           "name": "test_only_game_can_mark_slash_revert",
-          "line": 522,
+          "line": 500,
           "called": [
             "_commitOf",
             "_submit"
@@ -17425,7 +17410,7 @@
         {
           "kind": "function",
           "name": "testFuzz_bond_eth_is_conserved",
-          "line": 542,
+          "line": 518,
           "called": [
             "_commitOf",
             "_submit"
@@ -17434,7 +17419,7 @@
         {
           "kind": "function",
           "name": "test_breaker_halts_and_resumes_submission",
-          "line": 591,
+          "line": 567,
           "called": [
             "_commitOf",
             "_submit",
@@ -17444,7 +17429,7 @@
         {
           "kind": "function",
           "name": "test_breaker_role_is_exclusive",
-          "line": 611,
+          "line": 587,
           "called": [
             "sequencer"
           ]
@@ -17452,16 +17437,26 @@
         {
           "kind": "function",
           "name": "test_breaker_refuses_a_no_op_transition",
-          "line": 626,
+          "line": 602,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_halt_does_not_strand_prior_settlement",
-          "line": 644,
+          "line": 620,
           "called": [
             "_commitOf",
             "_submit"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_a_revert_does_not_halt_submission",
+          "line": 646,
+          "called": [
+            "_commitOf",
+            "_submit",
+            "sequencer"
           ]
         }
       ]

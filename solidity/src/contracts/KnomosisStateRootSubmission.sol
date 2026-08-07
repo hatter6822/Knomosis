@@ -93,21 +93,30 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     ///
     ///         Required non-zero, and required DISTINCT from
     ///         `sequencer`.  The distinctness is the load-bearing
-    ///         part: the automatic latch below fires precisely when a
-    ///         challenger proves the sequencer wrong, so a sequencer
-    ///         who could clear its own halt would make the breaker
-    ///         decorative.
+    ///         part: a halt is most often reached for the sequencer's
+    ///         benefit or on suspicion of it, so a sequencer able to
+    ///         clear its own halt would make the breaker decorative.
     address public immutable submissionBreaker;
 
     /// @notice When true, `submitStateRoot` is refused.
     ///
-    /// @dev    Latched automatically by `revertStateRootsFrom` — the
-    ///         fault-proof game's entry point, reached only when a
-    ///         challenger has WON — and clearable only by
-    ///         `submissionBreaker`.  Deliberately NOT self-clearing:
-    ///         the trip means a submitted root was proven invalid, and
-    ///         deciding that the cause has been addressed is a
-    ///         judgement a human makes, not a block count.
+    /// @dev    Set and cleared ONLY by `submissionBreaker`.  There is
+    ///         deliberately no automatic trip.
+    ///
+    ///         An earlier arrangement latched this inside
+    ///         `revertStateRootsFrom`, on the reasoning that a
+    ///         challenger win is the strongest evidence a sequencer is
+    ///         faulty.  The reasoning was right and the mechanism was
+    ///         wrong, because it collided with the thing that has to
+    ///         happen next: the SB ruling-R1 recovery path IS the
+    ///         sequencer resubmitting the corrected batch after
+    ///         exactly that revert.  Latching on the revert therefore
+    ///         did not gate a suspicious submission — it gated the
+    ///         REPAIR, turning every challenger win into a manual
+    ///         intervention and leaving the chain stalled whenever the
+    ///         breaker key was not immediately to hand.  Automatic
+    ///         halting and automatic recovery cannot both be had here;
+    ///         recovery wins, and the breaker stays a deliberate act.
     ///
     ///         Scoped to new submissions only.  Finalisation,
     ///         slashing, reversion and bond reclamation stay open
@@ -226,16 +235,11 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     );
 
     /// @notice Emitted when state-root submission is halted.
-    /// @param  by         the caller (the fault-proof game on an
-    ///                    automatic latch, otherwise the breaker role).
-    /// @param  fromIdx    the reverted-from index on an automatic
-    ///                    latch; `0` on a manual halt.
-    /// @param  automatic  true when latched by `revertStateRootsFrom`.
-    event SubmissionsHalted(address indexed by, uint64 fromIdx, bool automatic);
+    /// @param  by  the `submissionBreaker` — the only caller that can.
+    event SubmissionsHalted(address indexed by);
 
-    /// @notice Emitted when state-root submission is resumed.  Only
-    ///         ever by `submissionBreaker` — there is no automatic
-    ///         path back.
+    /// @notice Emitted when state-root submission is resumed.
+    /// @param  by  the `submissionBreaker` — the only caller that can.
     event SubmissionsResumed(address indexed by);
 
     /// @notice A reverted, undisputed record's bond returned to its
@@ -691,21 +695,19 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     /// @dev    The manual arm of the breaker, for the emergencies a
     ///         fault proof does not cover — a sequencer key suspected
     ///         compromised, an upstream dependency found unsound, a
-    ///         planned migration.  The automatic arm lives in
-    ///         `revertStateRootsFrom`.
+    ///         planned migration.  There is no automatic arm: see
+    ///         `submissionsHalted` for why a revert deliberately does
+    ///         NOT latch this.
     function haltSubmissions() external {
         if (msg.sender != submissionBreaker) revert NotSubmissionBreaker();
         if (submissionsHalted) revert HaltStateUnchanged();
         submissionsHalted = true;
-        emit SubmissionsHalted(msg.sender, 0, false);
+        emit SubmissionsHalted(msg.sender);
     }
 
     /// @notice Resume state-root submission.  Only `submissionBreaker`.
     ///
-    /// @dev    The ONLY path back, by design: an automatic latch means
-    ///         a root was proven invalid, and deciding the cause has
-    ///         been addressed is a judgement rather than a timeout.
-    ///         Nothing about resuming un-reverts a root — the
+    /// @dev    Nothing about resuming un-reverts a root — the
     ///         reverted range and its floor/ceiling are untouched, so
     ///         the sequencer still re-extends from `canonicalTip`.
     function resumeSubmissions() external {
@@ -741,17 +743,6 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     ///         reverted forever (its recovery path was a dead end).
     function revertStateRootsFrom(uint64 fromIdx) external nonReentrant {
         if (msg.sender != faultProofGame) revert NotFaultProofGame();
-
-        // The automatic latch.  Reaching here means the game settled
-        // AGAINST a submitted root, which is the strongest evidence
-        // available that the sequencer is faulty; continuing to accept
-        // its roots while the operator investigates is exactly the
-        // window an attacker wants.  Idempotent -- a second revert on
-        // an already-halted registry re-emits nothing.
-        if (!submissionsHalted) {
-            submissionsHalted = true;
-            emit SubmissionsHalted(msg.sender, fromIdx, true);
-        }
 
         // Update the floor (no-op if a lower floor is already in
         // place).  The `NO_REVERTED_FLOOR` sentinel makes `fromIdx = 0`

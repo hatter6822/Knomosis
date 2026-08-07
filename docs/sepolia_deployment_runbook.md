@@ -461,25 +461,25 @@ remains an operator responsibility.
 ## 9A. The submission breaker (halting state-root submission)
 
 `KnomosisStateRootSubmission` carries a breaker that gates
-`submitStateRoot`.  It has two arms.
+`submitStateRoot`.  It is **manual only** — `haltSubmissions()` /
+`resumeSubmissions()`, callable solely by the immutable
+`submissionBreaker` recorded in the manifest's
+`actors.submissionBreaker`.
 
-**Automatic.**  `revertStateRootsFrom` — the fault-proof game's entry
-point, reached only when a challenger has WON — latches
-`submissionsHalted = true` and emits
-`SubmissionsHalted(game, fromIdx, automatic = true)`.  A settled-against
-root is the strongest available evidence that the sequencer is faulty,
-and continuing to accept its roots while you investigate is exactly the
-window an attacker wants.
+Use it for what a fault proof does not cover: a sequencer key suspected
+compromised, an upstream dependency found unsound, a planned migration.
 
-**Manual.**  `haltSubmissions()` / `resumeSubmissions()`, callable only
-by the immutable `submissionBreaker` recorded in the manifest's
-`actors.submissionBreaker`.  Use the manual halt for what a fault proof
-does not cover: a sequencer key suspected compromised, an upstream
-dependency found unsound, a planned migration.
-
-**There is no automatic path back.**  Resuming is a judgement that the
-cause has been addressed, so it is a human's to make, not a block
-count's.
+**Nothing trips it automatically, and a challenger win in particular
+does not.**  An earlier arrangement latched the breaker inside
+`revertStateRootsFrom`, reasoning that a proven-invalid root is the
+strongest evidence a sequencer is faulty.  The reasoning was sound and
+the mechanism was not, because of what has to happen next: the SB
+ruling-R1 recovery path IS the sequencer resubmitting the corrected
+batch after exactly that revert.  Latching there gated the REPAIR
+rather than a suspicious submission — it turned every challenger win
+into a manual intervention and stalled the chain whenever the breaker
+key was not immediately to hand.  Automatic halting and automatic
+recovery cannot both be had at that point; recovery wins.
 
 ```bash
 # Is the chain halted?
@@ -504,17 +504,18 @@ Settlement of everything already submitted proceeds normally.  The
 scoping is deliberate: a safety brake that also stranded in-flight
 withdrawals would be a liveness failure wearing a safety hat.
 
-### Consequence for revert recovery — read this before an incident
+### Revert recovery is unattended
 
-The SB ruling-R1 recovery path (the sequencer re-extending from
-`canonicalTip` after a revert) is now **gated on a human clearing the
-halt**.  Before this breaker existed, a challenger win reverted the
-range and the sequencer resubmitted the corrected chain unattended.  It
-no longer can.  That is the intended posture — you chose to confirm the
-cause before resuming — but it means **every** challenger win now
-requires an operator in the loop, and a chain whose breaker key is
-unavailable stays halted.  Hold the breaker key somewhere you can reach
-during an incident, and distinctly from the sequencer's.
+The SB ruling-R1 recovery path — the sequencer re-extending from
+`canonicalTip` after a revert — needs no operator.  A challenger win
+reverts the range and the corrected chain resubmits on its own, exactly
+as it did before this breaker existed.  Pinned by
+`test_a_revert_does_not_halt_submission` and by the end-to-end
+`test_challenger_win_reverts_the_batch_then_recovery_resubmits`, both
+of which fail if a latch is reintroduced.
+
+Hold the breaker key somewhere you can reach during an incident, and
+distinctly from the sequencer's — the constructor enforces the latter.
 
 ---
 

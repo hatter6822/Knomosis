@@ -462,19 +462,15 @@ contract BatchGameCrossCheck is
         vm.prank(challenger);
         game.withdraw();
 
-        // THE BREAKER (EG.2).  The challenger's win latched it on its
-        // way through `revertStateRootsFrom`, so the R1 recovery path
-        // below is now gated on a human clearing the halt.  Asserted
-        // rather than merely cleared: this is the case that pins the
-        // automatic arm firing on a REAL settlement rather than on a
-        // direct call.
-        assertTrue(registry.submissionsHalted(),
-            "a challenger win must halt further submission");
-        vm.prank(sequencer);
-        vm.expectRevert(KnomosisStateRootSubmission.NotSubmissionBreaker.selector);
-        registry.resumeSubmissions();
-        vm.prank(BREAKER);
-        registry.resumeSubmissions();
+        // THE BREAKER (EG.2) DOES NOT FIRE HERE, and that is the
+        // point.  An earlier arrangement latched it inside
+        // `revertStateRootsFrom`, which gated the repair rather than a
+        // suspicious submission: the R1 recovery below is the
+        // sequencer resubmitting after exactly this revert, so
+        // latching turned every challenger win into a manual
+        // intervention.  Pinned so a reintroduction fails here.
+        assertFalse(registry.submissionsHalted(),
+            "a challenger win must NOT halt submission -- R1 recovery is unattended");
 
         // RECOVERY (the path the retired registry lacked): the
         // corrected batch resubmits at the SAME key — allowed because
