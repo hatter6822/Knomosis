@@ -315,6 +315,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "knomosis-amount"
+version = "0.15.0"
+dependencies = [
+ "crypto-bigint",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "knomosis-bench"
 version = "0.15.0"
 dependencies = [

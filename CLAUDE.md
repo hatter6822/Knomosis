@@ -305,6 +305,7 @@ knomosis/
 │   ├── Cargo.toml             --   workspace manifest
 │   ├── rust-toolchain.toml    --   pinned Rust channel (stable 1.97)
 │   ├── knomosis-hash-fallback.c  --   AR.10 default fallback (lake-built)
+│   ├── knomosis-amount/          --   256-bit accounting scalar (Amount)
 │   ├── knomosis-cli-common/      --   shared CLI / logging helpers
 │   ├── knomosis-cross-stack/     --   dev-dep fixture loader
 │   ├── knomosis-verify-secp256k1/ --  ECDSA secp256k1 verifier (cdylib)

@@ -26,6 +26,12 @@ remain: the Lean `knomosis extract-events` subcommand (needed by RH-D's
 `SubprocessExtractor`) and `knomosis-indexer`'s `--verify-against-knomosis`
 wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
 
+  * **`knomosis-amount`** — the workspace's 256-bit unsigned
+    accounting scalar.  Sits below every other crate (it depends only
+    on the arithmetic engine), because both the read side and the
+    write side carry balances.  The width is not a safety margin: the
+    kernel's `Laws.maxAmount` is exactly `2^256`, so `Amount` holds
+    precisely what the kernel admits.
   * **`knomosis-cli-common`** — shared logging / exit-code / paths
     helpers.  Fully implemented (small surface, stable from day
     one).
@@ -169,6 +175,11 @@ runtime/
 ├── knomosis-hash-fallback.c            — pre-existing AR.10 fallback
 │                                       (lake-built static library; not
 │                                       part of the Cargo workspace)
+│
+├── knomosis-amount/                    — shared library  (implemented)
+│   ├── Cargo.toml
+│   ├── src/lib.rs                   — `Amount`: 256-bit accounting scalar
+│   └── tests/property.rs            — `u128`-oracle + full-width properties
 │
 ├── knomosis-cli-common/                — shared library  (implemented)
 │   ├── Cargo.toml

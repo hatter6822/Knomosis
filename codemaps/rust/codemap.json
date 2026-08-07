@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "bc3046e38e6a2513945d25d888ca0e02524e9d3144c92d9ff5243e182bc06fe7"
+    "source_digest": "a8c9376f05abed8fee8e238fb1af2c6199513b10430a440ce7986e156a72cb1a"
   },
   "summary": {
-    "module_count": 193,
-    "declaration_count": 6189
+    "module_count": 195,
+    "declaration_count": 6278
   },
   "modules": [
     {
@@ -50,6 +50,764 @@
             "get",
             "hash",
             "push"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-amount::src::lib",
+      "path": "runtime/knomosis-amount/src/lib.rs",
+      "declaration_count": 71,
+      "declarations": [
+        {
+          "kind": "const",
+          "name": "AMOUNT_BYTES",
+          "line": 75,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "AMOUNT_MAX_DECIMAL_DIGITS",
+          "line": 81,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "AmountError",
+          "line": 86,
+          "called": [
+            "error",
+            "offset"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Amount",
+          "line": 121,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "Amount",
+          "line": 123,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "ZERO",
+          "line": 125,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "ONE",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "MAX",
+          "line": 132,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "from_u128",
+          "line": 139,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "from_u64",
+          "line": 145,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "to_u128",
+          "line": 157,
+          "called": [
+            "b",
+            "bytes",
+            "iter",
+            "to_be_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_zero",
+          "line": 170,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "checked_add",
+          "line": 181,
+          "called": [
+            "from"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "checked_sub",
+          "line": 187,
+          "called": [
+            "from"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "to_be_bytes",
+          "line": 193,
+          "called": [
+            "AMOUNT_BYTES"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_be_bytes",
+          "line": 203,
+          "called": [
+            "AMOUNT_BYTES",
+            "bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_be_slice",
+          "line": 209,
+          "called": [
+            "AMOUNT_BYTES",
+            "AmountError",
+            "_",
+            "bytes",
+            "len"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Ord for Amount",
+          "line": 217,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "cmp",
+          "line": 218,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "PartialOrd for Amount",
+          "line": 226,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "partial_cmp",
+          "line": 227,
+          "called": [
+            "cmp"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "From<u128> for Amount",
+          "line": 232,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from",
+          "line": 233,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "From<u64> for Amount",
+          "line": 238,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from",
+          "line": 239,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "TryFrom<Amount> for u128",
+          "line": 244,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "type",
+          "name": "Error",
+          "line": 245,
+          "called": [
+            "AmountError"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "try_from",
+          "line": 247,
+          "called": [
+            "Amount",
+            "to_u128"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "fmt::Display for Amount",
+          "line": 252,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fmt",
+          "line": 259,
+          "called": [
+            "AMOUNT_BYTES",
+            "AMOUNT_MAX_DECIMAL_DIGITS",
+            "_",
+            "is_zero",
+            "text",
+            "to_be_bytes"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "fmt::Debug for Amount",
+          "line": 285,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fmt",
+          "line": 291,
+          "called": [
+            "_",
+            "write"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "FromStr for Amount",
+          "line": 296,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "type",
+          "name": "Err",
+          "line": 297,
+          "called": [
+            "AmountError"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_str",
+          "line": 306,
+          "called": [
+            "Err",
+            "bytes",
+            "checked_add",
+            "from",
+            "is_empty",
+            "offset"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Serialize for Amount",
+          "line": 325,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "serialize",
+          "line": 332,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "Deserialize<'de> for Amount",
+          "line": 337,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deserialize",
+          "line": 353,
+          "called": [
+            "AmountVisitor"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "AmountVisitor",
+          "line": 359,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "Visitor<'_> for AmountVisitor",
+          "line": 361,
+          "called": [
+            "AmountVisitor",
+            "_"
+          ]
+        },
+        {
+          "kind": "type",
+          "name": "Value",
+          "line": 362,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "expecting",
+          "line": 364,
+          "called": [
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "visit_str",
+          "line": 368,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "visit_u64",
+          "line": 375,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "visit_u128",
+          "line": 379,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "visit_i64",
+          "line": 386,
+          "called": [
+            "_"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 394,
+          "called": [
+            "AMOUNT_BYTES",
+            "AMOUNT_MAX_DECIMAL_DIGITS",
+            "Amount",
+            "AmountError"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "MAX_DECIMAL",
+          "line": 399,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "TWO_POW_128_DECIMAL",
+          "line": 404,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "two_pow_128",
+          "line": 408,
+          "called": [
+            "AMOUNT_BYTES",
+            "Amount",
+            "bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "two_pow_128_is_representable_and_exact",
+          "line": 427,
+          "called": [
+            "TWO_POW_128_DECIMAL",
+            "to_be_bytes",
+            "to_u128",
+            "two_pow_128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "u128_boundary_is_exactly_where_narrowing_fails",
+          "line": 441,
+          "called": [
+            "checked_add",
+            "to_u128",
+            "two_pow_128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "max_is_two_pow_256_minus_one",
+          "line": 453,
+          "called": [
+            "AMOUNT_BYTES",
+            "AMOUNT_MAX_DECIMAL_DIGITS",
+            "MAX_DECIMAL",
+            "len",
+            "to_be_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "checked_add_refuses_to_wrap_at_the_ceiling",
+          "line": 465,
+          "called": [
+            "checked_add"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "checked_sub_refuses_to_wrap_at_zero",
+          "line": 476,
+          "called": [
+            "checked_sub"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "add_then_sub_round_trips_across_the_u128_boundary",
+          "line": 486,
+          "called": [
+            "base",
+            "checked_add",
+            "checked_sub",
+            "to_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "ordering_is_numeric_not_limb_order",
+          "line": 506,
+          "called": [
+            "two_pow_128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "be_codec_is_fixed_width_and_big_endian",
+          "line": 524,
+          "called": [
+            "AMOUNT_BYTES",
+            "b",
+            "iter",
+            "to_be_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_be_slice_refuses_any_length_but_32",
+          "line": 531,
+          "called": [
+            "AMOUNT_BYTES",
+            "Err"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "every_32_byte_array_decodes",
+          "line": 552,
+          "called": [
+            "to_be_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "display_is_decimal_with_no_leading_zeros",
+          "line": 564,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "debug_matches_display_base",
+          "line": 579,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "from_str_accepts_leading_zeros_but_nothing_else_odd",
+          "line": 584,
+          "called": [
+            "Err",
+            "offset"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_str_overflows_one_past_max",
+          "line": 616,
+          "called": [
+            "Err"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "serde_round_trips_as_a_decimal_string",
+          "line": 633,
+          "called": [
+            "Amount",
+            "json",
+            "two_pow_128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "serde_round_trips_the_maximum",
+          "line": 646,
+          "called": [
+            "Amount",
+            "json"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "serde_accepts_a_bare_integer_on_input",
+          "line": 655,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "serde_rejects_a_malformed_string",
+          "line": 663,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "serde_rejects_a_negative_integer",
+          "line": 670,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "serde_rejects_a_float",
+          "line": 681,
+          "called": [
+            "Amount"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-amount::tests::property",
+      "path": "runtime/knomosis-amount/tests/property.rs",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "fn",
+          "name": "any_amount",
+          "line": 36,
+          "called": [
+            "AMOUNT_BYTES",
+            "Amount",
+            "Value"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "add_agrees_with_u128_oracle",
+          "line": 48,
+          "called": [
+            "b",
+            "checked_add",
+            "max",
+            "to_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "sub_agrees_with_u128_oracle",
+          "line": 64,
+          "called": [
+            "b",
+            "checked_sub"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "ordering_agrees_with_u128_oracle",
+          "line": 71,
+          "called": [
+            "b",
+            "cmp"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "display_agrees_with_u128_oracle",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "from_str_agrees_with_u128_oracle",
+          "line": 86,
+          "called": [
+            "text"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "be_bytes_agree_with_u128_oracle",
+          "line": 95,
+          "called": [
+            "bytes",
+            "to_be_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "u128_narrowing_round_trips",
+          "line": 103,
+          "called": [
+            "to_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "be_codec_round_trips_full_width",
+          "line": 113,
+          "called": [
+            "any_amount",
+            "to_be_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decimal_round_trips_full_width",
+          "line": 119,
+          "called": [
+            "any_amount",
+            "b",
+            "bytes",
+            "is_empty",
+            "text"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "serde_round_trips_full_width",
+          "line": 133,
+          "called": [
+            "Amount",
+            "any_amount",
+            "json"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "ordering_matches_big_endian_byte_order",
+          "line": 144,
+          "called": [
+            "any_amount",
+            "b",
+            "cmp",
+            "to_be_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "add_never_wraps",
+          "line": 151,
+          "called": [
+            "any_amount",
+            "b",
+            "checked_add"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "sub_inverts_add",
+          "line": 161,
+          "called": [
+            "any_amount",
+            "b",
+            "checked_add",
+            "checked_sub"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "sub_refuses_exactly_on_underflow",
+          "line": 171,
+          "called": [
+            "any_amount",
+            "b",
+            "checked_sub"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_be_slice_refuses_wrong_lengths",
+          "line": 178,
+          "called": [
+            "AMOUNT_BYTES",
+            "Err",
+            "bytes",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_str_never_panics",
+          "line": 191,
+          "called": [
+            "b",
+            "bytes",
+            "is_empty",
+            "text"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "leading_zeros_are_value_preserving",
+          "line": 200,
+          "called": [
+            "any_amount"
           ]
         }
       ]
@@ -746,7 +1504,8 @@
             "MAX_SCALAR_ATTEMPT_INDEX",
             "finalize",
             "scalar_in_range",
-            "seed"
+            "seed",
+            "to_be_bytes"
           ]
         },
         {
@@ -773,6 +1532,7 @@
             "action",
             "actor_private_scalar",
             "amount",
+            "checked_add",
             "clone",
             "config",
             "encode_signed_action",
@@ -3275,7 +4035,8 @@
             "reason",
             "run",
             "spawn_mock_response_server",
-            "stop"
+            "stop",
+            "to_be_bytes"
           ]
         },
         {
@@ -3294,7 +4055,8 @@
             "push",
             "run",
             "spawn_mock_response_server",
-            "stop"
+            "stop",
+            "to_be_bytes"
           ]
         },
         {
@@ -3731,6 +4493,7 @@
             "r",
             "record",
             "records",
+            "to_be_bytes",
             "to_tag"
           ]
         },
@@ -3752,6 +4515,7 @@
           "line": 397,
           "called": [
             "bytes",
+            "checked_add",
             "get",
             "next",
             "offset",
@@ -3769,6 +4533,7 @@
             "MAX_RECORD_BYTES",
             "_",
             "bytes",
+            "checked_add",
             "cursor",
             "len",
             "read_u32_be_at",
@@ -3888,6 +4653,7 @@
           "called": [
             "Err",
             "bytes",
+            "to_be_bytes",
             "to_bytes"
           ]
         },
@@ -3900,6 +4666,7 @@
             "FORMAT_VERSION",
             "MAGIC",
             "bytes",
+            "to_be_bytes",
             "to_tag"
           ]
         },
@@ -3912,6 +4679,7 @@
             "FORMAT_VERSION",
             "MAGIC",
             "bytes",
+            "to_be_bytes",
             "to_tag"
           ]
         },
@@ -3924,6 +4692,7 @@
             "FORMAT_VERSION",
             "MAGIC",
             "bytes",
+            "to_be_bytes",
             "to_tag"
           ]
         },
@@ -3936,6 +4705,7 @@
             "FORMAT_VERSION",
             "MAGIC",
             "bytes",
+            "to_be_bytes",
             "to_tag"
           ]
         },
@@ -3949,6 +4719,7 @@
             "MAGIC",
             "MAX_RECORD_BYTES",
             "bytes",
+            "to_be_bytes",
             "to_tag"
           ]
         },
@@ -3962,6 +4733,7 @@
             "MAGIC",
             "MAX_RECORD_BYTES",
             "bytes",
+            "to_be_bytes",
             "to_tag"
           ]
         },
@@ -4114,6 +4886,7 @@
             "FORMAT_VERSION",
             "MAGIC",
             "bytes",
+            "to_be_bytes",
             "to_tag"
           ]
         },
@@ -4304,6 +5077,7 @@
             "HARD_MAX_SUBSCRIBERS",
             "HARD_MAX_SUBSCRIBER_LAG",
             "HARD_MAX_WRITE_TIMEOUT_MS",
+            "is_zero",
             "knomosis_binary",
             "log_path",
             "mock",
@@ -6190,7 +6964,8 @@
             "push",
             "read_exact",
             "reason",
-            "state"
+            "state",
+            "to_be_bytes"
           ]
         },
         {
@@ -6284,6 +7059,7 @@
             "backoff_duration",
             "drop",
             "events",
+            "is_zero",
             "load",
             "lock",
             "state",
@@ -6624,7 +7400,8 @@
             "last_delivered_seq",
             "len",
             "min",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -6673,7 +7450,8 @@
             "KIND_SUBSCRIBE",
             "frame",
             "push",
-            "resume_from"
+            "resume_from",
+            "to_be_bytes"
           ]
         },
         {
@@ -6884,7 +7662,8 @@
             "cursor",
             "max",
             "push",
-            "read_outbound"
+            "read_outbound",
+            "to_be_bytes"
           ]
         },
         {
@@ -6899,7 +7678,8 @@
             "cursor",
             "push",
             "read_outbound",
-            "start"
+            "start",
+            "to_be_bytes"
           ]
         },
         {
@@ -7099,7 +7879,8 @@
             "bytes",
             "cursor",
             "push",
-            "read_outbound"
+            "read_outbound",
+            "to_be_bytes"
           ]
         }
       ]
@@ -10088,7 +10869,8 @@
             "peek_event_tag",
             "push",
             "read_outbound",
-            "start"
+            "start",
+            "to_be_bytes"
           ]
         },
         {
@@ -11128,7 +11910,8 @@
           "name": "topic_from_u128",
           "line": 836,
           "called": [
-            "TopicHash"
+            "TopicHash",
+            "to_be_bytes"
           ]
         },
         {
@@ -11136,20 +11919,25 @@
           "name": "topic_from_u64",
           "line": 843,
           "called": [
-            "TopicHash"
+            "TopicHash",
+            "to_be_bytes"
           ]
         },
         {
           "kind": "fn",
           "name": "word_from_u128",
           "line": 850,
-          "called": []
+          "called": [
+            "to_be_bytes"
+          ]
         },
         {
           "kind": "fn",
           "name": "word_from_u64",
           "line": 857,
-          "called": []
+          "called": [
+            "to_be_bytes"
+          ]
         },
         {
           "kind": "fn",
@@ -11308,6 +12096,7 @@
             "decode_event",
             "event",
             "hash",
+            "to_be_bytes",
             "to_vec",
             "topic_from_u64"
           ]
@@ -12248,6 +13037,7 @@
           "called": [
             "JsonRpcSubmitError",
             "_",
+            "checked_add",
             "lock"
           ]
         },
@@ -12461,7 +13251,8 @@
           "called": [
             "be_trim",
             "len",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -12470,7 +13261,8 @@
           "line": 902,
           "called": [
             "be_trim",
-            "encode_bytes"
+            "encode_bytes",
+            "to_be_bytes"
           ]
         },
         {
@@ -12490,7 +13282,8 @@
             "be_trim",
             "iter",
             "len",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -14156,6 +14949,7 @@
           "name": "interruptible_sleep",
           "line": 2139,
           "called": [
+            "checked_sub",
             "load",
             "min",
             "stop"
@@ -14263,7 +15057,8 @@
           "name": "topic_from_u128",
           "line": 2259,
           "called": [
-            "TopicHash"
+            "TopicHash",
+            "to_be_bytes"
           ]
         },
         {
@@ -14271,7 +15066,8 @@
           "name": "topic_from_u64",
           "line": 2265,
           "called": [
-            "TopicHash"
+            "TopicHash",
+            "to_be_bytes"
           ]
         },
         {
@@ -15495,7 +16291,8 @@
             "CURSOR_KEY",
             "PersistenceError",
             "put",
-            "storage"
+            "storage",
+            "to_be_bytes"
           ]
         },
         {
@@ -15698,6 +16495,7 @@
             "rec",
             "response_key",
             "storage",
+            "to_be_bytes",
             "transaction"
           ]
         },
@@ -15796,7 +16594,8 @@
           "line": 818,
           "called": [
             "GAME_PREFIX",
-            "game_id"
+            "game_id",
+            "to_be_bytes"
           ]
         },
         {
@@ -15812,7 +16611,8 @@
           "name": "batch_key",
           "line": 838,
           "called": [
-            "BATCH_PREFIX"
+            "BATCH_PREFIX",
+            "to_be_bytes"
           ]
         },
         {
@@ -16393,7 +17193,8 @@
           "line": 396,
           "called": [
             "GAMES_SELECTOR",
-            "game_id"
+            "game_id",
+            "to_be_bytes"
           ]
         },
         {
@@ -16523,7 +17324,8 @@
           "called": [
             "GAMES_SELECTOR",
             "encode_games_calldata",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -16532,7 +17334,8 @@
           "line": 667,
           "called": [
             "encode_games_calldata",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -16540,7 +17343,8 @@
           "name": "synth_response_bytes",
           "line": 674,
           "called": [
-            "GAMES_RESPONSE_BYTES"
+            "GAMES_RESPONSE_BYTES",
+            "to_be_bytes"
           ]
         },
         {
@@ -16649,7 +17453,8 @@
             "Err",
             "read_strict_bool_from_slot",
             "read_u128_from_slot",
-            "read_u64_from_slot"
+            "read_u64_from_slot",
+            "to_be_bytes"
           ]
         },
         {
@@ -16697,7 +17502,8 @@
             "_",
             "bytes",
             "decode_game_state",
-            "synth_response_bytes"
+            "synth_response_bytes",
+            "to_be_bytes"
           ]
         },
         {
@@ -16715,7 +17521,8 @@
           "name": "read_address_uses_low_8_bytes",
           "line": 888,
           "called": [
-            "read_address_as_actor_id"
+            "read_address_as_actor_id",
+            "to_be_bytes"
           ]
         },
         {
@@ -18223,7 +19030,9 @@
           "kind": "fn",
           "name": "u256_be",
           "line": 1012,
-          "called": []
+          "called": [
+            "to_be_bytes"
+          ]
         },
         {
           "kind": "fn",
@@ -18650,7 +19459,8 @@
             "b",
             "bytes",
             "commit",
-            "encode_submit_calldata"
+            "encode_submit_calldata",
+            "to_be_bytes"
           ]
         },
         {
@@ -19472,6 +20282,7 @@
             "set_last_confirmed",
             "set_latest",
             "source",
+            "to_be_bytes",
             "watcher"
           ]
         },
@@ -19562,7 +20373,8 @@
           "line": 55,
           "called": [
             "TopicHash",
-            "seed"
+            "seed",
+            "to_be_bytes"
           ]
         },
         {
@@ -19876,7 +20688,8 @@
           "name": "topic_from_u128",
           "line": 59,
           "called": [
-            "TopicHash"
+            "TopicHash",
+            "to_be_bytes"
           ]
         },
         {
@@ -19884,7 +20697,8 @@
           "name": "topic_from_u64",
           "line": 65,
           "called": [
-            "TopicHash"
+            "TopicHash",
+            "to_be_bytes"
           ]
         },
         {
@@ -19897,7 +20711,9 @@
           "kind": "fn",
           "name": "word_from_u128",
           "line": 77,
-          "called": []
+          "called": [
+            "to_be_bytes"
+          ]
         },
         {
           "kind": "fn",
@@ -20604,13 +21420,17 @@
           "kind": "fn",
           "name": "commit_strategy",
           "line": 42,
-          "called": []
+          "called": [
+            "Value"
+          ]
         },
         {
           "kind": "fn",
           "name": "log_index_strategy",
           "line": 53,
-          "called": []
+          "called": [
+            "Value"
+          ]
         },
         {
           "kind": "fn",
@@ -20621,7 +21441,9 @@
             "DisputedRange",
             "GameState",
             "MAX_BISECTION_DEPTH",
+            "Value",
             "_",
+            "checked_add",
             "commit",
             "commit_strategy",
             "depth",
@@ -20636,6 +21458,7 @@
           "line": 99,
           "called": [
             "GameState",
+            "Value",
             "in_progress_game_strategy"
           ]
         },
@@ -20781,6 +21604,7 @@
           "called": [
             "Claim",
             "DisputedRange",
+            "checked_add",
             "commit",
             "log_index_strategy",
             "midpoint_idx",
@@ -21424,7 +22248,8 @@
           "name": "synth_game_state_bytes",
           "line": 202,
           "called": [
-            "GAMES_RESPONSE_BYTES"
+            "GAMES_RESPONSE_BYTES",
+            "to_be_bytes"
           ]
         },
         {
@@ -21432,6 +22257,7 @@
           "name": "end_to_end_eth_call_round_trip",
           "line": 238,
           "called": [
+            "Value",
             "captured",
             "contract_addr",
             "depth",
@@ -21819,6 +22645,7 @@
             "put",
             "resource",
             "seed",
+            "to_be_bytes",
             "transaction",
             "unix"
           ]
@@ -24500,7 +25327,8 @@
             "ensure_identifier",
             "path",
             "put",
-            "resource"
+            "resource",
+            "to_be_bytes"
           ]
         },
         {
@@ -24893,7 +25721,8 @@
             "put",
             "resource",
             "state",
-            "tls"
+            "tls",
+            "to_be_bytes"
           ]
         }
       ]
@@ -25093,7 +25922,8 @@
             "encode_event",
             "frame",
             "len",
-            "one_u64"
+            "one_u64",
+            "to_be_bytes"
           ]
         },
         {
@@ -25101,7 +25931,8 @@
           "name": "one_u64",
           "line": 386,
           "called": [
-            "kind"
+            "kind",
+            "to_be_bytes"
           ]
         },
         {
@@ -25320,7 +26151,8 @@
             "listener",
             "local_addr",
             "read_exact",
-            "req"
+            "req",
+            "to_be_bytes"
           ]
         },
         {
@@ -25390,6 +26222,7 @@
           "name": "EventJson",
           "line": 37,
           "called": [
+            "Value",
             "actor",
             "event_type",
             "resource"
@@ -25430,6 +26263,7 @@
           "name": "Rendered",
           "line": 116,
           "called": [
+            "Value",
             "actor",
             "resource"
           ]
@@ -25483,6 +26317,7 @@
           "called": [
             "DecodeError",
             "EventJson",
+            "Value",
             "json",
             "render_event"
           ]
@@ -25593,6 +26428,7 @@
           "name": "expected_envelopes",
           "line": 618,
           "called": [
+            "Value",
             "json"
           ]
         },
@@ -26208,6 +27044,7 @@
           "line": 259,
           "called": [
             "SHUTDOWN_POLL",
+            "checked_sub",
             "load",
             "min"
           ]
@@ -26256,7 +27093,8 @@
             "KIND_EVENT",
             "balance_payload",
             "frame",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -26490,6 +27328,7 @@
             "server",
             "spawn",
             "state",
+            "to_be_bytes",
             "wait_until"
           ]
         }
@@ -26767,6 +27606,7 @@
           "line": 71,
           "called": [
             "Cursor",
+            "checked_add",
             "next"
           ]
         },
@@ -27339,6 +28179,7 @@
           "called": [
             "BACKOFF_BASE",
             "BACKOFF_CAP",
+            "is_zero",
             "min",
             "next"
           ]
@@ -27417,6 +28258,7 @@
             "addr",
             "classify_error",
             "client",
+            "is_zero",
             "last_delivered_seq",
             "max",
             "read_frame",
@@ -27486,7 +28328,8 @@
             "KIND_SERVER_SHUTDOWN",
             "KIND_TRUNCATED",
             "len",
-            "one_u64"
+            "one_u64",
+            "to_be_bytes"
           ]
         },
         {
@@ -27494,7 +28337,8 @@
           "name": "one_u64",
           "line": 333,
           "called": [
-            "kind"
+            "kind",
+            "to_be_bytes"
           ]
         },
         {
@@ -27898,6 +28742,7 @@
             "Err",
             "_",
             "bound_next_read",
+            "is_zero",
             "remaining"
           ]
         },
@@ -27932,6 +28777,7 @@
             "LINGER_DRAIN_MIN_TIMEOUT",
             "LINGER_DRAIN_TIMEOUT",
             "_",
+            "is_zero",
             "max",
             "min",
             "read",
@@ -28497,7 +29343,8 @@
             "LINGER_DRAIN_BUDGET",
             "LINGER_DRAIN_MAX_BYTES",
             "LINGER_DRAIN_MIN_TIMEOUT",
-            "LINGER_DRAIN_TIMEOUT"
+            "LINGER_DRAIN_TIMEOUT",
+            "is_zero"
           ]
         },
         {
@@ -28526,6 +29373,7 @@
           "line": 1529,
           "called": [
             "b",
+            "checked_sub",
             "kind",
             "read"
           ]
@@ -28574,6 +29422,7 @@
             "_",
             "b",
             "budget",
+            "checked_sub",
             "iter",
             "kind",
             "len",
@@ -30450,6 +31299,7 @@
             "scan",
             "snapshot",
             "storage",
+            "to_be_bytes",
             "with_header"
           ]
         },
@@ -30515,7 +31365,8 @@
             "balance_key",
             "path",
             "put",
-            "storage"
+            "storage",
+            "to_be_bytes"
           ]
         },
         {
@@ -30665,7 +31516,8 @@
             "credit_actor_budget_current_epoch_grants",
             "path",
             "put",
-            "storage"
+            "storage",
+            "to_be_bytes"
           ]
         },
         {
@@ -30710,7 +31562,8 @@
             "path",
             "put",
             "reads",
-            "storage"
+            "storage",
+            "to_be_bytes"
           ]
         }
       ]
@@ -30826,7 +31679,8 @@
             "credit_pool_eth",
             "path",
             "put",
-            "storage"
+            "storage",
+            "to_be_bytes"
           ]
         },
         {
@@ -30928,6 +31782,7 @@
             "PARSE_ERROR",
             "RequestPayload",
             "RouteOutcome",
+            "Value",
             "_",
             "body",
             "config",
@@ -30950,6 +31805,7 @@
             "BlockHeight",
             "INVALID_REQUEST",
             "METHOD_NOT_FOUND",
+            "Value",
             "_",
             "clone",
             "error_response",
@@ -31012,6 +31868,7 @@
           "name": "result_response",
           "line": 259,
           "called": [
+            "Value",
             "id",
             "insert"
           ]
@@ -31021,6 +31878,7 @@
           "name": "error_response",
           "line": 268,
           "called": [
+            "Value",
             "id",
             "insert"
           ]
@@ -31031,6 +31889,7 @@
           "line": 282,
           "called": [
             "RouteOutcome",
+            "Value",
             "_"
           ]
         },
@@ -31638,6 +32497,7 @@
             "b",
             "bytes",
             "parse_verdict_response",
+            "to_be_bytes",
             "to_byte"
           ]
         },
@@ -31651,6 +32511,7 @@
             "RESPONSE_HEADER_LEN",
             "header",
             "parse_verdict_response",
+            "to_be_bytes",
             "to_byte"
           ]
         },
@@ -31662,6 +32523,7 @@
             "Err",
             "bytes",
             "parse_verdict_response",
+            "to_be_bytes",
             "to_byte"
           ]
         },
@@ -31887,7 +32749,9 @@
           "kind": "fn",
           "name": "is_enabled",
           "line": 167,
-          "called": []
+          "called": [
+            "is_zero"
+          ]
         },
         {
           "kind": "fn",
@@ -32441,6 +33305,7 @@
             "_",
             "encode",
             "flush",
+            "is_zero",
             "load",
             "ok",
             "read_frame",
@@ -32907,7 +33772,8 @@
             "cursor",
             "ensure_identifier",
             "path",
-            "put"
+            "put",
+            "to_be_bytes"
           ]
         },
         {
@@ -33214,6 +34080,7 @@
             "spawn_plain_listener",
             "state",
             "tls",
+            "to_be_bytes",
             "unix"
           ]
         },
@@ -33429,7 +34296,8 @@
             "parse",
             "r",
             "start_harness",
-            "stop"
+            "stop",
+            "to_be_bytes"
           ]
         },
         {
@@ -33626,7 +34494,8 @@
             "actor",
             "encode_event",
             "len",
-            "resource"
+            "resource",
+            "to_be_bytes"
           ]
         },
         {
@@ -35021,7 +35890,9 @@
           "kind": "fn",
           "name": "ordering_reflexive",
           "line": 299,
-          "called": []
+          "called": [
+            "cmp"
+          ]
         },
         {
           "kind": "fn",
@@ -35656,6 +36527,7 @@
             "Err",
             "HEAD_LEN",
             "bytes",
+            "checked_add",
             "end",
             "get",
             "head",
@@ -35673,6 +36545,7 @@
             "Err",
             "HEAD_LEN",
             "bytes",
+            "checked_add",
             "end",
             "get",
             "head",
@@ -35701,6 +36574,7 @@
             "Err",
             "b",
             "bytes",
+            "checked_add",
             "end",
             "get",
             "head",
@@ -35730,6 +36604,7 @@
             "HEAD_LEN",
             "_",
             "bytes",
+            "checked_add",
             "end",
             "get",
             "head",
@@ -37131,6 +38006,7 @@
             "HARD_MAX_SIGNERS_PER_CONN",
             "has_any_listener",
             "has_kernel_choice",
+            "is_zero",
             "knomosis_binary",
             "max_queue_depth",
             "scheduler"
@@ -38810,7 +39686,8 @@
           "name": "op_strategy",
           "line": 1245,
           "called": [
-            "Op"
+            "Op",
+            "Value"
           ]
         },
         {
@@ -39459,7 +40336,8 @@
             "WriteFrameError",
             "_",
             "flush",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -39470,7 +40348,8 @@
             "HEADER_LEN",
             "WriteFrameError",
             "_",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -39484,7 +40363,8 @@
             "WriteFrameError",
             "_",
             "len",
-            "signer"
+            "signer",
+            "to_be_bytes"
           ]
         },
         {
@@ -39581,7 +40461,8 @@
             "Err",
             "bytes",
             "cursor",
-            "read_frame"
+            "read_frame",
+            "to_be_bytes"
           ]
         },
         {
@@ -39594,7 +40475,8 @@
             "bytes",
             "cursor",
             "max",
-            "read_frame"
+            "read_frame",
+            "to_be_bytes"
           ]
         },
         {
@@ -39607,7 +40489,8 @@
             "bytes",
             "cursor",
             "read_frame",
-            "start"
+            "start",
+            "to_be_bytes"
           ]
         },
         {
@@ -39620,6 +40503,7 @@
             "bytes",
             "cursor",
             "read_frame",
+            "to_be_bytes",
             "to_vec"
           ]
         },
@@ -39828,7 +40712,8 @@
             "encode_frame",
             "len",
             "negotiate_connection",
-            "read_frame_with_prefix"
+            "read_frame_with_prefix",
+            "to_be_bytes"
           ]
         },
         {
@@ -39843,6 +40728,7 @@
             "head",
             "len",
             "negotiate_connection",
+            "to_be_bytes",
             "to_vec"
           ]
         },
@@ -39872,7 +40758,8 @@
             "len",
             "plain",
             "read_frame",
-            "read_hinted_frame"
+            "read_hinted_frame",
+            "to_be_bytes"
           ]
         },
         {
@@ -39894,6 +40781,7 @@
             "Err",
             "bytes",
             "read_hinted_frame",
+            "to_be_bytes",
             "to_vec"
           ]
         },
@@ -39939,6 +40827,7 @@
             "Err",
             "bytes",
             "read_hinted_frame",
+            "to_be_bytes",
             "to_vec"
           ]
         },
@@ -40008,6 +40897,7 @@
             "next",
             "state",
             "tail",
+            "to_be_bytes",
             "to_vec"
           ]
         },
@@ -40034,6 +40924,7 @@
           "line": 1481,
           "called": [
             "is_empty",
+            "is_zero",
             "len",
             "pos"
           ]
@@ -42021,6 +42912,7 @@
           "line": 103,
           "called": [
             "MAX_CONNECTION_TIMEOUT",
+            "checked_add",
             "min"
           ]
         },
@@ -42473,6 +43365,7 @@
           "called": [
             "Err",
             "_",
+            "is_zero",
             "max",
             "min",
             "remaining"
@@ -42547,6 +43440,7 @@
           "name": "read_past_the_deadline_is_timed_out_without_blocking",
           "line": 1159,
           "called": [
+            "checked_sub",
             "idle_server_stream",
             "kind",
             "read",
@@ -44055,6 +44949,7 @@
             "stop",
             "stream",
             "tcp",
+            "to_be_bytes",
             "to_byte"
           ]
         },
@@ -44395,6 +45290,7 @@
             "min",
             "push",
             "reason",
+            "to_be_bytes",
             "to_byte",
             "verdict"
           ]
@@ -45250,6 +46146,7 @@
             "stop",
             "stream",
             "tcp",
+            "to_be_bytes",
             "to_byte",
             "verdict"
           ]
@@ -45269,6 +46166,7 @@
             "spawn_server_tcp",
             "stop",
             "stream",
+            "to_be_bytes",
             "to_byte",
             "verdict"
           ]
@@ -46228,7 +47126,8 @@
             "bytes",
             "cursor",
             "max",
-            "read_frame"
+            "read_frame",
+            "to_be_bytes"
           ]
         },
         {
@@ -46498,6 +47397,7 @@
             "spawn_server",
             "stop",
             "submit_raw",
+            "to_be_bytes",
             "to_byte",
             "verdict"
           ]
@@ -46567,6 +47467,7 @@
             "spawn_server",
             "stop",
             "submit_raw",
+            "to_be_bytes",
             "to_byte",
             "to_vec"
           ]
@@ -46643,7 +47544,8 @@
             "BALANCE_KEY_PREFIX",
             "ResourceId",
             "actor",
-            "resource"
+            "resource",
+            "to_be_bytes"
           ]
         },
         {
@@ -46735,6 +47637,7 @@
             "Err",
             "ResourceId",
             "actor",
+            "checked_add",
             "get",
             "resource",
             "set"
@@ -46751,6 +47654,7 @@
             "Err",
             "ResourceId",
             "actor",
+            "checked_sub",
             "get",
             "resource",
             "set"
@@ -46848,6 +47752,7 @@
             "Err",
             "ResourceId",
             "actor",
+            "checked_add",
             "get",
             "resource",
             "set"
@@ -46864,6 +47769,7 @@
             "Err",
             "ResourceId",
             "actor",
+            "checked_sub",
             "get",
             "resource",
             "set"
@@ -47135,7 +48041,8 @@
             "BudgetDispatchError",
             "CURRENT_EPOCH_KEY",
             "CombinedTransactionOps",
-            "kv_put"
+            "kv_put",
+            "to_be_bytes"
           ]
         },
         {
@@ -47842,7 +48749,8 @@
             "flush",
             "min",
             "resume_from",
-            "stream"
+            "stream",
+            "to_be_bytes"
           ]
         },
         {
@@ -48537,7 +49445,8 @@
             "CursorError",
             "Storage",
             "put",
-            "storage"
+            "storage",
+            "to_be_bytes"
           ]
         },
         {
@@ -48565,7 +49474,8 @@
             "cell",
             "decode_cursor",
             "get",
-            "put"
+            "put",
+            "to_be_bytes"
           ]
         },
         {
@@ -48827,6 +49737,7 @@
             "apply_batch",
             "clear",
             "client",
+            "cmp",
             "decode_event",
             "error",
             "frame",
@@ -48944,6 +49855,7 @@
             "DecodeError",
             "Err",
             "bytes",
+            "checked_add",
             "end",
             "offset",
             "remaining"
@@ -49235,7 +50147,8 @@
           "line": 1115,
           "called": [
             "Amount",
-            "amount"
+            "amount",
+            "to_be_bytes"
           ]
         },
         {
@@ -50340,7 +51253,8 @@
             "BALANCE_KEY_PREFIX",
             "ResourceId",
             "actor",
-            "resource"
+            "resource",
+            "to_be_bytes"
           ]
         },
         {
@@ -50401,6 +51315,7 @@
             "actor",
             "balance_get",
             "balance_set",
+            "checked_add",
             "resource"
           ]
         },
@@ -50418,6 +51333,7 @@
             "actor",
             "balance_get",
             "balance_set",
+            "checked_sub",
             "resource"
           ]
         },
@@ -50437,7 +51353,8 @@
             "kv_put",
             "len",
             "map_combined_err",
-            "max"
+            "max",
+            "to_be_bytes"
           ]
         },
         {
@@ -51071,7 +51988,8 @@
           "name": "credit_grant",
           "line": 112,
           "called": [
-            "actor"
+            "actor",
+            "checked_add"
           ]
         },
         {
@@ -51079,7 +51997,8 @@
           "name": "credit_consumed",
           "line": 120,
           "called": [
-            "actor"
+            "actor",
+            "checked_add"
           ]
         },
         {
@@ -51091,6 +52010,7 @@
             "RESOURCE_ID_ETH",
             "_",
             "amount",
+            "checked_add",
             "resource"
           ]
         },
@@ -51103,6 +52023,7 @@
             "RESOURCE_ID_ETH",
             "_",
             "amount",
+            "checked_sub",
             "resource"
           ]
         },
@@ -51129,7 +52050,9 @@
           "kind": "fn",
           "name": "actor_strategy",
           "line": 214,
-          "called": []
+          "called": [
+            "Value"
+          ]
         },
         {
           "kind": "fn",
@@ -51137,14 +52060,17 @@
           "line": 218,
           "called": [
             "RESOURCE_ID_BOLD",
-            "RESOURCE_ID_ETH"
+            "RESOURCE_ID_ETH",
+            "Value"
           ]
         },
         {
           "kind": "fn",
           "name": "amount_strategy",
           "line": 223,
-          "called": []
+          "called": [
+            "Value"
+          ]
         },
         {
           "kind": "fn",
@@ -51152,6 +52078,7 @@
           "line": 228,
           "called": [
             "Event",
+            "Value",
             "actor",
             "actor_strategy",
             "amount",
@@ -51170,6 +52097,7 @@
           "line": 302,
           "called": [
             "Event",
+            "Value",
             "gp_event_strategy"
           ]
         },
@@ -51384,7 +52312,8 @@
           "line": 55,
           "called": [
             "len",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -51393,7 +52322,8 @@
           "line": 66,
           "called": [
             "kind",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -52238,6 +53168,7 @@
           "line": 30,
           "called": [
             "Event",
+            "Value",
             "actor",
             "addr",
             "amount",
@@ -52255,6 +53186,7 @@
           "line": 103,
           "called": [
             "Event",
+            "Value",
             "actor",
             "amount",
             "amt",
@@ -52271,6 +53203,7 @@
             "_",
             "actor",
             "amount",
+            "checked_sub",
             "event",
             "get",
             "insert",
@@ -52285,6 +53218,7 @@
           "line": 192,
           "called": [
             "Event",
+            "Value",
             "actor",
             "addr",
             "amount",
@@ -52446,7 +53380,8 @@
             "credit_actor_budget_current_epoch_consumed",
             "credit_actor_budget_current_epoch_grants",
             "path",
-            "put"
+            "put",
+            "to_be_bytes"
           ]
         },
         {
@@ -52523,7 +53458,8 @@
           "line": 54,
           "called": [
             "len",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -52532,7 +53468,8 @@
           "line": 65,
           "called": [
             "kind",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -52659,7 +53596,8 @@
             "listener",
             "max",
             "read_frame",
-            "run_mock_server"
+            "run_mock_server",
+            "to_be_bytes"
           ]
         },
         {
@@ -52676,7 +53614,8 @@
             "kind",
             "listener",
             "read_frame",
-            "run_mock_server"
+            "run_mock_server",
+            "to_be_bytes"
           ]
         },
         {
@@ -52692,7 +53631,8 @@
             "frame",
             "listener",
             "read_frame",
-            "run_mock_server"
+            "run_mock_server",
+            "to_be_bytes"
           ]
         },
         {
@@ -52717,7 +53657,8 @@
             "len",
             "listener",
             "read_frame",
-            "run_mock_server"
+            "run_mock_server",
+            "to_be_bytes"
           ]
         },
         {
@@ -52734,7 +53675,8 @@
             "listener",
             "max",
             "read_frame",
-            "run_mock_server"
+            "run_mock_server",
+            "to_be_bytes"
           ]
         }
       ]
@@ -53241,6 +54183,7 @@
             "AssignError",
             "EthAddress",
             "addr",
+            "checked_add",
             "get",
             "insert",
             "next",
@@ -54378,6 +55321,7 @@
           "called": [
             "DecodeError",
             "Err",
+            "checked_add",
             "end",
             "len",
             "offset"
@@ -54401,6 +55345,7 @@
             "DecodeError",
             "Err",
             "b",
+            "checked_add",
             "header",
             "iter",
             "len",
@@ -54844,7 +55789,8 @@
             "event",
             "id",
             "len",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -54945,6 +55891,7 @@
             "Err",
             "FixtureError",
             "bytes",
+            "checked_add",
             "cursor",
             "end",
             "len",
@@ -54971,7 +55918,8 @@
             "action",
             "len",
             "nonce",
-            "signer"
+            "signer",
+            "to_be_bytes"
           ]
         },
         {
@@ -55037,7 +55985,8 @@
           "called": [
             "FEE_SPLIT_INPUT_BYTES",
             "FeeSplitInput",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -55257,7 +56206,8 @@
             "Err",
             "bytes",
             "decode_input",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -55269,7 +56219,8 @@
             "_",
             "bytes",
             "decode_input",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -55280,7 +56231,8 @@
             "Err",
             "bytes",
             "decode_input",
-            "push"
+            "push",
+            "to_be_bytes"
           ]
         },
         {
@@ -55479,7 +56431,8 @@
           "line": 1564,
           "called": [
             "bytes",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -56128,6 +57081,7 @@
           "name": "ParseExit",
           "line": 255,
           "called": [
+            "Error",
             "Version"
           ]
         },
@@ -58188,6 +59142,7 @@
           "name": "RpcRequest",
           "line": 324,
           "called": [
+            "Value",
             "id"
           ]
         },
@@ -58197,6 +59152,7 @@
           "line": 333,
           "called": [
             "RpcErrorObject",
+            "Value",
             "default",
             "error",
             "id"
@@ -58253,6 +59209,7 @@
           "line": 416,
           "called": [
             "SourceError",
+            "Value",
             "rpc_call"
           ]
         },
@@ -58265,6 +59222,7 @@
             "RpcError",
             "RpcRequest",
             "RpcResponse",
+            "Value",
             "body",
             "error",
             "http_post",
@@ -59785,7 +60743,8 @@
             "encode",
             "len",
             "signed",
-            "signer"
+            "signer",
+            "to_be_bytes"
           ]
         },
         {
@@ -59944,7 +60903,8 @@
             "encode",
             "frame",
             "len",
-            "signed_with_signer"
+            "signed_with_signer",
+            "to_be_bytes"
           ]
         },
         {
@@ -59962,6 +60922,7 @@
             "len",
             "signed_with_signer",
             "signer",
+            "to_be_bytes",
             "with_emit_hints"
           ]
         },
@@ -60575,7 +61536,9 @@
           "kind": "fn",
           "name": "be_amount",
           "line": 1094,
-          "called": []
+          "called": [
+            "to_be_bytes"
+          ]
         },
         {
           "kind": "fn",
@@ -60612,6 +61575,7 @@
             "preview_ingest_materialising",
             "r",
             "signer",
+            "to_be_bytes",
             "try_assign",
             "u"
           ]
@@ -60632,6 +61596,7 @@
             "preview_ingest_materialising",
             "r",
             "signer",
+            "to_be_bytes",
             "try_assign",
             "u"
           ]
@@ -61039,7 +62004,8 @@
             "block_number",
             "hash",
             "identity_addr",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -61393,7 +62359,8 @@
             "RawLog",
             "block_number",
             "bridge_addr",
-            "hash"
+            "hash",
+            "to_be_bytes"
           ]
         },
         {
@@ -61450,6 +62417,7 @@
             "source",
             "submitter",
             "test_key",
+            "to_be_bytes",
             "watcher"
           ]
         },
@@ -61985,6 +62953,7 @@
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "budget",
+            "checked_add",
             "corpus_path",
             "decode_fee_split_input",
             "fixture",
@@ -62234,6 +63203,7 @@
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "budget",
+            "checked_add",
             "corpus_path",
             "decode_fee_split_input",
             "fixture",
@@ -62519,7 +63489,8 @@
             "block_number",
             "hash",
             "identity_addr",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -62853,6 +63824,7 @@
             "FeeSplitInput",
             "MAX_BUDGET_PER_DEPOSIT",
             "budget",
+            "checked_add",
             "pool",
             "split"
           ]
@@ -63028,6 +64000,7 @@
           "name": "MockRpc",
           "line": 35,
           "called": [
+            "Value",
             "handle",
             "stop",
             "url"
@@ -63065,6 +64038,7 @@
           "name": "set_result",
           "line": 85,
           "called": [
+            "Value",
             "lock"
           ]
         },
@@ -63092,6 +64066,7 @@
           "name": "respond",
           "line": 103,
           "called": [
+            "Value",
             "_",
             "b",
             "body",
@@ -63137,6 +64112,7 @@
           "name": "log_entry",
           "line": 149,
           "called": [
+            "Value",
             "block_hash",
             "json"
           ]
@@ -63268,7 +64244,8 @@
           "called": [
             "ACTOR_KEY_LEN",
             "ActorId",
-            "actor"
+            "actor",
+            "to_be_bytes"
           ]
         },
         {
@@ -63288,7 +64265,8 @@
           "line": 155,
           "called": [
             "COUNTER_VALUE_LEN",
-            "CounterValue"
+            "CounterValue",
+            "to_be_bytes"
           ]
         },
         {
@@ -63790,6 +64768,7 @@
             "CounterValue",
             "actor",
             "actor_key",
+            "checked_add",
             "conn",
             "encode_counter",
             "key",
@@ -63807,6 +64786,7 @@
             "CounterValue",
             "actor",
             "actor_key",
+            "checked_sub",
             "conn",
             "encode_counter",
             "key",
@@ -65127,6 +66107,7 @@
             "CounterValue",
             "actor",
             "actor_key",
+            "checked_add",
             "conn",
             "encode_counter",
             "key",
@@ -65144,6 +66125,7 @@
             "CounterValue",
             "actor",
             "actor_key",
+            "checked_sub",
             "conn",
             "encode_counter",
             "key",
@@ -67103,7 +68085,8 @@
             "get",
             "key",
             "path",
-            "put"
+            "put",
+            "to_be_bytes"
           ]
         },
         {
@@ -67144,6 +68127,7 @@
             "len",
             "put",
             "scan",
+            "to_be_bytes",
             "to_vec"
           ]
         },
@@ -67159,6 +68143,7 @@
             "put",
             "rollback",
             "scan",
+            "to_be_bytes",
             "transaction"
           ]
         },
@@ -67243,6 +68228,7 @@
           "line": 39,
           "called": [
             "Op",
+            "Value",
             "key"
           ]
         },
@@ -67516,7 +68502,8 @@
           "line": 364,
           "called": [
             "FixtureRecord",
-            "len"
+            "len",
+            "to_be_bytes"
           ]
         },
         {
@@ -67536,6 +68523,7 @@
           "line": 398,
           "called": [
             "bytes",
+            "checked_add",
             "cursor",
             "get",
             "next",
@@ -67548,6 +68536,7 @@
           "line": 406,
           "called": [
             "bytes",
+            "checked_add",
             "cursor",
             "get",
             "len",
@@ -68329,6 +69318,7 @@
           "line": 122,
           "called": [
             "bytes",
+            "checked_add",
             "cursor",
             "get",
             "next",
@@ -68341,6 +69331,7 @@
           "line": 130,
           "called": [
             "bytes",
+            "checked_add",
             "cursor",
             "get",
             "len",
