@@ -68,7 +68,7 @@
 //! only, never as `*`/`+`/`-`, so no caller can reach a wrapping or
 //! panicking operation by writing the obvious thing.
 
-#![doc(html_root_url = "https://docs.rs/knomosis-amount/0.15.0")]
+#![doc(html_root_url = "https://docs.rs/knomosis-amount/0.16.0")]
 
 use core::cmp::Ordering;
 use core::fmt;
