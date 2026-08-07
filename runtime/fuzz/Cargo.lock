@@ -340,6 +340,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "knomosis-amount"
+version = "0.14.0"
+dependencies = [
+ "crypto-bigint",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "knomosis-cli-common"
 version = "0.14.0"
 dependencies = [
@@ -383,6 +392,7 @@ dependencies = [
 name = "knomosis-host"
 version = "0.14.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-cli-common",
  "rustls",
  "rustls-pki-types",
@@ -396,6 +406,7 @@ dependencies = [
 name = "knomosis-indexer"
 version = "0.14.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-storage",
  "thiserror",
@@ -408,6 +419,7 @@ name = "knomosis-l1-ingest"
 version = "0.14.0"
 dependencies = [
  "k256",
+ "knomosis-amount",
  "knomosis-cli-common",
  "serde",
  "serde_json",
@@ -422,6 +434,7 @@ dependencies = [
 name = "knomosis-storage"
 version = "0.14.0"
 dependencies = [
+ "knomosis-amount",
  "rusqlite",
  "thiserror",
  "tracing",

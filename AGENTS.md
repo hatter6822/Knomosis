@@ -860,10 +860,10 @@ at the current version:
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
 | Lean | ~3 303 | 172 | `lake test` |
-| Rust | ~2 493 | across 13 crates | `cargo test --workspace` |
-| Solidity | ~996 passed | 73 forge suites | `cd solidity && forge test` |
+| Rust | ~2 497 | across 13 crates | `cargo test --workspace` |
+| Solidity | ~997 passed | 73 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **987 passed / 0 failed / 0 skipped** — the
+`forge test` runs **997 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried

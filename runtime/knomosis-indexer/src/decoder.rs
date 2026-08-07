@@ -243,7 +243,6 @@ impl<'a> Cursor<'a> {
         // rejection is exactly what the widening removes.
         let mut le = [0u8; AMOUNT_BYTES];
         le.copy_from_slice(&buf[1..AMOUNT_HEAD_LEN]);
-        let _ = head_offset;
         Ok(Amount::from_le_bytes(le))
     }
 

@@ -87,8 +87,16 @@ pub const AMOUNT_BYTES: usize = 32;
 
 /// Maximum number of decimal digits an [`Amount`] can require.
 ///
-/// `2^256 - 1` is a 78-digit decimal number.  Used to bound parsing
-/// work and to pre-size formatting buffers.
+/// `2^256 - 1` is a 78-digit decimal number.  Sizes [`Display`]'s
+/// stack buffer, which is why it must be exact rather than generous.
+///
+/// Parsing does NOT use it, deliberately: [`FromStr`] bounds its own
+/// work through `checked_mul` (the accumulator overflows and errors by
+/// roughly the 78th significant digit), and a raw length cap here
+/// would wrongly reject valid zero-padded inputs — `"000…0005"` is
+/// five at any length, and leading zeros are accepted by contract.
+///
+/// [`Display`]: core::fmt::Display
 pub const AMOUNT_MAX_DECIMAL_DIGITS: usize = 78;
 
 /// Errors produced when building an [`Amount`] from an external
@@ -565,6 +573,78 @@ mod tests {
         assert!(sum > base, "the sum must exceed the base");
         assert_eq!(sum.to_u128(), None, "the sum must be out of u128 range");
         assert_eq!(sum.checked_sub(delta), Some(base));
+    }
+
+    // ---------------------------------------------------------------
+    // The little-endian codec, and the remaining arithmetic
+    // ---------------------------------------------------------------
+
+    /// The LE codec round-trips, and is exactly the byte-reverse of
+    /// the BE one.  The relation is the load-bearing assertion: two
+    /// independent codecs that each round-trip could still disagree
+    /// with each other, and the wire (LE, per the CBE amount payload)
+    /// and storage (BE, so blob order sorts numerically) must denote
+    /// the same numbers.
+    #[test]
+    fn le_codec_round_trips_and_mirrors_be() {
+        for probe in [Amount::ZERO, Amount::ONE, Amount::MAX, two_pow_128()] {
+            assert_eq!(Amount::from_le_bytes(probe.to_le_bytes()), probe);
+            let mut reversed = probe.to_be_bytes();
+            reversed.reverse();
+            assert_eq!(probe.to_le_bytes(), reversed, "LE is BE reversed");
+        }
+        // And the placement check a pure round-trip cannot see: one is
+        // in the FIRST byte under LE.
+        assert_eq!(Amount::ONE.to_le_bytes()[0], 1);
+        assert!(Amount::ONE.to_le_bytes()[1..].iter().all(|b| *b == 0));
+    }
+
+    /// `checked_mul` is exact inside the range and refuses outside it.
+    ///
+    /// The boundary pinned here is the one the host's refund gate
+    /// leans on: a `u64 × u128` product spans at most `2^192`, so it
+    /// ALWAYS fits — and `(2^128 - 1)^2 < 2^256` shows even the widest
+    /// product of the retired representation's values is exact now.
+    #[test]
+    fn checked_mul_is_exact_in_range_and_refuses_overflow() {
+        let max_u128 = Amount::from_u128(u128::MAX);
+        let squared = max_u128
+            .checked_mul(max_u128)
+            .expect("(2^128 - 1)^2 fits in 256 bits");
+        // (2^128 - 1)^2 = 2^256 - 2^129 + 1, computed independently
+        // via the byte encoding: verified against the decimal string.
+        assert_eq!(
+            squared.to_string(),
+            "115792089237316195423570985008687907852589419931798687112530834793049593217025"
+        );
+        assert_eq!(
+            Amount::from_u64(4).checked_mul(Amount::from_u128(1u128 << 127)),
+            Some(Amount::from_be_bytes({
+                let mut b = [0u8; AMOUNT_BYTES];
+                b[15] = 2; // 2^129
+                b
+            })),
+            "the host gate's wrapping probe is exact here"
+        );
+        assert_eq!(Amount::MAX.checked_mul(Amount::from_u64(2)), None);
+        assert_eq!(Amount::MAX.checked_mul(Amount::ONE), Some(Amount::MAX));
+        assert_eq!(Amount::MAX.checked_mul(Amount::ZERO), Some(Amount::ZERO));
+    }
+
+    /// The saturating pair clamps at the documented ends.
+    #[test]
+    fn saturating_ops_clamp_at_the_ends() {
+        assert_eq!(Amount::MAX.saturating_add(Amount::ONE), Amount::MAX);
+        assert_eq!(Amount::ZERO.saturating_sub(Amount::ONE), Amount::ZERO);
+        // ...and are exact everywhere else.
+        assert_eq!(
+            Amount::from_u64(2).saturating_add(Amount::from_u64(3)),
+            Amount::from_u64(5)
+        );
+        assert_eq!(
+            Amount::from_u64(5).saturating_sub(Amount::from_u64(3)),
+            Amount::from_u64(2)
+        );
     }
 
     // ---------------------------------------------------------------

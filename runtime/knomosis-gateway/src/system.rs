@@ -155,10 +155,24 @@ pub fn info_view(state: &AppState) -> RouteOutcome {
 ///
 /// Lives in [`crate::state::AppState`] so every connection thread
 /// shares one.  See [`READINESS_CACHE_TTL`] for why this exists.
+///
+/// Two locks, deliberately: the SAMPLE lock is held only for the
+/// microseconds a read or write takes and NEVER across a probe, so a
+/// caller can always read the last sample immediately; the PROBE
+/// permit is what one thread holds for the duration of a probe round,
+/// so at most one probe is in flight.  A single mutex protecting both
+/// cannot provide "serve the stale sample while a probe runs" — the
+/// prober would hold the only lock for up to the 2 s connect timeout
+/// per dead upstream, and every reader would queue behind it, which is
+/// the thread-pinning this cache exists to remove.
 #[derive(Debug, Default)]
 pub struct ReadinessCache {
-    /// `None` until the first probe completes.
-    inner: Mutex<Option<CachedReadiness>>,
+    /// The last taken sample.  `None` until the first probe completes.
+    sample: Mutex<Option<CachedReadiness>>,
+    /// The probe permit.  Held across a probe; acquired with
+    /// `try_lock` so a caller that loses the race serves the stale
+    /// sample instead of waiting.
+    probing: Mutex<()>,
 }
 
 /// One taken readiness sample.
@@ -171,52 +185,92 @@ struct CachedReadiness {
 }
 
 impl ReadinessCache {
+    /// Read the last sample, if any.  The lock is held only for the
+    /// copy; a poisoned lock (a panic while writing) still yields the
+    /// value, because readiness must keep answering.
+    fn read(&self) -> Option<CachedReadiness> {
+        match self.sample.lock() {
+            Ok(guard) => *guard,
+            Err(poisoned) => *poisoned.into_inner(),
+        }
+    }
+
+    /// Publish a fresh sample.  Same momentary-lock discipline.
+    fn write(&self, value: CachedReadiness) {
+        match self.sample.lock() {
+            Ok(mut guard) => *guard = Some(value),
+            Err(poisoned) => *poisoned.into_inner() = Some(value),
+        }
+    }
+
     /// Serve a readiness sample, probing only if the cache is cold or
     /// stale.
     ///
-    /// Concurrency is deliberate.  On a flood, one thread probes and
-    /// every other thread serves the last sample IMMEDIATELY via
-    /// `try_lock` rather than queueing behind the probe — queueing
-    /// would reintroduce the thread-pinning this exists to remove,
-    /// just on a mutex instead of a socket.  Serving a slightly older
-    /// sample to the racing callers is the right trade: they were
-    /// going to receive a sample from within the TTL anyway.
+    /// Concurrency contract, pinned by
+    /// `a_probe_in_flight_does_not_block_other_callers`:
     ///
-    /// The one case that DOES block is the cold cache, where there is
-    /// no previous sample to serve.  That happens once per process.
+    ///   * at most ONE probe is in flight at a time (the permit);
+    ///   * while it is, every other caller is served the previous
+    ///     sample IMMEDIATELY — it does not queue behind the probe,
+    ///     because queueing would reintroduce the thread-pinning this
+    ///     cache exists to remove, just on a mutex instead of a
+    ///     socket.  A slightly older sample is the right trade: those
+    ///     callers were going to receive a sample from within the TTL
+    ///     regardless;
+    ///   * the single case that waits is a COLD cache (no sample ever
+    ///     taken), where there is nothing to serve.  That happens once
+    ///     per process.
     fn sample<F: FnOnce() -> CachedReadiness>(&self, probe: F) -> CachedReadiness {
-        let Ok(mut guard) = self.inner.try_lock() else {
-            // A probe is in flight.  Serve the last sample if we have
-            // one; otherwise fall through to the blocking path below.
-            if let Ok(guard) = self.inner.lock() {
-                if let Some(cached) = *guard {
-                    return cached;
-                }
-            }
-            // Cold cache and a contended lock: block, then re-check —
-            // the winner will have filled it.
-            let mut guard = match self.inner.lock() {
-                Ok(g) => g,
-                // A poisoned lock means a prior probe panicked.  Probe
-                // afresh rather than propagate: readiness must keep
-                // answering.
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            if let Some(cached) = *guard {
-                return cached;
-            }
-            let fresh = probe();
-            *guard = Some(fresh);
-            return fresh;
-        };
-        if let Some(cached) = *guard {
+        // Fast path: a fresh sample.
+        if let Some(cached) = self.read() {
             if cached.taken_at.elapsed() < READINESS_CACHE_TTL {
                 return cached;
             }
         }
-        let fresh = probe();
-        *guard = Some(fresh);
-        fresh
+        // Stale or cold: try to become the prober.
+        match self.probing.try_lock() {
+            Ok(_permit) => {
+                // Re-check under the permit: another prober may have
+                // refreshed between the fast path and here.
+                if let Some(cached) = self.read() {
+                    if cached.taken_at.elapsed() < READINESS_CACHE_TTL {
+                        return cached;
+                    }
+                }
+                let fresh = probe();
+                self.write(fresh);
+                fresh
+            }
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+                // A prior prober panicked while holding the permit.
+                // Take it over and probe afresh.
+                let _permit = poisoned.into_inner();
+                let fresh = probe();
+                self.write(fresh);
+                fresh
+            }
+            Err(std::sync::TryLockError::WouldBlock) => {
+                // A probe is in flight on another thread.  Serve the
+                // stale sample immediately.
+                if let Some(cached) = self.read() {
+                    return cached;
+                }
+                // Cold cache: nothing to serve, so wait for the
+                // in-flight probe and read its result.
+                let _permit = match self.probing.lock() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                if let Some(cached) = self.read() {
+                    return cached;
+                }
+                // The prober died before publishing; probe ourselves
+                // (still holding the permit, so no stampede).
+                let fresh = probe();
+                self.write(fresh);
+                fresh
+            }
+        }
     }
 }
 
@@ -295,7 +349,7 @@ mod tests {
     use knomosis_storage::sqlite::SqliteStorage;
     use knomosis_storage::storage::Storage;
     use std::net::{SocketAddr, TcpListener};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     /// A config with no indexer + no upstreams, overridable by the caller.
     fn config() -> Config {
@@ -424,6 +478,87 @@ mod tests {
         assert_eq!(v["indexer"], true);
         assert_eq!(v["ready"], true);
         drop(writer);
+    }
+
+    /// **The non-blocking contract.**  A caller arriving while a
+    /// probe is in flight is served the previous sample immediately —
+    /// it does not queue behind the probe.
+    ///
+    /// This is the property the two-lock design exists for, and the
+    /// one a single-mutex cache cannot provide: there, the prober
+    /// holds the only lock for up to the 2 s connect timeout per dead
+    /// upstream, and every concurrent `/readyz` pins a thread behind
+    /// it — worst exactly when an upstream is down and readiness is
+    /// being polled hardest.  The probe here blocks on a channel until
+    /// the test releases it, so "in flight" is a certainty rather than
+    /// a race; the reader's result arrives through a watchdog channel
+    /// so a regression fails with a message instead of deadlocking the
+    /// suite.
+    #[test]
+    fn a_probe_in_flight_does_not_block_other_callers() {
+        use std::sync::mpsc;
+        use std::sync::Arc;
+
+        let cache = Arc::new(super::ReadinessCache::default());
+        // Seed a STALE sample (twice the TTL old) so the next caller
+        // must probe rather than hit the fast path.
+        cache.write(super::CachedReadiness {
+            taken_at: Instant::now()
+                .checked_sub(READINESS_CACHE_TTL * 2)
+                .expect("the monotonic clock has more than 2s of history"),
+            host: true,
+            subscribe: true,
+            indexer: true,
+        });
+
+        let (started_tx, started_rx) = mpsc::channel::<()>();
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+        let prober = {
+            let cache = Arc::clone(&cache);
+            std::thread::spawn(move || {
+                cache.sample(|| {
+                    started_tx.send(()).expect("test alive");
+                    release_rx.recv().expect("released");
+                    super::CachedReadiness {
+                        taken_at: Instant::now(),
+                        host: false,
+                        subscribe: true,
+                        indexer: true,
+                    }
+                })
+            })
+        };
+        started_rx.recv().expect("the probe is in flight");
+
+        // A second caller must be served the STALE sample now, without
+        // waiting for the probe.  Its own probe closure must never run
+        // -- one probe at a time is the other half of the contract.
+        let (served_tx, served_rx) = mpsc::channel();
+        let reader = {
+            let cache = Arc::clone(&cache);
+            std::thread::spawn(move || {
+                let served = cache.sample(|| panic!("a second probe ran while one was in flight"));
+                served_tx.send(served).expect("test alive");
+            })
+        };
+        if let Ok(served) = served_rx.recv_timeout(Duration::from_secs(2)) {
+            assert!(served.host, "the STALE sample is what gets served");
+        } else {
+            let _ = release_tx.send(());
+            panic!(
+                "the caller queued behind the in-flight probe instead of \
+                 being served the stale sample"
+            );
+        }
+        reader.join().expect("reader exits");
+
+        release_tx.send(()).expect("prober alive");
+        let fresh = prober.join().expect("prober exits");
+        assert!(!fresh.host, "the prober received its own fresh sample");
+        assert!(
+            !cache.read().expect("published").host,
+            "...and published it for the next caller"
+        );
     }
 
     /// **The amplification bound.**  Repeated `/readyz` calls inside

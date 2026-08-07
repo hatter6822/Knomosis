@@ -171,7 +171,10 @@ unseen records.
     unauthenticated caller amplify one cheap request into three and pin
     a connection thread for up to the two-second probe timeout on each,
     worst exactly when an upstream is already down.  Caching makes the
-    probe rate independent of the request rate.  A poll period of 1–10 s
+    probe rate independent of the request rate, and callers arriving
+    while a probe is in flight are served the previous sample
+    immediately rather than queueing behind it — so a dead upstream
+    slows at most one request per second, not every request.  A poll period of 1–10 s
     is unaffected; a probe interval *below* one second will read a
     repeated value, which is the intended behaviour rather than a
     limitation.

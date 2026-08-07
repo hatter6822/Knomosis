@@ -219,7 +219,7 @@ real BOLD token, use `make deploy-local` (a live anvil node) or
 | `KNOMOSIS_GENESIS_STATE_COMMIT` | **required** (no default on a real deploy) | the registry's genesis anchor (SB ruling R5): `commitExtendedState` of the ratified L2 genesis — `knomosis export-batch` emits it; a mismatch makes the first honest batch indefensible |
 | `KNOMOSIS_MAX_ACTIONS_PER_BATCH` | 65 536 | operational ceiling on one batch's span (SB ruling R10; see `deployment_parameters.md` §3) |
 | `KNOMOSIS_BISECTION_TIMEOUT_BLOCKS` / `_MIN_CHALLENGE_BOND` / `_MIN_BISECTION_STEP_INTERVAL` | 21 600 / 0.05e / 5 | fault-proof game (`bond > 0`, `timeout > stepInterval`) |
-| `KNOMOSIS_SUBMISSION_BREAKER_ADDRESS` | the broadcaster | the address that may halt / resume state-root submission.  **Set it explicitly on a real deploy.**  Required non-zero and required DISTINCT from `KNOMOSIS_SEQUENCER` — the constructor reverts `BreakerIsSequencer` otherwise, because the automatic latch fires precisely on the sequencer's proven misbehaviour |
+| `KNOMOSIS_SUBMISSION_BREAKER_ADDRESS` | the broadcaster | the address that may halt / resume state-root submission.  **Set it explicitly on a real deploy.**  Required non-zero and required DISTINCT from `KNOMOSIS_SEQUENCER` — the constructor reverts `BreakerIsSequencer` otherwise, because a halt is reached on suspicion of the sequencer at least as often as for its benefit, so that sequencer must not be able to clear its own halt |
 | `KNOMOSIS_MANIFEST_OUT` | `deployments/<network>.json` | manifest output path |
 
 ---

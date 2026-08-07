@@ -115,7 +115,7 @@ pub const MIGRATIONS: &[Migration] = &[
 /// Compile-time assertion that the migration table fits in u32.
 /// Without this, a future PR that adds u32::MAX + 1 migrations
 /// would silently truncate the version counter.  At time of
-/// writing (1 migration), this is trivially below the cap.
+/// writing (3 migrations), this is trivially below the cap.
 const _MIGRATIONS_FIT_IN_U32: () = assert!(
     MIGRATIONS.len() <= u32::MAX as usize,
     "knomosis-storage MIGRATIONS table overflows u32"
