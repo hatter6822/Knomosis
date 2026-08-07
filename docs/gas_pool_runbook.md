@@ -479,9 +479,9 @@ usd ≈ user-tx gas × gas-price-gwei × eth-usd × 10⁻⁹
 (To recover the execution component:
 `execution ≈ user-tx − 21 000 − calldata + refunds`.)  Worked
 examples at 30 gwei and $3 000/ETH: a first-time `depositETHWithFee`
-is a measured 66 261 gas ≈ **$6.0** of L1 gas, which the user absorbs
+is a measured 61 514 gas ≈ **$5.5** of L1 gas, which the user absorbs
 in their bridging UX; the `withdrawWithProof` exit leg is a measured
-≈ 861 000–878 000 gas ≈ **$77.5–79.0** — the dominant cost of the
+≈ 247 500–263 900 gas ≈ **$22.3–23.7** — the dominant cost of the
 round trip (see §9.3).
 
 ### 9.2 Baseline table
@@ -546,15 +546,13 @@ the committed baseline, which is why adjacent variant rows exist):
   ~46k approve once — so infinite approval wins from the second
   operation onward.  The trade applies to `depositBoldWithFee`.
 * **The exit leg dominates the round trip.**  `withdrawWithProof`
-  costs a measured ~861–878k per transaction (~13× a repeat deposit),
-  of which ~37.9k is the ~2.7 kB, 64-sibling proof calldata and the
-  bulk of the execution is the byte-loop CBE decode of that blob (the
-  64-keccak SMT walk itself is a few thousand gas).  Verification gas
-  is essentially independent of tree population
-  (`SmtVerifier.recomputeRoot` always walks all 64 levels over
-  same-sized siblings).  Operators quoting "bridging cost" should
-  quote deposit + withdrawal; a future calldata-slice decoder is the
-  obvious optimisation target if exit costs ever matter commercially.
+  costs a measured ~247.5–263.9k per transaction (~5.6× a repeat
+  deposit), of which ~38.1k is the 64-sibling proof calldata and the
+  bulk of the execution is the CBE decode of that blob plus the
+  64-keccak SMT walk.  Verification gas is essentially independent
+  of tree population (`SmtVerifier.recomputeRoot` always walks all
+  64 levels over same-sized siblings).  Operators quoting "bridging
+  cost" should quote deposit + withdrawal.
 * **Keeper-probe budgeting.**  The no-shutdown probe row (a measured
   47 250 per probe ≈ $4.3 at the reference prices) is measured through
   a plain low-level call — no test cheatcode interferes with the
