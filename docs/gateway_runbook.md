@@ -163,6 +163,18 @@ unseen records.
     per-upstream boolean body.  **An unconfigured upstream is treated as
     satisfied** (not blocking).  Health-gate rollout on `/readyz` before
     sending traffic.
+
+    The result is **cached for one second** (EG.4).  `/readyz` is exempt
+    from both the auth gate and the rate limiter — it has to be, for an
+    orchestrator to reach it — so without a cache each call would open a
+    TCP connection to *every* configured upstream, letting an
+    unauthenticated caller amplify one cheap request into three and pin
+    a connection thread for up to the two-second probe timeout on each,
+    worst exactly when an upstream is already down.  Caching makes the
+    probe rate independent of the request rate.  A poll period of 1–10 s
+    is unaffected; a probe interval *below* one second will read a
+    repeated value, which is the intended behaviour rather than a
+    limitation.
   * **`/v1/info`:** the deployment id, the `Verdict::Ok` admission stage, the
     host + event-subscribe wire `PROTOCOL_VERSION`s, the live indexer cursor
     + schema version, and the **budget/pool config echo** (so a §10 drift is

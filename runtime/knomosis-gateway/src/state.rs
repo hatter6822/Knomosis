@@ -102,6 +102,12 @@ pub struct AppState {
     /// The per-credential request-rate limiter (G1.3).  Disabled when
     /// `--rate-limit-rps` is `0`.
     pub rate_limiter: RateLimiter,
+    /// The `/readyz` probe cache (EG.4).  `/readyz` is exempt from both
+    /// auth and the rate limiter, and each uncached call opens two TCP
+    /// connections to internal upstreams, so without this an
+    /// unauthenticated caller amplifies one request into three.  See
+    /// [`crate::system::READINESS_CACHE_TTL`].
+    pub readiness: crate::system::ReadinessCache,
     /// The bounded host-connection pool for the submit path (G2.1b),
     /// present iff `--host-addr` was configured.  `None` makes
     /// `POST /v1/actions` answer `503` (submit disabled).
@@ -203,6 +209,7 @@ impl AppState {
             reads,
             auth,
             rate_limiter,
+            readiness: crate::system::ReadinessCache::default(),
             host_pool,
             idempotency,
             cors,

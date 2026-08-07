@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "9d59f2d1bb10018efab150021fed44612e889b64d1f8853d10c22280627e3997"
+    "source_digest": "1f1d04b5fd0f4ba8c8e4b60fbcd0611a6e9c320fd8f15c0ab4deb59c598fcb2c"
   },
   "summary": {
     "module_count": 195,
-    "declaration_count": 6292
+    "declaration_count": 6299
   },
   "modules": [
     {
@@ -32264,13 +32264,13 @@
         {
           "kind": "impl",
           "name": "AppState",
-          "line": 138,
+          "line": 144,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 153,
+          "line": 159,
           "called": [
             "Config",
             "IDEMPOTENCY_MAX_ENTRIES",
@@ -32295,7 +32295,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 217,
+          "line": 224,
           "called": [
             "AppState",
             "StateError"
@@ -32304,7 +32304,7 @@
         {
           "kind": "fn",
           "name": "config",
-          "line": 221,
+          "line": 228,
           "called": [
             "Config",
             "action_cost",
@@ -32320,7 +32320,7 @@
         {
           "kind": "fn",
           "name": "no_indexer_db_disables_reads",
-          "line": 254,
+          "line": 261,
           "called": [
             "config",
             "reads",
@@ -32330,7 +32330,7 @@
         {
           "kind": "fn",
           "name": "nonexistent_indexer_db_fails_fast",
-          "line": 262,
+          "line": 269,
           "called": [
             "Err",
             "config"
@@ -33729,18 +33729,24 @@
     {
       "module": "runtime::knomosis-gateway::src::system",
       "path": "runtime/knomosis-gateway/src/system.rs",
-      "declaration_count": 17,
+      "declaration_count": 24,
       "declarations": [
         {
           "kind": "const",
           "name": "READINESS_PROBE_TIMEOUT",
-          "line": 40,
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "READINESS_CACHE_TTL",
+          "line": 69,
           "called": []
         },
         {
           "kind": "struct",
           "name": "InfoDto",
-          "line": 48,
+          "line": 77,
           "called": [
             "BudgetPolicyEcho",
             "budget_policy",
@@ -33750,7 +33756,7 @@
         {
           "kind": "struct",
           "name": "BudgetPolicyEcho",
-          "line": 73,
+          "line": 102,
           "called": [
             "action_cost",
             "epoch_length",
@@ -33761,7 +33767,7 @@
         {
           "kind": "fn",
           "name": "info_view",
-          "line": 86,
+          "line": 115,
           "called": [
             "AppState",
             "BudgetPolicyEcho",
@@ -33789,8 +33795,42 @@
         },
         {
           "kind": "struct",
+          "name": "ReadinessCache",
+          "line": 158,
+          "called": [
+            "CachedReadiness"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "CachedReadiness",
+          "line": 165,
+          "called": [
+            "indexer",
+            "subscribe"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "ReadinessCache",
+          "line": 172,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "sample",
+          "line": 186,
+          "called": [
+            "CachedReadiness",
+            "Err",
+            "READINESS_CACHE_TTL",
+            "lock"
+          ]
+        },
+        {
+          "kind": "struct",
           "name": "ReadinessDto",
-          "line": 131,
+          "line": 229,
           "called": [
             "indexer",
             "subscribe"
@@ -33799,9 +33839,10 @@
         {
           "kind": "fn",
           "name": "readyz",
-          "line": 142,
+          "line": 240,
           "called": [
             "AppState",
+            "CachedReadiness",
             "ReadinessDto",
             "RouteOutcome",
             "_",
@@ -33810,6 +33851,7 @@
             "indexer",
             "probe_indexer",
             "probe_tcp",
+            "sample",
             "state",
             "subscribe"
           ]
@@ -33817,7 +33859,7 @@
         {
           "kind": "fn",
           "name": "probe_indexer",
-          "line": 161,
+          "line": 263,
           "called": [
             "AppState",
             "read_cursor",
@@ -33829,7 +33871,7 @@
         {
           "kind": "fn",
           "name": "probe_tcp",
-          "line": 171,
+          "line": 273,
           "called": [
             "READINESS_PROBE_TIMEOUT",
             "addr"
@@ -33838,7 +33880,7 @@
         {
           "kind": "fn",
           "name": "read_failed",
-          "line": 179,
+          "line": 281,
           "called": [
             "RouteOutcome",
             "into_outcome",
@@ -33848,11 +33890,12 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 186,
+          "line": 288,
           "called": [
             "AdmissionStage",
             "CURSOR_KEY",
             "Config",
+            "READINESS_CACHE_TTL",
             "TcpListener",
             "ensure_identifier",
             "info_view",
@@ -33862,7 +33905,7 @@
         {
           "kind": "fn",
           "name": "config",
-          "line": 197,
+          "line": 300,
           "called": [
             "Config",
             "action_cost",
@@ -33878,7 +33921,7 @@
         {
           "kind": "fn",
           "name": "seeded_indexer",
-          "line": 229,
+          "line": 332,
           "called": [
             "CURSOR_KEY",
             "INDEXER_IDENTIFIER",
@@ -33893,7 +33936,7 @@
         {
           "kind": "fn",
           "name": "info_reports_config_and_protocol_versions",
-          "line": 239,
+          "line": 342,
           "called": [
             "action_cost",
             "body",
@@ -33912,7 +33955,7 @@
         {
           "kind": "fn",
           "name": "info_without_indexer_reports_zero_seq_and_finalized_default",
-          "line": 280,
+          "line": 383,
           "called": [
             "body",
             "config",
@@ -33924,7 +33967,7 @@
         {
           "kind": "fn",
           "name": "readyz_with_no_upstreams_is_ready",
-          "line": 297,
+          "line": 400,
           "called": [
             "body",
             "config",
@@ -33936,7 +33979,7 @@
         {
           "kind": "fn",
           "name": "readyz_probes_configured_indexer",
-          "line": 312,
+          "line": 415,
           "called": [
             "body",
             "config",
@@ -33949,8 +33992,35 @@
         },
         {
           "kind": "fn",
+          "name": "readyz_probes_are_coalesced_within_the_ttl",
+          "line": 439,
+          "called": [
+            "_",
+            "config",
+            "listener",
+            "local_addr",
+            "readyz",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "readyz_reprobes_after_the_ttl_expires",
+          "line": 470,
+          "called": [
+            "READINESS_CACHE_TTL",
+            "_",
+            "config",
+            "listener",
+            "local_addr",
+            "readyz",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "readyz_live_host_probe_succeeds_dead_one_fails",
-          "line": 326,
+          "line": 491,
           "called": [
             "body",
             "config",

@@ -25,7 +25,8 @@
 //! process is up.
 
 use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use knomosis_indexer::cursor::read_cursor;
 use serde::Serialize;
@@ -39,6 +40,34 @@ use crate::state::AppState;
 /// upstream; a configurable timeout lands with the full governor surface
 /// (G1.3).
 const READINESS_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// How long a readiness result is served from cache before the probes
+/// are run again.
+///
+/// **Why a cache is required rather than an optimisation.**  `/readyz`
+/// is exempt from BOTH the auth gate ([`crate::auth::is_exempt_path`])
+/// and the rate limiter (which returns early on the same exempt set),
+/// so it is reachable by anyone who can open a socket, without a
+/// credential and without a budget.  Each uncached call opens TWO TCP
+/// connections to internal upstreams and reads the indexer — so an
+/// unauthenticated caller could turn a cheap request stream into a
+/// connection flood pointed at `knomosis-host` and
+/// `knomosis-event-subscribe`, which is amplification in the plain
+/// sense: the attacker spends one connection and the gateway spends
+/// three.
+///
+/// It is worse than the connection count alone suggests, because
+/// [`probe_tcp`] BLOCKS for up to [`READINESS_PROBE_TIMEOUT`] and the
+/// server is thread-per-connection: probing a DEAD upstream pins a
+/// thread for two seconds per request, so the flood costs threads as
+/// well as sockets, and costs most exactly when the system is already
+/// unhealthy.
+///
+/// One second is chosen against the consumer rather than the
+/// attacker: orchestrators poll readiness on a 1–10 s period, so a
+/// result at most this stale changes no scheduling decision, while the
+/// probe rate becomes independent of the request rate.
+const READINESS_CACHE_TTL: Duration = Duration::from_secs(1);
 
 /// The OpenAPI `Info` schema.  `submitProtocolVersion` /
 /// `eventsProtocolVersion` / `indexerSchemaVersion` are integers;
@@ -122,6 +151,75 @@ pub fn info_view(state: &AppState) -> RouteOutcome {
     RouteOutcome::json(200, body)
 }
 
+/// The cached readiness result and when it was taken.
+///
+/// Lives in [`crate::state::AppState`] so every connection thread
+/// shares one.  See [`READINESS_CACHE_TTL`] for why this exists.
+#[derive(Debug, Default)]
+pub struct ReadinessCache {
+    /// `None` until the first probe completes.
+    inner: Mutex<Option<CachedReadiness>>,
+}
+
+/// One taken readiness sample.
+#[derive(Clone, Copy, Debug)]
+struct CachedReadiness {
+    taken_at: Instant,
+    host: bool,
+    subscribe: bool,
+    indexer: bool,
+}
+
+impl ReadinessCache {
+    /// Serve a readiness sample, probing only if the cache is cold or
+    /// stale.
+    ///
+    /// Concurrency is deliberate.  On a flood, one thread probes and
+    /// every other thread serves the last sample IMMEDIATELY via
+    /// `try_lock` rather than queueing behind the probe — queueing
+    /// would reintroduce the thread-pinning this exists to remove,
+    /// just on a mutex instead of a socket.  Serving a slightly older
+    /// sample to the racing callers is the right trade: they were
+    /// going to receive a sample from within the TTL anyway.
+    ///
+    /// The one case that DOES block is the cold cache, where there is
+    /// no previous sample to serve.  That happens once per process.
+    fn sample<F: FnOnce() -> CachedReadiness>(&self, probe: F) -> CachedReadiness {
+        let Ok(mut guard) = self.inner.try_lock() else {
+            // A probe is in flight.  Serve the last sample if we have
+            // one; otherwise fall through to the blocking path below.
+            if let Ok(guard) = self.inner.lock() {
+                if let Some(cached) = *guard {
+                    return cached;
+                }
+            }
+            // Cold cache and a contended lock: block, then re-check —
+            // the winner will have filled it.
+            let mut guard = match self.inner.lock() {
+                Ok(g) => g,
+                // A poisoned lock means a prior probe panicked.  Probe
+                // afresh rather than propagate: readiness must keep
+                // answering.
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if let Some(cached) = *guard {
+                return cached;
+            }
+            let fresh = probe();
+            *guard = Some(fresh);
+            return fresh;
+        };
+        if let Some(cached) = *guard {
+            if cached.taken_at.elapsed() < READINESS_CACHE_TTL {
+                return cached;
+            }
+        }
+        let fresh = probe();
+        *guard = Some(fresh);
+        fresh
+    }
+}
+
 /// The OpenAPI `Readiness` schema: the overall `ready` flag plus the
 /// per-upstream booleans.  The four-boolean shape is fixed by the
 /// contract (`{ready, host, subscribe, indexer}`), so the
@@ -141,9 +239,13 @@ struct ReadinessDto {
 /// the per-probe booleans in both cases (per the contract).
 #[must_use]
 pub fn readyz(state: &AppState) -> RouteOutcome {
-    let indexer = probe_indexer(state);
-    let host = probe_tcp(state.config.host_addr);
-    let subscribe = probe_tcp(state.config.event_subscribe_addr);
+    let sample = state.readiness.sample(|| CachedReadiness {
+        taken_at: Instant::now(),
+        indexer: probe_indexer(state),
+        host: probe_tcp(state.config.host_addr),
+        subscribe: probe_tcp(state.config.event_subscribe_addr),
+    });
+    let (indexer, host, subscribe) = (sample.indexer, sample.host, sample.subscribe);
     let ready = indexer && host && subscribe;
     let dto = ReadinessDto {
         ready,
@@ -185,7 +287,7 @@ fn read_failed(title: &str, detail: &str) -> RouteOutcome {
 
 #[cfg(test)]
 mod tests {
-    use super::{info_view, readyz};
+    use super::{info_view, readyz, READINESS_CACHE_TTL};
     use crate::config::{AdmissionStage, Config};
     use crate::state::AppState;
     use knomosis_indexer::cursor::{ensure_identifier, CURSOR_KEY};
@@ -193,6 +295,7 @@ mod tests {
     use knomosis_storage::sqlite::SqliteStorage;
     use knomosis_storage::storage::Storage;
     use std::net::{SocketAddr, TcpListener};
+    use std::time::Duration;
 
     /// A config with no indexer + no upstreams, overridable by the caller.
     fn config() -> Config {
@@ -321,6 +424,68 @@ mod tests {
         assert_eq!(v["indexer"], true);
         assert_eq!(v["ready"], true);
         drop(writer);
+    }
+
+    /// **The amplification bound.**  Repeated `/readyz` calls inside
+    /// the TTL probe the upstream ONCE.
+    ///
+    /// `/readyz` is exempt from auth and from the rate limiter, so
+    /// without the cache each call opens a fresh TCP connection to
+    /// every configured upstream and an unauthenticated caller turns
+    /// one request into three.  Counted at the LISTENER — the number
+    /// of accepted connections is the amplification factor, so this
+    /// measures the property directly rather than asserting the cache
+    /// was consulted.
+    #[test]
+    fn readyz_probes_are_coalesced_within_the_ttl() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let live: SocketAddr = listener.local_addr().expect("addr");
+        listener.set_nonblocking(true).expect("nonblocking");
+
+        let mut cfg = config();
+        cfg.host_addr = Some(live);
+        let state = AppState::new(cfg).expect("open state");
+
+        for _ in 0..25 {
+            let o = readyz(&state);
+            assert_eq!(o.status, 200, "every call still answers");
+        }
+
+        let mut accepted = 0;
+        while listener.accept().is_ok() {
+            accepted += 1;
+        }
+        assert_eq!(
+            accepted, 1,
+            "25 calls must cost ONE upstream connection, not 25"
+        );
+    }
+
+    /// ...and the cache expires, so readiness is not frozen.
+    ///
+    /// The negative control for the case above: a cache that never
+    /// re-probed would pass it while reporting a dead upstream as
+    /// healthy forever, which is worse than the amplification it
+    /// fixes.
+    #[test]
+    fn readyz_reprobes_after_the_ttl_expires() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let live: SocketAddr = listener.local_addr().expect("addr");
+        listener.set_nonblocking(true).expect("nonblocking");
+
+        let mut cfg = config();
+        cfg.host_addr = Some(live);
+        let state = AppState::new(cfg).expect("open state");
+
+        let _ = readyz(&state);
+        std::thread::sleep(READINESS_CACHE_TTL + Duration::from_millis(50));
+        let _ = readyz(&state);
+
+        let mut accepted = 0;
+        while listener.accept().is_ok() {
+            accepted += 1;
+        }
+        assert_eq!(accepted, 2, "a call after the TTL probes again");
     }
 
     #[test]
