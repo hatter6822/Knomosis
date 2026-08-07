@@ -70,6 +70,61 @@ def tests : List TestCase :=
         assert (¬ decide ((reserveSwap 0 1 9 1000 907 3).pre fixture))
           "pre fails one above the quote"
     }
+  , -- ## The minimum-liquidity floor
+    { name := "minimum liquidity: a swap that would drain the pool is a NO-OP"
+    , body := do
+        -- Reserves 1000/1500, input 100 000.  The quote is 1485, which
+        -- would leave the output leg holding 15 -- a pool the next
+        -- swap prices arbitrarily badly.
+        --
+        -- The load-bearing part is the SECOND assertion: under the
+        -- retired rule (`0 < reserveOut`) this swap was ADMISSIBLE, so
+        -- the case fails on the old law and is a real regression test
+        -- rather than a restatement of the new one.  The old rule is
+        -- rebuilt inline instead of being described.
+        let drainable : State :=
+          setBalance (setBalance (setBalance emptyState
+            0 9 200000) 0 3 1000) 1 3 1500
+        assertEq (expected := 1485) (actual := reserveQuote drainable 0 1 3 100000)
+          "the quote leaves the output leg at 15"
+        assert (¬ decide ((reserveSwap 0 1 9 100000 1 3).pre drainable))
+          "the floor refuses the drain"
+        assert (decide (0 < getBalance drainable 0 3 ∧ 0 < getBalance drainable 1 3))
+          "the retired rule's reserve test still passes, so it would have admitted it"
+    }
+  , { name := "minimum liquidity: both entry legs are floored"
+    , body := do
+        -- 999 on a leg is below the floor; the swap is refused even
+        -- though the quote itself is fine and the pool is non-empty.
+        let thinFrom : State :=
+          setBalance (setBalance (setBalance emptyState
+            0 9 5000) 0 3 999) 1 3 10000
+        assert (¬ decide ((reserveSwap 0 1 9 10 1 3).pre thinFrom))
+          "input leg below the floor is refused"
+        let thinTo : State :=
+          setBalance (setBalance (setBalance emptyState
+            0 9 5000) 0 3 10000) 1 3 999
+        assert (¬ decide ((reserveSwap 0 1 9 10 1 3).pre thinTo))
+          "output leg below the floor is refused"
+        -- The control: one unit more on each leg and the same swap is
+        -- admissible, so the refusals above are about the floor and
+        -- not about the quote or the bounds.
+        let atFloor : State :=
+          setBalance (setBalance (setBalance emptyState
+            0 9 5000) 0 3 1000) 1 3 10000
+        assert (decide ((reserveSwap 0 1 9 10 1 3).pre atFloor))
+          "exactly at the floor is admissible"
+    }
+  , { name := "minimum liquidity: the canonical fixture is unaffected"
+    , body := do
+        -- The floor must not have narrowed ordinary trading: the
+        -- fixture's 10000/10000 pool leaves 9094 after a 1000-in swap.
+        assert (decide ((reserveSwap 0 1 9 1000 900 3).pre fixture))
+          "a normal swap still holds"
+        assertEq (expected := 9094)
+          (actual := getBalance fixture 1 3 - reserveQuote fixture 0 1 3 1000)
+          "and leaves the output leg far above the floor"
+    }
   , { name := "precondition: a zero-output swap is refused"
     , body := do
         -- Reserves 10000/1: one unit in quotes 0 out; `max 1

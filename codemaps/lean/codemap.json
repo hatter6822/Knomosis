@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "92c678365728b5896e13f5e896e7b12553384c82e77b7c506038f013e3f9e9a3"
+    "source_digest": "a56ae2014a52cd65fa87d618d7bc446ea830cfa6b6ca9dfaa0f5a931069175ac"
   },
   "summary": {
     "module_count": 349,
-    "declaration_count": 6128
+    "declaration_count": 6130
   },
   "modules": [
     {
@@ -6884,7 +6884,7 @@
     {
       "module": "LegalKernel.Bridge.AmmMath",
       "path": "LegalKernel/Bridge/AmmMath.lean",
-      "declaration_count": 7,
+      "declaration_count": 9,
       "declarations": [
         {
           "kind": "namespace",
@@ -6915,8 +6915,22 @@
         },
         {
           "kind": "def",
+          "name": "minimumLiquidity",
+          "line": 84,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "minimumLiquidity_pos",
+          "line": 88,
+          "called": [
+            "minimumLiquidity"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "getAmountOut",
-          "line": 70,
+          "line": 99,
           "called": [
             "bpsDenominator"
           ]
@@ -6924,7 +6938,7 @@
         {
           "kind": "theorem",
           "name": "getAmountOut_lt_reserveOut",
-          "line": 77,
+          "line": 106,
           "called": [
             "bpsDenominator",
             "getAmountOut"
@@ -6933,7 +6947,7 @@
         {
           "kind": "theorem",
           "name": "k_nondecreasing",
-          "line": 103,
+          "line": 132,
           "called": [
             "LegalKernel.Bridge.AmmMath",
             "bpsDenominator",
@@ -33984,7 +33998,7 @@
         {
           "kind": "theorem",
           "name": "deriveReserveSwapBalances_correct",
-          "line": 1548,
+          "line": 1555,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -34008,13 +34022,13 @@
         {
           "kind": "def",
           "name": "deriveRegistryCellValue",
-          "line": 1766,
+          "line": 1795,
           "called": []
         },
         {
           "kind": "def",
           "name": "deriveDeclaredPolicyCellValue",
-          "line": 1770,
+          "line": 1799,
           "called": [
             "policy"
           ]
@@ -34022,13 +34036,13 @@
         {
           "kind": "def",
           "name": "deriveRevokedPolicyCellValue",
-          "line": 1782,
+          "line": 1811,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "deriveRegistryCellValue_correct_replaceKey",
-          "line": 1785,
+          "line": 1814,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -34044,7 +34058,7 @@
         {
           "kind": "theorem",
           "name": "deriveRegistryCellValue_correct_registerIdentity",
-          "line": 1809,
+          "line": 1838,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -34060,7 +34074,7 @@
         {
           "kind": "theorem",
           "name": "deriveDeclaredPolicyCellValue_correct",
-          "line": 1833,
+          "line": 1862,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -34076,7 +34090,7 @@
         {
           "kind": "theorem",
           "name": "deriveDeclaredPolicyCellValue_eq_actionFields",
-          "line": 1872,
+          "line": 1901,
           "called": [
             "deriveDeclaredPolicyCellValue",
             "policy"
@@ -34085,7 +34099,7 @@
         {
           "kind": "theorem",
           "name": "registry_key_is_action_fields_tail",
-          "line": 1882,
+          "line": 1911,
           "called": [
             "ActorId"
           ]
@@ -34093,7 +34107,7 @@
         {
           "kind": "theorem",
           "name": "deriveRevokedPolicyCellValue_correct",
-          "line": 1896,
+          "line": 1925,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -34108,25 +34122,25 @@
         {
           "kind": "def",
           "name": "deriveConsumedCellValue",
-          "line": 1942,
+          "line": 1971,
           "called": []
         },
         {
           "kind": "def",
           "name": "derivePendingCellValue",
-          "line": 1946,
+          "line": 1975,
           "called": []
         },
         {
           "kind": "def",
           "name": "deriveNextWdIdCellValue",
-          "line": 1954,
+          "line": 1983,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "deriveConsumedCellValue_correct_deposit",
-          "line": 1960,
+          "line": 1989,
           "called": [
             "ActorId",
             "Amount",
@@ -34145,7 +34159,7 @@
         {
           "kind": "theorem",
           "name": "deriveConsumedCellValue_correct_depositWithFee",
-          "line": 1994,
+          "line": 2023,
           "called": [
             "ActorId",
             "Amount",
@@ -34165,7 +34179,7 @@
         {
           "kind": "theorem",
           "name": "derivePendingCellValue_correct",
-          "line": 2032,
+          "line": 2061,
           "called": [
             "ActorId",
             "Amount",
@@ -34184,7 +34198,7 @@
         {
           "kind": "theorem",
           "name": "deriveNextWdIdCellValue_correct",
-          "line": 2063,
+          "line": 2092,
           "called": [
             "ActorId",
             "Amount",
@@ -34203,7 +34217,7 @@
         {
           "kind": "def",
           "name": "FaultProofAdjudicable",
-          "line": 2131,
+          "line": 2160,
           "called": [
             "Action",
             "distributeOthers",
@@ -34213,7 +34227,7 @@
         {
           "kind": "theorem",
           "name": "writeCellsAt_eq_writeCells_of_adjudicable",
-          "line": 2140,
+          "line": 2169,
           "called": [
             "Action",
             "Action.writeCellsAt_eq_writeCells",
@@ -34228,7 +34242,7 @@
         {
           "kind": "theorem",
           "name": "writeCellsAt_withdraw_from_proven_counter",
-          "line": 2156,
+          "line": 2185,
           "called": [
             "ActorId",
             "Amount",
@@ -34241,7 +34255,7 @@
         {
           "kind": "theorem",
           "name": "faultProofAdjudicable_eq_false_iff",
-          "line": 2169,
+          "line": 2198,
           "called": [
             "Action",
             "FaultProofAdjudicable",
@@ -34252,7 +34266,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_malformed",
-          "line": 2188,
+          "line": 2217,
           "called": [
             "deriveNonceCellValue"
           ]
@@ -34260,7 +34274,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_trailing",
-          "line": 2202,
+          "line": 2231,
           "called": [
             "deriveNonceCellValue"
           ]
@@ -34268,7 +34282,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_pair",
-          "line": 2235,
+          "line": 2264,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34278,7 +34292,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_singleton",
-          "line": 2246,
+          "line": 2275,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34288,7 +34302,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_nil",
-          "line": 2250,
+          "line": 2279,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34298,7 +34312,7 @@
         {
           "kind": "theorem",
           "name": "deriveChainPair_alias_consistent",
-          "line": 2259,
+          "line": 2288,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -34311,7 +34325,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_read_pair",
-          "line": 2282,
+          "line": 2311,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -34323,7 +34337,7 @@
         {
           "kind": "theorem",
           "name": "deriveTransferBalances_alias_consistent",
-          "line": 2297,
+          "line": 2326,
           "called": [
             "ActorId",
             "Amount",
@@ -34340,7 +34354,7 @@
         {
           "kind": "theorem",
           "name": "deriveTopUpBalances_alias_consistent",
-          "line": 2332,
+          "line": 2361,
           "called": [
             "ActorId",
             "Amount",
@@ -34356,7 +34370,7 @@
         {
           "kind": "theorem",
           "name": "deriveRefundBalances_alias_consistent",
-          "line": 2357,
+          "line": 2386,
           "called": [
             "ActorId",
             "Amount",
@@ -34374,7 +34388,7 @@
         {
           "kind": "theorem",
           "name": "deriveAmmSwapBalances_alias_consistent",
-          "line": 2385,
+          "line": 2414,
           "called": [
             "ActorId",
             "Amount",
@@ -34390,7 +34404,7 @@
         {
           "kind": "theorem",
           "name": "deriveReclaimBalances_alias_consistent",
-          "line": 2416,
+          "line": 2445,
           "called": [
             "ActorId",
             "Amount",
@@ -34406,7 +34420,7 @@
         {
           "kind": "theorem",
           "name": "alias_atom",
-          "line": 2445,
+          "line": 2474,
           "called": [
             "ActorId",
             "ResourceId"
@@ -34415,7 +34429,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_quad",
-          "line": 2456,
+          "line": 2485,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34426,7 +34440,7 @@
         {
           "kind": "theorem",
           "name": "deriveReserveSwapBalances_alias_consistent",
-          "line": 2485,
+          "line": 2514,
           "called": [
             "ActorId",
             "Amount",
@@ -34440,7 +34454,7 @@
         {
           "kind": "theorem",
           "name": "deriveDelegatedTopUpBalances_alias_consistent",
-          "line": 2576,
+          "line": 2609,
           "called": [
             "ActorId",
             "Amount",
@@ -34456,7 +34470,7 @@
         {
           "kind": "theorem",
           "name": "aliasConsistent_triple",
-          "line": 2605,
+          "line": 2638,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34467,7 +34481,7 @@
         {
           "kind": "theorem",
           "name": "deriveChainTriple_alias_consistent",
-          "line": 2626,
+          "line": 2659,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -34480,7 +34494,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositWithFeeBalances_alias_consistent",
-          "line": 2664,
+          "line": 2697,
           "called": [
             "ActorId",
             "Amount",
@@ -34496,7 +34510,7 @@
         {
           "kind": "theorem",
           "name": "deriveCreditBalance_alias_consistent",
-          "line": 2717,
+          "line": 2750,
           "called": [
             "ActorId",
             "Amount",
@@ -34510,7 +34524,7 @@
         {
           "kind": "theorem",
           "name": "deriveBurnBalance_alias_consistent",
-          "line": 2735,
+          "line": 2768,
           "called": [
             "ActorId",
             "Amount",
@@ -34524,7 +34538,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositBalance_alias_consistent",
-          "line": 2753,
+          "line": 2786,
           "called": [
             "ActorId",
             "Amount",
@@ -34538,7 +34552,7 @@
         {
           "kind": "theorem",
           "name": "deriveWithdrawBalance_alias_consistent",
-          "line": 2771,
+          "line": 2804,
           "called": [
             "ActorId",
             "Amount",
@@ -34553,7 +34567,7 @@
         {
           "kind": "theorem",
           "name": "deriveChainPair_congr",
-          "line": 2804,
+          "line": 2837,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -34564,7 +34578,7 @@
         {
           "kind": "theorem",
           "name": "deriveTransferBalances_congr",
-          "line": 2811,
+          "line": 2844,
           "called": [
             "ActorId",
             "Amount",
@@ -34578,7 +34592,7 @@
         {
           "kind": "theorem",
           "name": "deriveCreditBalance_congr",
-          "line": 2820,
+          "line": 2853,
           "called": [
             "ActorId",
             "Amount",
@@ -34590,7 +34604,7 @@
         {
           "kind": "theorem",
           "name": "deriveBurnBalance_congr",
-          "line": 2827,
+          "line": 2860,
           "called": [
             "ActorId",
             "Amount",
@@ -34602,7 +34616,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositBalance_congr",
-          "line": 2835,
+          "line": 2868,
           "called": [
             "ActorId",
             "Amount",
@@ -34614,7 +34628,7 @@
         {
           "kind": "theorem",
           "name": "deriveWithdrawBalance_congr",
-          "line": 2843,
+          "line": 2876,
           "called": [
             "ActorId",
             "Amount",
@@ -34627,7 +34641,7 @@
         {
           "kind": "theorem",
           "name": "deriveChainTriple_congr",
-          "line": 2851,
+          "line": 2884,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -34638,7 +34652,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositWithFeeBalances_congr",
-          "line": 2861,
+          "line": 2894,
           "called": [
             "ActorId",
             "Amount",
@@ -34652,7 +34666,7 @@
         {
           "kind": "theorem",
           "name": "deriveTopUpBalances_congr",
-          "line": 2879,
+          "line": 2912,
           "called": [
             "ActorId",
             "Amount",
@@ -34666,7 +34680,7 @@
         {
           "kind": "theorem",
           "name": "deriveDelegatedTopUpBalances_congr",
-          "line": 2891,
+          "line": 2924,
           "called": [
             "ActorId",
             "Amount",
@@ -34680,7 +34694,7 @@
         {
           "kind": "theorem",
           "name": "deriveRefundBalances_congr",
-          "line": 2902,
+          "line": 2935,
           "called": [
             "ActorId",
             "Amount",
@@ -34696,7 +34710,7 @@
         {
           "kind": "theorem",
           "name": "deriveAmmSwapBalances_congr",
-          "line": 2913,
+          "line": 2946,
           "called": [
             "ActorId",
             "Amount",
@@ -34709,7 +34723,7 @@
         {
           "kind": "theorem",
           "name": "deriveReclaimBalances_congr",
-          "line": 2925,
+          "line": 2958,
           "called": [
             "ActorId",
             "Amount",
@@ -34723,7 +34737,7 @@
         {
           "kind": "theorem",
           "name": "deriveReserveSwapBalances_congr",
-          "line": 2938,
+          "line": 2971,
           "called": [
             "ActorId",
             "Amount",
@@ -37898,7 +37912,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_no_reserve_drain",
-          "line": 199,
+          "line": 209,
           "called": [
             "ActorId",
             "Amount",
@@ -37912,7 +37926,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_k_nondecreasing",
-          "line": 212,
+          "line": 226,
           "called": [
             "ActorId",
             "Amount",
@@ -37926,7 +37940,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_min_out_honoured",
-          "line": 228,
+          "line": 244,
           "called": [
             "ActorId",
             "Amount",
@@ -37939,7 +37953,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_setBalance_other",
-          "line": 244,
+          "line": 260,
           "called": [
             "ActorId",
             "Amount",
@@ -37952,7 +37966,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_other_resource_untouched",
-          "line": 253,
+          "line": 269,
           "called": [
             "ActorId",
             "Amount",
@@ -37966,7 +37980,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_does_not_touch_other_resources",
-          "line": 275,
+          "line": 291,
           "called": [
             "ActorId",
             "Amount",
@@ -37981,7 +37995,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_other_actor_untouched",
-          "line": 289,
+          "line": 305,
           "called": [
             "ActorId",
             "Amount",
@@ -37996,13 +38010,13 @@
         {
           "kind": "theorem",
           "name": "swap_leg_arithmetic",
-          "line": 318,
+          "line": 334,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "reserveSwap_conserves_from",
-          "line": 328,
+          "line": 344,
           "called": [
             "ActorId",
             "Amount",
@@ -38021,7 +38035,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_conserves_to",
-          "line": 380,
+          "line": 396,
           "called": [
             "ActorId",
             "Amount",
@@ -38043,7 +38057,7 @@
         {
           "kind": "instance",
           "name": "reserveSwap_isConservative",
-          "line": 513,
+          "line": 529,
           "called": [
             "ActorId",
             "Amount",
@@ -38059,7 +38073,7 @@
         {
           "kind": "instance",
           "name": "reserveSwap_localTo",
-          "line": 534,
+          "line": 550,
           "called": [
             "ActorId",
             "Amount",
@@ -38072,7 +38086,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_freezePreserving",
-          "line": 553,
+          "line": 569,
           "called": [
             "ActorId",
             "Amount",
@@ -38085,7 +38099,7 @@
         {
           "kind": "instance",
           "name": "reserveSwap_freezePreserving_empty",
-          "line": 569,
+          "line": 585,
           "called": [
             "ActorId",
             "Amount",

@@ -1521,7 +1521,14 @@ def deriveReserveSwapBalances (read : BalanceReader)
         read toResource reserveActor, read toResource user with
   | some userFromBal, some resFromBal, some resToBal, some userToBal =>
     if amountIn > 0 ∧ fromResource ≠ toResource ∧ user ≠ reserveActor ∧
-       userFromBal ≥ amountIn ∧ 0 < resFromBal ∧ 0 < resToBal ∧
+       userFromBal ≥ amountIn ∧
+       -- The minimum-liquidity floor, re-derived from OPENED pre-values
+       -- exactly as the law states it over the pre-state.
+       Bridge.AmmMath.minimumLiquidity ≤ resFromBal ∧
+       Bridge.AmmMath.minimumLiquidity ≤ resToBal ∧
+       Bridge.AmmMath.minimumLiquidity
+         ≤ resToBal - Bridge.AmmMath.getAmountOut amountIn resFromBal
+             resToBal Bridge.AmmMath.swapFeeBps ∧
        max 1 minAmountOut ≤ Bridge.AmmMath.getAmountOut amountIn resFromBal
          resToBal Bridge.AmmMath.swapFeeBps ∧
        resFromBal + amountIn < Laws.maxAmount ∧
@@ -1567,8 +1574,16 @@ theorem deriveReserveSwapBalances_correct
   simp only []
   have h_iff : (amountIn > 0 ∧ fromResource ≠ toResource ∧ user ≠ reserveActor ∧
       LegalKernel.getBalance es.base fromResource user ≥ amountIn ∧
-      0 < LegalKernel.getBalance es.base fromResource reserveActor ∧
-      0 < LegalKernel.getBalance es.base toResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base fromResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base toResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base toResource reserveActor
+              - Bridge.AmmMath.getAmountOut amountIn
+                  (LegalKernel.getBalance es.base fromResource reserveActor)
+                  (LegalKernel.getBalance es.base toResource reserveActor)
+                  Bridge.AmmMath.swapFeeBps ∧
       max 1 minAmountOut ≤ Bridge.AmmMath.getAmountOut amountIn
         (LegalKernel.getBalance es.base fromResource reserveActor)
         (LegalKernel.getBalance es.base toResource reserveActor)
@@ -1590,8 +1605,14 @@ theorem deriveReserveSwapBalances_correct
           minAmountOut reserveActor) st.signer).pre es.base := by
     show _ ↔ (amountIn > 0 ∧ fromResource ≠ toResource ∧ user ≠ reserveActor ∧
       LegalKernel.getBalance es.base fromResource user ≥ amountIn ∧
-      0 < LegalKernel.getBalance es.base fromResource reserveActor ∧
-      0 < LegalKernel.getBalance es.base toResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base fromResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base toResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base toResource reserveActor
+              - Laws.reserveQuote es.base fromResource toResource
+                  reserveActor amountIn ∧
       max 1 minAmountOut ≤ Laws.reserveQuote es.base fromResource toResource
         reserveActor amountIn ∧
       Laws.AmountBounded (setBalance es.base fromResource user
@@ -1625,8 +1646,8 @@ theorem deriveReserveSwapBalances_correct
         reserveActor amountIn)
     unfold Laws.AmountBounded Laws.reserveQuote Laws.reserveQuoteDomainBounded
     constructor
-    · rintro ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10a, h10b⟩
-      refine ⟨h1, h2, h3, h4, h5, h6, h7, ?_, ?_, h10a, h10b⟩
+    · rintro ⟨h1, h2, h3, h4, h5, h6, hfloor, h7, h8, h9, h10a, h10b⟩
+      refine ⟨h1, h2, h3, h4, h5, h6, hfloor, h7, ?_, ?_, h10a, h10b⟩
       · rw [getBalance_setBalance_other es.base fromResource fromResource user
           reserveActor _ (Or.inr h3)]
         exact h8
@@ -1637,8 +1658,8 @@ theorem deriveReserveSwapBalances_correct
             getBalance_setBalance_other es.base fromResource toResource user user _
               (Or.inl h2)]
         exact h9
-    · rintro ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10a, h10b⟩
-      refine ⟨h1, h2, h3, h4, h5, h6, h7, ?_, ?_, h10a, h10b⟩
+    · rintro ⟨h1, h2, h3, h4, h5, h6, hfloor, h7, h8, h9, h10a, h10b⟩
+      refine ⟨h1, h2, h3, h4, h5, h6, hfloor, h7, ?_, ?_, h10a, h10b⟩
       · rw [getBalance_setBalance_other es.base fromResource fromResource user
           reserveActor _ (Or.inr h3)] at h8
         exact h8
@@ -1651,8 +1672,16 @@ theorem deriveReserveSwapBalances_correct
         exact h9
   by_cases h : amountIn > 0 ∧ fromResource ≠ toResource ∧ user ≠ reserveActor ∧
       LegalKernel.getBalance es.base fromResource user ≥ amountIn ∧
-      0 < LegalKernel.getBalance es.base fromResource reserveActor ∧
-      0 < LegalKernel.getBalance es.base toResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base fromResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base toResource reserveActor ∧
+      Bridge.AmmMath.minimumLiquidity
+          ≤ LegalKernel.getBalance es.base toResource reserveActor
+              - Bridge.AmmMath.getAmountOut amountIn
+                  (LegalKernel.getBalance es.base fromResource reserveActor)
+                  (LegalKernel.getBalance es.base toResource reserveActor)
+                  Bridge.AmmMath.swapFeeBps ∧
       max 1 minAmountOut ≤ Bridge.AmmMath.getAmountOut amountIn
         (LegalKernel.getBalance es.base fromResource reserveActor)
         (LegalKernel.getBalance es.base toResource reserveActor)
@@ -2513,8 +2542,12 @@ theorem deriveReserveSwapBalances_alias_consistent (read : BalanceReader)
       rw [hfu, hfr, htr, htu] at h
       simp only [] at h
       by_cases hpre : amountIn > 0 ∧ fromResource ≠ toResource ∧
-          user ≠ reserveActor ∧ userFromBal ≥ amountIn ∧ 0 < resFromBal ∧
-          0 < resToBal ∧
+          user ≠ reserveActor ∧ userFromBal ≥ amountIn ∧
+          Bridge.AmmMath.minimumLiquidity ≤ resFromBal ∧
+          Bridge.AmmMath.minimumLiquidity ≤ resToBal ∧
+          Bridge.AmmMath.minimumLiquidity
+            ≤ resToBal - Bridge.AmmMath.getAmountOut amountIn resFromBal
+                resToBal Bridge.AmmMath.swapFeeBps ∧
           max 1 minAmountOut ≤ Bridge.AmmMath.getAmountOut amountIn resFromBal
             resToBal Bridge.AmmMath.swapFeeBps ∧
           resFromBal + amountIn < Laws.maxAmount ∧

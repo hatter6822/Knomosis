@@ -60,6 +60,35 @@ def swapFeeBps : Nat := 30
 theorem swapFeeBps_lt_bpsDenominator : swapFeeBps < bpsDenominator := by
   decide
 
+/-- The floor a reserve leg may not be drawn below by a swap.
+
+    ONE constant for both stacks, exactly as `swapFeeBps` is: this is
+    the value Solidity's `KnomosisBridge.AMM_MINIMUM_LIQUIDITY` pins
+    compile-time and enforces on BOTH sides of an L1 swap (`reserveIn`
+    / `reserveOut` at entry, and `reserveOut - amountOut` after), and
+    the cross-stack AMM corpus carries it as an explicit column so a
+    drift on either side fails a byte comparison.
+
+    **Why the L2 law needs it at all.**  Under the L2-primary pool
+    topology (§15E.12) the reserve ACTOR's balances are the pool users
+    actually swap against; the L1 `ammReserve*` books hold pre-existing
+    liquidity only.  The floor therefore has to hold where the trading
+    happens, and until now it did not: `reserveSwap`'s precondition
+    asked only `0 < getBalance …`, so a reserve could legally be drawn
+    to a single unit, where the constant-product curve prices the next
+    swap arbitrarily badly.  L1 refused exactly that and L2 permitted
+    it — an asymmetry between two implementations of one pool.
+
+    Uniswap V2's value, and the same reasoning: it is large enough that
+    rounding in the quote cannot matter at the margin, and small enough
+    to be economically negligible against any real pool. -/
+def minimumLiquidity : Nat := 1000
+
+/-- The floor is positive — the form every consumer that previously
+    took `0 < reserve` needs, discharged once here. -/
+theorem minimumLiquidity_pos : 0 < minimumLiquidity := by
+  decide
+
 /-- Constant-product output, net of a `feeBps` fee retained in the
     pool.  Byte-for-byte the `solidity/src/lib/AmmMath.sol`
     `getAmountOut` formula over `Nat`:

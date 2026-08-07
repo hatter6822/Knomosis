@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "a258fedd968e4a589d61c1f2f80a21fc4071a00b8ac300b0a1325203ac54e4d1"
+    "source_digest": "09beb089a26ba275e51d9380dd9b41a97d984ab95d3cea478a31a35e9f13e237"
   },
   "summary": {
     "module_count": 113,
-    "declaration_count": 2307
+    "declaration_count": 2310
   },
   "modules": [
     {
@@ -4178,25 +4178,25 @@
         {
           "kind": "error",
           "name": "AmmMathInsufficientInput",
-          "line": 42,
+          "line": 55,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmMathInsufficientLiquidity",
-          "line": 48,
+          "line": 61,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmMathFeeTooHigh",
-          "line": 52,
+          "line": 65,
           "called": []
         },
         {
           "kind": "function",
           "name": "getAmountOut",
-          "line": 79,
+          "line": 92,
           "called": [
             "AmmMathFeeTooHigh",
             "AmmMathInsufficientInput",
@@ -4206,7 +4206,7 @@
         {
           "kind": "function",
           "name": "getAmountIn",
-          "line": 113,
+          "line": 126,
           "called": [
             "AmmMathFeeTooHigh",
             "AmmMathInsufficientInput",
@@ -5448,25 +5448,25 @@
         {
           "kind": "function",
           "name": "_reserveSwapDomainOk",
-          "line": 738,
+          "line": 745,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveRegistryCellValue",
-          "line": 775,
+          "line": 782,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveDeclaredPolicyCellValue",
-          "line": 799,
+          "line": 806,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveRegistryFromFields",
-          "line": 814,
+          "line": 821,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -5474,25 +5474,25 @@
         {
           "kind": "function",
           "name": "deriveRevokedPolicyCellValue",
-          "line": 833,
+          "line": 840,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveConsumedCellValue",
-          "line": 846,
+          "line": 853,
           "called": []
         },
         {
           "kind": "function",
           "name": "derivePendingCellValue",
-          "line": 877,
+          "line": 884,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveNextWdIdCellValue",
-          "line": 899,
+          "line": 906,
           "called": [
             "decodeNonce"
           ]
@@ -5500,37 +5500,37 @@
         {
           "kind": "struct",
           "name": "Cell",
-          "line": 912,
+          "line": 919,
           "called": []
         },
         {
           "kind": "error",
           "name": "ActionNotAdjudicable",
-          "line": 926,
+          "line": 933,
           "called": []
         },
         {
           "kind": "function",
           "name": "isAdjudicable",
-          "line": 939,
+          "line": 946,
           "called": []
         },
         {
           "kind": "error",
           "name": "ActionFieldsTooShort",
-          "line": 944,
+          "line": 951,
           "called": []
         },
         {
           "kind": "function",
           "name": "_fieldUint64",
-          "line": 950,
+          "line": 957,
           "called": []
         },
         {
           "kind": "function",
           "name": "_appendUniform",
-          "line": 968,
+          "line": 975,
           "called": [
             "Cell"
           ]
@@ -5538,7 +5538,7 @@
         {
           "kind": "function",
           "name": "deriveWriteSet",
-          "line": 994,
+          "line": 1001,
           "called": [
             "ActionNotAdjudicable",
             "Cell",
@@ -5551,7 +5551,7 @@
         {
           "kind": "function",
           "name": "_need",
-          "line": 1128,
+          "line": 1135,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -5559,7 +5559,7 @@
         {
           "kind": "function",
           "name": "canonicalAbsentValue",
-          "line": 1159,
+          "line": 1166,
           "called": [
             "ActionNotAdjudicable"
           ]
@@ -5567,7 +5567,7 @@
         {
           "kind": "function",
           "name": "isCanonicallyAbsent",
-          "line": 1200,
+          "line": 1207,
           "called": [
             "canonicalAbsentValue"
           ]
@@ -5575,7 +5575,7 @@
         {
           "kind": "function",
           "name": "deriveEpochBudgetCellValue",
-          "line": 1211,
+          "line": 1218,
           "called": [
             "ActorBudget",
             "decodeActorBudget",
@@ -18813,7 +18813,7 @@
     {
       "module": "StepVMRootReserveSwap.t",
       "path": "solidity/test/StepVMRootReserveSwap.t.sol",
-      "declaration_count": 17,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "contract",
@@ -18863,14 +18863,36 @@
         },
         {
           "kind": "function",
+          "name": "test_minimumLiquidity_is_one_value_across_surfaces",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_derive_refuses_a_swap_that_would_drain_the_pool",
+          "line": 140,
+          "called": [
+            "_fields"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_derive_floors_both_entry_legs",
+          "line": 157,
+          "called": [
+            "_fields"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_kind25_is_adjudicable",
-          "line": 115,
+          "line": 177,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_writeSet_is_the_quad_plus_uniform_pair",
-          "line": 124,
+          "line": 186,
           "called": [
             "_fields"
           ]
@@ -18878,13 +18900,13 @@
         {
           "kind": "function",
           "name": "test_writeSet_rejects_short_fields",
-          "line": 151,
+          "line": 213,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_derive_happy_path_lands_the_quote",
-          "line": 165,
+          "line": 227,
           "called": [
             "_fields"
           ]
@@ -18892,7 +18914,7 @@
         {
           "kind": "function",
           "name": "test_derive_slippage_floor_is_exact",
-          "line": 177,
+          "line": 239,
           "called": [
             "_fields"
           ]
@@ -18900,30 +18922,6 @@
         {
           "kind": "function",
           "name": "test_derive_zero_quote_is_refused",
-          "line": 193,
-          "called": [
-            "_fields"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_derive_refuses_each_precondition",
-          "line": 204,
-          "called": [
-            "_fields"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_derive_out_of_domain_is_a_noop_not_a_revert",
-          "line": 243,
-          "called": [
-            "_fields"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_derive_refuses_ceiling_crossings",
           "line": 255,
           "called": [
             "_fields"
@@ -18931,8 +18929,32 @@
         },
         {
           "kind": "function",
+          "name": "test_derive_refuses_each_precondition",
+          "line": 266,
+          "called": [
+            "_fields"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_derive_out_of_domain_is_a_noop_not_a_revert",
+          "line": 305,
+          "called": [
+            "_fields"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_derive_refuses_ceiling_crossings",
+          "line": 317,
+          "called": [
+            "_fields"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_planBalances4_passes_through_for_pair_variants",
-          "line": 276,
+          "line": 338,
           "called": []
         }
       ]

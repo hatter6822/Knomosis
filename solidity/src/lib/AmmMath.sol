@@ -37,6 +37,19 @@ library AmmMath {
     ///         authority for the kind-25 rows.
     uint256 internal constant SWAP_FEE_BPS = 30;
 
+    /// @notice The floor a reserve leg may not be drawn below by a swap.
+    /// @dev    ONE constant for both stacks, exactly as `SWAP_FEE_BPS`
+    ///         is: `Bridge.AmmMath.minimumLiquidity` on the Lean side,
+    ///         and the value `KnomosisBridge.AMM_MINIMUM_LIQUIDITY`
+    ///         already enforces for the L1 pool.  Lives here rather
+    ///         than only on the bridge because the STEP VM needs it
+    ///         too — the L2 `reserveSwap` law is floored, so the
+    ///         fault-proof replay of that law has to apply the same
+    ///         guard or the two stacks disagree about which swaps are
+    ///         admissible, which is the one disagreement a fault proof
+    ///         cannot survive.
+    uint256 internal constant MINIMUM_LIQUIDITY = 1000;
+
     /// @notice Thrown when an input amount is zero (`getAmountOut`) or a
     ///         requested output amount is zero (`getAmountIn`).  A swap
     ///         must move a positive quantity in each direction.

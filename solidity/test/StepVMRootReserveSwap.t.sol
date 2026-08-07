@@ -109,6 +109,68 @@ contract StepVMRootReserveSwapTest is Test {
         );
     }
 
+    /// @notice `MINIMUM_LIQUIDITY` is ONE value across the surfaces
+    ///         that enforce it.
+    /// @dev    The bridge already floored the L1 pool; the step VM
+    ///         had to gain the same floor because the L2 law did.  A
+    ///         drift between the two is a cross-venue divergence in
+    ///         which swaps are ADMISSIBLE, which is the one
+    ///         disagreement a fault proof cannot survive — so the two
+    ///         constants are pinned equal here rather than trusted to
+    ///         stay in step.  The two are pinned to the same LITERAL
+    ///         from two independent places — this case pins the step
+    ///         VM's, and `scripts/audit_compile_time_caps.sh` pins the
+    ///         bridge's `AMM_MINIMUM_LIQUIDITY` as a constitutional
+    ///         cap — so a drift on either side fails one of them.
+    ///         Exactly the arrangement `SWAP_FEE_BPS` already uses; a
+    ///         direct cross-reference is not possible because the
+    ///         library's constant is `internal` while the gate matches
+    ///         `public constant` on a contract.
+    function test_minimumLiquidity_is_one_value_across_surfaces() public pure {
+        assertEq(AmmMath.MINIMUM_LIQUIDITY, 1000, "AmmMath.MINIMUM_LIQUIDITY == 1000");
+    }
+
+    /// @notice A swap that would draw the output leg below the floor
+    ///         is a NO-OP, matching the Lean law's precondition.
+    /// @dev    Reserves 1000/1500, input 100 000: the quote is 1485,
+    ///         which would leave the output leg holding 15.  This is
+    ///         the exact probe the Lean `laws-reserve-swap` suite
+    ///         pins, and it is a REGRESSION case on both stacks —
+    ///         under the retired guard (`preResTo > 0`) the swap was
+    ///         admissible and the four writes landed.
+    function test_derive_refuses_a_swap_that_would_drain_the_pool() public view {
+        (uint256 n0, uint256 n1, uint256 n2, uint256 n3) =
+            proxy.planBalances4(25, _fields(100000, 1), USER, 200000, 1000, 1500, 0);
+        assertEq(n0, 200000, "user at from untouched");
+        assertEq(n1, 1000, "reserve at from untouched");
+        assertEq(n2, 1500, "reserve at to untouched");
+        assertEq(n3, 0, "user at to untouched");
+        // The quote itself is well-formed and non-zero — the refusal
+        // is the floor, not a degenerate price.
+        assertEq(
+            AmmMath.getAmountOut(100000, 1000, 1500, AmmMath.SWAP_FEE_BPS),
+            1485,
+            "the quote is 1485, leaving 15 behind"
+        );
+    }
+
+    /// @notice Both ENTRY legs are floored, and the boundary admits.
+    function test_derive_floors_both_entry_legs() public view {
+        // Input leg one below the floor.
+        (uint256 a0,,,) =
+            proxy.planBalances4(25, _fields(10, 1), USER, 5000, 999, 10000, 0);
+        assertEq(a0, 5000, "input leg below the floor no-ops");
+        // Output leg one below the floor.
+        (uint256 b0,,,) =
+            proxy.planBalances4(25, _fields(10, 1), USER, 5000, 10000, 999, 0);
+        assertEq(b0, 5000, "output leg below the floor no-ops");
+        // Exactly at the floor admits — so the two refusals above are
+        // about the floor and not about the quote or the bounds.
+        (uint256 c0,,,) =
+            proxy.planBalances4(25, _fields(10, 1), USER, 5000, 1000, 10000, 0);
+        assertEq(c0, 4990, "exactly at the floor admits");
+    }
+
     /* ---------------------------------------------------------- */
     /* Adjudicability and the write set                           */
     /* ---------------------------------------------------------- */

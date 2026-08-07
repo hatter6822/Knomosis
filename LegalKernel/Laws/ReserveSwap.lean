@@ -151,8 +151,18 @@ def reserveSwap (fromResource toResource : ResourceId)
     fromResource ≠ toResource ∧
     user ≠ reserveActor ∧
     getBalance s fromResource user ≥ amountIn ∧
-    0 < getBalance s fromResource reserveActor ∧
-    0 < getBalance s toResource reserveActor ∧
+    -- The minimum-liquidity floor, mirroring the three checks
+    -- `KnomosisBridge.ammSwap` makes: both legs at entry, and the
+    -- output leg AFTER the quote is deducted.  The third implies the
+    -- second (a quote is at least 1), but both are stated so the two
+    -- stacks' guards line up one-for-one rather than one being derived
+    -- from the other -- a reader comparing them should not have to
+    -- reconstruct an implication.
+    AmmMath.minimumLiquidity ≤ getBalance s fromResource reserveActor ∧
+    AmmMath.minimumLiquidity ≤ getBalance s toResource reserveActor ∧
+    AmmMath.minimumLiquidity
+      ≤ getBalance s toResource reserveActor
+          - reserveQuote s fromResource toResource reserveActor amountIn ∧
     max 1 minAmountOut ≤ reserveQuote s fromResource toResource reserveActor amountIn ∧
     AmountBounded
       (setBalance s fromResource user (getBalance s fromResource user - amountIn))
@@ -205,8 +215,12 @@ theorem reserveSwap_no_reserve_drain
       reserveActor).pre s) :
     reserveQuote s fromResource toResource reserveActor amountIn
       < getBalance s toResource reserveActor :=
+  -- The reserve legs are now floored rather than merely non-zero, so
+  -- the positivity these lemmas take is derived from the floor.
   AmmMath.getAmountOut_lt_reserveOut
-    hpre.2.2.2.2.1 hpre.2.2.2.2.2.1 AmmMath.swapFeeBps_lt_bpsDenominator
+    (Nat.lt_of_lt_of_le AmmMath.minimumLiquidity_pos hpre.2.2.2.2.1)
+    (Nat.lt_of_lt_of_le AmmMath.minimumLiquidity_pos hpre.2.2.2.2.2.1)
+    AmmMath.swapFeeBps_lt_bpsDenominator
 
 /-- k-monotonicity at the law level: the reserve pair's constant
     product does not decrease across the swap's reserve legs. -/
@@ -222,7 +236,9 @@ theorem reserveSwap_k_nondecreasing
           * (getBalance s toResource reserveActor
               - reserveQuote s fromResource toResource reserveActor amountIn) :=
   AmmMath.k_nondecreasing
-    hpre.2.2.2.2.1 hpre.2.2.2.2.2.1 AmmMath.swapFeeBps_lt_bpsDenominator
+    (Nat.lt_of_lt_of_le AmmMath.minimumLiquidity_pos hpre.2.2.2.2.1)
+    (Nat.lt_of_lt_of_le AmmMath.minimumLiquidity_pos hpre.2.2.2.2.2.1)
+    AmmMath.swapFeeBps_lt_bpsDenominator
 
 /-- The slippage floor is honoured: the quote the user is credited
     clears both `1` and `minAmountOut`. -/
@@ -234,7 +250,7 @@ theorem reserveSwap_min_out_honoured
       reserveActor).pre s) :
     minAmountOut ≤ reserveQuote s fromResource toResource reserveActor amountIn ∧
     1 ≤ reserveQuote s fromResource toResource reserveActor amountIn := by
-  have h := hpre.2.2.2.2.2.2.1
+  have h := hpre.2.2.2.2.2.2.2.1
   exact ⟨(Nat.max_le.mp h).2, (Nat.max_le.mp h).1⟩
 
 /-! ## Cross-resource and cross-actor independence -/

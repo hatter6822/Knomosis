@@ -699,7 +699,10 @@ library StepWrites {
         // checked first so the quote below cannot revert.
         bool ok = amountIn > 0 && fromResource != toResource
             && user != reserveActor && preUserFrom >= amountIn
-            && preResFrom > 0 && preResTo > 0
+            // The minimum-liquidity floor's two ENTRY legs.  The
+            // post-swap leg needs the quote and so is checked below.
+            && preResFrom >= AmmMath.MINIMUM_LIQUIDITY
+            && preResTo >= AmmMath.MINIMUM_LIQUIDITY
             && creditFits(preResFrom, amountIn)
             && _reserveSwapDomainOk(amountIn, preResFrom, preResTo);
         if (!ok) return (preUserFrom, preResFrom, preResTo, preUserTo);
@@ -711,7 +714,11 @@ library StepWrites {
         // The slippage floor (`max 1 minAmountOut <= q` — never a
         // zero output) and the user-credit ceiling.
         if ((minAmountOut > 1 ? minAmountOut : 1) > q
-                || !creditFits(preUserTo, q)) {
+                || !creditFits(preUserTo, q)
+                // The floor's POST-swap leg: the output reserve must
+                // still clear it once the quote is deducted.  `q <
+                // preResTo` strictly, so the subtraction is safe here.
+                || preResTo - q < AmmMath.MINIMUM_LIQUIDITY) {
             return (preUserFrom, preResFrom, preResTo, preUserTo);
         }
         // The four writes, in the law's order.  `q < preResTo`

@@ -262,8 +262,8 @@ theorem balancesBounded_apply_impl (a : Action) (signer : ActorId) (s : State)
       exact balancesBounded_setBalance
         (balancesBounded_setBalance_sub
           (balancesBounded_setBalance (balancesBounded_setBalance_sub hs)
-            hpre.2.2.2.2.2.2.2.1))
-        hpre.2.2.2.2.2.2.2.2.1
+            hpre.2.2.2.2.2.2.2.2.1))
+        hpre.2.2.2.2.2.2.2.2.2.1
   -- The bulk pair: one fold, distinct recipients.
   | distributeOthers r excluded amount =>
       exact balancesBounded_bulk_foldl r (fun _ => amount) _ s hs
