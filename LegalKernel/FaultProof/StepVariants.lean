@@ -110,7 +110,13 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   -- entry — every cell the quote is priced FROM (the reserve's two
   -- balances, the user's from-balance) is also WRITTEN, so they live
   -- in `writeCells`, whose openings carry the pre-values the L1
-  -- verifier re-derives the quote from.
+  -- verifier re-derives the quote from.  The Workstream-AX
+  -- `ammDisabled = false` halt is an admission-layer check
+  -- (`BridgeAdmissibleWith` conjunct 10 over the L2 mirror), not an
+  -- L1 step-VM cell read — the same posture as the reclaim gate
+  -- below, and the game-enforceable half of the disable story is the
+  -- post-sweep minimum-liquidity no-op the law's own precondition
+  -- carries.
   | .reserveSwap _ _ _ _ _ _,      signer => [.registry signer]
 
 /-- The cell tags an action writes.  Per the §4.13 contract,

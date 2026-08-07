@@ -313,11 +313,34 @@ def BridgeAdmissibleWith
   -- reclamation is inadmissible, so the GP.11.6 reserve isolation
   -- (`ammReservePolicy` + this conjunct) keeps its pre-disaster
   -- strength: the ONLY action that can move the reserve actor's
-  -- balances before a disaster remains `ammSwap`.
+  -- balances before a disaster remains the user-signed `reserveSwap`.
   (∀ r amount reserveActor poolActor,
     st.action = .reclaimAmmReserves r amount reserveActor poolActor →
     reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧
-    es.bridge.ammDisabled = true)
+    es.bridge.ammDisabled = true) ∧
+  -- (10) kill-switch halt for the user swap (the reclaim gate's dual).
+  -- A `.reserveSwap` is admissible only while the L2 `ammDisabled`
+  -- mirror is UNSET: once the L1 `emergencyDisableAmm()` fires and the
+  -- mirror is committed, the sequencer's admission gate refuses every
+  -- user swap, freezing the pool for the bridge-signed reclaim sweep.
+  --
+  -- **Enforcement boundary (deliberate, mirrors conjunct 9).**  Like
+  -- every `BridgeAdmissibleWith` conjunct, this is a SEQUENCER-side
+  -- admission check, not part of the total `productionApplyBudget`
+  -- semantics the fault-proof game replays — the game adjudicates
+  -- what an admitted step COMPUTES, not whether the sequencer should
+  -- have admitted it.  The game-enforceable half of the disable story
+  -- is downstream: the reclaim sweep drains the reserve to zero, and
+  -- `Laws.reserveSwap`'s minimum-liquidity floor — a precondition
+  -- over OPENED balances the verifier re-evaluates — then makes every
+  -- later swap a provable no-op.  So a sequencer that ignores this
+  -- conjunct can at worst let swaps trade at the law's proven
+  -- constant-product price during the disable→sweep window, never
+  -- reach past the sweep.
+  (∀ fromResource toResource user amountIn minAmountOut reserveActor,
+    st.action = .reserveSwap fromResource toResource user amountIn
+                  minAmountOut reserveActor →
+    es.bridge.ammDisabled = false)
 
 /-- Projection: bridge admissibility implies kernel admissibility.
     Direct consequence of `BridgeAdmissibleWith`'s definition: the
@@ -390,7 +413,23 @@ theorem BridgeAdmissibleWith.reclaimGate
     (heq : st.action = .reclaimAmmReserves r amount reserveActor poolActor) :
     reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧
     es.bridge.ammDisabled = true :=
-  h.2.2.2.2.2 r amount reserveActor poolActor heq
+  h.2.2.2.2.2.1 r amount reserveActor poolActor heq
+
+/-- The Workstream-AX kill-switch halt conjunct, projected: an
+    admissible `.reserveSwap` implies the L2 `ammDisabled` mirror is
+    unset. -/
+theorem BridgeAdmissibleWith.reserveSwapGate
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray}
+    {es : ExtendedState} {st : SignedAction}
+    (h : BridgeAdmissibleWith verify P d es st)
+    (fromResource toResource : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (reserveActor : ActorId)
+    (heq : st.action = .reserveSwap fromResource toResource user amountIn
+                          minAmountOut reserveActor) :
+    es.bridge.ammDisabled = false :=
+  h.2.2.2.2.2.2 fromResource toResource user amountIn minAmountOut
+    reserveActor heq
 
 /-- GP.11.10 headline (admission half): while the L2 kill-switch
     mirror is UNSET (`ammDisabled = false`), no `.reclaimAmmReserves`
@@ -408,6 +447,27 @@ theorem reclaim_inadmissible_while_amm_enabled
   have hgate := h.reclaimGate r amount reserveActor poolActor heq
   rw [h_enabled] at hgate
   exact Bool.false_ne_true hgate.2.2
+
+/-- Workstream-AX headline (admission half): once the L2 kill-switch
+    mirror is SET (`ammDisabled = true`), no `.reserveSwap` is
+    bridge-admissible — the sequencer's gate halts user swaps the
+    moment the disaster state is committed, freezing the pool for the
+    bridge-signed reclaim sweep. -/
+theorem reserveSwap_inadmissible_while_amm_disabled
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray}
+    {es : ExtendedState} {st : SignedAction}
+    (h_disabled : es.bridge.ammDisabled = true)
+    (fromResource toResource : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (reserveActor : ActorId)
+    (heq : st.action = .reserveSwap fromResource toResource user amountIn
+                          minAmountOut reserveActor) :
+    ¬ BridgeAdmissibleWith verify P d es st := by
+  intro h
+  have hgate := h.reserveSwapGate fromResource toResource user amountIn
+    minAmountOut reserveActor heq
+  rw [h_disabled] at hgate
+  exact Bool.false_ne_true hgate.symm
 
 /-! ## apply_bridge_admissible_with
 

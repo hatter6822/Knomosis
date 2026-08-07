@@ -283,6 +283,30 @@ instance BridgeAdmissibleWith.dec_reclaimGate
       exact hcon (h r amount reserveActor poolActor rfl)
   | _ => apply isTrue; intro _ _ _ _ heq; cases heq
 
+/-- Decidable instance for the Workstream-AX kill-switch halt
+    (`BridgeAdmissibleWith` conjunct 10).  Reduces to the decidable
+    Bool equality "the L2 `ammDisabled` mirror is unset" when the
+    action is a `.reserveSwap`, and to `Decidable True` for every
+    other constructor.  Same `generalize` rationale as conjunct 6. -/
+instance BridgeAdmissibleWith.dec_reserveSwapGate
+    (es : ExtendedState) (st : SignedAction) :
+    Decidable
+      (∀ fromResource toResource user amountIn minAmountOut reserveActor,
+         st.action = .reserveSwap fromResource toResource user amountIn
+                       minAmountOut reserveActor →
+         es.bridge.ammDisabled = false) := by
+  generalize _h_eq : st.action = a
+  cases a with
+  | reserveSwap fr tr user amountIn minAmountOut reserveActor =>
+    by_cases hcon : es.bridge.ammDisabled = false
+    · apply isTrue
+      intro _ _ _ _ _ _ _
+      exact hcon
+    · apply isFalse
+      intro h
+      exact hcon (h fr tr user amountIn minAmountOut reserveActor rfl)
+  | _ => apply isTrue; intro _ _ _ _ _ _ heq; cases heq
+
 /-- RB.1.c — Umbrella `Decidable` instance for `BridgeAdmissibleWith`.
     Composes the kernel-level `AdmissibleWith.decidable` with the
     two bridge-specific helpers above plus the bridge-only-signer

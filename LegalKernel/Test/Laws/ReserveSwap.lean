@@ -27,6 +27,8 @@ import LegalKernel.Laws.ReserveSwap
 import LegalKernel.Authority.Action
 import LegalKernel.Authority.LocalPolicySemantics
 import LegalKernel.Bridge.AmmReservePolicy
+import LegalKernel.Bridge.Admissible
+import LegalKernel.Runtime.Replay
 import LegalKernel.Events.Types
 import LegalKernel.Test.Framework
 
@@ -363,6 +365,49 @@ def tests : List TestCase :=
         let _fee : Bridge.AmmMath.swapFeeBps < Bridge.AmmMath.bpsDenominator :=
           Bridge.AmmMath.swapFeeBps_lt_bpsDenominator
         assert true "theorem signatures elaborated"
+    }
+  , -- ## Workstream AX: the kill-switch halt (BridgeAdmissibleWith
+    -- conjunct 10).  Once the L2 `ammDisabled` mirror is set, no
+    -- user swap is bridge-admissible — the sequencer's gate freezes
+    -- the pool for the bridge-signed reclaim sweep.
+    { name := "AX: reserveSwap is bridge-inadmissible while ammDisabled"
+    , body := do
+        let _proof :
+            ∀ {verify : Authority.PublicKey → ByteArray →
+                          Authority.Signature → Bool}
+              {P : Authority.AuthorityPolicy} {d : ByteArray}
+              {es : Authority.ExtendedState} {st : Authority.SignedAction},
+              es.bridge.ammDisabled = true →
+              ∀ (fromResource toResource : ResourceId) (user : ActorId)
+                (amountIn minAmountOut : Amount) (reserveActor : ActorId),
+                st.action = .reserveSwap fromResource toResource user amountIn
+                              minAmountOut reserveActor →
+              ¬ Bridge.BridgeAdmissibleWith verify P d es st :=
+          fun h_dis fr tr u ai mao ra heq =>
+            Bridge.reserveSwap_inadmissible_while_amm_disabled h_dis fr tr u ai mao ra heq
+        pure ()
+    }
+  , { name := "AX: the reserveSwapGate projection is API stable"
+    , body := do
+        -- Value-level twin: build a disabled-state fixture and check
+        -- the gate conjunct refuses by `decide` on the projected
+        -- proposition (the full `BridgeAdmissibleWith` needs a
+        -- signature witness, so the conjunct is probed directly —
+        -- the theorem case above covers the composed refusal).
+        let esOn : Authority.ExtendedState := Authority.ExtendedState.empty
+        let esOff : Authority.ExtendedState :=
+          { esOn with bridge := { esOn.bridge with ammDisabled := true } }
+        let st : Authority.SignedAction :=
+          { action := .reserveSwap 0 1 9 1000 900 3
+          , signer := 9, nonce := 0, sig := ByteArray.empty }
+        let gate := fun (es : Authority.ExtendedState) =>
+          decide (∀ fr tr user amountIn minAmountOut reserveActor,
+            st.action = .reserveSwap fr tr user amountIn minAmountOut reserveActor →
+            es.bridge.ammDisabled = false)
+        assertEq (expected := true) (actual := gate esOn)
+          "the gate admits while the AMM is live"
+        assertEq (expected := false) (actual := gate esOff)
+          "the gate refuses once the kill switch is mirrored"
     }
   ]
 
