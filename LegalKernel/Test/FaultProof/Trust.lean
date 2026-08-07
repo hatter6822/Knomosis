@@ -123,12 +123,31 @@ def tests : List TestCase :=
     , body := do
         -- Just verify the function signature is callable; the
         -- conclusion type-checks.
-        let _name := @single_honest_challenger_narrows_with_disagreement
+        let _name :
+            ∀ (truth : LogIndex → StateCommit)
+              (gs₀ gs_k : LegalKernel.FaultProof.GameState) (k : Nat)
+              (h_trace : HonestResponseTrace truth gs₀ k gs_k)
+              (h_disagree₀ : inDisagreementWithTruth truth gs₀)
+              (h_k : k ≥ gs₀.range.high.idx - gs₀.range.low.idx),
+              inDisagreementWithTruth truth gs_k ∧
+              gs_k.range.high.idx - gs_k.range.low.idx ≤ 1 :=
+          single_honest_challenger_narrows_with_disagreement
         assert true "API exists"
     }
   , { name := "#232: trust_model_upgrade_composite API stable"
     , body := do
-        let _name := @trust_model_upgrade_composite
+        let _name :
+            ∀ (truth : LogIndex → StateCommit)
+              (gs₀ gs_k : LegalKernel.FaultProof.GameState) (k : Nat)
+              (h_trace : HonestResponseTrace truth gs₀ k gs_k)
+              (h_disagree₀ : inDisagreementWithTruth truth gs₀)
+              (h_k : k ≥ gs₀.range.high.idx - gs₀.range.low.idx),
+              -- The trifecta: disagreement persists, range narrows, and
+              -- the sequencer's high-commit at termination is wrong.
+              inDisagreementWithTruth truth gs_k ∧
+              gs_k.range.high.idx - gs_k.range.low.idx ≤ 1 ∧
+              gs_k.range.high.commit ≠ truth gs_k.range.high.idx :=
+          trust_model_upgrade_composite
         assert true "API exists"
     }
   , { name := "#233: state_root_invalidity_inequality API stable"

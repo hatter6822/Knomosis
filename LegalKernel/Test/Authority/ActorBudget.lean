@@ -165,11 +165,29 @@ def tests : List TestCase :=
     }
   , { name := "growth-bound API stable"
     , body := do
-        let _ := @EpochBudgetState.storedBalance_topUp_le
-        let _ := @EpochBudgetState.storedBalance_consume_le
-        let _ := @ActorBudget.topUp_budgetBalance_le
-        let _ := @ActorBudget.consume_some_budgetBalance_le
-        let _ := @ActorBudget.normalise_budgetBalance_le_max
+        let _ :
+            ∀ (ebs : EpochBudgetState) (target a : ActorId) (now ft amount : Nat),
+              (ebs.topUp target now ft amount).storedBalance a
+              ≤ max (ebs.storedBalance a) ft + amount :=
+          EpochBudgetState.storedBalance_topUp_le
+        let _ :
+            ∀ (ebs ebs' : EpochBudgetState) (target a : ActorId) (now ft cost : Nat)
+              (_h : ebs.consume target now ft cost = some ebs'),
+              ebs'.storedBalance a ≤ max (ebs.storedBalance a) ft :=
+          EpochBudgetState.storedBalance_consume_le
+        let _ :
+            ∀ (b : ActorBudget) (now ft amount : Nat),
+              (b.topUp now ft amount).budgetBalance ≤ max b.budgetBalance ft + amount :=
+          ActorBudget.topUp_budgetBalance_le
+        let _ :
+            ∀ (b : ActorBudget) (now ft cost : Nat)
+              (b' : ActorBudget) (_h : b.consume now ft cost = some b'),
+              b'.budgetBalance ≤ max b.budgetBalance ft :=
+          ActorBudget.consume_some_budgetBalance_le
+        let _ :
+            ∀ (b : ActorBudget) (now ft : Nat),
+              (b.normalise now ft).budgetBalance ≤ max b.budgetBalance ft :=
+          ActorBudget.normalise_budgetBalance_le_max
         assert true "API exists"
     }
   ]

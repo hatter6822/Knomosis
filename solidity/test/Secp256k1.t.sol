@@ -77,7 +77,9 @@ contract Secp256k1Test is Test {
     /// lands on `toAddress` of that key's compressed form.  This is
     /// the exact comparison the terminate wiring performs.
     function test_toAddress_agrees_with_ecrecover() public view {
-        uint256 sk = uint256(bytes32(hex"0101010101010101010101010101010101010101010101010101010101010101"));
+        // The verify-check secret key, as a plain uint256 literal —
+        // no cast, so nothing for a truncation lint to doubt.
+        uint256 sk = 0x0101010101010101010101010101010101010101010101010101010101010101;
         bytes32 digest = keccak256("F-A ecrecover agreement probe");
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(sk, digest);
         address recovered = ecrecover(digest, v, r, s);

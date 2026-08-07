@@ -816,7 +816,11 @@ def tests : List TestCase :=
     , body := do
         -- Term-level pin: the value-binding theorem's signature is
         -- stable.  Elaboration fails if it changes.
-        let _proof := @recipientBudgetCell_currentBudget
+        let _proof :
+            ∀ (budgetGrant : Nat),
+              EpochBudgetState.currentBudget (recipientBudgetLedger budgetGrant)
+              (UInt64.ofNat fixedRecipient) 0 0 = budgetGrant :=
+          recipientBudgetCell_currentBudget
         pure ()
     }
   , { name := "recipientBudgetCell_matches_gate API stability"
@@ -827,7 +831,29 @@ def tests : List TestCase :=
         -- depositWithFee branch is refactored away from
         -- `topUp recipient currentEpoch freeTier budgetGrant`, the
         -- theorem stops elaborating and THIS test fails the build.
-        let _proof := @recipientBudgetCell_matches_gate
+        let _proof :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (r : ResourceId) (recipient poolActor : ActorId)
+              (userAmount poolAmount : Amount) (budgetGrant : Nat)
+              (depositId : Bridge.DepositId) (seedAmount : Amount)
+              (signer : ActorId) (nonce : Nonce) (sig : Signature)
+              (h : AdmissibleWith verify P d es
+                ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                  budgetGrant depositId seedAmount, signer, nonce, sig⟩)
+              (actionCost : Nat)
+              (_hpolicy : es.budgetPolicy = .bounded 0 actionCost 0)
+              (_hrecip : recipient = UInt64.ofNat fixedRecipient)
+              (_hpre : EpochBudgetState.currentBudget es.epochBudgets recipient 0 0 = 0)
+              {es' : ExtendedState}
+              (_hsuc : apply_admissible_with_budget verify P d es
+                ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                  budgetGrant depositId seedAmount, signer, nonce, sig⟩ h
+                = some es'),
+              EpochBudgetState.currentBudget es'.epochBudgets recipient 0 0
+                = EpochBudgetState.currentBudget (recipientBudgetLedger budgetGrant)
+                    recipient 0 0 :=
+          recipientBudgetCell_matches_gate
         pure ()
     }
   , { name := "GP.6.5: write bold_deposit.json fixture file"

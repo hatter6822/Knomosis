@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6d5d45382b387d7d59ed026ea655bcabc2800bc5abe2720260f56b519d73eb40"
+    "source_digest": "d7107c6b307d73549e20a1ff00021c21561af01ae172c7109973a134d4e6c84d"
   },
   "summary": {
     "module_count": 113,
@@ -17521,7 +17521,7 @@
         {
           "kind": "function",
           "name": "test_rejects_off_curve_x",
-          "line": 92,
+          "line": 94,
           "called": [
             "_compressed"
           ]
@@ -17529,7 +17529,7 @@
         {
           "kind": "function",
           "name": "test_rejects_x_at_field_prime",
-          "line": 100,
+          "line": 102,
           "called": [
             "_compressed"
           ]
@@ -17537,7 +17537,7 @@
         {
           "kind": "function",
           "name": "test_rejects_bad_prefixes",
-          "line": 110,
+          "line": 112,
           "called": [
             "_compressed"
           ]
@@ -17545,31 +17545,31 @@
         {
           "kind": "function",
           "name": "test_rejects_wrong_lengths",
-          "line": 123,
+          "line": 125,
           "called": []
         },
         {
           "kind": "function",
           "name": "testFuzz_toAddress_matches_vm_addr",
-          "line": 137,
+          "line": 139,
           "called": []
         },
         {
           "kind": "contract",
           "name": "Secp256k1Caller",
-          "line": 160,
+          "line": 162,
           "called": []
         },
         {
           "kind": "function",
           "name": "decompress",
-          "line": 161,
+          "line": 163,
           "called": []
         },
         {
           "kind": "function",
           "name": "toAddress",
-          "line": 169,
+          "line": 171,
           "called": []
         }
       ]

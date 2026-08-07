@@ -148,7 +148,11 @@ def tests : List TestCase :=
     }
   , { name := "cellTag_roundtrip API stable"
     , body := do
-        let _ := @cellTag_roundtrip
+        let _ :
+            ∀ (t : FaultProof.CellTag) (rest : Stream)
+              (_h : CellTag.fieldsBounded t),
+              CellTag.decode (CellTag.encode t ++ rest) = .ok (t, rest) :=
+          cellTag_roundtrip
         assert true "API exists"
     }
   , { name := "CellTag.fieldsBounded is decidable and bounds only the Nat keys"

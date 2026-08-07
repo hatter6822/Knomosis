@@ -77,8 +77,10 @@ lake exe stub_audit                 # stub-detection gate
 lake exe naming_audit               # content-name discipline gate
 lake exe deferral_audit             # no-deferrals policy gate
 lake exe mock_import_audit          # no-test-import-in-production gate
+lake exe api_stability_audit        # term-level API-pin gate
 lake exe lex_lint                   # Lex registry + sidecar gate
 lake exe lex_codegen --check        # Lex codegen-consistency gate
+lake exe lex_codegen --canonical --check  # Lex canonical-manifest gate
 lake exe lex_diff <before> <after>  # Lex semantic-diff binary
 lake exe lex_format <file>          # Lex pretty-printer
 python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
@@ -232,9 +234,19 @@ After any source change, also run:
   not on `tcb_allowlist.txt` or in `Tools.Common.tcbInternalImports`.
 * `lake exe stub_audit` — catches placeholder-body stubs accompanied
   by red-flag docstring tokens.  Allowlist: `tools/stub_allowlist.txt`.
-* `lake exe lex_lint` + `lake exe lex_codegen --check` — enforce
-  the Lex action-index registry's append-only discipline and the
-  byte-stability of codegen-input sidecars.
+* `lake exe api_stability_audit` — fails on any test-module
+  term-level API pin of the form `let _ := @theoremName` that lacks
+  a full type ascription (an unascribed pin elaborates against
+  *whatever* the theorem's current signature is, so it cannot catch
+  a signature change — the one job a pin exists for).  The
+  historical unascribed pins are frozen in
+  `tools/api_stability_allowlist.txt`; the allowlist must never be
+  extended — new pins state the expected type explicitly.
+* `lake exe lex_lint` + `lake exe lex_codegen --check` +
+  `lake exe lex_codegen --canonical --check` — enforce
+  the Lex action-index registry's append-only discipline, the
+  byte-stability of codegen-input sidecars, and the canonical
+  manifest's consistency with the registry.
 * `python3 scripts/regenerate_codemaps.py` — regenerates the
   per-language navigation maps under `codemaps/`; CI fails if the
   result differs from the committed tree.
