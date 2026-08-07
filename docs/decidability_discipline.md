@@ -168,8 +168,8 @@ layer.
 | `topUpActionBudget`    | `LegalKernel/Laws/TopUpActionBudget.lean`   | `getBalance s gasResource a ≥ gasAmount`                               |
 | `topUpActionBudgetFor` | `LegalKernel/Laws/TopUpActionBudgetFor.lean`| `getBalance s gasResource signer ≥ gasAmount ∧ recipient ≠ signer`     |
 | `claimBudgetRefund`    | `LegalKernel/Laws/ClaimBudgetRefund.lean`   | `getBalance s gasResource poolActor ≥ refundAmount`                    |
-| `ammSwap`              | `LegalKernel/Laws/AmmSwap.lean`             | `getBalance s toResource ammReserveActor ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0` |
 | `reclaimAmmReserves`   | `LegalKernel/Laws/ReclaimAmmReserves.lean`  | `getBalance s r reserveActor = amount ∧ reserveActor ≠ poolActor ∧ amount > 0` |
+| `reserveSwap`          | `LegalKernel/Laws/ReserveSwap.lean`         | `getBalance s fromResource user ≥ amountIn ∧ fromResource ≠ toResource ∧ amountIn > 0` (+ the quote/floor conjuncts) |
 
 Each module ships an `example : Decidable ((law …).pre s) :=
 inferInstance` smoke-test that fails at compile time if the

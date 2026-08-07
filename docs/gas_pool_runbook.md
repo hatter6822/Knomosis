@@ -536,20 +536,15 @@ the committed baseline, which is why adjacent variant rows exist):
 * **Migration-wired premium ≈ 3.1k gas per operation.**  Production
   deployments that pre-wire a predicted `KnomosisMigration` successor
   (solidity/README, "Production deployment notes") pay one external
-  `activated()` read in every `circuitOpen` operation and every
-  `ammSwap` — measured by the two "migration-wired" rows (+3 107 on
-  the deposit, +3 110 on the swap).  Initial deployments with
-  `migration = address(0)` skip it.
-* **Exact vs infinite approval: refunds invert the per-swap story.**
-  Per transaction, the exact-approval BOLD→ETH swap (68 204) is
-  ~1.7k CHEAPER than the infinite-approval one (69 870): clearing the
-  allowance to zero earns a 4 800 EIP-3529 refund that outweighs the
-  ~3.1k execution the infinite shape saves by skipping the allowance
-  write.  Per FLOW the ranking flips back: the exact shape needs a
-  fresh ~46k `approve` before every swap (~114k per swap all-in),
-  while the infinite shape pays its ~46k approve once — so infinite
-  approval wins from the second swap onward.  The same trade applies
-  to `depositBoldWithFee`.
+  `activated()` read in every `circuitOpen` operation — measured by
+  the "migration-wired" deposit row (+3 107).  Initial deployments
+  with `migration = address(0)` skip it.
+* **Exact vs infinite approval: refunds can invert a per-transaction
+  story.**  Clearing a BOLD allowance to zero earns a 4 800 EIP-3529
+  refund, but per FLOW the exact-approval shape needs a fresh ~46k
+  `approve` before every operation while the infinite shape pays its
+  ~46k approve once — so infinite approval wins from the second
+  operation onward.  The trade applies to `depositBoldWithFee`.
 * **The exit leg dominates the round trip.**  `withdrawWithProof`
   costs a measured ~861–878k per transaction (~13× a repeat deposit),
   of which ~37.9k is the ~2.7 kB, 64-sibling proof calldata and the
@@ -648,64 +643,58 @@ signature scheme.  The cost lands on a path taken only under dispute
 and funded by the losing party's bond, so it does not touch the
 per-action amortised figure above.
 
-### 9.6 L1/L2 AMM price independence
+### 9.6 One AMM venue: the L2 reserve swap
 
-The deployment now runs **two AMM venues with independent prices**:
+The deployment runs **one AMM venue**: the **L2 reserve swap**
+(`Laws.reserveSwap`, Action 25) over the L2 reserve actor's live
+balances, priced in-kernel by `AmmMath.getAmountOut`
+(`swapFeeBps = 30`, corpus-pinned across all three stacks) and funded
+by the deposit fee-split's seed leg (`ammSeedAmount` credited on L2;
+the backing wei stays in the bridge's general escrow).
 
-* the **L1 embedded AMM** (`KnomosisBridge.ammSwap`, §9.2 rows) over
-  the bridge's pre-existing L1-local reserves — under the SB
-  L2-primary topology, deposits no longer grow these books, so this
-  venue's depth is whatever L1 liquidity the deployment already held;
-* the **L2 reserve swap** (`Laws.reserveSwap`, Action 25) over the
-  L2 reserve actor's live balances, which the deposit fee-split's
-  seed leg funds (`ammSeedAmount` credited on L2).
-
-The two constant-product curves share the fee constant
-(`AmmMath.swapFeeBps = 30`, corpus-pinned across all three stacks)
-but hold **separate reserves, so their spot prices move
-independently** — nothing in the kernel or the bridge equalises them.
-Divergence is closed by ARBITRAGE, not by protocol action: an L2 swap
-costs ~239 gas of amortised L1 (§9.5) against ~$6.6 for an L1
-`ammSwap`, so the economic pressure pushes flow — and therefore price
-discovery — to the L2 venue, with the L1 pool serving as a
-gas-denominated fallback.  Operators should monitor the two spot
-prices (`ammReserveEth/ammReserveBold` on L1; the reserve actor's
-balance ratio on L2) and expect a persistent gap no larger than the
-round-trip arbitrage cost (one deposit + one withdrawal + both swap
-fees); a wider persistent gap means arbitrage is blocked (bridge
-halted, deposits paused) and is a monitoring signal, not a defect.
-The deliberate NON-goal: the L1→L2 swap-mirror ingest is unbuilt —
-L1 swaps do not replay onto L2 books (`ammSwap` L2 Action 23 remains
-the bridge-attested mirror vocabulary, not a live pipeline).
+The embedded L1 AMM that used to sit beside it — `ammSwap`, the
+`ammReserveEth` / `ammReserveBold` books, and the L2 bridge-attested
+mirror at Action 23 — was **excised before any deployment existed**
+(no contract was live, so no liquidity was stranded).  The
+excision closes what would otherwise be a standing two-venue price
+gap: one pool means one spot price, no arbitrage channel to monitor,
+and no L1→L2 swap-mirror pipeline to build.  An L2 swap costs ~239
+gas of amortised L1 (§9.5); users needing L1-side ETH↔BOLD
+conversion use an external DEX.  Action index 23 and Event tag 21
+are permanent holes: the decoders on all three stacks refuse them
+like never-assigned tags, and they must never be reused.
 
 ---
 
 ## 10. AMM disaster recovery (`emergencyDisableAmm`; WU GP.11.10)
 
-The embedded ETH↔BOLD AMM ships a **one-way kill switch**:
+The L2 AMM ships a **one-way kill switch** on the L1 bridge:
 `emergencyDisableAmm()`, callable only by the immutable
 `ammDisasterRecovery` role.  Once fired:
 
-* every `ammSwap` reverts `AmmIsDisabled` (both directions, forever
-  within this deployment);
-* deposit-time AMM seeding stops (`_seedAmmReserves` early-outs, so
-  the whole pool fee routes to sequencer-claimable free reserves);
-* the reserves are **preserved** — nothing is zeroed, moved, or paid
-  out by the disable itself.  `ammReserveEth` / `ammReserveBold`
-  freeze at their pre-disable values and remain part of the bridge's
-  escrow; their L2 representation is then re-tagged as free gas-pool
-  funds through the bridge-attested `Action.reclaimAmmReserves`
-  exact sweep (§10.4), after which the sequencer claims them through
-  the existing `gasPoolPolicy` mechanism;
+* the `ammDisabled` flag is set and committed to the state root,
+  where the L2 admission gate refuses every new `reserveSwap`
+  (Action 25) — the `BridgeAdmissibleWith` conjunct requires
+  `ammDisabled = false`;
+* deposit-time AMM seeding stops (`_ammSeedSplit` early-outs, so
+  the whole pool fee routes to sequencer-claimable free reserves
+  and the emitted `ammSeedAmount` is 0);
+* the L2 reserve actor's balances are **preserved** — nothing is
+  zeroed, moved, or paid out by the disable itself.  They are then
+  re-tagged as free gas-pool funds through the bridge-attested
+  `Action.reclaimAmmReserves` exact sweep (§10.4), which is
+  admissible only under `ammDisabled = true`, after which the
+  sequencer claims them through the existing `gasPoolPolicy`
+  mechanism;
 * everything else keeps working: deposits (both legs), withdrawals
   (`withdrawWithProof`), state-root submission, disputes, and the
-  BOLD circuit breaker are all untouched.  The bridge degrades to
-  the v1.2 "external L1 DEX" mode for ETH↔BOLD conversion.
+  BOLD circuit breaker are all untouched.  ETH↔BOLD conversion
+  degrades to external DEXes.
 
 This is a *graceful shutdown of the AMM, not a value drain*.  The
-three properties are pinned as forge tests
-(`AmmKillSwitch.t.sol`): `emergencyDisableAmm_preserves_reserves`,
-`ammDisabled_implies_swap_reverts`, `ammDisabled_is_monotonic`.
+flag-only semantics and its monotonicity are pinned as forge tests
+(`AmmKillSwitch.t.sol`), and the L2 refusal is pinned by
+`reserveSwap_inadmissible_while_amm_disabled` on the Lean side.
 
 **One-way by design.**  `ammDisabled` cannot be unset.  Reactivating
 the AMM requires a fresh `KnomosisBridge` deployment via
@@ -719,17 +708,17 @@ switch takes precedence (`AmmIsDisabled` is the revert you will see).
 
 Invoke `emergencyDisableAmm()` when any of the following holds:
 
-* **Reserve-depth pathology.**  Either reserve leg drops below
-  `MIN_VIABLE_DEPTH_USD = $10 000` (at spot prices) AND off-bridge
-  arbitrage has not restored depth within **24 hours**.  A thin leg
-  means even tiny swaps cause huge slippage — the AMM is
-  functionally stuck even though the curve has mathematically not
-  "drained" (the GP.11.3 no-drain theorem still holds).
+* **Reserve-depth pathology.**  Either leg of the L2 reserve
+  actor's balances drops below `MIN_VIABLE_DEPTH_USD = $10 000` (at
+  spot prices) AND arbitrage has not restored depth within
+  **24 hours**.  A thin leg means even tiny swaps cause huge
+  slippage — the pool is functionally stuck even though the curve
+  has mathematically not "drained" (the no-drain theorem
+  `reserveSwap_no_reserve_drain` still holds).
 * **Math bug suspected.**  Any reproducible discrepancy between the
-  Lean fixture reference (`crosscheck-amm-getamountout` /
-  `crosscheck-amm-swap` corpora) and Solidity execution output, or
-  an on-chain `AmmKInvariantViolated` revert (which should be
-  mathematically unreachable).
+  Lean fixture reference (the `crosscheck-amm-getamountout` corpus
+  or the kind-25 `step_vm.json` rows) and the Solidity step-VM
+  quote derivation.
 * **Liquity V2 unreachable.**  Persistent `LiquityV2ReadFailed`
   errors AND operator-side monitoring confirms a Liquity-V2 contract
   failure (not just an integration bug on our side).  Note: a mere
@@ -798,8 +787,8 @@ pre-wired `KnomosisMigration` successors):
    confirms.  Watch `confirmationCount()` / `DisableConfirmed`.
 3. The third (threshold-th) confirmation executes
    `emergencyDisableAmm()` atomically.  Confirm
-   `bridge.ammDisabled() == true` and that the `AmmDisabled` event
-   carries the expected frozen reserves.
+   `bridge.ammDisabled() == true` and that the `AmmDisabled(uint256)`
+   event fired with the expected timestamp.
 4. If the incident resolves before quorum: every confirmed signer
    calls `revokeConfirmation()`.  Do not rely solely on the 7-day
    expiry.
@@ -807,9 +796,9 @@ pre-wired `KnomosisMigration` successors):
 ### 10.4 Recovery decision tree (post-disable)
 
 1. **Run a post-mortem (1–7 days).**  Root-cause the trigger
-   condition; reconcile the frozen reserves against
-   `address(bridge).balance` / `BOLD.balanceOf(bridge)` and the L2
-   accounting equation.
+   condition; reconcile the L2 reserve actor's balances against the
+   bridge escrow (`address(bridge).balance` /
+   `BOLD.balanceOf(bridge)`) and the L2 accounting equation.
 2. **Commit the L2 mirror, then sweep the L2 reserves.**  The
    sequencer commits `BridgeState.ammDisabled = true` in the next
    state root (§10.5) and then materialises one bridge-signed
@@ -832,15 +821,14 @@ pre-wired `KnomosisMigration` successors):
 3. **Decide: redeploy or degraded mode.**
    * **Redeploy path:** prepare a new `KnomosisBridge` deployment
      via `KnomosisMigration` (with corrected parameters or patched
-     code).  The reserves carry over physically with the rest of
-     the escrow; the new contract's AMM is seeded fresh from
-     post-migration deposits per its `ammSeedRatioBps`.
-   * **Degraded path:** operate permanently without the embedded
-     AMM.  The sequencer converts ETH↔BOLD on external L1 DEXes
-     (the v1.2 posture); document the expected per-claim MEV/fee
-     cost increase.  All other v1.3 mechanisms (fee-split deposits,
-     budgets, gas-pool claims, circuit breaker) remain fully
-     functional.
+     code).  The escrow carries over physically; the L2 pool is
+     re-seeded from post-migration deposits per the new
+     deployment's `ammSeedRatioBps`.
+   * **Degraded path:** operate permanently without the AMM.  The
+     sequencer converts ETH↔BOLD on external L1 DEXes; document
+     the expected per-claim MEV/fee cost increase.  All other v1.3
+     mechanisms (fee-split deposits, budgets, gas-pool claims,
+     circuit breaker) remain fully functional.
 
 ### 10.5 State-root visibility (the Lean-side mirror)
 

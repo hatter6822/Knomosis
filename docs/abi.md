@@ -273,7 +273,8 @@ Action.depositWithFee       := 19 -- Workstream GP (fee-split deposit; GP.2.1)
 Action.topUpActionBudget    := 20 -- Workstream GP (self-funded top-up; GP.2.2)
 Action.topUpActionBudgetFor := 21 -- Workstream GP (delegated top-up; GP.3.4)
 Action.claimBudgetRefund    := 22 -- Workstream GP (budget refund; GP.9.1)
-Action.ammSwap              := 23 -- Workstream GP (constant-product swap; GP.11.4)
+-- 23 is RETIRED (the excised L1-AMM ammSwap mirror) — a permanent
+-- hole the decoder refuses like a never-assigned tag; never reuse.
 Action.reclaimAmmReserves   := 24 -- Workstream GP (post-disable sweep; GP.11.10)
 Action.reserveSwap          := 25 -- Workstream SB (user-signed L2 AMM swap)
 ```
@@ -353,10 +354,6 @@ Action.topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement pool
 Action.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor  →
   CBE-uint(22) ++ CBE-uint(gasResource) ++ CBE-uint(budgetUnits) ++
   CBE-amount(weiPerBudgetUnit) ++ CBE-uint(poolActor)
-
-Action.ammSwap fromResource toResource amountIn amountOut ammReserveActor  →
-  CBE-uint(23) ++ CBE-uint(fromResource) ++ CBE-uint(toResource) ++
-  CBE-amount(amountIn) ++ CBE-amount(amountOut) ++ CBE-uint(ammReserveActor)
 
 Action.reclaimAmmReserves r amount reserveActor poolActor  →
   CBE-uint(24) ++ CBE-uint(r) ++ CBE-amount(amount) ++
@@ -497,7 +494,8 @@ Event.actionBudgetTopUp          := 17 -- GP §15E v1.0 (self-funded top-up)
 Event.gasPoolClaim               := 18 -- GP §15E v1.0 (pool drain; GP.7)
 Event.delegatedActionBudgetTopUp := 19 -- GP.3.4 (delegated top-up)
 Event.budgetConsumed             := 20 -- GP.6.4 (per-action budget debit)
-Event.ammSwapExecuted            := 21 -- GP.11.4 (constant-product swap)
+-- 21 is RETIRED (the excised L1-AMM mirror's ammSwapExecuted) — a
+-- permanent hole the decoder refuses like a never-assigned tag.
 Event.ammReservesReclaimed       := 22 -- GP.11.10 (post-disable sweep)
 Event.reserveSwapExecuted        := 23 -- Workstream SB (user L2 swap)
 Event.reserveSeeded              := 24 -- Workstream SB (deposit seed leg)
@@ -513,7 +511,7 @@ field a CBE uint head):
 | 18  | `gasPoolClaim`               | `resource, sequencer, amount`                                                |
 | 19  | `delegatedActionBudgetTopUp` | `recipient, signer, gasResource, gasAmount, budgetIncrement, poolActor`      |
 | 20  | `budgetConsumed`             | `actor, amount`                                                              |
-| 21  | `ammSwapExecuted`            | `fromResource, toResource, amountIn, amountOut, ammReserveActor`             |
+| 21  | RETIRED (`ammSwapExecuted`)  | the excised L1-AMM mirror's event — a permanent hole; never reuse            |
 | 22  | `ammReservesReclaimed`       | `resource, amount, reserveActor, poolActor`                                  |
 | 23  | `reserveSwapExecuted`        | `fromResource, toResource, user, amountIn, amountOut, reserveActor`          |
 | 24  | `reserveSeeded`              | `resource, amount, reserveActor, depositId`                                  |
@@ -537,11 +535,10 @@ much).  Indexers consume tag 20 to maintain a per-epoch "budget
 consumed" counter and compute "N actions remaining this epoch"
 (see §11A).
 
-`ammSwapExecuted` (21, GP.11.4) is emitted IN ADDITION to the two
-kernel-level `balanceChanged` events on every admitted
-`Action.ammSwap`, carrying the swap's intent (direction + both leg
-amounts + the reserve actor) so indexers can maintain AMM-volume
-views without re-deriving the action.  `ammReservesReclaimed`
+Tag 21 belonged to the bridge-attested L1-AMM swap mirror and was
+RETIRED with the embedded L1 AMM: the decoders on every stack refuse
+it like a never-assigned tag, and it must never be reused.  AMM-volume
+views ride `reserveSwapExecuted` (23).  `ammReservesReclaimed`
 (22, GP.11.10) is emitted on every admitted
 `Action.reclaimAmmReserves` — the post-kill-switch sweep of the
 frozen L2 AMM reserve into the gas pool.  Under the law's
@@ -1782,8 +1779,9 @@ head `knomosis-indexer::decoder` reads).  The set of tags is
 constructor — e.g. the Workstream-GP gas-pool family at tags 16/17/18
 (`depositWithFeeCredited`, `actionBudgetTopUp`, `gasPoolClaim`), the
 GP.3.4 `delegatedActionBudgetTopUp` at 19, the GP.6.4
-`budgetConsumed` at 20, the GP.11.4 `ammSwapExecuted` at 21, and the
-GP.11.10 `ammReservesReclaimed` at 22 — emits at the SAME 9-byte
+`budgetConsumed` at 20, and the GP.11.10 `ammReservesReclaimed` at
+22 (21 is the retired `ammSwapExecuted`'s permanent hole) — emits
+at the SAME 9-byte
 head with no new fields in the *frame*.  The frame layout is
 therefore unchanged, and no `PROTOCOL_VERSION` bump is required.  The
 streamer (`knomosis-event-subscribe`) forwards every event payload
@@ -2130,9 +2128,10 @@ byte-equivalence is mechanically pinned for all 25 tags
 (a Lean→`decode_event`→`encode_event` round-trip against the
 real `event_subscribe_cbe.json` bytes).  GP.6.4 widened the
 indexer's `Event` mirror to cover the Workstream-GP gas-pool
-family (tags 16..=19); GP.11.4 and GP.11.10 widened it again
-for `ammSwapExecuted` (21) and `ammReservesReclaimed` (22).
-Previously unknown tags decode to a typed `UnknownTag`.
+family (tags 16..=19); GP.11.10 widened it again for
+`ammReservesReclaimed` (22).  Tag 21 (the retired
+`ammSwapExecuted`) is a permanent hole decoding to the same typed
+`UnknownTag` as any unassigned tag.
 
 ## 11A. Indexer Storage Layout (Workstream RH-E)
 
@@ -2298,7 +2297,7 @@ ALL inside ONE `SqliteCombinedTransaction` (§11A.6).
 | 18  | `gasPoolClaim`                 | no-op                                           | if `--gas-pool-actor` set AND `r ∈ {0,1}`: `[gasPoolActor]` −= `amount` (halt on underflow); else no-op |
 | 19  | `delegatedActionBudgetTopUp`   | both `[recipient]` += `budgetIncrement` (NOT signer) | if `gr ∈ {0,1}`: `[poolActor]` += `gasAmount` |
 | 20  | `budgetConsumed`               | `…_current_epoch_consumed[actor]` += `amount`   | no-op                                          |
-| 21  | `ammSwapExecuted`              | no-op (typed decode only — the paired `balanceChanged` events are authoritative) | no-op |
+| 21  | RETIRED (`ammSwapExecuted`)    | (a permanent hole — decodes as an unknown tag)  | no-op |
 | 22  | `ammReservesReclaimed`         | no-op (typed decode only — the paired `balanceChanged` events are authoritative) | no-op |
 | other tags                         | no-op                                       | no-op                                          |
 
@@ -3047,7 +3046,7 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `KnomosisStepVMRoot`:
 
-  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..25`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
+  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..25`, excluding the retired 23 — `isAdjudicable` refuses it like a never-assigned kind; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
   * `widestFrontier(bytes probeFields) pure returns (uint256)` — the
     largest frontier any adjudicable action produces, derived from
     `StepWrites.deriveWriteSet` rather than restated.  `assertConsistent`
@@ -3200,8 +3199,10 @@ silently re-grouping these indices.
 
 Workstream GP appends `Action` indices 19..24 (`depositWithFee`,
 `topUpActionBudget`, `topUpActionBudgetFor`, `claimBudgetRefund`,
-`ammSwap`, `reclaimAmmReserves`); their field layouts live in §5 /
-§5.1 and the L1-side `actionFieldsForL1` byte layouts in §15.3.
+`reclaimAmmReserves`; 23 is the retired `ammSwap`'s permanent hole)
+and Workstream SB appends 25 (`reserveSwap`); their field layouts
+live in §5 / §5.1 and the L1-side `actionFieldsForL1` byte layouts
+in §15.3.
 
 ### 16.2 Event constructor encodings (Workstream E indices)
 
@@ -3218,23 +3219,27 @@ by AR.6 regression tests and the `Event.tag` projection
 (`LegalKernel/Events/Types.lean`).
 
 Workstream GP appends `Event` indices 16..22 (through
-`ammSwapExecuted` at 21 and `ammReservesReclaimed` at 22); their
-field layouts live in the §5.4 Workstream-GP subsection.
+`ammReservesReclaimed` at 22; 21 is the retired `ammSwapExecuted`'s
+permanent hole) and Workstream SB appends 23/24; their field
+layouts live in the §5.4 Workstream-GP subsection.
 
 ### 16.3 BridgeState CBE encoding
 
 `Bridge.BridgeState.encode` (defined in
-`LegalKernel/Encoding/State.lean`) concatenates nine segments — the
-v1.2 ledger triple, the five GP.11.8 AMM/BOLD L1-mirror fields, and
-the GP.11.10 `ammDisabled` kill-switch mirror:
+`LegalKernel/Encoding/State.lean`) concatenates seven segments — the
+v1.2 ledger triple, the three GP.11.8 BOLD L1-mirror fields, and the
+GP.11.10 `ammDisabled` kill-switch mirror.  (The two GP.11.8
+`ammReserve*` book segments were EXCISED with the embedded L1 AMM —
+under the one-AMM L2-primary topology the pool's reserves are the
+reserve actor's ordinary balances, already committed through the
+balances segment of the extended state, so mirroring L1 books here
+would commit a venue that no longer exists.)
 
 ```
 BridgeState.encode bs =
   encodeConsumed bs ++       -- consumed: TreeMap DepositId DepositRecord
   encodePending  bs ++       -- pending:  TreeMap WithdrawalId PendingWithdrawal
   CBE-uint(bs.nextWdId) ++
-  CBE-uint(bs.ammReserveEth) ++              -- GP.11.8
-  CBE-uint(bs.ammReserveBold) ++             -- GP.11.8
   CBE-uint(bs.boldCircuitClosed ? 1 : 0) ++  -- GP.11.8 (canonical 0/1)
   CBE-uint(bs.boldTvlCap) ++                 -- GP.11.8
   CBE-uint(bs.boldTotalLockedValue) ++       -- GP.11.8
@@ -3268,17 +3273,18 @@ EI.7 extended by GP.11.8 / GP.11.10, in
 `LegalKernel/Encoding/BridgeInjective.lean`) ship under
 `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 
-**Wire-format note.**  GP.11.8 and GP.11.10 are append-only
+**Wire-format note.**  The BOLD/kill-switch segments are append-only
 extensions of the v1.2 three-segment form: the encoding factorises as
-`bridgeStateEncodeBase ++ bridgeStateEncodeAmmSuffix`
-(`bridgeState_encode_factored`), and at genesis AMM defaults the
-suffix is a fixed constant, which is what makes the v1.2 → v1.4
-migration deterministic (`bridgeState_commit_extends_v1_2` /
-`bridgeState_commit_extends_v1_3` in
-`LegalKernel/FaultProof/Commit.lean`).  Snapshots and state
-commitments produced before a field addition are not byte-compatible
-with the extended encoder; re-snapshot from genesis (or replay the
-log) when upgrading a persisted deployment.
+`bridgeStateEncodeBase ++ bridgeStateEncodeMirrorSuffix`
+(`bridgeState_encode_factored`), and at genesis mirror defaults the
+suffix is a fixed constant, which is what makes the v1.2 migration
+deterministic (`bridgeState_commit_extends_v1_2` in
+`LegalKernel/FaultProof/Commit.lean`).  The `ammReserve*` excision
+is a BREAKING wire change riding the pre-deployment 0.14.0 — no
+persisted deployment existed to migrate.  Snapshots and state
+commitments produced under a different segment set are not
+byte-compatible with this encoder; re-snapshot from genesis (or
+replay the log).
 
 ### 16.4 WithdrawalProof CBE encoding (on-wire)
 

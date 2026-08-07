@@ -6120,7 +6120,8 @@ Action.depositWithFee       := 19 -- Workstream GP (GP.2.3)
 Action.topUpActionBudget    := 20 -- Workstream GP (GP.2.3)
 Action.topUpActionBudgetFor := 21 -- Workstream GP (GP.3.4 delegated)
 Action.claimBudgetRefund    := 22 -- Workstream GP (GP.9.1 refund-on-exit)
-Action.ammSwap              := 23 -- Workstream GP (GP.11.4 AMM swap)
+-- 23 is RETIRED (Workstream AX: the excised L1-AMM ammSwap mirror)
+-- — a permanent hole the decoder refuses; never reuse.
 Action.reclaimAmmReserves   := 24 -- Workstream GP (GP.11.10 reserve reclamation)
 Action.reserveSwap          := 25 -- Workstream SB (user-signed L2 AMM swap)
 
@@ -6146,7 +6147,8 @@ Event.actionBudgetTopUp          := 17 -- Workstream GP (GP.2.3)
 Event.gasPoolClaim               := 18 -- Workstream GP (GP.2.3)
 Event.delegatedActionBudgetTopUp := 19 -- Workstream GP (GP.3.4)
 Event.budgetConsumed             := 20 -- Workstream GP (GP.6.4 per-action debit)
-Event.ammSwapExecuted            := 21 -- Workstream GP (GP.11.4 swap)
+-- 21 is RETIRED (Workstream AX: the excised L1-AMM mirror's event)
+-- — a permanent hole the decoder refuses; never reuse.
 Event.ammReservesReclaimed       := 22 -- Workstream GP (GP.11.10 reclamation)
 Event.reserveSwapExecuted        := 23 -- Workstream SB (user L2 swap)
 Event.reserveSeeded              := 24 -- Workstream SB (deposit seed leg)
@@ -7245,10 +7247,11 @@ makes available.  In `LegalKernel/Bridge/Accounting.lean`:
   parameterised so it does not depend on the concrete id; its inductive
   maintenance across a trace — bounding the pool actor's outflows to
   the sequencer-payout path — is the `gasPoolPolicy` drain bound
-  (§15E.6), shipped with the GP.7 pool-governance work; the
-  **strong-conservation / AMM-aware** extension depends on
-  `Action.ammSwap` (§15E embedded-AMM amendment) and lands with that
-  workstream.
+  (§15E.6), shipped with the GP.7 pool-governance work.  (The
+  **strong-conservation / AMM-aware** extension that was scoped
+  against `Action.ammSwap` retired with that mirror under
+  Workstream AX; the live swap, `Laws.reserveSwap`, is
+  `IsConservative` outright.)
 
 * **Atomic admitted-step forms.**  The deltas and the pool-credit /
   ledger coherence are additionally lifted onto the *actual* admitted
@@ -7280,10 +7283,11 @@ All GP.4.2 theorems depend only on `propext`, `Classical.choice`,
 
 ### 15E.12 Workstream SB: batched submission + the user-facing L2 AMM
 
-Workstream SB rebuilt the L1 submission pipeline and made the
-embedded AMM user-facing on the L2.  Design record (rulings R1–R10
-and A–E live in the workstream plan; this section is the
-architectural summary):
+Workstream SB rebuilt the L1 submission pipeline and made the AMM
+user-facing on the L2; Workstream AX (amendment 1.39) then excised
+the embedded L1 venue entirely, leaving the L2 pool as the ONE AMM.
+Design record (rulings R1–R10 and A–E live in the workstream plan;
+this section is the architectural summary):
 
 **Batched state-root submission.**  One
 `submitStateRoot(end, prevEnd, stateCommit, actionsRoot)` record
@@ -7317,19 +7321,22 @@ tag 25) and both deny lists keep the pool/reserve keys unable to
 SIGN it.  Events 23/24 (`reserveSwapExecuted` / `reserveSeeded`)
 carry the trade and seed-attribution observables.
 
-**The funding loop (L2-primary topology).**  The deposit
+**The funding loop (one-AMM L2-primary topology).**  The deposit
 fee-split's seed leg is credited on the L2: `Action.depositWithFee`
 gained the appended `seedAmount` field (§15E.3), the L1
-`_ammSeedSplit` computes and event-binds the split WITHOUT accruing
-the L1 `ammReserve*` books (they hold pre-existing L1-local
-liquidity only, mutated solely by the L1 `ammSwap`), and the
-`knomosis-l1-ingest` daemon materialises deposits opt-in
+`_ammSeedSplit` computes and event-binds the split (the backing wei
+stays in general escrow — there are no L1 reserve books to accrue;
+Workstream AX excised the embedded L1 AMM entirely, pre-deployment),
+and the `knomosis-l1-ingest` daemon materialises deposits opt-in
 (`--materialise-deposits`; content-derived deposit ids make the
 kernel's `consumed`-set conjuncts a sound replay backstop —
-`docs/abi.md` §16.7).  The two AMM venues price independently;
-arbitrage, cheap on the L2 side, closes divergence
-(`gas_pool_runbook.md` §9.6).  The L1→L2 swap-mirror ingest is a
-deliberate non-goal under this topology.
+`docs/abi.md` §16.7).  The L2 pool is the ONE venue
+(`gas_pool_runbook.md` §9.6): one spot price, no protocol-internal
+arbitrage channel, and no swap-mirror pipeline to build.  The kill
+switch is admission-enforced — a committed `ammDisabled = true`
+refuses every new `reserveSwap`
+(`reserveSwap_inadmissible_while_amm_disabled`) and unlocks the
+`reclaimAmmReserves` sweep.
 
 ---
 
@@ -7644,6 +7651,7 @@ one-line summary, and a link to the amending discussion.
 | 1.36     | 2026-08-07 | Workstream F-A **phase 3 — the Lean game-model mirror of the terminate signature gate** (completes F-A on both stacks).  `applyTransitionWith (verify) …` carries the deployment-supplied verifier and `applyTransition` is its instance at the opaque `Authority.Verify` — the same `AdmissibleWith`/`Admissible` shape the authority layer already uses, so the ~100 bisection call sites and every theorem about them read unchanged while a test can drive the honest signature path with a stub.  `GameTransition.terminateOnSingleStep` gains `registryValue` / `registryProof` (the signer's registry cell at the pre-state and its single-cell opening), `GameError` gains `registryOpeningInvalid`, and three helpers land in `Game.lean`: `registryCellKey` (CBE bytes decode; an ABSENT cell yields `none`, so an unregistered signer is refused before any verifier is consulted), `frontierNonce` (the nonce read from the step's own frontier — root-checked by `kernelStepApply`, so a responder cannot sign over a nonce of its choosing) and `signatureAdmissible`.  The arm gates in the L1's order: authentication, the Lean-only pre-state/index refusal, then the registry-opening check (`.error .registryOpeningInvalid`, mirroring the L1 revert — a calldata defect the responder retries, NOT a verdict), then the fold, whose result is replaced by `gs.range.low.commit` when the signature does not verify.  All eight settlement theorems are restated over `applyTransitionWith verify`, each carrying only the hypotheses it consumes — the wrong-pre-state branch needs neither (it returns before the registry guard), the invalid-proofs branch needs the opening, and the two endpoint branches plus both composites need the opening AND the signature; `anchored_challenger_wins` needs the signature but NOT the opening (the guard's fired branch is `.error`, which contradicts its `.ok` hypothesis), and `h_sig_ok`'s necessity there was verified by deletion — removing it breaks the proof.  Four value-level cases mirror the Solidity verdict tests: a forged signature loses against a state-change endpoint and WINS against a pre-root endpoint (the no-op pinned from both sides), an unregistered signer loses through a PROVEN absent cell, and a mismatched opening is refused rather than lost.  The terminate-bundle exporter ships `registry_value_hex` / `registry_proof_hex` (feeding the observer fields F-A phase 2b added), with a test proving the emitted opening VERIFIES against the bundle's own pre-root in both the registered and absent cases.  The observer's Rust game port needs no parity change — it never evaluates terminates (a documented non-goal), and the trace corpus emits none, so it is byte-unchanged.  No kernel TCB delta, no new axioms.  Version v0.14.0 (the bump for amendments 1.34–1.36 as a body; see 1.35 for why it is a minor rather than a patch). |
 | 1.37     | 2026-08-07 | Workstream AM **— the 256-bit accounting scalar** (the standing `u128`-widening item).  `knomosis-amount` wraps `crypto_bigint::U256` as the workspace's `Amount`: the width is not a safety margin but the kernel's OWN ceiling, since `Laws.maxAmount = 256^32 = 2^256` and `Laws.AmountBounded` is exactly `< Laws.maxAmount`.  That exact fit is load-bearing — an overflow becomes UNREACHABLE under a truthful event stream, which is what lets consumers treat one as proof the source disagrees with the kernel rather than as a condition to absorb.  **Three defects closed, each of a different kind.**  (1) `knomosis-indexer`'s balance `credit` SATURATED at `u128::MAX` and published the clamped number; that traded accuracy for availability correctly at 128 bits (where a kernel-legal balance could outgrow the type by ordinary accumulation) and wrongly at 256, so it now leaves the cell unchanged and errors.  (2) `knomosis-host`'s GP.9.1 refund gate computed pool solvency as an UNCHECKED `u128` product of two WIRE-DECODED operands; a `u64` count times a `u128` rate spans `2^192`, so `wei_per_budget_unit = 2^127` with `budget_units = 4` wrapped to exactly ZERO and the gate admitted a refund against an empty pool in any release build.  At 256 bits the wrap is unreachable (`2^192 < 2^256`).  (3) Two fail-closed REFUSALS — `translation::amount_from_be_bytes` rejecting an L1 `uint256` above `2^128`, and the indexer's / host's `AmountTooWide` — were right while the runtime could not hold the value but blocked legitimate deposits the kernel admits; all three are now TOTAL, their error variants deleted rather than left unreachable.  Storage migrates via `migration_003_widen_amount_cells` (schema 3), which zero-extends big-endian — lossless by construction — in Rust rather than SQL, because SQLite's `||` coerces blobs to TEXT and a balance cell is mostly NUL bytes; it matches `kv` cells by the `b/` prefix so neighbouring keyspaces are untouched.  Two stale claims corrected on the way: both `knomosis-l1-ingest` and `knomosis-bench` asserted a CBE bound of `< 2^64`, where `Encoding.Action.fieldsBounded` actually reads `a < 256 ^ 32`.  Every inverted test is a regression test — a `2^128` deposit must now materialise exactly, a watcher iteration that used to HALT must now submit, and the refund case rebuilds the retired wrapping expression in-test so it cannot pass merely because the numbers are large.  `crypto-bigint` was already in the lock transitively via `k256`, so the promotion to a direct pinned dependency adds no code and no cargo-deny exposure (`docs/audits/gateway_dependency_audit.md`).  Rust-only: no kernel TCB delta, no new axioms, Lean and Solidity byte-untouched.  Rides v0.14.0.  Note for an upgrading deployment: the indexer's on-disk cell width changed (schema 3, migrated automatically) and the workspace's public `Amount` type changed with it. |
 | 1.38     | 2026-08-07 | Workstream EG **— economic guards, the submission breaker, and two coverage corrections**.  (1) `Laws.reserveSwap`'s precondition gains the minimum-liquidity floor `Bridge.AmmMath.minimumLiquidity = 1000`, closing an L1/L2 ASYMMETRY rather than adding a new guard: `KnomosisBridge.ammSwap` had enforced it on both entry legs and post-swap since the L1 AMM shipped, while the L2 law asked only `0 < reserve` — and under the L2-primary topology (§15E.12) the L2 reserve actor is the pool users actually trade against, so the unguarded side was the one that mattered.  A breach is a NO-OP, the kernel's own semantics for an inadmissible action, which is what makes tightening a frozen law (index 25) safe.  The `StepWrites` kind-25 arm and `VerifierWrites` carry the same three conjuncts: had the fault-proof replay kept `preResTo > 0` while the law gained a floor, the two stacks would disagree about which swaps are ADMISSIBLE — the one disagreement a fault proof cannot survive.  (2) `KnomosisStateRootSubmission` gains a MANUAL submission breaker: `haltSubmissions` / `resumeSubmissions`, gated on a new immutable `submissionBreaker` role — required non-zero and required DISTINCT from `sequencer`, so the party a halt most often restrains cannot clear it.  Scoped to `submitStateRoot` alone: finalisation, slashing, reversion and bond reclamation stay open, so a halt freezes the frontier without stranding settlement already in flight.  **Nothing trips it automatically, and a challenger win in particular does not.**  A first cut latched it inside `revertStateRootsFrom`, reasoning that a proven-invalid root is the strongest evidence a sequencer is faulty; the reasoning was sound and the mechanism was not, because the SB ruling-R1 recovery path IS the sequencer resubmitting after exactly that revert.  Latching there gated the REPAIR rather than a suspicious submission — it made every challenger win a manual intervention and stalled the chain whenever the breaker key was not to hand.  Automatic halting and automatic recovery cannot both be had at that point; recovery wins, and two tests fail if a latch returns.  (3) The gateway's `/readyz` is exempt from BOTH auth and the rate limiter, and each call opened two TCP connections to internal upstreams plus an indexer read — an unauthenticated 1:3 amplification, worse because the 2 s blocking probe pins a thread per request on a thread-per-connection server, and worst exactly when an upstream is down.  Now cached for 1 s, with the bound measured at the listener (25 calls, 1 connection).  (4) Two register entries CORRECTED rather than re-fixed: all four observer-liveness items and three of four gateway items were already closed by the SB.6 cutover and the G4 track; the surviving gaps were a missing test for the dedup key's `MoveKind` discriminator (without which a `Respond` blocks the `Terminate` at the same pivot and the observer forfeits a game it was winning) and the `/readyz` amplification above.  Every new test mutation-verified.  Rides v0.14.0. |
+| 1.39     | 2026-08-07 | Workstream AX **— the L1-AMM excision (one-AMM L2-primary topology)**.  With zero contracts deployed, the embedded L1 AMM was excised ENTIRELY rather than left as a second venue: `KnomosisBridge.ammSwap`, the `ammReserveEth` / `ammReserveBold` books, the swap-only constants and error surface, the L2 bridge-attested mirror `Laws.ammSwap` (frozen `Action` index 23) and its execution event (frozen `Event` tag 21), the step-VM kind-23 arms on both stacks, and every Rust mirror (the l1-ingest `Action`/encoder arms, the host budget-gate arm, the observer `ActionKind`, the indexer / event-subscribe / gateway tag-21 event arms, the `amm_swap` cross-stack corpus and its `FixtureKind` tag 8).  **Retire-in-place discipline:** the freed indices are PERMANENT HOLES, never renumbered and never reusable — every decoder refuses them exactly like never-assigned tags (`Encoding.Action.decode` on 23; the event decoders on 21; `StepWrites.isAdjudicable(23) = false`; the host surfaces `Verdict::ParseError`), each refusal pinned by a negative control, and the assigned-range bounds (`EVENT_TAG_COUNT` / `KNOWN_EVENT_TAG_COUNT` = 25) are documented as exclusive bounds of the ASSIGNED range rather than live-constructor counts.  `BridgeState` drops the two book segments (nine → seven; EI.7.e is a 7-way injectivity again; `bridgeState_commit_includes_mirrorState` / `bridgeState_mirror_genesis_suffix_const` replace the `ammState` spellings; `bridgeState_commit_extends_v1_3` is deleted with the layout it described) — a BREAKING wire change riding the pre-deployment v0.14.0, so nothing existed to migrate.  The kill-switch family survives re-pointed at the L2 pool: `emergencyDisableAmm` flips the committed `ammDisabled` flag only and `AmmDisabled` narrows to `(uint256 timestamp)` (the Rust topic pin follows), the 3-of-N multisig is untouched, and — the excision's one NEW obligation — `BridgeAdmissibleWith` gains conjunct 10: a `reserveSwap` is admissible only under `ammDisabled = false` (`reserveSwap_inadmissible_while_amm_disabled`), an ADMISSION-layer gate by design since `productionApplyBudget` replays only the law's `pre` (the same enforcement boundary the reclaim gate already sits at); the game-enforceable half of the disable story remains the law's minimum-liquidity floor over opened balances.  `ammReservePolicy` re-points to DENY-ALL over the reserve key's own signatures (`List.range 26`): the reserve moves only as the user swap's counterparty or via the bridge-signed sweep.  The corpus follows in one regeneration (`step_vm.json` back to 278 entries — the ten kind-23 rows out, `countAmmSwap` gone from the header — and the event corpus covers exactly the live tags), and the cap gate / gas baseline / runbook table drop their swap rows, ratcheting `emergencyDisableAmm`'s −9.8% (it no longer snapshots reserves).  Removes what would otherwise be a standing two-venue price gap: one pool, one spot price, no protocol-internal arbitrage channel, no L1→L2 swap-mirror pipeline.  No kernel TCB delta, no new axioms.  Rides v0.14.0 (pre-deployment; the wire breaks are why it could). |
 
 ---
 

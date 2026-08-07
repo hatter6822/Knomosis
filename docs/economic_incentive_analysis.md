@@ -125,9 +125,11 @@ real L1 gas spent (§2.9 of the GP.8 plan).
 ## 5. The AMM & disaster recovery
 
 - **No extraction beyond fees.**  The L2 AMM is constant-product; the
-  reserve actor's balances move *only* via `ammSwap` while live
-  (`ammReservePolicy`, GP.11.6) — there is no path for an operator to
-  withdraw reserves except the fee accrual and the post-disaster sweep.
+  reserve actor's balances move *only* as the user-signed
+  `reserveSwap`'s counterparty while live (`ammReservePolicy` is
+  deny-all on the reserve key's own signatures, GP.11.6) — there is no
+  path for an operator to withdraw reserves except the fee accrual and
+  the post-disaster sweep.
 - **The kill switch is a circuit breaker, not an extraction vector.**
   `ammDisabled` (committed to the state root) is set only by the
   **3-of-N** `KnomosisAmmDisasterRecoveryMultisig` (constructor-enforced
@@ -142,37 +144,36 @@ real L1 gas spent (§2.9 of the GP.8 plan).
   MAX_FEE_BPS`), so the *deployer* cannot extract via a high default and
   a malicious *user* paying a high fee only gifts the sequencer.
 
-### 5.1 Two-venue arbitrage (Workstream SB)
+### 5.1 One venue (Workstream SB + the L1-AMM excision)
 
-The L2-primary topology runs **two constant-product venues with
-independent prices**: the L1 embedded AMM over pre-existing L1-local
-reserves (deposits no longer grow them) and the user-facing L2
-`reserveSwap` over the reserve actor's live balances, funded by the
-deposit fee-split's seed leg.  Economic properties:
+The one-AMM L2-primary topology runs a **single constant-product
+venue**: the user-facing L2 `reserveSwap` over the reserve actor's
+live balances, funded by the deposit fee-split's seed leg.  The
+embedded L1 AMM was excised before any deployment existed, which
+*removes* an economic surface rather than adding one:
 
-- **No protocol-level price oracle, no equalisation mechanism.**
-  Divergence between the two spot prices is closed by ARBITRAGE, and
-  the arbitrage is safe for the protocol on both legs: each venue's
-  k-non-decrease is enforced independently (Solidity invariant suite
-  on L1; `reserveSwap_k_nondecreasing` on L2), so an arbitrageur
-  extracts only the divergence, never reserves.
-- **The cost asymmetry directs flow to L2.**  An L2 swap carries
-  ≈239 gas of amortised L1 (batched submission, runbook §9.5) versus
-  ~66k+ gas for an L1 `ammSwap`, so price discovery migrates to the
-  L2 venue and the L1 pool degrades gracefully into a
-  gas-denominated fallback.  This is the intended equilibrium, not a
-  failure mode.
-- **The persistent-gap bound is a monitoring signal.**  The
-  no-arbitrage band is one bridge round trip (deposit + withdrawal)
-  plus both 30-bps swap fees; a persistent gap wider than that means
-  arbitrage is blocked (deposits halted, circuit closed) and should
-  alert — see runbook §9.6.
+- **No cross-venue price gap exists.**  One pool means one spot
+  price — there is no protocol-internal arbitrage channel, no
+  two-venue divergence to monitor, and no L1→L2 swap-mirror
+  pipeline whose absence could desynchronise books.  Divergence
+  from EXTERNAL market prices is closed by ordinary arbitrage
+  through the bridge, and that arbitrage is safe for the protocol:
+  `reserveSwap_k_nondecreasing` means an arbitrageur extracts only
+  the divergence, never reserves.
+- **The swap is cheap where the users are.**  An L2 swap carries
+  ≈239 gas of amortised L1 (batched submission, runbook §9.5);
+  L1-side ETH↔BOLD conversion uses external DEXes.
 - **The swap cannot be delegated or spoofed.**  The
   `AuthorityPolicy` binds `user = signer` for tag 25
   (`reserveSwapUserBinding`), and both deny lists keep the
   pool/reserve keys unable to SIGN a swap — a compromised
   reserve-actor key cannot trade against itself to drain via
   price manipulation.
+- **The kill switch is admission-enforced.**  Once `ammDisabled` is
+  committed to the state root, the `BridgeAdmissibleWith` gate
+  refuses every new `reserveSwap`
+  (`reserveSwap_inadmissible_while_amm_disabled`), so the disable
+  is not a sequencer courtesy.
 
 ## 6. Cross-cutting economic risks & recommendations
 
