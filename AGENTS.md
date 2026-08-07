@@ -845,7 +845,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.16.0`) — the single
+the `lakefile.lean` `version` field (currently `0.17.0`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the
@@ -860,8 +860,8 @@ at the current version:
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
 | Lean | ~3 303 | 172 | `lake test` |
-| Rust | ~2 490 | across 13 crates | `cargo test --workspace` |
-| Solidity | ~987 passed | 73 forge suites | `cd solidity && forge test` |
+| Rust | ~2 493 | across 13 crates | `cargo test --workspace` |
+| Solidity | ~996 passed | 73 forge suites | `cd solidity && forge test` |
 
 `forge test` runs **987 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
