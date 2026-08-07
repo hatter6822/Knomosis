@@ -125,7 +125,7 @@ pub enum FixtureError {
     /// the first transfer encoding, after we've already paid the
     /// secp256k1 key-derivation cost).
     #[error("transfer_amount {0} exceeds the 2^64 canonical-encoding bound")]
-    TransferAmountTooLarge(u128),
+    TransferAmountTooLarge(Amount),
     /// `deployment_id.len()` exceeds the CBE byte-string canonical
     /// bound.  Unreachable on 64-bit hosts.
     #[error("deployment_id length {0} exceeds canonical-encoding bound")]
@@ -171,7 +171,7 @@ impl Default for FixtureConfig {
             transfer_count: crate::DEFAULT_TRANSFER_COUNT,
             per_actor_balance: DEFAULT_PER_ACTOR_BALANCE,
             resource_id: 0,
-            transfer_amount: 1,
+            transfer_amount: Amount::ONE,
             deployment_id: b"knomosis-bench-dpl0".to_vec(),
         }
     }
@@ -196,11 +196,18 @@ impl FixtureConfig {
         if self.transfer_count == 0 {
             return Err(FixtureError::NoTransfers);
         }
-        // Pre-check the transfer amount against CBE's `< 2^64`
-        // canonical bound.  Without this, the failure would surface
-        // only at first-transfer-encoding time inside `generate`,
-        // AFTER we've spent O(actor_count) on key derivation.
-        if self.transfer_amount >= 1u128 << 64 {
+        // Fail fast on an obviously-misconfigured knob, before we
+        // spend O(actor_count) on key derivation.
+        //
+        // This used to cite "CBE's `< 2^64` canonical bound", which
+        // does not exist: `Encoding.Action.fieldsBounded` admits
+        // `a < 256 ^ 32` for a transfer and the encoder writes a
+        // 32-byte amount head.  The ceiling kept here is the
+        // BENCHMARK's, not the encoder's -- the fixture funds every
+        // sender from `per_actor_balance` and a transfer amount near
+        // the type's ceiling makes that funding unrepresentable, which
+        // would fail far less legibly than this does.
+        if self.transfer_amount >= Amount::from_u128(1u128 << 64) {
             return Err(FixtureError::TransferAmountTooLarge(self.transfer_amount));
         }
         if self.deployment_id.len() > (1usize << 32) {
@@ -413,6 +420,7 @@ mod tests {
         DEFAULT_PER_ACTOR_BALANCE, MAX_SCALAR_ATTEMPTS, MAX_SCALAR_ATTEMPT_INDEX,
         SECP256K1_ORDER_BE,
     };
+    use knomosis_l1_ingest::action::Amount;
 
     /// Default config has the documented per-actor balance.
     #[test]
@@ -420,7 +428,7 @@ mod tests {
         let cfg = FixtureConfig::default();
         assert_eq!(cfg.per_actor_balance, DEFAULT_PER_ACTOR_BALANCE);
         assert_eq!(cfg.resource_id, 0);
-        assert_eq!(cfg.transfer_amount, 1);
+        assert_eq!(cfg.transfer_amount, Amount::from_u64(1));
     }
 
     /// Default config's deployment-id is the documented 16-byte
@@ -458,12 +466,12 @@ mod tests {
     #[test]
     fn validate_rejects_oversize_transfer_amount() {
         let mut cfg = FixtureConfig::default();
-        cfg.transfer_amount = 1u128 << 64;
+        cfg.transfer_amount = Amount::from_u128(1u128 << 64);
         assert!(matches!(
             cfg.validate(),
             Err(FixtureError::TransferAmountTooLarge(_))
         ));
-        cfg.transfer_amount = u128::MAX;
+        cfg.transfer_amount = Amount::MAX;
         assert!(matches!(
             cfg.validate(),
             Err(FixtureError::TransferAmountTooLarge(_))
@@ -475,7 +483,7 @@ mod tests {
     #[test]
     fn validate_accepts_max_transfer_amount() {
         let mut cfg = FixtureConfig::default();
-        cfg.transfer_amount = (1u128 << 64) - 1;
+        cfg.transfer_amount = Amount::from_u128((1u128 << 64) - 1);
         assert!(cfg.validate().is_ok());
     }
 

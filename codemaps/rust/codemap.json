@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b3a321a58cb5b19d65f733576618113b8db4a140683a09a9e5fcbae67517dec4"
+    "source_digest": "7d3bca8e007dc628f8fc1b4ceb7f2ea03b790f716e9cf68c992c6dbbf89685de"
   },
   "summary": {
     "module_count": 195,
-    "declaration_count": 6290
+    "declaration_count": 6291
   },
   "modules": [
     {
@@ -57,24 +57,24 @@
     {
       "module": "runtime::knomosis-amount::src::lib",
       "path": "runtime/knomosis-amount/src/lib.rs",
-      "declaration_count": 75,
+      "declaration_count": 76,
       "declarations": [
         {
           "kind": "const",
           "name": "AMOUNT_BYTES",
-          "line": 75,
+          "line": 85,
           "called": []
         },
         {
           "kind": "const",
           "name": "AMOUNT_MAX_DECIMAL_DIGITS",
-          "line": 81,
+          "line": 91,
           "called": []
         },
         {
           "kind": "enum",
           "name": "AmountError",
-          "line": 86,
+          "line": 96,
           "called": [
             "error",
             "offset"
@@ -83,49 +83,49 @@
         {
           "kind": "struct",
           "name": "Amount",
-          "line": 121,
+          "line": 131,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Amount",
-          "line": 123,
+          "line": 133,
           "called": []
         },
         {
           "kind": "const",
           "name": "ZERO",
-          "line": 125,
+          "line": 135,
           "called": []
         },
         {
           "kind": "const",
           "name": "ONE",
-          "line": 128,
+          "line": 138,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX",
-          "line": 132,
+          "line": 142,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_u128",
-          "line": 139,
+          "line": 149,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_u64",
-          "line": 145,
+          "line": 155,
           "called": []
         },
         {
           "kind": "fn",
           "name": "to_u128",
-          "line": 157,
+          "line": 167,
           "called": [
             "b",
             "bytes",
@@ -136,13 +136,13 @@
         {
           "kind": "fn",
           "name": "is_zero",
-          "line": 170,
+          "line": 180,
           "called": []
         },
         {
           "kind": "fn",
           "name": "checked_add",
-          "line": 181,
+          "line": 191,
           "called": [
             "from"
           ]
@@ -150,7 +150,15 @@
         {
           "kind": "fn",
           "name": "checked_sub",
-          "line": 187,
+          "line": 197,
+          "called": [
+            "from"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "checked_mul",
+          "line": 212,
           "called": [
             "from"
           ]
@@ -158,7 +166,7 @@
         {
           "kind": "fn",
           "name": "saturating_add",
-          "line": 205,
+          "line": 230,
           "called": [
             "checked_add"
           ]
@@ -166,7 +174,7 @@
         {
           "kind": "fn",
           "name": "saturating_sub",
-          "line": 218,
+          "line": 243,
           "called": [
             "checked_sub"
           ]
@@ -174,7 +182,7 @@
         {
           "kind": "fn",
           "name": "to_be_bytes",
-          "line": 224,
+          "line": 249,
           "called": [
             "AMOUNT_BYTES"
           ]
@@ -182,7 +190,7 @@
         {
           "kind": "fn",
           "name": "from_be_bytes",
-          "line": 234,
+          "line": 259,
           "called": [
             "AMOUNT_BYTES",
             "bytes"
@@ -191,7 +199,7 @@
         {
           "kind": "fn",
           "name": "to_le_bytes",
-          "line": 246,
+          "line": 271,
           "called": [
             "AMOUNT_BYTES"
           ]
@@ -199,7 +207,7 @@
         {
           "kind": "fn",
           "name": "from_le_bytes",
-          "line": 252,
+          "line": 277,
           "called": [
             "AMOUNT_BYTES",
             "bytes"
@@ -208,7 +216,7 @@
         {
           "kind": "fn",
           "name": "from_be_slice",
-          "line": 258,
+          "line": 283,
           "called": [
             "AMOUNT_BYTES",
             "AmountError",
@@ -220,7 +228,7 @@
         {
           "kind": "impl",
           "name": "Ord for Amount",
-          "line": 266,
+          "line": 291,
           "called": [
             "Amount"
           ]
@@ -228,13 +236,13 @@
         {
           "kind": "fn",
           "name": "cmp",
-          "line": 267,
+          "line": 292,
           "called": []
         },
         {
           "kind": "impl",
           "name": "PartialOrd for Amount",
-          "line": 275,
+          "line": 300,
           "called": [
             "Amount"
           ]
@@ -242,7 +250,7 @@
         {
           "kind": "fn",
           "name": "partial_cmp",
-          "line": 276,
+          "line": 301,
           "called": [
             "cmp"
           ]
@@ -250,7 +258,7 @@
         {
           "kind": "impl",
           "name": "From<u128> for Amount",
-          "line": 281,
+          "line": 306,
           "called": [
             "Amount"
           ]
@@ -258,13 +266,13 @@
         {
           "kind": "fn",
           "name": "from",
-          "line": 282,
+          "line": 307,
           "called": []
         },
         {
           "kind": "impl",
           "name": "From<u64> for Amount",
-          "line": 287,
+          "line": 312,
           "called": [
             "Amount"
           ]
@@ -272,13 +280,13 @@
         {
           "kind": "fn",
           "name": "from",
-          "line": 288,
+          "line": 313,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TryFrom<Amount> for u128",
-          "line": 293,
+          "line": 318,
           "called": [
             "Amount"
           ]
@@ -286,7 +294,7 @@
         {
           "kind": "type",
           "name": "Error",
-          "line": 294,
+          "line": 319,
           "called": [
             "AmountError"
           ]
@@ -294,7 +302,7 @@
         {
           "kind": "fn",
           "name": "try_from",
-          "line": 296,
+          "line": 321,
           "called": [
             "Amount",
             "to_u128"
@@ -303,7 +311,7 @@
         {
           "kind": "impl",
           "name": "fmt::Display for Amount",
-          "line": 301,
+          "line": 326,
           "called": [
             "Amount"
           ]
@@ -311,7 +319,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 308,
+          "line": 333,
           "called": [
             "AMOUNT_BYTES",
             "AMOUNT_MAX_DECIMAL_DIGITS",
@@ -324,7 +332,7 @@
         {
           "kind": "impl",
           "name": "fmt::Debug for Amount",
-          "line": 334,
+          "line": 359,
           "called": [
             "Amount"
           ]
@@ -332,7 +340,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 340,
+          "line": 365,
           "called": [
             "_",
             "write"
@@ -341,7 +349,7 @@
         {
           "kind": "impl",
           "name": "FromStr for Amount",
-          "line": 345,
+          "line": 370,
           "called": [
             "Amount"
           ]
@@ -349,7 +357,7 @@
         {
           "kind": "type",
           "name": "Err",
-          "line": 346,
+          "line": 371,
           "called": [
             "AmountError"
           ]
@@ -357,11 +365,12 @@
         {
           "kind": "fn",
           "name": "from_str",
-          "line": 355,
+          "line": 380,
           "called": [
             "Err",
             "bytes",
             "checked_add",
+            "checked_mul",
             "from",
             "is_empty",
             "offset"
@@ -370,7 +379,7 @@
         {
           "kind": "impl",
           "name": "Serialize for Amount",
-          "line": 374,
+          "line": 399,
           "called": [
             "Amount"
           ]
@@ -378,13 +387,13 @@
         {
           "kind": "fn",
           "name": "serialize",
-          "line": 381,
+          "line": 406,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Deserialize<'de> for Amount",
-          "line": 386,
+          "line": 411,
           "called": [
             "Amount"
           ]
@@ -392,7 +401,7 @@
         {
           "kind": "fn",
           "name": "deserialize",
-          "line": 402,
+          "line": 427,
           "called": [
             "AmountVisitor"
           ]
@@ -400,13 +409,13 @@
         {
           "kind": "struct",
           "name": "AmountVisitor",
-          "line": 408,
+          "line": 433,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Visitor<'_> for AmountVisitor",
-          "line": 410,
+          "line": 435,
           "called": [
             "AmountVisitor",
             "_"
@@ -415,7 +424,7 @@
         {
           "kind": "type",
           "name": "Value",
-          "line": 411,
+          "line": 436,
           "called": [
             "Amount"
           ]
@@ -423,7 +432,7 @@
         {
           "kind": "fn",
           "name": "expecting",
-          "line": 413,
+          "line": 438,
           "called": [
             "_"
           ]
@@ -431,25 +440,25 @@
         {
           "kind": "fn",
           "name": "visit_str",
-          "line": 417,
+          "line": 442,
           "called": []
         },
         {
           "kind": "fn",
           "name": "visit_u64",
-          "line": 424,
+          "line": 449,
           "called": []
         },
         {
           "kind": "fn",
           "name": "visit_u128",
-          "line": 428,
+          "line": 453,
           "called": []
         },
         {
           "kind": "fn",
           "name": "visit_i64",
-          "line": 435,
+          "line": 460,
           "called": [
             "_"
           ]
@@ -457,7 +466,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 443,
+          "line": 468,
           "called": [
             "AMOUNT_BYTES",
             "AMOUNT_MAX_DECIMAL_DIGITS",
@@ -468,19 +477,19 @@
         {
           "kind": "const",
           "name": "MAX_DECIMAL",
-          "line": 448,
+          "line": 473,
           "called": []
         },
         {
           "kind": "const",
           "name": "TWO_POW_128_DECIMAL",
-          "line": 453,
+          "line": 478,
           "called": []
         },
         {
           "kind": "fn",
           "name": "two_pow_128",
-          "line": 457,
+          "line": 482,
           "called": [
             "AMOUNT_BYTES",
             "Amount",
@@ -490,7 +499,7 @@
         {
           "kind": "fn",
           "name": "two_pow_128_is_representable_and_exact",
-          "line": 476,
+          "line": 501,
           "called": [
             "TWO_POW_128_DECIMAL",
             "to_be_bytes",
@@ -501,7 +510,7 @@
         {
           "kind": "fn",
           "name": "u128_boundary_is_exactly_where_narrowing_fails",
-          "line": 490,
+          "line": 515,
           "called": [
             "checked_add",
             "to_u128",
@@ -511,7 +520,7 @@
         {
           "kind": "fn",
           "name": "max_is_two_pow_256_minus_one",
-          "line": 502,
+          "line": 527,
           "called": [
             "AMOUNT_BYTES",
             "AMOUNT_MAX_DECIMAL_DIGITS",
@@ -523,7 +532,7 @@
         {
           "kind": "fn",
           "name": "checked_add_refuses_to_wrap_at_the_ceiling",
-          "line": 514,
+          "line": 539,
           "called": [
             "checked_add"
           ]
@@ -531,7 +540,7 @@
         {
           "kind": "fn",
           "name": "checked_sub_refuses_to_wrap_at_zero",
-          "line": 525,
+          "line": 550,
           "called": [
             "checked_sub"
           ]
@@ -539,7 +548,7 @@
         {
           "kind": "fn",
           "name": "add_then_sub_round_trips_across_the_u128_boundary",
-          "line": 535,
+          "line": 560,
           "called": [
             "base",
             "checked_add",
@@ -550,7 +559,7 @@
         {
           "kind": "fn",
           "name": "ordering_is_numeric_not_limb_order",
-          "line": 555,
+          "line": 580,
           "called": [
             "two_pow_128"
           ]
@@ -558,7 +567,7 @@
         {
           "kind": "fn",
           "name": "be_codec_is_fixed_width_and_big_endian",
-          "line": 573,
+          "line": 598,
           "called": [
             "AMOUNT_BYTES",
             "b",
@@ -569,7 +578,7 @@
         {
           "kind": "fn",
           "name": "from_be_slice_refuses_any_length_but_32",
-          "line": 580,
+          "line": 605,
           "called": [
             "AMOUNT_BYTES",
             "Err"
@@ -578,7 +587,7 @@
         {
           "kind": "fn",
           "name": "every_32_byte_array_decodes",
-          "line": 601,
+          "line": 626,
           "called": [
             "to_be_bytes"
           ]
@@ -586,19 +595,19 @@
         {
           "kind": "fn",
           "name": "display_is_decimal_with_no_leading_zeros",
-          "line": 613,
+          "line": 638,
           "called": []
         },
         {
           "kind": "fn",
           "name": "debug_matches_display_base",
-          "line": 628,
+          "line": 653,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_str_accepts_leading_zeros_but_nothing_else_odd",
-          "line": 633,
+          "line": 658,
           "called": [
             "Err",
             "offset"
@@ -607,7 +616,7 @@
         {
           "kind": "fn",
           "name": "from_str_overflows_one_past_max",
-          "line": 665,
+          "line": 690,
           "called": [
             "Err"
           ]
@@ -615,7 +624,7 @@
         {
           "kind": "fn",
           "name": "serde_round_trips_as_a_decimal_string",
-          "line": 682,
+          "line": 707,
           "called": [
             "Amount",
             "json",
@@ -625,7 +634,7 @@
         {
           "kind": "fn",
           "name": "serde_round_trips_the_maximum",
-          "line": 695,
+          "line": 720,
           "called": [
             "Amount",
             "json"
@@ -634,7 +643,7 @@
         {
           "kind": "fn",
           "name": "serde_accepts_a_bare_integer_on_input",
-          "line": 704,
+          "line": 729,
           "called": [
             "Amount"
           ]
@@ -642,7 +651,7 @@
         {
           "kind": "fn",
           "name": "serde_rejects_a_malformed_string",
-          "line": 712,
+          "line": 737,
           "called": [
             "Amount"
           ]
@@ -650,7 +659,7 @@
         {
           "kind": "fn",
           "name": "serde_rejects_a_negative_integer",
-          "line": 719,
+          "line": 744,
           "called": [
             "Amount"
           ]
@@ -658,7 +667,7 @@
         {
           "kind": "fn",
           "name": "serde_rejects_a_float",
-          "line": 730,
+          "line": 755,
           "called": [
             "Amount"
           ]
@@ -1427,6 +1436,7 @@
           "name": "FixtureError",
           "line": 103,
           "called": [
+            "Amount",
             "EncodeError",
             "KeyError",
             "error",
@@ -1481,7 +1491,7 @@
         {
           "kind": "struct",
           "name": "Fixture",
-          "line": 221,
+          "line": 228,
           "called": [
             "FixtureConfig",
             "config"
@@ -1490,25 +1500,25 @@
         {
           "kind": "impl",
           "name": "Fixture",
-          "line": 235,
+          "line": 242,
           "called": []
         },
         {
           "kind": "fn",
           "name": "len",
-          "line": 238,
+          "line": 245,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 244,
+          "line": 251,
           "called": []
         },
         {
           "kind": "fn",
           "name": "average_payload_bytes",
-          "line": 251,
+          "line": 258,
           "called": [
             "is_empty",
             "iter",
@@ -1519,7 +1529,7 @@
         {
           "kind": "fn",
           "name": "max_payload_bytes",
-          "line": 263,
+          "line": 270,
           "called": [
             "iter",
             "max"
@@ -1528,7 +1538,7 @@
         {
           "kind": "fn",
           "name": "actor_private_scalar",
-          "line": 282,
+          "line": 289,
           "called": [
             "ACTOR_SCALAR_DOMAIN",
             "Err",
@@ -1545,7 +1555,7 @@
         {
           "kind": "fn",
           "name": "scalar_in_range",
-          "line": 306,
+          "line": 313,
           "called": [
             "SECP256K1_ORDER_BE",
             "b",
@@ -1555,7 +1565,7 @@
         {
           "kind": "fn",
           "name": "generate",
-          "line": 341,
+          "line": 348,
           "called": [
             "ActorId",
             "BridgeActorKey",
@@ -1584,7 +1594,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 409,
+          "line": 416,
           "called": [
             "DEFAULT_PER_ACTOR_BALANCE",
             "Fixture",
@@ -1601,7 +1611,7 @@
         {
           "kind": "fn",
           "name": "default_config_has_documented_balance",
-          "line": 418,
+          "line": 426,
           "called": [
             "DEFAULT_PER_ACTOR_BALANCE"
           ]
@@ -1609,7 +1619,7 @@
         {
           "kind": "fn",
           "name": "default_config_deployment_id_stable",
-          "line": 429,
+          "line": 437,
           "called": [
             "b"
           ]
@@ -1617,15 +1627,6 @@
         {
           "kind": "fn",
           "name": "validate_rejects_zero_actor_count",
-          "line": 438,
-          "called": [
-            "Err",
-            "validate"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "validate_rejects_zero_transfer_count",
           "line": 446,
           "called": [
             "Err",
@@ -1634,8 +1635,17 @@
         },
         {
           "kind": "fn",
+          "name": "validate_rejects_zero_transfer_count",
+          "line": 454,
+          "called": [
+            "Err",
+            "validate"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "validate_rejects_oversize_transfer_amount",
-          "line": 458,
+          "line": 466,
           "called": [
             "Err",
             "_",
@@ -1645,7 +1655,7 @@
         {
           "kind": "fn",
           "name": "validate_accepts_max_transfer_amount",
-          "line": 475,
+          "line": 483,
           "called": [
             "validate"
           ]
@@ -1653,14 +1663,6 @@
         {
           "kind": "fn",
           "name": "scalar_in_range_accepts_one",
-          "line": 484,
-          "called": [
-            "scalar_in_range"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "scalar_in_range_rejects_zero",
           "line": 492,
           "called": [
             "scalar_in_range"
@@ -1668,8 +1670,16 @@
         },
         {
           "kind": "fn",
+          "name": "scalar_in_range_rejects_zero",
+          "line": 500,
+          "called": [
+            "scalar_in_range"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "scalar_in_range_rejects_n_exactly",
-          "line": 498,
+          "line": 506,
           "called": [
             "SECP256K1_ORDER_BE",
             "scalar_in_range"
@@ -1678,7 +1688,7 @@
         {
           "kind": "fn",
           "name": "scalar_in_range_rejects_just_above_n",
-          "line": 505,
+          "line": 513,
           "called": [
             "SECP256K1_ORDER_BE",
             "scalar_in_range"
@@ -1687,7 +1697,7 @@
         {
           "kind": "fn",
           "name": "scalar_in_range_accepts_just_below_n",
-          "line": 517,
+          "line": 525,
           "called": [
             "SECP256K1_ORDER_BE",
             "scalar_in_range"
@@ -1696,7 +1706,7 @@
         {
           "kind": "fn",
           "name": "actor_scalar_deterministic",
-          "line": 525,
+          "line": 533,
           "called": [
             "actor_private_scalar"
           ]
@@ -1704,7 +1714,7 @@
         {
           "kind": "fn",
           "name": "actor_scalar_distinct_indices",
-          "line": 534,
+          "line": 542,
           "called": [
             "actor_private_scalar"
           ]
@@ -1712,7 +1722,7 @@
         {
           "kind": "fn",
           "name": "actor_scalar_distinct_seeds",
-          "line": 543,
+          "line": 551,
           "called": [
             "actor_private_scalar"
           ]
@@ -1720,7 +1730,7 @@
         {
           "kind": "fn",
           "name": "actor_scalar_always_in_range",
-          "line": 551,
+          "line": 559,
           "called": [
             "actor_private_scalar",
             "scalar_in_range"
@@ -1729,7 +1739,7 @@
         {
           "kind": "fn",
           "name": "generate_small_fixture",
-          "line": 560,
+          "line": 568,
           "called": [
             "fixture",
             "generate",
@@ -1739,7 +1749,7 @@
         {
           "kind": "fn",
           "name": "generate_deterministic",
-          "line": 575,
+          "line": 583,
           "called": [
             "generate"
           ]
@@ -1747,7 +1757,7 @@
         {
           "kind": "fn",
           "name": "generate_seed_changes_payloads",
-          "line": 587,
+          "line": 595,
           "called": [
             "clone",
             "generate",
@@ -1757,7 +1767,7 @@
         {
           "kind": "fn",
           "name": "payloads_start_with_transfer_tag",
-          "line": 604,
+          "line": 612,
           "called": [
             "fixture",
             "generate",
@@ -1768,7 +1778,7 @@
         {
           "kind": "fn",
           "name": "per_actor_nonces_strictly_increase",
-          "line": 619,
+          "line": 627,
           "called": [
             "fixture",
             "generate",
@@ -1780,7 +1790,7 @@
         {
           "kind": "fn",
           "name": "fixture_size_accessors",
-          "line": 671,
+          "line": 679,
           "called": [
             "average_payload_bytes",
             "fixture",
@@ -1793,7 +1803,7 @@
         {
           "kind": "fn",
           "name": "max_scalar_attempts_documented",
-          "line": 693,
+          "line": 701,
           "called": [
             "MAX_SCALAR_ATTEMPTS",
             "MAX_SCALAR_ATTEMPT_INDEX"
@@ -1802,7 +1812,7 @@
         {
           "kind": "fn",
           "name": "empty_fixture_accessors",
-          "line": 703,
+          "line": 711,
           "called": [
             "Fixture",
             "average_payload_bytes",
@@ -2488,7 +2498,7 @@
         {
           "kind": "struct",
           "name": "BenchmarkReport",
-          "line": 71,
+          "line": 72,
           "called": [
             "LatencySummary",
             "ReportFixtureConfig",
@@ -2501,21 +2511,22 @@
         {
           "kind": "struct",
           "name": "ReportFixtureConfig",
-          "line": 136,
+          "line": 137,
           "called": [
+            "Amount",
             "seed"
           ]
         },
         {
           "kind": "impl",
           "name": "ReportFixtureConfig",
-          "line": 153,
+          "line": 154,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_fixture",
-          "line": 156,
+          "line": 157,
           "called": [
             "FixtureConfig",
             "b",
@@ -2526,7 +2537,7 @@
         {
           "kind": "const",
           "name": "HEX",
-          "line": 161,
+          "line": 162,
           "called": [
             "b",
             "hex",
@@ -2537,25 +2548,25 @@
         {
           "kind": "enum",
           "name": "TransportKind",
-          "line": 180,
+          "line": 181,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TransportKind",
-          "line": 188,
+          "line": 189,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 191,
+          "line": 192,
           "called": []
         },
         {
           "kind": "enum",
           "name": "ReportError",
-          "line": 201,
+          "line": 202,
           "called": [
             "error",
             "from",
@@ -2566,13 +2577,13 @@
         {
           "kind": "impl",
           "name": "BenchmarkReport",
-          "line": 252,
+          "line": 253,
           "called": []
         },
         {
           "kind": "fn",
           "name": "save",
-          "line": 287,
+          "line": 288,
           "called": [
             "ReportError",
             "json",
@@ -2586,7 +2597,7 @@
         {
           "kind": "fn",
           "name": "load",
-          "line": 332,
+          "line": 333,
           "called": [
             "Err",
             "ReportError",
@@ -2600,7 +2611,7 @@
         {
           "kind": "fn",
           "name": "validate_loaded",
-          "line": 367,
+          "line": 368,
           "called": [
             "ReportError",
             "check_finite_nonneg",
@@ -2611,7 +2622,7 @@
         {
           "kind": "fn",
           "name": "to_human_summary",
-          "line": 382,
+          "line": 383,
           "called": [
             "_",
             "identifier",
@@ -2622,7 +2633,7 @@
         {
           "kind": "enum",
           "name": "RegressionVerdict",
-          "line": 472,
+          "line": 473,
           "called": [
             "RegressionDetail"
           ]
@@ -2630,7 +2641,7 @@
         {
           "kind": "struct",
           "name": "RegressionDetail",
-          "line": 506,
+          "line": 507,
           "called": [
             "RegressionMetric"
           ]
@@ -2638,25 +2649,25 @@
         {
           "kind": "enum",
           "name": "RegressionMetric",
-          "line": 523,
+          "line": 524,
           "called": []
         },
         {
           "kind": "impl",
           "name": "RegressionMetric",
-          "line": 534,
+          "line": 535,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 537,
+          "line": 538,
           "called": []
         },
         {
           "kind": "fn",
           "name": "compare_against_baseline",
-          "line": 578,
+          "line": 579,
           "called": [
             "BenchmarkReport",
             "RegressionDetail",
@@ -2670,7 +2681,7 @@
         {
           "kind": "fn",
           "name": "check_finite_nonneg",
-          "line": 656,
+          "line": 657,
           "called": [
             "Err",
             "ReportError",
@@ -2680,7 +2691,7 @@
         {
           "kind": "fn",
           "name": "check_latency_ceiling",
-          "line": 669,
+          "line": 670,
           "called": [
             "RegressionDetail",
             "RegressionMetric",
@@ -2690,7 +2701,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 696,
+          "line": 697,
           "called": [
             "BenchmarkReport",
             "RegressionDetail",
@@ -2705,7 +2716,7 @@
         {
           "kind": "fn",
           "name": "make_report",
-          "line": 706,
+          "line": 708,
           "called": [
             "BenchmarkReport",
             "LatencySummary",
@@ -2719,13 +2730,13 @@
         {
           "kind": "fn",
           "name": "fixture_config_hex_encodes_deployment_id",
-          "line": 743,
+          "line": 745,
           "called": []
         },
         {
           "kind": "fn",
           "name": "transport_kind_names",
-          "line": 752,
+          "line": 754,
           "called": [
             "name"
           ]
@@ -2733,7 +2744,7 @@
         {
           "kind": "fn",
           "name": "within_tolerance_for_identical_reports",
-          "line": 759,
+          "line": 761,
           "called": [
             "clone",
             "compare_against_baseline",
@@ -2743,7 +2754,7 @@
         {
           "kind": "fn",
           "name": "throughput_drop_within_threshold",
-          "line": 768,
+          "line": 770,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -2752,7 +2763,7 @@
         {
           "kind": "fn",
           "name": "throughput_drop_beyond_threshold",
-          "line": 778,
+          "line": 780,
           "called": [
             "_",
             "compare_against_baseline",
@@ -2763,7 +2774,7 @@
         {
           "kind": "fn",
           "name": "throughput_improvement_no_regression",
-          "line": 795,
+          "line": 797,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -2772,7 +2783,7 @@
         {
           "kind": "fn",
           "name": "p99_latency_growth_triggers_regression",
-          "line": 804,
+          "line": 806,
           "called": [
             "_",
             "compare_against_baseline",
@@ -2783,7 +2794,7 @@
         {
           "kind": "fn",
           "name": "p50_latency_improvement_no_regression",
-          "line": 820,
+          "line": 822,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -2792,7 +2803,7 @@
         {
           "kind": "fn",
           "name": "multiple_regressions",
-          "line": 829,
+          "line": 831,
           "called": [
             "_",
             "compare_against_baseline",
@@ -2803,7 +2814,7 @@
         {
           "kind": "fn",
           "name": "save_load_round_trip",
-          "line": 843,
+          "line": 845,
           "called": [
             "make_report",
             "path",
@@ -2814,7 +2825,7 @@
         {
           "kind": "fn",
           "name": "save_uses_atomic_rename",
-          "line": 858,
+          "line": 860,
           "called": [
             "_",
             "len",
@@ -2827,7 +2838,7 @@
         {
           "kind": "fn",
           "name": "save_rejects_missing_parent_directory",
-          "line": 880,
+          "line": 882,
           "called": [
             "Err",
             "make_report",
@@ -2838,7 +2849,7 @@
         {
           "kind": "fn",
           "name": "save_no_filename_falls_back_to_direct_write",
-          "line": 893,
+          "line": 895,
           "called": [
             "Err",
             "make_report",
@@ -2850,7 +2861,7 @@
         {
           "kind": "fn",
           "name": "load_refuses_future_protocol_version",
-          "line": 907,
+          "line": 909,
           "called": [
             "Err",
             "make_report",
@@ -2862,7 +2873,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_malformed_json",
-          "line": 919,
+          "line": 921,
           "called": [
             "Err",
             "path"
@@ -2871,7 +2882,7 @@
         {
           "kind": "fn",
           "name": "load_reports_io_for_missing",
-          "line": 929,
+          "line": 931,
           "called": [
             "Err",
             "path"
@@ -2880,7 +2891,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_infinity_overflow_via_serde",
-          "line": 947,
+          "line": 949,
           "called": [
             "Err",
             "json",
@@ -2890,7 +2901,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_negative_throughput",
-          "line": 995,
+          "line": 997,
           "called": [
             "Err",
             "json",
@@ -2900,7 +2911,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_negative_mean_ns",
-          "line": 1042,
+          "line": 1044,
           "called": [
             "Err",
             "json",
@@ -2910,7 +2921,7 @@
         {
           "kind": "fn",
           "name": "save_rejects_infinity_throughput",
-          "line": 1093,
+          "line": 1095,
           "called": [
             "Err",
             "make_report",
@@ -2923,7 +2934,7 @@
         {
           "kind": "fn",
           "name": "save_rejects_nan_stddev",
-          "line": 1116,
+          "line": 1118,
           "called": [
             "Err",
             "make_report",
@@ -2935,7 +2946,7 @@
         {
           "kind": "fn",
           "name": "save_rejects_negative_mean_ns",
-          "line": 1134,
+          "line": 1136,
           "called": [
             "Err",
             "make_report",
@@ -2947,7 +2958,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_negative_stddev",
-          "line": 1153,
+          "line": 1155,
           "called": [
             "Err",
             "json",
@@ -2957,7 +2968,7 @@
         {
           "kind": "fn",
           "name": "compare_with_nan_threshold_returns_within_tolerance",
-          "line": 1201,
+          "line": 1203,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -2966,7 +2977,7 @@
         {
           "kind": "fn",
           "name": "compare_with_inf_threshold_returns_within_tolerance",
-          "line": 1211,
+          "line": 1213,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -2975,7 +2986,7 @@
         {
           "kind": "fn",
           "name": "human_summary_contains_key_fields",
-          "line": 1220,
+          "line": 1222,
           "called": [
             "make_report",
             "report",
@@ -2985,7 +2996,7 @@
         {
           "kind": "fn",
           "name": "human_summary_shows_hinted_wire_mode",
-          "line": 1235,
+          "line": 1237,
           "called": [
             "make_report",
             "report",
@@ -2995,7 +3006,7 @@
         {
           "kind": "fn",
           "name": "wire_mode_mismatch_is_not_comparable",
-          "line": 1247,
+          "line": 1249,
           "called": [
             "clone",
             "compare_against_baseline",
@@ -3005,7 +3016,7 @@
         {
           "kind": "fn",
           "name": "persistent_mode_mismatch_is_not_comparable",
-          "line": 1274,
+          "line": 1276,
           "called": [
             "clone",
             "compare_against_baseline",
@@ -3015,7 +3026,7 @@
         {
           "kind": "fn",
           "name": "same_wire_mode_compares_normally",
-          "line": 1296,
+          "line": 1298,
           "called": [
             "compare_against_baseline",
             "iter",
@@ -3025,7 +3036,7 @@
         {
           "kind": "fn",
           "name": "legacy_baseline_without_emit_hints_loads_as_false",
-          "line": 1317,
+          "line": 1319,
           "called": [
             "json",
             "path"
@@ -3034,7 +3045,7 @@
         {
           "kind": "fn",
           "name": "emit_hints_round_trips",
-          "line": 1362,
+          "line": 1364,
           "called": [
             "make_report",
             "path",
@@ -3045,7 +3056,7 @@
         {
           "kind": "fn",
           "name": "regression_detail_fields",
-          "line": 1375,
+          "line": 1377,
           "called": [
             "RegressionDetail",
             "name"
@@ -3054,7 +3065,7 @@
         {
           "kind": "fn",
           "name": "regression_metric_names_distinct",
-          "line": 1389,
+          "line": 1391,
           "called": [
             "insert",
             "name"
@@ -21797,13 +21808,13 @@
         {
           "kind": "fn",
           "name": "locate_knomosis_binary",
-          "line": 37,
+          "line": 38,
           "called": []
         },
         {
           "kind": "fn",
           "name": "fnv1a64",
-          "line": 51,
+          "line": 52,
           "called": [
             "b",
             "bytes"
@@ -21812,7 +21823,7 @@
         {
           "kind": "fn",
           "name": "u64_le",
-          "line": 61,
+          "line": 62,
           "called": [
             "to_le_bytes"
           ]
@@ -21820,7 +21831,7 @@
         {
           "kind": "fn",
           "name": "cbe_bytes",
-          "line": 68,
+          "line": 69,
           "called": [
             "len",
             "push",
@@ -21830,7 +21841,7 @@
         {
           "kind": "fn",
           "name": "wrap_frame",
-          "line": 78,
+          "line": 79,
           "called": [
             "b",
             "fnv1a64",
@@ -21841,7 +21852,7 @@
         {
           "kind": "fn",
           "name": "build_synthetic_log_with_transfer",
-          "line": 90,
+          "line": 91,
           "called": [
             "action",
             "amount",
@@ -21854,7 +21865,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_transfer_round_trip",
-          "line": 115,
+          "line": 116,
           "called": [
             "CellProof",
             "assert_openings_present",
@@ -21870,7 +21881,7 @@
         {
           "kind": "fn",
           "name": "assert_openings_present",
-          "line": 244,
+          "line": 245,
           "called": [
             "CellProof",
             "is_empty",
@@ -21881,7 +21892,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_deterministic",
-          "line": 262,
+          "line": 263,
           "called": [
             "build_synthetic_log_with_transfer",
             "locate_knomosis_binary",
@@ -21893,7 +21904,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_withdraw",
-          "line": 301,
+          "line": 302,
           "called": [
             "CellProof",
             "action",
@@ -21913,7 +21924,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_out_of_range_exits_2",
-          "line": 396,
+          "line": 397,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -21924,7 +21935,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_non_nat_idx_exits_2",
-          "line": 433,
+          "line": 434,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -21935,7 +21946,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_non_nat_signer_exits_2",
-          "line": 465,
+          "line": 466,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -21946,7 +21957,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_signer_mismatch_exits_2",
-          "line": 502,
+          "line": 503,
           "called": [
             "build_synthetic_log_with_transfer",
             "locate_knomosis_binary",
@@ -21964,13 +21975,13 @@
         {
           "kind": "fn",
           "name": "locate_knomosis_binary",
-          "line": 46,
+          "line": 47,
           "called": []
         },
         {
           "kind": "fn",
           "name": "fnv1a64",
-          "line": 59,
+          "line": 60,
           "called": [
             "b",
             "bytes"
@@ -21979,7 +21990,7 @@
         {
           "kind": "fn",
           "name": "u64_le",
-          "line": 68,
+          "line": 69,
           "called": [
             "to_le_bytes"
           ]
@@ -21987,7 +21998,7 @@
         {
           "kind": "fn",
           "name": "cbe_bytes",
-          "line": 73,
+          "line": 74,
           "called": [
             "len",
             "push",
@@ -21997,7 +22008,7 @@
         {
           "kind": "fn",
           "name": "wrap_frame",
-          "line": 82,
+          "line": 83,
           "called": [
             "b",
             "fnv1a64",
@@ -22008,7 +22019,7 @@
         {
           "kind": "fn",
           "name": "build_log_with_action",
-          "line": 92,
+          "line": 93,
           "called": [
             "Action",
             "action",
@@ -22021,7 +22032,7 @@
         {
           "kind": "fn",
           "name": "run_export_terminate_bundle",
-          "line": 103,
+          "line": 104,
           "called": [
             "log_path"
           ]
@@ -22029,7 +22040,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_transfer_round_trip",
-          "line": 127,
+          "line": 128,
           "called": [
             "action",
             "amount",
@@ -22049,7 +22060,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_deterministic",
-          "line": 208,
+          "line": 209,
           "called": [
             "action",
             "amount",
@@ -22064,7 +22075,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_mint_variant",
-          "line": 237,
+          "line": 238,
           "called": [
             "action",
             "amount",
@@ -22082,7 +22093,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_withdraw_variant",
-          "line": 284,
+          "line": 285,
           "called": [
             "action",
             "amount",
@@ -22100,7 +22111,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_out_of_range_exits_2",
-          "line": 346,
+          "line": 347,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -22111,7 +22122,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_non_nat_idx_exits_2",
-          "line": 384,
+          "line": 385,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -22122,7 +22133,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_json_is_single_line_object",
-          "line": 416,
+          "line": 417,
           "called": [
             "action",
             "amount",
@@ -36172,66 +36183,66 @@
     {
       "module": "runtime::knomosis-host::src::budget",
       "path": "runtime/knomosis-host/src/budget.rs",
-      "declaration_count": 161,
+      "declaration_count": 162,
       "declarations": [
         {
           "kind": "const",
           "name": "BRIDGE_ACTOR",
-          "line": 93,
+          "line": 94,
           "called": []
         },
         {
           "kind": "const",
           "name": "GAS_POOL_ACTOR",
-          "line": 98,
+          "line": 99,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TOPUP_BUDGET_PER_ACTION",
-          "line": 109,
+          "line": 110,
           "called": []
         },
         {
           "kind": "const",
           "name": "CBE_TAG_UINT",
-          "line": 113,
+          "line": 114,
           "called": []
         },
         {
           "kind": "const",
           "name": "CBE_TAG_AMOUNT",
-          "line": 117,
+          "line": 118,
           "called": []
         },
         {
           "kind": "const",
           "name": "CBE_TAG_BYTES",
-          "line": 121,
+          "line": 122,
           "called": []
         },
         {
           "kind": "const",
           "name": "CBE_TAG_MAP",
-          "line": 124,
+          "line": 125,
           "called": []
         },
         {
           "kind": "const",
           "name": "HEAD_LEN",
-          "line": 129,
+          "line": 130,
           "called": []
         },
         {
           "kind": "const",
           "name": "AMOUNT_HEAD_LEN",
-          "line": 134,
+          "line": 135,
           "called": []
         },
         {
           "kind": "fn",
           "name": "push_cbe_uint",
-          "line": 138,
+          "line": 139,
           "called": [
             "CBE_TAG_UINT",
             "push",
@@ -36241,7 +36252,7 @@
         {
           "kind": "enum",
           "name": "BudgetPolicy",
-          "line": 150,
+          "line": 151,
           "called": [
             "action_cost",
             "current_epoch",
@@ -36251,13 +36262,13 @@
         {
           "kind": "impl",
           "name": "BudgetPolicy",
-          "line": 168,
+          "line": 169,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mk_bounded",
-          "line": 174,
+          "line": 175,
           "called": [
             "action_cost",
             "current_epoch",
@@ -36268,25 +36279,25 @@
         {
           "kind": "fn",
           "name": "free_tier",
-          "line": 184,
+          "line": 185,
           "called": []
         },
         {
           "kind": "fn",
           "name": "action_cost",
-          "line": 192,
+          "line": 193,
           "called": []
         },
         {
           "kind": "fn",
           "name": "current_epoch",
-          "line": 200,
+          "line": 201,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode",
-          "line": 211,
+          "line": 212,
           "called": [
             "HEAD_LEN",
             "action_cost",
@@ -36298,7 +36309,7 @@
         {
           "kind": "fn",
           "name": "decode_at",
-          "line": 230,
+          "line": 231,
           "called": [
             "BudgetDecodeError",
             "CbeCursor",
@@ -36314,7 +36325,7 @@
         {
           "kind": "fn",
           "name": "decode",
-          "line": 259,
+          "line": 260,
           "called": [
             "BudgetDecodeError",
             "Err",
@@ -36327,25 +36338,25 @@
         {
           "kind": "struct",
           "name": "ActorBudget",
-          "line": 274,
+          "line": 275,
           "called": []
         },
         {
           "kind": "impl",
           "name": "ActorBudget",
-          "line": 281,
+          "line": 282,
           "called": []
         },
         {
           "kind": "fn",
           "name": "empty",
-          "line": 285,
+          "line": 286,
           "called": []
         },
         {
           "kind": "fn",
           "name": "normalise",
-          "line": 298,
+          "line": 299,
           "called": [
             "free_tier",
             "max"
@@ -36354,7 +36365,7 @@
         {
           "kind": "fn",
           "name": "consume",
-          "line": 314,
+          "line": 315,
           "called": [
             "free_tier",
             "normalise"
@@ -36363,7 +36374,7 @@
         {
           "kind": "fn",
           "name": "top_up",
-          "line": 334,
+          "line": 335,
           "called": [
             "amount",
             "free_tier",
@@ -36374,7 +36385,7 @@
         {
           "kind": "fn",
           "name": "encode",
-          "line": 346,
+          "line": 347,
           "called": [
             "HEAD_LEN",
             "push_cbe_uint"
@@ -36383,7 +36394,7 @@
         {
           "kind": "fn",
           "name": "decode_at",
-          "line": 355,
+          "line": 356,
           "called": [
             "BudgetDecodeError",
             "CbeCursor",
@@ -36393,7 +36404,7 @@
         {
           "kind": "fn",
           "name": "decode",
-          "line": 370,
+          "line": 371,
           "called": [
             "BudgetDecodeError",
             "Err",
@@ -36407,7 +36418,7 @@
         {
           "kind": "impl",
           "name": "Default for ActorBudget",
-          "line": 382,
+          "line": 383,
           "called": [
             "ActorBudget"
           ]
@@ -36415,13 +36426,13 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 383,
+          "line": 384,
           "called": []
         },
         {
           "kind": "struct",
           "name": "EpochBudgetState",
-          "line": 395,
+          "line": 396,
           "called": [
             "ActorBudget"
           ]
@@ -36429,31 +36440,31 @@
         {
           "kind": "impl",
           "name": "EpochBudgetState",
-          "line": 397,
+          "line": 398,
           "called": []
         },
         {
           "kind": "fn",
           "name": "empty",
-          "line": 400,
+          "line": 401,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 406,
+          "line": 407,
           "called": []
         },
         {
           "kind": "fn",
           "name": "len",
-          "line": 412,
+          "line": 413,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell",
-          "line": 420,
+          "line": 421,
           "called": [
             "ActorBudget",
             "actor",
@@ -36463,7 +36474,7 @@
         {
           "kind": "fn",
           "name": "current_budget",
-          "line": 427,
+          "line": 428,
           "called": [
             "actor",
             "free_tier",
@@ -36474,7 +36485,7 @@
         {
           "kind": "fn",
           "name": "consume_in_place",
-          "line": 440,
+          "line": 441,
           "called": [
             "actor",
             "cell",
@@ -36487,7 +36498,7 @@
         {
           "kind": "fn",
           "name": "top_up_in_place",
-          "line": 453,
+          "line": 454,
           "called": [
             "actor",
             "amount",
@@ -36501,7 +36512,7 @@
         {
           "kind": "fn",
           "name": "encode",
-          "line": 466,
+          "line": 467,
           "called": [
             "CBE_TAG_MAP",
             "actor",
@@ -36516,7 +36527,7 @@
         {
           "kind": "fn",
           "name": "decode_at",
-          "line": 487,
+          "line": 488,
           "called": [
             "BudgetDecodeError",
             "CbeCursor",
@@ -36534,7 +36545,7 @@
         {
           "kind": "fn",
           "name": "decode",
-          "line": 514,
+          "line": 515,
           "called": [
             "BudgetDecodeError",
             "Err",
@@ -36547,13 +36558,15 @@
         {
           "kind": "enum",
           "name": "ActionBudgetKind",
-          "line": 530,
-          "called": []
+          "line": 531,
+          "called": [
+            "Amount"
+          ]
         },
         {
           "kind": "struct",
           "name": "SignedActionBudgetView",
-          "line": 609,
+          "line": 611,
           "called": [
             "ActionBudgetKind",
             "kind",
@@ -36563,7 +36576,7 @@
         {
           "kind": "enum",
           "name": "BudgetDecodeError",
-          "line": 618,
+          "line": 620,
           "called": [
             "error",
             "offset",
@@ -36574,7 +36587,7 @@
         {
           "kind": "struct",
           "name": "CbeCursor",
-          "line": 703,
+          "line": 694,
           "called": [
             "bytes",
             "pos"
@@ -36583,7 +36596,7 @@
         {
           "kind": "impl",
           "name": "CbeCursor<'a>",
-          "line": 708,
+          "line": 699,
           "called": [
             "CbeCursor"
           ]
@@ -36591,7 +36604,7 @@
         {
           "kind": "fn",
           "name": "new",
-          "line": 709,
+          "line": 700,
           "called": [
             "bytes",
             "pos"
@@ -36600,13 +36613,13 @@
         {
           "kind": "fn",
           "name": "pos",
-          "line": 714,
+          "line": 705,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_at_end",
-          "line": 719,
+          "line": 710,
           "called": [
             "bytes",
             "len",
@@ -36616,7 +36629,7 @@
         {
           "kind": "fn",
           "name": "read_map_head",
-          "line": 725,
+          "line": 716,
           "called": [
             "BudgetDecodeError",
             "CBE_TAG_MAP",
@@ -36634,7 +36647,7 @@
         {
           "kind": "fn",
           "name": "read_uint",
-          "line": 748,
+          "line": 739,
           "called": [
             "BudgetDecodeError",
             "CBE_TAG_UINT",
@@ -36652,7 +36665,7 @@
         {
           "kind": "fn",
           "name": "skip_uint",
-          "line": 770,
+          "line": 761,
           "called": [
             "BudgetDecodeError",
             "_",
@@ -36662,19 +36675,18 @@
         {
           "kind": "fn",
           "name": "read_amount",
-          "line": 784,
+          "line": 775,
           "called": [
             "AMOUNT_HEAD_LEN",
+            "Amount",
             "BudgetDecodeError",
             "CBE_TAG_AMOUNT",
             "Err",
-            "b",
             "bytes",
             "checked_add",
             "end",
             "get",
             "head",
-            "iter",
             "offset",
             "pos"
           ]
@@ -36682,7 +36694,7 @@
         {
           "kind": "fn",
           "name": "skip_amount",
-          "line": 815,
+          "line": 808,
           "called": [
             "BudgetDecodeError",
             "_",
@@ -36692,7 +36704,7 @@
         {
           "kind": "fn",
           "name": "skip_bytes",
-          "line": 821,
+          "line": 814,
           "called": [
             "BudgetDecodeError",
             "CBE_TAG_BYTES",
@@ -36712,7 +36724,7 @@
         {
           "kind": "fn",
           "name": "decode_budget_view",
-          "line": 873,
+          "line": 866,
           "called": [
             "BudgetDecodeError",
             "Err",
@@ -36735,7 +36747,7 @@
         {
           "kind": "enum",
           "name": "GateRejection",
-          "line": 1054,
+          "line": 1047,
           "called": [
             "error"
           ]
@@ -36743,20 +36755,21 @@
         {
           "kind": "impl",
           "name": "GateRejection",
-          "line": 1148,
+          "line": 1141,
           "called": []
         },
         {
           "kind": "fn",
           "name": "reason",
-          "line": 1153,
+          "line": 1146,
           "called": []
         },
         {
           "kind": "struct",
           "name": "BudgetGate",
-          "line": 1182,
+          "line": 1175,
           "called": [
+            "Amount",
             "BudgetPolicy",
             "EpochBudgetState",
             "balances",
@@ -36768,13 +36781,13 @@
         {
           "kind": "impl",
           "name": "BudgetGate",
-          "line": 1214,
+          "line": 1207,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 1218,
+          "line": 1211,
           "called": [
             "BudgetPolicy",
             "balances",
@@ -36786,7 +36799,7 @@
         {
           "kind": "fn",
           "name": "with_ledger",
-          "line": 1233,
+          "line": 1226,
           "called": [
             "BudgetPolicy",
             "EpochBudgetState",
@@ -36799,13 +36812,13 @@
         {
           "kind": "fn",
           "name": "with_strict_checks",
-          "line": 1253,
+          "line": 1246,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with_epoch_length",
-          "line": 1264,
+          "line": 1257,
           "called": [
             "epoch_length"
           ]
@@ -36813,13 +36826,13 @@
         {
           "kind": "fn",
           "name": "is_strict",
-          "line": 1271,
+          "line": 1264,
           "called": []
         },
         {
           "kind": "fn",
           "name": "effective_epoch",
-          "line": 1279,
+          "line": 1272,
           "called": [
             "current_epoch",
             "epoch_length",
@@ -36830,8 +36843,9 @@
         {
           "kind": "fn",
           "name": "set_balance",
-          "line": 1286,
+          "line": 1279,
           "called": [
+            "Amount",
             "actor",
             "balance",
             "balances",
@@ -36841,7 +36855,7 @@
         {
           "kind": "fn",
           "name": "allow_delegate",
-          "line": 1292,
+          "line": 1285,
           "called": [
             "insert",
             "signer"
@@ -36850,7 +36864,7 @@
         {
           "kind": "fn",
           "name": "policy",
-          "line": 1298,
+          "line": 1291,
           "called": [
             "BudgetPolicy"
           ]
@@ -36858,7 +36872,7 @@
         {
           "kind": "fn",
           "name": "ledger",
-          "line": 1304,
+          "line": 1297,
           "called": [
             "EpochBudgetState"
           ]
@@ -36866,7 +36880,7 @@
         {
           "kind": "fn",
           "name": "current_budget",
-          "line": 1312,
+          "line": 1305,
           "called": [
             "actor",
             "effective_epoch",
@@ -36878,8 +36892,9 @@
         {
           "kind": "fn",
           "name": "balance_of",
-          "line": 1323,
+          "line": 1316,
           "called": [
+            "Amount",
             "actor",
             "balances",
             "get"
@@ -36888,7 +36903,7 @@
         {
           "kind": "fn",
           "name": "evaluate",
-          "line": 1346,
+          "line": 1339,
           "called": [
             "BRIDGE_ACTOR",
             "EpochBudgetState",
@@ -36900,6 +36915,7 @@
             "_",
             "action_cost",
             "balance_of",
+            "checked_mul",
             "clone",
             "consume_in_place",
             "effective_epoch",
@@ -36916,7 +36932,7 @@
         {
           "kind": "fn",
           "name": "admit",
-          "line": 1548,
+          "line": 1564,
           "called": [
             "GateRejection",
             "SignedActionBudgetView",
@@ -36930,7 +36946,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1560,
+          "line": 1576,
           "called": [
             "ActionBudgetKind",
             "ActorBudget",
@@ -36952,7 +36968,7 @@
         {
           "kind": "fn",
           "name": "u",
-          "line": 1571,
+          "line": 1588,
           "called": [
             "CBE_TAG_UINT",
             "to_le_bytes"
@@ -36961,8 +36977,9 @@
         {
           "kind": "fn",
           "name": "amt",
-          "line": 1581,
+          "line": 1598,
           "called": [
+            "Amount",
             "CBE_TAG_AMOUNT",
             "to_le_bytes"
           ]
@@ -36970,7 +36987,7 @@
         {
           "kind": "fn",
           "name": "bytes",
-          "line": 1589,
+          "line": 1609,
           "called": [
             "len",
             "to_le_bytes"
@@ -36979,13 +36996,13 @@
         {
           "kind": "fn",
           "name": "cat",
-          "line": 1597,
+          "line": 1617,
           "called": []
         },
         {
           "kind": "fn",
           "name": "signed",
-          "line": 1603,
+          "line": 1623,
           "called": [
             "action",
             "bytes",
@@ -36997,7 +37014,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_encode_known_vector",
-          "line": 1618,
+          "line": 1638,
           "called": [
             "ActorBudget",
             "b",
@@ -37007,7 +37024,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_encode_known_vector",
-          "line": 1634,
+          "line": 1654,
           "called": [
             "encode"
           ]
@@ -37015,7 +37032,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_encode_known_vector",
-          "line": 1650,
+          "line": 1670,
           "called": [
             "ActorBudget",
             "CBE_TAG_MAP",
@@ -37027,7 +37044,7 @@
         {
           "kind": "fn",
           "name": "empty_epoch_budget_state_encode",
-          "line": 1744,
+          "line": 1764,
           "called": [
             "CBE_TAG_MAP",
             "encode"
@@ -37036,7 +37053,7 @@
         {
           "kind": "fn",
           "name": "encode_deterministic",
-          "line": 1751,
+          "line": 1771,
           "called": [
             "ActorBudget",
             "b",
@@ -37046,7 +37063,7 @@
         {
           "kind": "fn",
           "name": "mk_bounded_clamps_action_cost",
-          "line": 1765,
+          "line": 1785,
           "called": [
             "action_cost"
           ]
@@ -37054,7 +37071,7 @@
         {
           "kind": "fn",
           "name": "policy_accessors",
-          "line": 1773,
+          "line": 1793,
           "called": [
             "action_cost",
             "current_epoch",
@@ -37064,7 +37081,7 @@
         {
           "kind": "fn",
           "name": "normalise_noop_if_current",
-          "line": 1786,
+          "line": 1806,
           "called": [
             "ActorBudget",
             "b",
@@ -37074,7 +37091,7 @@
         {
           "kind": "fn",
           "name": "normalise_floors_stale_cell",
-          "line": 1798,
+          "line": 1818,
           "called": [
             "ActorBudget",
             "b",
@@ -37084,7 +37101,7 @@
         {
           "kind": "fn",
           "name": "consume_semantics",
-          "line": 1818,
+          "line": 1838,
           "called": [
             "ActorBudget",
             "b",
@@ -37094,7 +37111,7 @@
         {
           "kind": "fn",
           "name": "top_up_semantics",
-          "line": 1842,
+          "line": 1862,
           "called": [
             "ActorBudget",
             "b",
@@ -37104,7 +37121,7 @@
         {
           "kind": "fn",
           "name": "top_up_saturates",
-          "line": 1860,
+          "line": 1880,
           "called": [
             "ActorBudget",
             "b",
@@ -37114,7 +37131,7 @@
         {
           "kind": "fn",
           "name": "current_budget_missing_cell",
-          "line": 1873,
+          "line": 1893,
           "called": [
             "current_budget"
           ]
@@ -37122,7 +37139,7 @@
         {
           "kind": "fn",
           "name": "consume_locality",
-          "line": 1883,
+          "line": 1903,
           "called": [
             "consume_in_place",
             "current_budget"
@@ -37131,7 +37148,7 @@
         {
           "kind": "fn",
           "name": "consume_insufficient_no_mutation",
-          "line": 1893,
+          "line": 1913,
           "called": [
             "consume_in_place",
             "is_empty"
@@ -37140,7 +37157,7 @@
         {
           "kind": "fn",
           "name": "decode_transfer_ordinary",
-          "line": 1904,
+          "line": 1924,
           "called": [
             "action",
             "amt",
@@ -37156,7 +37173,7 @@
         {
           "kind": "fn",
           "name": "decode_simple_variants",
-          "line": 1915,
+          "line": 1935,
           "called": [
             "action",
             "amt",
@@ -37174,7 +37191,7 @@
         {
           "kind": "fn",
           "name": "decode_deposit_with_fee",
-          "line": 1953,
+          "line": 1985,
           "called": [
             "BRIDGE_ACTOR",
             "action",
@@ -37191,7 +37208,7 @@
         {
           "kind": "fn",
           "name": "decode_top_up_action_budget",
-          "line": 1981,
+          "line": 2013,
           "called": [
             "action",
             "amt",
@@ -37207,7 +37224,7 @@
         {
           "kind": "fn",
           "name": "decode_top_up_action_budget_for",
-          "line": 2000,
+          "line": 2032,
           "called": [
             "action",
             "amt",
@@ -37223,7 +37240,7 @@
         {
           "kind": "fn",
           "name": "decode_unsupported_tags",
-          "line": 2021,
+          "line": 2053,
           "called": [
             "Err",
             "action",
@@ -37237,7 +37254,7 @@
         {
           "kind": "fn",
           "name": "decode_unknown_tag",
-          "line": 2036,
+          "line": 2068,
           "called": [
             "Err",
             "action",
@@ -37251,7 +37268,7 @@
         {
           "kind": "fn",
           "name": "decode_truncated_no_signer",
-          "line": 2049,
+          "line": 2081,
           "called": [
             "Err",
             "action",
@@ -37263,7 +37280,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_missing_nonce_sig",
-          "line": 2062,
+          "line": 2094,
           "called": [
             "Err",
             "amt",
@@ -37275,7 +37292,7 @@
         {
           "kind": "fn",
           "name": "decode_view_rejects_trailing_after_sig",
-          "line": 2084,
+          "line": 2116,
           "called": [
             "Err",
             "action",
@@ -37289,7 +37306,7 @@
         {
           "kind": "fn",
           "name": "decode_wrong_tag",
-          "line": 2096,
+          "line": 2128,
           "called": [
             "Err",
             "bytes",
@@ -37301,7 +37318,7 @@
         {
           "kind": "fn",
           "name": "decode_never_panics",
-          "line": 2111,
+          "line": 2143,
           "called": [
             "_",
             "decode_budget_view",
@@ -37312,7 +37329,7 @@
         {
           "kind": "fn",
           "name": "view",
-          "line": 2123,
+          "line": 2155,
           "called": [
             "ActionBudgetKind",
             "SignedActionBudgetView",
@@ -37323,7 +37340,7 @@
         {
           "kind": "fn",
           "name": "gate_consume_then_exhaust",
-          "line": 2132,
+          "line": 2164,
           "called": [
             "Err",
             "admit",
@@ -37335,7 +37352,7 @@
         {
           "kind": "fn",
           "name": "gate_genesis_default_denies",
-          "line": 2147,
+          "line": 2179,
           "called": [
             "Err",
             "admit",
@@ -37346,7 +37363,7 @@
         {
           "kind": "fn",
           "name": "gate_bridge_actor_exempt",
-          "line": 2159,
+          "line": 2191,
           "called": [
             "BRIDGE_ACTOR",
             "admit",
@@ -37359,7 +37376,7 @@
         {
           "kind": "fn",
           "name": "gate_per_actor_isolation",
-          "line": 2171,
+          "line": 2203,
           "called": [
             "admit",
             "current_budget",
@@ -37370,7 +37387,7 @@
         {
           "kind": "fn",
           "name": "gate_top_up_grants_signer",
-          "line": 2182,
+          "line": 2214,
           "called": [
             "GAS_POOL_ACTOR",
             "admit",
@@ -37382,7 +37399,7 @@
         {
           "kind": "fn",
           "name": "gate_rejects_unbounded_budget_mint",
-          "line": 2211,
+          "line": 2243,
           "called": [
             "Err",
             "GAS_POOL_ACTOR",
@@ -37394,7 +37411,7 @@
         {
           "kind": "fn",
           "name": "gate_budget_ceiling_is_exact",
-          "line": 2231,
+          "line": 2263,
           "called": [
             "Err",
             "GAS_POOL_ACTOR",
@@ -37407,7 +37424,7 @@
         {
           "kind": "fn",
           "name": "gate_pins_topup_pool_and_resource",
-          "line": 2261,
+          "line": 2293,
           "called": [
             "Err",
             "GAS_POOL_ACTOR",
@@ -37419,7 +37436,7 @@
         {
           "kind": "fn",
           "name": "gate_refund_consumes_action_cost_plus_units",
-          "line": 2306,
+          "line": 2338,
           "called": [
             "admit",
             "current_budget",
@@ -37430,7 +37447,7 @@
         {
           "kind": "fn",
           "name": "gate_refund_rejections",
-          "line": 2325,
+          "line": 2357,
           "called": [
             "BRIDGE_ACTOR",
             "Err",
@@ -37442,7 +37459,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_refund_enforces_pool_solvency",
-          "line": 2374,
+          "line": 2406,
           "called": [
             "Err",
             "admit",
@@ -37456,8 +37473,23 @@
         },
         {
           "kind": "fn",
+          "name": "strict_gate_refund_solvency_product_does_not_wrap",
+          "line": 2444,
+          "called": [
+            "Err",
+            "checked_mul",
+            "evaluate",
+            "gate",
+            "set_balance",
+            "to_u128",
+            "view",
+            "with_strict_checks"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "gate_deposit_with_fee_grants_recipient",
-          "line": 2398,
+          "line": 2482,
           "called": [
             "BRIDGE_ACTOR",
             "admit",
@@ -37469,7 +37501,7 @@
         {
           "kind": "fn",
           "name": "gate_delegated_top_up_grants_recipient",
-          "line": 2414,
+          "line": 2498,
           "called": [
             "GAS_POOL_ACTOR",
             "admit",
@@ -37481,7 +37513,7 @@
         {
           "kind": "fn",
           "name": "gate_safety_conjuncts",
-          "line": 2434,
+          "line": 2518,
           "called": [
             "BRIDGE_ACTOR",
             "Err",
@@ -37494,7 +37526,7 @@
         {
           "kind": "fn",
           "name": "gate_reject_does_not_mutate",
-          "line": 2516,
+          "line": 2600,
           "called": [
             "admit",
             "clone",
@@ -37506,7 +37538,7 @@
         {
           "kind": "fn",
           "name": "rejection_reason_strings",
-          "line": 2540,
+          "line": 2624,
           "called": [
             "reason"
           ]
@@ -37514,7 +37546,7 @@
         {
           "kind": "fn",
           "name": "permissive_gate_admits_topup_without_balance",
-          "line": 2581,
+          "line": 2665,
           "called": [
             "GAS_POOL_ACTOR",
             "admit",
@@ -37526,7 +37558,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_enforces_gas_balance",
-          "line": 2600,
+          "line": 2684,
           "called": [
             "Err",
             "GAS_POOL_ACTOR",
@@ -37543,7 +37575,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_gas_balance_is_resource_keyed",
-          "line": 2626,
+          "line": 2710,
           "called": [
             "Err",
             "GAS_POOL_ACTOR",
@@ -37558,7 +37590,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_enforces_delegated_consent",
-          "line": 2647,
+          "line": 2731,
           "called": [
             "Err",
             "GAS_POOL_ACTOR",
@@ -37575,7 +37607,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_keeps_balance_independent_conjuncts",
-          "line": 2679,
+          "line": 2763,
           "called": [
             "Err",
             "GAS_POOL_ACTOR",
@@ -37589,7 +37621,7 @@
         {
           "kind": "fn",
           "name": "gate_drives_decoded_view",
-          "line": 2696,
+          "line": 2780,
           "called": [
             "Err",
             "action",
@@ -37605,7 +37637,7 @@
         {
           "kind": "fn",
           "name": "gate_with_ledger_preseeds",
-          "line": 2708,
+          "line": 2792,
           "called": [
             "current_budget",
             "gate",
@@ -37616,13 +37648,13 @@
         {
           "kind": "fn",
           "name": "types_are_send_sync",
-          "line": 2718,
+          "line": 2802,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 2719,
+          "line": 2803,
           "called": [
             "ActorBudget",
             "BudgetGate",
@@ -37633,7 +37665,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_encode_multibyte_le",
-          "line": 2734,
+          "line": 2818,
           "called": [
             "ActorBudget",
             "b",
@@ -37643,7 +37675,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_encode_multibyte_le",
-          "line": 2757,
+          "line": 2841,
           "called": [
             "cat",
             "encode",
@@ -37653,7 +37685,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_encode_multikey_ascending",
-          "line": 2769,
+          "line": 2853,
           "called": [
             "ActorBudget",
             "CBE_TAG_MAP",
@@ -37668,7 +37700,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_orders_keys_unsigned",
-          "line": 2810,
+          "line": 2894,
           "called": [
             "CBE_TAG_UINT",
             "encode",
@@ -37678,7 +37710,7 @@
         {
           "kind": "fn",
           "name": "decode_recovers_large_signer",
-          "line": 2826,
+          "line": 2910,
           "called": [
             "action",
             "cat",
@@ -37693,7 +37725,7 @@
         {
           "kind": "fn",
           "name": "gate_multi_actor_trace",
-          "line": 2841,
+          "line": 2925,
           "called": [
             "BRIDGE_ACTOR",
             "Err",
@@ -37709,7 +37741,7 @@
         {
           "kind": "fn",
           "name": "gate_epoch_advancement_replenishes",
-          "line": 2891,
+          "line": 2975,
           "called": [
             "Err",
             "admit",
@@ -37722,7 +37754,7 @@
         {
           "kind": "fn",
           "name": "gate_epoch_advancement_boundary_paces_free_tier",
-          "line": 2914,
+          "line": 2998,
           "called": [
             "admit",
             "effective_epoch",
@@ -37734,7 +37766,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_round_trip",
-          "line": 2931,
+          "line": 3015,
           "called": [
             "ActorBudget",
             "b",
@@ -37744,7 +37776,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_round_trip",
-          "line": 2949,
+          "line": 3033,
           "called": [
             "encode"
           ]
@@ -37752,7 +37784,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_round_trip",
-          "line": 2962,
+          "line": 3046,
           "called": [
             "ActorBudget",
             "empty",
@@ -37763,7 +37795,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_bad_policy_tag",
-          "line": 2992,
+          "line": 3076,
           "called": [
             "Err",
             "bytes",
@@ -37774,7 +37806,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_zero_action_cost",
-          "line": 3003,
+          "line": 3087,
           "called": [
             "Err",
             "bytes",
@@ -37785,7 +37817,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_unsorted_keys",
-          "line": 3014,
+          "line": 3098,
           "called": [
             "CBE_TAG_MAP",
             "Err",
@@ -37801,7 +37833,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_trailing_bytes",
-          "line": 3032,
+          "line": 3116,
           "called": [
             "Err",
             "bytes",
@@ -37812,7 +37844,7 @@
         {
           "kind": "fn",
           "name": "decode_truncated_is_unexpected_end",
-          "line": 3043,
+          "line": 3127,
           "called": [
             "Err"
           ]
@@ -37820,7 +37852,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_non_map_head",
-          "line": 3052,
+          "line": 3136,
           "called": [
             "Err",
             "bytes",
@@ -37831,7 +37863,7 @@
         {
           "kind": "fn",
           "name": "encode_view_bytes",
-          "line": 3064,
+          "line": 3148,
           "called": [
             "ActionBudgetKind",
             "action",
@@ -37846,7 +37878,7 @@
         {
           "kind": "fn",
           "name": "decode_view_round_trip_unit",
-          "line": 3128,
+          "line": 3212,
           "called": [
             "GAS_POOL_ACTOR",
             "SignedActionBudgetView",
@@ -37860,7 +37892,7 @@
         {
           "kind": "mod",
           "name": "prop",
-          "line": 3166,
+          "line": 3250,
           "called": [
             "ActionBudgetKind",
             "ActorBudget",
@@ -37873,7 +37905,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_round_trip",
-          "line": 3177,
+          "line": 3262,
           "called": [
             "ActorBudget",
             "b",
@@ -37884,7 +37916,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_round_trip",
-          "line": 3184,
+          "line": 3269,
           "called": [
             "encode"
           ]
@@ -37892,7 +37924,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_round_trip",
-          "line": 3191,
+          "line": 3276,
           "called": [
             "ActorBudget",
             "b",
@@ -37903,7 +37935,7 @@
         {
           "kind": "fn",
           "name": "encode_deterministic",
-          "line": 3204,
+          "line": 3289,
           "called": [
             "ActorBudget",
             "b",
@@ -37914,7 +37946,7 @@
         {
           "kind": "fn",
           "name": "decode_view_ordinary",
-          "line": 3211,
+          "line": 3296,
           "called": [
             "SignedActionBudgetView",
             "bytes",
@@ -37927,7 +37959,7 @@
         {
           "kind": "fn",
           "name": "decode_view_topupfor",
-          "line": 3221,
+          "line": 3306,
           "called": [
             "SignedActionBudgetView",
             "bytes",
@@ -54052,55 +54084,55 @@
         {
           "kind": "type",
           "name": "Amount",
-          "line": 84,
-          "called": []
-        },
-        {
-          "kind": "type",
-          "name": "Nonce",
           "line": 88,
           "called": []
         },
         {
           "kind": "type",
-          "name": "LogIndex",
+          "name": "Nonce",
           "line": 92,
           "called": []
         },
         {
           "kind": "type",
-          "name": "DepositId",
+          "name": "LogIndex",
           "line": 96,
           "called": []
         },
         {
           "kind": "type",
-          "name": "WithdrawalId",
+          "name": "DepositId",
           "line": 100,
+          "called": []
+        },
+        {
+          "kind": "type",
+          "name": "WithdrawalId",
+          "line": 104,
           "called": []
         },
         {
           "kind": "struct",
           "name": "EthAddress",
-          "line": 109,
+          "line": 113,
           "called": []
         },
         {
           "kind": "impl",
           "name": "EthAddress",
-          "line": 111,
+          "line": 115,
           "called": []
         },
         {
           "kind": "const",
           "name": "ZERO",
-          "line": 113,
+          "line": 117,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_bytes",
-          "line": 118,
+          "line": 122,
           "called": [
             "bytes",
             "len"
@@ -54109,13 +54141,13 @@
         {
           "kind": "fn",
           "name": "as_bytes",
-          "line": 129,
+          "line": 133,
           "called": []
         },
         {
           "kind": "fn",
           "name": "to_hex",
-          "line": 136,
+          "line": 140,
           "called": [
             "b",
             "hex_nibble",
@@ -54125,19 +54157,19 @@
         {
           "kind": "struct",
           "name": "PublicKey",
-          "line": 153,
+          "line": 157,
           "called": []
         },
         {
           "kind": "impl",
           "name": "PublicKey",
-          "line": 155,
+          "line": 159,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_bytes",
-          "line": 158,
+          "line": 162,
           "called": [
             "bytes",
             "to_vec"
@@ -54146,13 +54178,13 @@
         {
           "kind": "fn",
           "name": "as_bytes",
-          "line": 164,
+          "line": 168,
           "called": []
         },
         {
           "kind": "enum",
           "name": "Action",
-          "line": 178,
+          "line": 182,
           "called": [
             "ActorId",
             "Amount",
@@ -54170,19 +54202,19 @@
         {
           "kind": "impl",
           "name": "Action",
-          "line": 453,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "tag",
           "line": 457,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "tag",
+          "line": 461,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "hex_nibble",
-          "line": 488,
+          "line": 492,
           "called": [
             "_"
           ]
@@ -54190,7 +54222,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 497,
+          "line": 501,
           "called": [
             "Action",
             "EthAddress",
@@ -54200,7 +54232,7 @@
         {
           "kind": "fn",
           "name": "tags_match_lean_frozen_table",
-          "line": 502,
+          "line": 507,
           "called": [
             "actor",
             "amount",
@@ -54212,7 +54244,7 @@
         {
           "kind": "fn",
           "name": "gp_family_tags_pairwise_distinct",
-          "line": 681,
+          "line": 686,
           "called": [
             "len",
             "r",
@@ -54223,13 +54255,13 @@
         {
           "kind": "fn",
           "name": "eth_address_from_bytes_rejects_wrong_length",
-          "line": 717,
+          "line": 722,
           "called": []
         },
         {
           "kind": "fn",
           "name": "eth_address_roundtrip",
-          "line": 727,
+          "line": 732,
           "called": [
             "addr",
             "as_bytes"
@@ -54238,7 +54270,7 @@
         {
           "kind": "fn",
           "name": "eth_address_hex_format",
-          "line": 738,
+          "line": 743,
           "called": [
             "addr",
             "hex",
@@ -54249,7 +54281,7 @@
         {
           "kind": "fn",
           "name": "eth_address_zero",
-          "line": 754,
+          "line": 759,
           "called": [
             "as_bytes",
             "to_hex"
@@ -54258,7 +54290,7 @@
         {
           "kind": "fn",
           "name": "public_key_roundtrip",
-          "line": 761,
+          "line": 766,
           "called": [
             "as_bytes"
           ]
@@ -54648,7 +54680,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::encoding",
       "path": "runtime/knomosis-l1-ingest/src/encoding.rs",
-      "declaration_count": 64,
+      "declaration_count": 63,
       "declarations": [
         {
           "kind": "const",
@@ -54707,8 +54739,9 @@
         {
           "kind": "fn",
           "name": "write_amount_head",
-          "line": 117,
+          "line": 123,
           "called": [
+            "Amount",
             "CBE_TAG_AMOUNT",
             "push",
             "to_le_bytes"
@@ -54716,17 +54749,18 @@
         },
         {
           "kind": "fn",
-          "name": "encode_amount_u128",
-          "line": 134,
+          "name": "encode_amount",
+          "line": 135,
           "called": [
             "AMOUNT_HEAD_LEN",
+            "Amount",
             "write_amount_head"
           ]
         },
         {
           "kind": "fn",
           "name": "encode_u64",
-          "line": 142,
+          "line": 143,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -54736,7 +54770,7 @@
         {
           "kind": "fn",
           "name": "encode_u128_checked",
-          "line": 159,
+          "line": 160,
           "called": [
             "encode_u64"
           ]
@@ -54744,7 +54778,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_checked",
-          "line": 177,
+          "line": 178,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -54757,7 +54791,7 @@
         {
           "kind": "enum",
           "name": "EncodeError",
-          "line": 194,
+          "line": 195,
           "called": [
             "error",
             "len"
@@ -54766,7 +54800,7 @@
         {
           "kind": "fn",
           "name": "encode_action",
-          "line": 225,
+          "line": 226,
           "called": [
             "Action",
             "EncodeError",
@@ -54785,17 +54819,8 @@
         },
         {
           "kind": "fn",
-          "name": "encode_amount",
-          "line": 466,
-          "called": [
-            "amount",
-            "encode_amount_u128"
-          ]
-        },
-        {
-          "kind": "fn",
           "name": "encode_nonce",
-          "line": 480,
+          "line": 470,
           "called": [
             "EncodeError",
             "encode_u128_checked",
@@ -54805,7 +54830,7 @@
         {
           "kind": "fn",
           "name": "encode_byte_string",
-          "line": 487,
+          "line": 477,
           "called": [
             "EncodeError",
             "bytes",
@@ -54816,7 +54841,7 @@
         {
           "kind": "fn",
           "name": "signing_input",
-          "line": 514,
+          "line": 504,
           "called": [
             "Action",
             "EncodeError",
@@ -54834,7 +54859,7 @@
         {
           "kind": "fn",
           "name": "encode_signed_action",
-          "line": 548,
+          "line": 538,
           "called": [
             "Action",
             "EncodeError",
@@ -54850,7 +54875,7 @@
         {
           "kind": "fn",
           "name": "encode_eth_address",
-          "line": 565,
+          "line": 555,
           "called": [
             "EthAddress",
             "addr",
@@ -54861,7 +54886,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 571,
+          "line": 561,
           "called": [
             "AMOUNT_HEAD_LEN",
             "Action",
@@ -54885,7 +54910,7 @@
         {
           "kind": "fn",
           "name": "u64_le_zero",
-          "line": 581,
+          "line": 572,
           "called": [
             "write_u64_le"
           ]
@@ -54893,7 +54918,7 @@
         {
           "kind": "fn",
           "name": "u64_le_one",
-          "line": 589,
+          "line": 580,
           "called": [
             "write_u64_le"
           ]
@@ -54901,7 +54926,7 @@
         {
           "kind": "fn",
           "name": "u64_le_max",
-          "line": 597,
+          "line": 588,
           "called": [
             "write_u64_le"
           ]
@@ -54909,7 +54934,7 @@
         {
           "kind": "fn",
           "name": "u64_le_pattern",
-          "line": 605,
+          "line": 596,
           "called": [
             "write_u64_le"
           ]
@@ -54917,7 +54942,7 @@
         {
           "kind": "fn",
           "name": "encode_u64_layout",
-          "line": 614,
+          "line": 605,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -54928,7 +54953,7 @@
         {
           "kind": "fn",
           "name": "encode_u128_rejects_overflow",
-          "line": 623,
+          "line": 614,
           "called": [
             "encode_u128_checked"
           ]
@@ -54936,7 +54961,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_empty",
-          "line": 631,
+          "line": 622,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -54947,7 +54972,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_short",
-          "line": 640,
+          "line": 631,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -54958,7 +54983,7 @@
         {
           "kind": "fn",
           "name": "encode_transfer_layout",
-          "line": 650,
+          "line": 641,
           "called": [
             "AMOUNT_HEAD_LEN",
             "CBE_TAG_AMOUNT",
@@ -54975,7 +55000,7 @@
         {
           "kind": "fn",
           "name": "encode_register_identity_layout",
-          "line": 683,
+          "line": 674,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -54990,7 +55015,7 @@
         {
           "kind": "fn",
           "name": "encode_replace_key_layout",
-          "line": 704,
+          "line": 695,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -55005,7 +55030,7 @@
         {
           "kind": "fn",
           "name": "encode_withdraw_layout",
-          "line": 725,
+          "line": 716,
           "called": [
             "AMOUNT_HEAD_LEN",
             "CBE_TAG_UINT",
@@ -55021,7 +55046,7 @@
         {
           "kind": "fn",
           "name": "encode_revoke_local_policy",
-          "line": 744,
+          "line": 735,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -55034,7 +55059,7 @@
         {
           "kind": "fn",
           "name": "encode_signed_action_layout",
-          "line": 754,
+          "line": 745,
           "called": [
             "action",
             "encode_signed_action",
@@ -55045,7 +55070,7 @@
         {
           "kind": "fn",
           "name": "signing_input_starts_with_domain_prefix",
-          "line": 768,
+          "line": 759,
           "called": [
             "CBE_TAG_BYTES",
             "SIGNED_ACTION_DOMAIN",
@@ -55061,7 +55086,7 @@
         {
           "kind": "fn",
           "name": "signing_input_min_size",
-          "line": 784,
+          "line": 775,
           "called": [
             "action",
             "bytes",
@@ -55073,7 +55098,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_deployments",
-          "line": 797,
+          "line": 788,
           "called": [
             "action",
             "r",
@@ -55083,7 +55108,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_nonces",
-          "line": 806,
+          "line": 797,
           "called": [
             "action",
             "r",
@@ -55093,7 +55118,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_actions",
-          "line": 815,
+          "line": 806,
           "called": [
             "r",
             "signing_input"
@@ -55102,7 +55127,7 @@
         {
           "kind": "fn",
           "name": "encode_eth_address_layout",
-          "line": 825,
+          "line": 816,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -55115,7 +55140,7 @@
         {
           "kind": "fn",
           "name": "signed_action_domain_matches_lean",
-          "line": 837,
+          "line": 828,
           "called": [
             "SIGNED_ACTION_DOMAIN",
             "len"
@@ -55124,7 +55149,7 @@
         {
           "kind": "fn",
           "name": "encode_action_deterministic",
-          "line": 845,
+          "line": 836,
           "called": [
             "actor",
             "encode_action"
@@ -55133,7 +55158,7 @@
         {
           "kind": "fn",
           "name": "encode_register_identity_known_vector",
-          "line": 868,
+          "line": 859,
           "called": [
             "actor",
             "encode_action"
@@ -55142,7 +55167,7 @@
         {
           "kind": "fn",
           "name": "signing_input_domain_prefix_known_vector",
-          "line": 894,
+          "line": 885,
           "called": [
             "b",
             "bytes",
@@ -55154,7 +55179,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_checked_empty_known_vector",
-          "line": 912,
+          "line": 903,
           "called": [
             "encode_bytes_checked"
           ]
@@ -55162,7 +55187,7 @@
         {
           "kind": "fn",
           "name": "encode_u64_zero_known_vector",
-          "line": 920,
+          "line": 911,
           "called": [
             "encode_u64"
           ]
@@ -55170,7 +55195,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_layout",
-          "line": 930,
+          "line": 921,
           "called": [
             "AMOUNT_HEAD_LEN",
             "CBE_TAG_AMOUNT",
@@ -55186,7 +55211,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_layout",
-          "line": 979,
+          "line": 970,
           "called": [
             "AMOUNT_HEAD_LEN",
             "CBE_TAG_AMOUNT",
@@ -55201,7 +55226,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_layout",
-          "line": 1010,
+          "line": 1001,
           "called": [
             "AMOUNT_HEAD_LEN",
             "CBE_TAG_AMOUNT",
@@ -55216,7 +55241,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_known_vector",
-          "line": 1064,
+          "line": 1055,
           "called": [
             "action",
             "encode_action",
@@ -55227,7 +55252,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_bold_known_vector",
-          "line": 1103,
+          "line": 1094,
           "called": [
             "encode_action",
             "len",
@@ -55237,7 +55262,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_known_vector",
-          "line": 1147,
+          "line": 1138,
           "called": [
             "action",
             "encode_action"
@@ -55246,7 +55271,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_known_vector",
-          "line": 1173,
+          "line": 1164,
           "called": [
             "action",
             "encode_action"
@@ -55255,7 +55280,7 @@
         {
           "kind": "fn",
           "name": "encode_claim_budget_refund_known_vector",
-          "line": 1201,
+          "line": 1192,
           "called": [
             "action",
             "encode_action"
@@ -55264,7 +55289,7 @@
         {
           "kind": "fn",
           "name": "encode_amm_swap_known_vector",
-          "line": 1227,
+          "line": 1218,
           "called": [
             "action",
             "encode_action"
@@ -55273,7 +55298,7 @@
         {
           "kind": "fn",
           "name": "encode_reclaim_amm_reserves_known_vector",
-          "line": 1260,
+          "line": 1251,
           "called": [
             "action",
             "amount",
@@ -55284,13 +55309,13 @@
         {
           "kind": "fn",
           "name": "value_fields_encode_at_full_width",
-          "line": 1293,
+          "line": 1284,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_amount_at",
-          "line": 1300,
+          "line": 1291,
           "called": [
             "AMOUNT_HEAD_LEN",
             "CBE_TAG_AMOUNT",
@@ -55306,7 +55331,7 @@
         {
           "kind": "fn",
           "name": "narrow_fields_still_reject_out_of_range_values",
-          "line": 1382,
+          "line": 1373,
           "called": [
             "Err",
             "action",
@@ -55317,7 +55342,7 @@
         {
           "kind": "fn",
           "name": "top_up_action_budget_variants_distinct_bytes",
-          "line": 1397,
+          "line": 1388,
           "called": [
             "AMOUNT_HEAD_LEN",
             "HEAD_LEN",
@@ -55328,7 +55353,7 @@
         {
           "kind": "fn",
           "name": "signing_input_deposit_with_fee",
-          "line": 1427,
+          "line": 1418,
           "called": [
             "AMOUNT_HEAD_LEN",
             "CBE_TAG_BYTES",
@@ -55347,7 +55372,7 @@
         {
           "kind": "fn",
           "name": "encode_gp_actions_deterministic",
-          "line": 1466,
+          "line": 1457,
           "called": [
             "b",
             "encode_action",
@@ -55925,49 +55950,49 @@
         {
           "kind": "const",
           "name": "EVENT_TAG_REGISTERED_ECDSA",
-          "line": 69,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "EVENT_TAG_REGISTERED_EIP1271",
           "line": 70,
           "called": []
         },
         {
           "kind": "const",
-          "name": "EVENT_TAG_REVOKED",
+          "name": "EVENT_TAG_REGISTERED_EIP1271",
           "line": 71,
           "called": []
         },
         {
           "kind": "const",
-          "name": "EVENT_TAG_DEPOSIT_INITIATED",
+          "name": "EVENT_TAG_REVOKED",
           "line": 72,
           "called": []
         },
         {
           "kind": "const",
-          "name": "EVENT_TAG_DEPOSIT_WITH_FEE",
+          "name": "EVENT_TAG_DEPOSIT_INITIATED",
           "line": 73,
           "called": []
         },
         {
           "kind": "const",
-          "name": "EVENT_TAG_AMM_DISABLED",
+          "name": "EVENT_TAG_DEPOSIT_WITH_FEE",
           "line": 74,
           "called": []
         },
         {
           "kind": "const",
+          "name": "EVENT_TAG_AMM_DISABLED",
+          "line": 75,
+          "called": []
+        },
+        {
+          "kind": "const",
           "name": "MAX_DECODED_ADDRESS_BOOK_ENTRIES",
-          "line": 82,
+          "line": 83,
           "called": []
         },
         {
           "kind": "enum",
           "name": "FixtureError",
-          "line": 86,
+          "line": 87,
           "called": [
             "error",
             "offset",
@@ -55978,7 +56003,7 @@
         {
           "kind": "struct",
           "name": "FixtureInput",
-          "line": 121,
+          "line": 122,
           "called": [
             "EthAddress",
             "IngestedEvent",
@@ -55989,7 +56014,7 @@
         {
           "kind": "fn",
           "name": "encode_input",
-          "line": 138,
+          "line": 139,
           "called": [
             "EVENT_TAG_AMM_DISABLED",
             "EVENT_TAG_DEPOSIT_INITIATED",
@@ -56016,7 +56041,7 @@
         {
           "kind": "fn",
           "name": "decode_input",
-          "line": 277,
+          "line": 278,
           "called": [
             "Err",
             "EthAddress",
@@ -56044,7 +56069,7 @@
         {
           "kind": "fn",
           "name": "decode_event",
-          "line": 322,
+          "line": 323,
           "called": [
             "EVENT_TAG_AMM_DISABLED",
             "EVENT_TAG_DEPOSIT_INITIATED",
@@ -56074,7 +56099,7 @@
         {
           "kind": "fn",
           "name": "read_u32_be",
-          "line": 464,
+          "line": 465,
           "called": [
             "FixtureError",
             "bytes",
@@ -56085,7 +56110,7 @@
         {
           "kind": "fn",
           "name": "read_u64_be",
-          "line": 471,
+          "line": 472,
           "called": [
             "FixtureError",
             "bytes",
@@ -56096,7 +56121,7 @@
         {
           "kind": "fn",
           "name": "read_u128_be",
-          "line": 478,
+          "line": 479,
           "called": [
             "FixtureError",
             "bytes",
@@ -56107,7 +56132,7 @@
         {
           "kind": "fn",
           "name": "read_bytes",
-          "line": 485,
+          "line": 486,
           "called": [
             "Err",
             "FixtureError",
@@ -56123,7 +56148,7 @@
         {
           "kind": "enum",
           "name": "FixtureExpected",
-          "line": 504,
+          "line": 505,
           "called": [
             "nonce",
             "signer"
@@ -56132,7 +56157,7 @@
         {
           "kind": "fn",
           "name": "encode_expected",
-          "line": 528,
+          "line": 529,
           "called": [
             "UnsignedAction",
             "_",
@@ -56146,25 +56171,25 @@
         {
           "kind": "struct",
           "name": "FeeSplitInput",
-          "line": 607,
+          "line": 608,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_BUDGET_PER_DEPOSIT",
-          "line": 632,
+          "line": 633,
           "called": []
         },
         {
           "kind": "const",
           "name": "FEE_SPLIT_INPUT_BYTES",
-          "line": 636,
+          "line": 637,
           "called": []
         },
         {
           "kind": "const",
           "name": "_",
-          "line": 644,
+          "line": 645,
           "called": [
             "FEE_SPLIT_INPUT_BYTES"
           ]
@@ -56172,15 +56197,16 @@
         {
           "kind": "impl",
           "name": "FeeSplitInput",
-          "line": 649,
+          "line": 650,
           "called": []
         },
         {
           "kind": "fn",
           "name": "split",
-          "line": 687,
+          "line": 688,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
+            "checked_mul",
             "min",
             "saturating_sub"
           ]
@@ -56188,13 +56214,13 @@
         {
           "kind": "const",
           "name": "MAX_ADMISSIBLE_FEE_BPS",
-          "line": 741,
+          "line": 742,
           "called": []
         },
         {
           "kind": "fn",
           "name": "to_action",
-          "line": 766,
+          "line": 767,
           "called": [
             "r",
             "split"
@@ -56203,7 +56229,7 @@
         {
           "kind": "fn",
           "name": "encode_fee_split_input",
-          "line": 798,
+          "line": 799,
           "called": [
             "FEE_SPLIT_INPUT_BYTES",
             "FeeSplitInput",
@@ -56214,7 +56240,7 @@
         {
           "kind": "fn",
           "name": "decode_fee_split_input",
-          "line": 827,
+          "line": 828,
           "called": [
             "Err",
             "FEE_SPLIT_INPUT_BYTES",
@@ -56229,7 +56255,7 @@
         {
           "kind": "fn",
           "name": "decode_expected",
-          "line": 874,
+          "line": 875,
           "called": [
             "Err",
             "FixtureError",
@@ -56251,7 +56277,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 901,
+          "line": 902,
           "called": [
             "Action",
             "EthAddress",
@@ -56268,7 +56294,7 @@
         {
           "kind": "fn",
           "name": "sample_registered_ecdsa",
-          "line": 910,
+          "line": 912,
           "called": [
             "IngestedEvent",
             "actor",
@@ -56278,7 +56304,7 @@
         {
           "kind": "fn",
           "name": "registered_ecdsa_round_trip",
-          "line": 922,
+          "line": 924,
           "called": [
             "FixtureInput",
             "address_book",
@@ -56291,7 +56317,7 @@
         {
           "kind": "fn",
           "name": "revoked_round_trip",
-          "line": 935,
+          "line": 937,
           "called": [
             "FixtureInput",
             "actor",
@@ -56305,7 +56331,7 @@
         {
           "kind": "fn",
           "name": "deposit_initiated_round_trip",
-          "line": 956,
+          "line": 958,
           "called": [
             "FixtureInput",
             "address_book",
@@ -56319,7 +56345,7 @@
         {
           "kind": "fn",
           "name": "amm_disabled_roundtrip",
-          "line": 979,
+          "line": 981,
           "called": [
             "FixtureInput",
             "address_book",
@@ -56333,7 +56359,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_round_trip",
-          "line": 1005,
+          "line": 1007,
           "called": [
             "FixtureInput",
             "address_book",
@@ -56346,7 +56372,7 @@
         {
           "kind": "fn",
           "name": "registered_eip1271_round_trip",
-          "line": 1031,
+          "line": 1033,
           "called": [
             "FixtureInput",
             "actor",
@@ -56360,7 +56386,7 @@
         {
           "kind": "fn",
           "name": "truncated_input_returns_unexpected_end",
-          "line": 1050,
+          "line": 1052,
           "called": [
             "Err",
             "FixtureInput",
@@ -56375,7 +56401,7 @@
         {
           "kind": "fn",
           "name": "unknown_event_tag_returns_error",
-          "line": 1066,
+          "line": 1068,
           "called": [
             "Err",
             "bytes",
@@ -56386,7 +56412,7 @@
         {
           "kind": "fn",
           "name": "expected_none_round_trip",
-          "line": 1076,
+          "line": 1078,
           "called": [
             "decode_expected",
             "encode_expected"
@@ -56395,7 +56421,7 @@
         {
           "kind": "fn",
           "name": "expected_some_round_trip",
-          "line": 1085,
+          "line": 1087,
           "called": [
             "UnsignedAction",
             "_",
@@ -56411,7 +56437,7 @@
         {
           "kind": "fn",
           "name": "encoding_deterministic",
-          "line": 1117,
+          "line": 1119,
           "called": [
             "FixtureInput",
             "address_book",
@@ -56423,7 +56449,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_huge_address_book_length",
-          "line": 1134,
+          "line": 1136,
           "called": [
             "Err",
             "bytes",
@@ -56435,7 +56461,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_at_threshold",
-          "line": 1161,
+          "line": 1163,
           "called": [
             "Err",
             "_",
@@ -56448,7 +56474,7 @@
         {
           "kind": "fn",
           "name": "decode_input_accepts_at_threshold_but_fails_on_truncation",
-          "line": 1182,
+          "line": 1184,
           "called": [
             "Err",
             "bytes",
@@ -56460,13 +56486,13 @@
         {
           "kind": "fn",
           "name": "sample_fee_split",
-          "line": 1203,
+          "line": 1205,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_fee_split_input_length",
-          "line": 1218,
+          "line": 1220,
           "called": [
             "len",
             "sample_fee_split"
@@ -56475,7 +56501,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_round_trip",
-          "line": 1227,
+          "line": 1229,
           "called": [
             "sample_fee_split"
           ]
@@ -56483,7 +56509,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_truncated_returns_unexpected_end",
-          "line": 1236,
+          "line": 1238,
           "called": [
             "Err",
             "len",
@@ -56493,7 +56519,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_oversized_returns_trailing_bytes",
-          "line": 1251,
+          "line": 1253,
           "called": [
             "Err",
             "push",
@@ -56504,7 +56530,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_exact_length_decodes_cleanly",
-          "line": 1269,
+          "line": 1271,
           "called": [
             "len",
             "sample_fee_split"
@@ -56513,7 +56539,7 @@
         {
           "kind": "fn",
           "name": "fee_split_canonical_sample",
-          "line": 1283,
+          "line": 1285,
           "called": [
             "budget",
             "pool",
@@ -56524,7 +56550,7 @@
         {
           "kind": "fn",
           "name": "fee_split_zero_fee",
-          "line": 1297,
+          "line": 1299,
           "called": [
             "budget",
             "pool",
@@ -56535,7 +56561,7 @@
         {
           "kind": "fn",
           "name": "fee_split_max_fee_50_percent",
-          "line": 1311,
+          "line": 1313,
           "called": [
             "_",
             "pool",
@@ -56546,7 +56572,7 @@
         {
           "kind": "fn",
           "name": "fee_split_residue_favours_user",
-          "line": 1326,
+          "line": 1328,
           "called": [
             "_",
             "pool",
@@ -56557,7 +56583,7 @@
         {
           "kind": "fn",
           "name": "fee_split_budget_clamp",
-          "line": 1343,
+          "line": 1345,
           "called": [
             "_",
             "budget",
@@ -56568,7 +56594,7 @@
         {
           "kind": "fn",
           "name": "fee_split_conservation_boundary",
-          "line": 1358,
+          "line": 1360,
           "called": [
             "_",
             "pool",
@@ -56579,7 +56605,7 @@
         {
           "kind": "fn",
           "name": "fee_split_to_action_produces_correct_constructor",
-          "line": 1373,
+          "line": 1375,
           "called": [
             "_",
             "action",
@@ -56592,7 +56618,7 @@
         {
           "kind": "fn",
           "name": "fee_split_to_action_rejects_oversized",
-          "line": 1404,
+          "line": 1406,
           "called": [
             "sample_fee_split",
             "to_action"
@@ -56601,7 +56627,7 @@
         {
           "kind": "fn",
           "name": "fee_split_to_action_rejects_over_max_bps",
-          "line": 1424,
+          "line": 1426,
           "called": [
             "_",
             "pool",
@@ -56612,7 +56638,7 @@
         {
           "kind": "fn",
           "name": "fee_split_overflow_path_rejects_without_panic",
-          "line": 1475,
+          "line": 1477,
           "called": [
             "_",
             "budget",
@@ -56624,7 +56650,7 @@
         {
           "kind": "fn",
           "name": "fee_split_encodable_boundary_is_exact_and_conserves",
-          "line": 1510,
+          "line": 1512,
           "called": [
             "budget",
             "pool",
@@ -56635,7 +56661,7 @@
         {
           "kind": "fn",
           "name": "fee_split_resource_id_does_not_affect_arithmetic",
-          "line": 1539,
+          "line": 1541,
           "called": [
             "sample_fee_split",
             "split"
@@ -56644,13 +56670,13 @@
         {
           "kind": "fn",
           "name": "max_budget_per_deposit_constitutional_pin",
-          "line": 1555,
+          "line": 1557,
           "called": []
         },
         {
           "kind": "fn",
           "name": "fee_split_input_decode_explicit_bytes",
-          "line": 1564,
+          "line": 1566,
           "called": [
             "bytes",
             "len",
@@ -56660,7 +56686,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_encoding_deterministic",
-          "line": 1597,
+          "line": 1599,
           "called": [
             "sample_fee_split"
           ]
@@ -56668,7 +56694,7 @@
         {
           "kind": "fn",
           "name": "fee_split_division_by_zero_yields_zero_like_lean",
-          "line": 1614,
+          "line": 1616,
           "called": [
             "_",
             "budget",
@@ -57775,25 +57801,25 @@
         {
           "kind": "const",
           "name": "RECEIPT_BLOCK",
-          "line": 552,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "CONFIRMED",
           "line": 553,
           "called": []
         },
         {
           "kind": "const",
-          "name": "UNCONFIRMED_HEAD",
+          "name": "CONFIRMED",
           "line": 554,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "UNCONFIRMED_HEAD",
+          "line": 555,
           "called": []
         },
         {
           "kind": "struct",
           "name": "MockReceiptSource",
-          "line": 558,
+          "line": 559,
           "called": [
             "EthTxReceipt"
           ]
@@ -57801,13 +57827,13 @@
         {
           "kind": "impl",
           "name": "MockReceiptSource",
-          "line": 562,
+          "line": 563,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with",
-          "line": 563,
+          "line": 564,
           "called": [
             "EthTxReceipt",
             "insert"
@@ -57816,7 +57842,7 @@
         {
           "kind": "impl",
           "name": "ReceiptSource for MockReceiptSource",
-          "line": 569,
+          "line": 570,
           "called": [
             "MockReceiptSource",
             "ReceiptSource"
@@ -57825,7 +57851,7 @@
         {
           "kind": "fn",
           "name": "fetch_receipt",
-          "line": 570,
+          "line": 571,
           "called": [
             "EthTxReceipt",
             "ReceiptFetchError",
@@ -57835,7 +57861,7 @@
         {
           "kind": "struct",
           "name": "MockRateOracle",
-          "line": 581,
+          "line": 582,
           "called": [
             "EthBoldRate"
           ]
@@ -57843,13 +57869,13 @@
         {
           "kind": "impl",
           "name": "MockRateOracle",
-          "line": 585,
+          "line": 586,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with",
-          "line": 586,
+          "line": 587,
           "called": [
             "EthBoldRate",
             "insert",
@@ -57859,7 +57885,7 @@
         {
           "kind": "impl",
           "name": "RateOracle for MockRateOracle",
-          "line": 592,
+          "line": 593,
           "called": [
             "MockRateOracle",
             "RateOracle"
@@ -57868,7 +57894,7 @@
         {
           "kind": "fn",
           "name": "attested_rate",
-          "line": 593,
+          "line": 594,
           "called": [
             "EthBoldRate",
             "ReceiptFetchError",
@@ -57878,7 +57904,7 @@
         {
           "kind": "fn",
           "name": "rate",
-          "line": 598,
+          "line": 599,
           "called": [
             "EthBoldRate"
           ]
@@ -57886,7 +57912,7 @@
         {
           "kind": "fn",
           "name": "ok_receipt",
-          "line": 606,
+          "line": 607,
           "called": [
             "EthTxReceipt",
             "RECEIPT_BLOCK",
@@ -57896,7 +57922,7 @@
         {
           "kind": "fn",
           "name": "mk_claim",
-          "line": 616,
+          "line": 617,
           "called": [
             "Action",
             "GAS_POOL_ACTOR_ID",
@@ -57910,7 +57936,7 @@
         {
           "kind": "fn",
           "name": "eth_claim",
-          "line": 625,
+          "line": 626,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -57923,7 +57949,7 @@
         {
           "kind": "fn",
           "name": "bold_claim",
-          "line": 634,
+          "line": 635,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -57936,7 +57962,7 @@
         {
           "kind": "fn",
           "name": "binding_hash_is_deterministic_and_tx_keyed",
-          "line": 644,
+          "line": 645,
           "called": [
             "canonical_receipt_binding_hash"
           ]
@@ -57944,7 +57970,7 @@
         {
           "kind": "fn",
           "name": "binding_hash_is_independent_of_caller_supplied_batch_id",
-          "line": 656,
+          "line": 657,
           "called": [
             "canonical_receipt_binding_hash",
             "derive_gas_receipt",
@@ -57954,7 +57980,7 @@
         {
           "kind": "fn",
           "name": "derive_gas_receipt_uses_canonical_hash_and_fetched_fields",
-          "line": 675,
+          "line": 676,
           "called": [
             "canonical_receipt_binding_hash",
             "derive_gas_receipt",
@@ -57965,7 +57991,7 @@
         {
           "kind": "fn",
           "name": "derive_gas_receipt_rejects_reverted_tx",
-          "line": 687,
+          "line": 688,
           "called": [
             "derive_gas_receipt",
             "ok_receipt"
@@ -57974,7 +58000,7 @@
         {
           "kind": "fn",
           "name": "independent_eth_verify_backs_a_within_cost_claim",
-          "line": 697,
+          "line": 698,
           "called": [
             "CONFIRMED",
             "eth_claim",
@@ -57988,7 +58014,7 @@
         {
           "kind": "fn",
           "name": "independent_eth_verify_rejects_overspend_and_fabrication",
-          "line": 715,
+          "line": 716,
           "called": [
             "CONFIRMED",
             "GAS_POOL_ACTOR_ID",
@@ -58005,7 +58031,7 @@
         {
           "kind": "fn",
           "name": "independent_verify_rejects_unconfirmed_receipt",
-          "line": 741,
+          "line": 742,
           "called": [
             "CONFIRMED",
             "UNCONFIRMED_HEAD",
@@ -58021,7 +58047,7 @@
         {
           "kind": "fn",
           "name": "independent_verify_reports_missing_and_failed",
-          "line": 773,
+          "line": 774,
           "called": [
             "CONFIRMED",
             "eth_claim",
@@ -58034,7 +58060,7 @@
         {
           "kind": "fn",
           "name": "unconfirmed_failed_receipt_is_not_terminal",
-          "line": 795,
+          "line": 796,
           "called": [
             "CONFIRMED",
             "UNCONFIRMED_HEAD",
@@ -58050,7 +58076,7 @@
         {
           "kind": "fn",
           "name": "parse_eth_receipt_for_rejects_mismatched_tx",
-          "line": 825,
+          "line": 826,
           "called": [
             "parse_eth_receipt_for"
           ]
@@ -58058,7 +58084,7 @@
         {
           "kind": "fn",
           "name": "independent_bold_verify_uses_the_oracle_rate",
-          "line": 850,
+          "line": 851,
           "called": [
             "CONFIRMED",
             "bold_claim",
@@ -58074,7 +58100,7 @@
         {
           "kind": "fn",
           "name": "independent_bold_verify_binds_the_rate_to_the_batch",
-          "line": 886,
+          "line": 887,
           "called": [
             "CONFIRMED",
             "bold_claim",
@@ -58089,7 +58115,7 @@
         {
           "kind": "fn",
           "name": "parse_eth_receipt_parses_and_rejects",
-          "line": 916,
+          "line": 917,
           "called": [
             "block_number",
             "clone",
@@ -58101,7 +58127,7 @@
         {
           "kind": "fn",
           "name": "fresh_verify_rejects_a_reused_receipt",
-          "line": 962,
+          "line": 963,
           "called": [
             "CONFIRMED",
             "canonical_receipt_binding_hash",
@@ -58116,7 +58142,7 @@
         {
           "kind": "fn",
           "name": "fresh_bold_verify_rejects_a_reused_receipt",
-          "line": 1010,
+          "line": 1011,
           "called": [
             "CONFIRMED",
             "bold_claim",
@@ -58131,7 +58157,7 @@
         {
           "kind": "fn",
           "name": "fetch_and_derive_exposes_the_canonical_receipt",
-          "line": 1037,
+          "line": 1038,
           "called": [
             "CONFIRMED",
             "canonical_receipt_binding_hash",
@@ -58145,7 +58171,7 @@
         {
           "kind": "fn",
           "name": "builder_and_observer_agree_on_the_canonical_hash",
-          "line": 1054,
+          "line": 1055,
           "called": [
             "CONFIRMED",
             "clone",
@@ -58796,13 +58822,14 @@
           "name": "reimbursement",
           "line": 411,
           "called": [
-            "Amount"
+            "Amount",
+            "checked_mul"
           ]
         },
         {
           "kind": "fn",
           "name": "bold_reimbursement",
-          "line": 421,
+          "line": 430,
           "called": [
             "Amount",
             "EthBoldRate",
@@ -58813,13 +58840,13 @@
         {
           "kind": "struct",
           "name": "EthBoldRate",
-          "line": 432,
+          "line": 441,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bold_receipt_reimbursement",
-          "line": 452,
+          "line": 461,
           "called": [
             "Amount"
           ]
@@ -58827,27 +58854,28 @@
         {
           "kind": "fn",
           "name": "gas_receipt_reimbursement",
-          "line": 470,
+          "line": 486,
           "called": [
-            "Amount"
+            "Amount",
+            "checked_mul"
           ]
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 475,
+          "line": 494,
           "called": []
         },
         {
           "kind": "const",
           "name": "TEST_SCALAR",
-          "line": 479,
+          "line": 499,
           "called": []
         },
         {
           "kind": "fn",
           "name": "test_key",
-          "line": 485,
+          "line": 505,
           "called": [
             "BridgeActorKey",
             "TEST_SCALAR"
@@ -58856,7 +58884,7 @@
         {
           "kind": "fn",
           "name": "claim_is_capped_gas_pool_to_sequencer_transfer",
-          "line": 490,
+          "line": 510,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -58873,7 +58901,7 @@
         {
           "kind": "fn",
           "name": "over_cap_request_is_clamped_to_cap",
-          "line": 511,
+          "line": 543,
           "called": [
             "SEQUENCER_ACTOR_ID",
             "_",
@@ -58887,7 +58915,7 @@
         {
           "kind": "fn",
           "name": "signature_verifies_against_the_pool_public_key",
-          "line": 524,
+          "line": 568,
           "called": [
             "action",
             "b",
@@ -58902,7 +58930,7 @@
         {
           "kind": "fn",
           "name": "build_is_deterministic_and_encodes",
-          "line": 545,
+          "line": 597,
           "called": [
             "b",
             "encode",
@@ -58914,7 +58942,7 @@
         {
           "kind": "fn",
           "name": "test_receipt",
-          "line": 557,
+          "line": 625,
           "called": [
             "GasReceipt"
           ]
@@ -58922,7 +58950,7 @@
         {
           "kind": "fn",
           "name": "reimbursement_is_gas_used_times_gas_price",
-          "line": 567,
+          "line": 635,
           "called": [
             "gas_receipt_reimbursement",
             "reimbursement",
@@ -58931,18 +58959,21 @@
         },
         {
           "kind": "fn",
-          "name": "reimbursement_saturates_instead_of_wrapping",
-          "line": 577,
+          "name": "reimbursement_is_exact_rather_than_saturating",
+          "line": 661,
           "called": [
+            "checked_mul",
             "gas_receipt_reimbursement",
+            "max",
             "reimbursement",
-            "test_receipt"
+            "test_receipt",
+            "to_u128"
           ]
         },
         {
           "kind": "fn",
           "name": "receipt_backed_clamps_to_the_receipt_when_it_binds",
-          "line": 587,
+          "line": 682,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -58960,7 +58991,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_still_respects_the_cap_when_cap_binds",
-          "line": 619,
+          "line": 720,
           "called": [
             "amount",
             "b",
@@ -58973,7 +59004,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_passes_through_under_both_bounds",
-          "line": 632,
+          "line": 743,
           "called": [
             "amount",
             "b",
@@ -58986,7 +59017,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by_rejects_an_overspend",
-          "line": 643,
+          "line": 761,
           "called": [
             "amount",
             "b",
@@ -58999,7 +59030,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by_rejects_noncanonical_claim_shapes",
-          "line": 660,
+          "line": 794,
           "called": [
             "Action",
             "GAS_POOL_ACTOR_ID",
@@ -59018,7 +59049,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_fresh_and_backed_rejects_consumed_receipts",
-          "line": 732,
+          "line": 866,
           "called": [
             "b",
             "is_receipt_fresh_and_backed",
@@ -59030,7 +59061,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_signature_verifies",
-          "line": 757,
+          "line": 906,
           "called": [
             "action",
             "b",
@@ -59046,7 +59077,7 @@
         {
           "kind": "fn",
           "name": "test_rate",
-          "line": 779,
+          "line": 934,
           "called": [
             "EthBoldRate"
           ]
@@ -59054,7 +59085,7 @@
         {
           "kind": "fn",
           "name": "bold_reimbursement_converts_wei_via_rate",
-          "line": 788,
+          "line": 943,
           "called": [
             "bold_receipt_reimbursement",
             "bold_reimbursement",
@@ -59065,7 +59096,7 @@
         {
           "kind": "fn",
           "name": "bold_reimbursement_floors_and_fail_closes",
-          "line": 801,
+          "line": 956,
           "called": [
             "bold_receipt_reimbursement"
           ]
@@ -59073,7 +59104,7 @@
         {
           "kind": "fn",
           "name": "bold_receipt_backed_clamps_to_the_converted_cost",
-          "line": 816,
+          "line": 989,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -59093,7 +59124,7 @@
         {
           "kind": "fn",
           "name": "bold_receipt_backed_still_respects_the_cap",
-          "line": 856,
+          "line": 1029,
           "called": [
             "amount",
             "b",
@@ -59108,7 +59139,7 @@
         {
           "kind": "fn",
           "name": "is_bold_receipt_backed_by_rejects_noncanonical_claim_shapes",
-          "line": 870,
+          "line": 1053,
           "called": [
             "Action",
             "GAS_POOL_ACTOR_ID",
@@ -59129,7 +59160,7 @@
         {
           "kind": "fn",
           "name": "is_bold_receipt_fresh_and_backed_rejects_consumed_receipts",
-          "line": 930,
+          "line": 1113,
           "called": [
             "b",
             "is_bold_receipt_fresh_and_backed",
@@ -61375,15 +61406,13 @@
         {
           "kind": "enum",
           "name": "MaterialiseError",
-          "line": 234,
-          "called": [
-            "error"
-          ]
+          "line": 245,
+          "called": []
         },
         {
           "kind": "fn",
           "name": "deposit_id_from_receipt",
-          "line": 270,
+          "line": 263,
           "called": [
             "DepositId"
           ]
@@ -61391,21 +61420,16 @@
         {
           "kind": "fn",
           "name": "amount_from_be_bytes",
-          "line": 285,
+          "line": 287,
           "called": [
-            "Err",
-            "MaterialiseError",
             "_",
-            "b",
-            "bytes",
-            "iter",
-            "write"
+            "bytes"
           ]
         },
         {
           "kind": "fn",
           "name": "preview_ingest_materialising",
-          "line": 328,
+          "line": 318,
           "called": [
             "AddressBook",
             "GAS_POOL_ACTOR_ID",
@@ -61425,7 +61449,7 @@
         {
           "kind": "fn",
           "name": "materialise_deposit_for",
-          "line": 400,
+          "line": 390,
           "called": [
             "Action",
             "ActorId",
@@ -61445,7 +61469,7 @@
         {
           "kind": "enum",
           "name": "CommitError",
-          "line": 429,
+          "line": 419,
           "called": [
             "ActorId",
             "error"
@@ -61454,7 +61478,7 @@
         {
           "kind": "impl",
           "name": "From<crate::address_book::AssignError> for CommitError",
-          "line": 454,
+          "line": 444,
           "called": [
             "CommitError"
           ]
@@ -61462,13 +61486,13 @@
         {
           "kind": "fn",
           "name": "from",
-          "line": 455,
+          "line": 445,
           "called": []
         },
         {
           "kind": "fn",
           "name": "commit_assignment",
-          "line": 479,
+          "line": 469,
           "called": [
             "ActorId",
             "AddressBook",
@@ -61481,7 +61505,7 @@
         {
           "kind": "fn",
           "name": "ingest",
-          "line": 512,
+          "line": 502,
           "called": [
             "AddressBook",
             "IngestedEvent",
@@ -61496,7 +61520,7 @@
         {
           "kind": "fn",
           "name": "preview_registration",
-          "line": 542,
+          "line": 532,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -61515,7 +61539,7 @@
         {
           "kind": "enum",
           "name": "TranslationError",
-          "line": 586,
+          "line": 576,
           "called": [
             "error"
           ]
@@ -61523,7 +61547,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 594,
+          "line": 584,
           "called": [
             "Action",
             "AddressBook",
@@ -61536,7 +61560,7 @@
         {
           "kind": "fn",
           "name": "first_time_registration_emits_register_identity",
-          "line": 603,
+          "line": 594,
           "called": [
             "BRIDGE_ACTOR_ID",
             "_",
@@ -61556,7 +61580,7 @@
         {
           "kind": "fn",
           "name": "rotation_emits_replace_key",
-          "line": 632,
+          "line": 623,
           "called": [
             "_",
             "action",
@@ -61573,7 +61597,7 @@
         {
           "kind": "fn",
           "name": "revoked_emits_no_action",
-          "line": 671,
+          "line": 662,
           "called": [
             "actor",
             "block_number",
@@ -61585,7 +61609,7 @@
         {
           "kind": "fn",
           "name": "deposit_emits_no_action",
-          "line": 689,
+          "line": 680,
           "called": [
             "amount",
             "block_number",
@@ -61597,7 +61621,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_emits_no_action",
-          "line": 712,
+          "line": 703,
           "called": [
             "block_number",
             "event",
@@ -61608,7 +61632,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_bold_emits_no_action",
-          "line": 738,
+          "line": 729,
           "called": [
             "block_number",
             "event",
@@ -61619,7 +61643,7 @@
         {
           "kind": "fn",
           "name": "eip1271_translates_via_contract_signer",
-          "line": 768,
+          "line": 759,
           "called": [
             "_",
             "action",
@@ -61633,7 +61657,7 @@
         {
           "kind": "fn",
           "name": "signer_is_always_bridge_actor",
-          "line": 792,
+          "line": 783,
           "called": [
             "BRIDGE_ACTOR_ID",
             "actor",
@@ -61648,7 +61672,7 @@
         {
           "kind": "fn",
           "name": "other_address_lookup_preserved",
-          "line": 829,
+          "line": 820,
           "called": [
             "_",
             "actor",
@@ -61660,7 +61684,7 @@
         {
           "kind": "fn",
           "name": "distinct_registrations_distinct_ids",
-          "line": 857,
+          "line": 848,
           "called": [
             "_",
             "actor",
@@ -61672,7 +61696,7 @@
         {
           "kind": "fn",
           "name": "nonce_passes_through",
-          "line": 891,
+          "line": 882,
           "called": [
             "actor",
             "addr",
@@ -61686,7 +61710,7 @@
         {
           "kind": "fn",
           "name": "preview_ingest_does_not_mutate_book",
-          "line": 910,
+          "line": 901,
           "called": [
             "Translated",
             "_",
@@ -61703,7 +61727,7 @@
         {
           "kind": "fn",
           "name": "preview_then_commit_materialises_assignment",
-          "line": 945,
+          "line": 936,
           "called": [
             "Translated",
             "actor",
@@ -61717,7 +61741,7 @@
         {
           "kind": "fn",
           "name": "preview_without_commit_allows_register_retry",
-          "line": 975,
+          "line": 966,
           "called": [
             "Translated",
             "action",
@@ -61731,7 +61755,7 @@
         {
           "kind": "fn",
           "name": "preview_rotation_does_not_emit_assignment",
-          "line": 1033,
+          "line": 1024,
           "called": [
             "Translated",
             "action",
@@ -61744,9 +61768,8 @@
         {
           "kind": "fn",
           "name": "preview_revoked_returns_no_action",
-          "line": 1072,
+          "line": 1063,
           "called": [
-            "MaterialiseError",
             "Translated",
             "actor",
             "amount_from_be_bytes",
@@ -61760,7 +61783,7 @@
         {
           "kind": "fn",
           "name": "be_amount",
-          "line": 1094,
+          "line": 1084,
           "called": [
             "to_be_bytes"
           ]
@@ -61768,7 +61791,7 @@
         {
           "kind": "fn",
           "name": "deposit_event",
-          "line": 1102,
+          "line": 1092,
           "called": [
             "EthAddress",
             "IngestedEvent",
@@ -61779,7 +61802,7 @@
         {
           "kind": "fn",
           "name": "deposit_id_is_receipt_prefix_big_endian",
-          "line": 1126,
+          "line": 1116,
           "called": [
             "deposit_id_from_receipt"
           ]
@@ -61787,7 +61810,7 @@
         {
           "kind": "fn",
           "name": "materialised_eth_deposit_round_trip",
-          "line": 1137,
+          "line": 1127,
           "called": [
             "BRIDGE_ACTOR_ID",
             "_",
@@ -61808,7 +61831,7 @@
         {
           "kind": "fn",
           "name": "materialised_fee_split_deposit_round_trip",
-          "line": 1166,
+          "line": 1156,
           "called": [
             "BRIDGE_ACTOR_ID",
             "GAS_POOL_ACTOR_ID",
@@ -61829,7 +61852,7 @@
         {
           "kind": "fn",
           "name": "materialised_deposit_unregistered_depositor_assigns_fresh_id",
-          "line": 1213,
+          "line": 1203,
           "called": [
             "action",
             "be_amount",
@@ -61843,7 +61866,7 @@
         {
           "kind": "fn",
           "name": "materialised_deposit_id_is_reorg_stable",
-          "line": 1246,
+          "line": 1236,
           "called": [
             "b",
             "be_amount",
@@ -61854,22 +61877,24 @@
         },
         {
           "kind": "fn",
-          "name": "materialised_amount_overflow_rejected_never_truncated",
-          "line": 1261,
+          "name": "materialised_amount_above_the_retired_ceiling_is_carried_exactly",
+          "line": 1262,
           "called": [
-            "Err",
+            "action",
+            "amount",
             "be_amount",
-            "block_number",
             "deposit_event",
             "event",
             "preview_ingest_materialising",
-            "try_assign"
+            "to_u128",
+            "try_assign",
+            "u"
           ]
         },
         {
           "kind": "fn",
           "name": "materialised_amount_u128_max_passes",
-          "line": 1300,
+          "line": 1290,
           "called": [
             "amount_from_be_bytes",
             "be_amount"
@@ -61878,7 +61903,7 @@
         {
           "kind": "fn",
           "name": "materialising_preview_delegates_non_deposit_events",
-          "line": 1310,
+          "line": 1300,
           "called": [
             "actor",
             "block_number",
@@ -62177,7 +62202,7 @@
         {
           "kind": "struct",
           "name": "SharedSubmitter",
-          "line": 738,
+          "line": 739,
           "called": [
             "BufferingSubmitter"
           ]
@@ -62185,7 +62210,7 @@
         {
           "kind": "impl",
           "name": "crate::submitter::Submitter for SharedSubmitter",
-          "line": 739,
+          "line": 740,
           "called": [
             "SharedSubmitter"
           ]
@@ -62193,7 +62218,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 740,
+          "line": 741,
           "called": [
             "signed"
           ]
@@ -62201,7 +62226,7 @@
         {
           "kind": "fn",
           "name": "bridge_addr",
-          "line": 749,
+          "line": 750,
           "called": [
             "EthAddress"
           ]
@@ -62209,7 +62234,7 @@
         {
           "kind": "fn",
           "name": "identity_addr",
-          "line": 752,
+          "line": 753,
           "called": [
             "EthAddress"
           ]
@@ -62217,7 +62242,7 @@
         {
           "kind": "fn",
           "name": "test_key",
-          "line": 757,
+          "line": 758,
           "called": [
             "BridgeActorKey"
           ]
@@ -62225,7 +62250,7 @@
         {
           "kind": "fn",
           "name": "build_registered_ecdsa_log",
-          "line": 764,
+          "line": 765,
           "called": [
             "RawLog",
             "actor",
@@ -62239,7 +62264,7 @@
         {
           "kind": "fn",
           "name": "empty_source_no_blocks",
-          "line": 800,
+          "line": 801,
           "called": [
             "bridge_addr",
             "config",
@@ -62256,7 +62281,7 @@
         {
           "kind": "fn",
           "name": "confirmation_depth_holds_back",
-          "line": 815,
+          "line": 816,
           "called": [
             "BlockHeader",
             "bridge_addr",
@@ -62275,7 +62300,7 @@
         {
           "kind": "fn",
           "name": "first_registration_submits_register_identity",
-          "line": 841,
+          "line": 842,
           "called": [
             "BlockHeader",
             "_",
@@ -62305,7 +62330,7 @@
         {
           "kind": "fn",
           "name": "idempotency_drops_duplicates",
-          "line": 901,
+          "line": 902,
           "called": [
             "BlockHeader",
             "SharedSubmitter",
@@ -62334,7 +62359,7 @@
         {
           "kind": "fn",
           "name": "backpressure_retries_on_busy",
-          "line": 968,
+          "line": 969,
           "called": [
             "BlockHeader",
             "bridge_addr",
@@ -62357,7 +62382,7 @@
         {
           "kind": "fn",
           "name": "halts_on_not_admissible",
-          "line": 1010,
+          "line": 1011,
           "called": [
             "BlockHeader",
             "Err",
@@ -62380,7 +62405,7 @@
         {
           "kind": "fn",
           "name": "run_until_respects_stop_signal",
-          "line": 1054,
+          "line": 1055,
           "called": [
             "bridge_addr",
             "config",
@@ -62397,7 +62422,7 @@
         {
           "kind": "fn",
           "name": "revoked_records_forwarded_no_submission",
-          "line": 1073,
+          "line": 1074,
           "called": [
             "BlockHeader",
             "RawLog",
@@ -62422,7 +62447,7 @@
         {
           "kind": "fn",
           "name": "revoked_event_does_not_bump_nonce",
-          "line": 1120,
+          "line": 1121,
           "called": [
             "BlockHeader",
             "RawLog",
@@ -62447,7 +62472,7 @@
         {
           "kind": "fn",
           "name": "failed_submit_does_not_corrupt_address_book",
-          "line": 1170,
+          "line": 1171,
           "called": [
             "BlockHeader",
             "action",
@@ -62476,7 +62501,7 @@
         {
           "kind": "fn",
           "name": "state_records_use_atomic_submitted_record",
-          "line": 1247,
+          "line": 1248,
           "called": [
             "BlockHeader",
             "bridge_addr",
@@ -62501,7 +62526,7 @@
         {
           "kind": "fn",
           "name": "blocks_per_iteration_zero_does_not_underflow",
-          "line": 1316,
+          "line": 1317,
           "called": [
             "BlockHeader",
             "bridge_addr",
@@ -62520,7 +62545,7 @@
         {
           "kind": "fn",
           "name": "last_confirmed_block_at_u64_max_does_not_wrap",
-          "line": 1347,
+          "line": 1348,
           "called": [
             "_",
             "block_number",
@@ -62539,19 +62564,19 @@
         {
           "kind": "fn",
           "name": "ok_not_admissible_verdict_maps_to_submit_error",
-          "line": 1388,
+          "line": 1389,
           "called": []
         },
         {
           "kind": "struct",
           "name": "OkNotAdmissibleSubmitter",
-          "line": 1389,
+          "line": 1390,
           "called": []
         },
         {
           "kind": "impl",
           "name": "crate::submitter::Submitter for OkNotAdmissibleSubmitter",
-          "line": 1390,
+          "line": 1391,
           "called": [
             "OkNotAdmissibleSubmitter"
           ]
@@ -62559,7 +62584,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 1391,
+          "line": 1392,
           "called": [
             "BlockHeader",
             "Err",
@@ -62582,7 +62607,7 @@
         {
           "kind": "fn",
           "name": "build_deposit_initiated_log",
-          "line": 1441,
+          "line": 1442,
           "called": [
             "RawLog",
             "block_number",
@@ -62594,7 +62619,7 @@
         {
           "kind": "fn",
           "name": "deposit_log_without_flag_stays_no_action",
-          "line": 1476,
+          "line": 1477,
           "called": [
             "BlockHeader",
             "address_book",
@@ -62620,7 +62645,7 @@
         {
           "kind": "fn",
           "name": "deposit_log_with_flag_submits_materialised_deposit",
-          "line": 1516,
+          "line": 1517,
           "called": [
             "BlockHeader",
             "action",
@@ -62652,7 +62677,7 @@
         {
           "kind": "fn",
           "name": "reorged_deposit_redelivery_reuses_content_derived_id",
-          "line": 1576,
+          "line": 1577,
           "called": [
             "BlockHeader",
             "action",
@@ -62677,10 +62702,9 @@
         {
           "kind": "fn",
           "name": "deposit_amount_overflow_halts_watcher",
-          "line": 1630,
+          "line": 1631,
           "called": [
             "BlockHeader",
-            "Err",
             "bridge_addr",
             "build_deposit_initiated_log",
             "clone",
@@ -62793,19 +62817,19 @@
         {
           "kind": "const",
           "name": "AMM_SWAP_FEE_BPS",
-          "line": 27,
+          "line": 28,
           "called": []
         },
         {
           "kind": "const",
           "name": "BPS_DENOMINATOR",
-          "line": 28,
+          "line": 29,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Header",
-          "line": 33,
+          "line": 34,
           "called": [
             "count"
           ]
@@ -62813,13 +62837,13 @@
         {
           "kind": "struct",
           "name": "Entry",
-          "line": 48,
+          "line": 49,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Fixture",
-          "line": 72,
+          "line": 73,
           "called": [
             "Entry",
             "Header",
@@ -62829,13 +62853,13 @@
         {
           "kind": "fn",
           "name": "parse_hex_u128",
-          "line": 79,
+          "line": 80,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_hex_u256",
-          "line": 90,
+          "line": 91,
           "called": [
             "bytes",
             "len"
@@ -62844,7 +62868,7 @@
         {
           "kind": "fn",
           "name": "u256_le",
-          "line": 109,
+          "line": 110,
           "called": [
             "b"
           ]
@@ -62852,7 +62876,7 @@
         {
           "kind": "fn",
           "name": "locate_fixture",
-          "line": 114,
+          "line": 115,
           "called": [
             "fixture"
           ]
@@ -62860,7 +62884,7 @@
         {
           "kind": "fn",
           "name": "load_fixture",
-          "line": 130,
+          "line": 131,
           "called": [
             "Fixture",
             "bytes",
@@ -62872,13 +62896,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 155,
+          "line": 156,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mul_wide",
-          "line": 163,
+          "line": 164,
           "called": [
             "b"
           ]
@@ -62886,13 +62910,13 @@
         {
           "kind": "fn",
           "name": "div_u256_by_u128",
-          "line": 180,
+          "line": 181,
           "called": []
         },
         {
           "kind": "fn",
           "name": "get_amount_out_wide",
-          "line": 211,
+          "line": 212,
           "called": [
             "BPS_DENOMINATOR",
             "div_u256_by_u128",
@@ -62902,7 +62926,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_byte_equivalence",
-          "line": 231,
+          "line": 232,
           "called": [
             "action",
             "count",
@@ -62919,7 +62943,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_coverage",
-          "line": 268,
+          "line": 269,
           "called": [
             "count",
             "fixture",
@@ -62930,7 +62954,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_tag_pin",
-          "line": 290,
+          "line": 291,
           "called": [
             "action",
             "fixture",
@@ -62943,7 +62967,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_header_constants",
-          "line": 316,
+          "line": 317,
           "called": [
             "AMM_SWAP_FEE_BPS",
             "BPS_DENOMINATOR",
@@ -62955,7 +62979,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_formula_compliance",
-          "line": 331,
+          "line": 332,
           "called": [
             "fixture",
             "get_amount_out_wide",
@@ -62967,7 +62991,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_no_drain",
-          "line": 353,
+          "line": 354,
           "called": [
             "BPS_DENOMINATOR",
             "fixture",
@@ -62979,7 +63003,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_k_monotonicity",
-          "line": 383,
+          "line": 384,
           "called": [
             "fixture",
             "iter",
@@ -62991,7 +63015,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_slippage",
-          "line": 401,
+          "line": 402,
           "called": [
             "fixture",
             "iter",
@@ -63002,7 +63026,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_post_swap_reserves",
-          "line": 420,
+          "line": 421,
           "called": [
             "fixture",
             "iter",
@@ -63013,7 +63037,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_l2_balance_deltas",
-          "line": 449,
+          "line": 450,
           "called": [
             "credit",
             "debit",
@@ -63026,7 +63050,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_cxsf_consumer",
-          "line": 474,
+          "line": 475,
           "called": [
             "fixture",
             "iter",
@@ -63039,7 +63063,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_cxsf_matches_json",
-          "line": 522,
+          "line": 523,
           "called": [
             "decode_hex",
             "fixture",
@@ -63053,7 +63077,7 @@
         {
           "kind": "fn",
           "name": "mul_wide_known_vectors",
-          "line": 567,
+          "line": 568,
           "called": [
             "mul_wide"
           ]
@@ -63061,7 +63085,7 @@
         {
           "kind": "fn",
           "name": "div_u256_by_u128_known_vectors",
-          "line": 595,
+          "line": 596,
           "called": [
             "b",
             "div_u256_by_u128",
@@ -63071,7 +63095,7 @@
         {
           "kind": "fn",
           "name": "get_amount_out_wide_known_vectors",
-          "line": 626,
+          "line": 627,
           "called": [
             "get_amount_out_wide"
           ]
@@ -63531,13 +63555,13 @@
         {
           "kind": "const",
           "name": "EXPECTED_FIXTURE_IDENTIFIER",
-          "line": 57,
+          "line": 58,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Header",
-          "line": 68,
+          "line": 69,
           "called": [
             "count",
             "identifier"
@@ -63546,7 +63570,7 @@
         {
           "kind": "struct",
           "name": "Entry",
-          "line": 105,
+          "line": 106,
           "called": [
             "kind",
             "r"
@@ -63555,7 +63579,7 @@
         {
           "kind": "struct",
           "name": "Fixture",
-          "line": 138,
+          "line": 139,
           "called": [
             "Entry",
             "Header",
@@ -63565,7 +63589,7 @@
         {
           "kind": "fn",
           "name": "locate_fixture",
-          "line": 145,
+          "line": 146,
           "called": [
             "fixture"
           ]
@@ -63573,7 +63597,7 @@
         {
           "kind": "fn",
           "name": "load_fixture",
-          "line": 176,
+          "line": 177,
           "called": [
             "Fixture",
             "bytes",
@@ -63585,13 +63609,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 204,
+          "line": 205,
           "called": []
         },
         {
           "kind": "fn",
           "name": "entry_to_action",
-          "line": 227,
+          "line": 228,
           "called": [
             "Action",
             "Entry",
@@ -63605,7 +63629,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_byte_equivalence",
-          "line": 332,
+          "line": 333,
           "called": [
             "action",
             "count",
@@ -63622,7 +63646,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_coverage",
-          "line": 365,
+          "line": 366,
           "called": [
             "as_str",
             "fixture",
@@ -63634,7 +63658,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_identifier_matches",
-          "line": 414,
+          "line": 415,
           "called": [
             "EXPECTED_FIXTURE_IDENTIFIER",
             "fixture",
@@ -63646,7 +63670,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_max_budget_constant_agrees",
-          "line": 433,
+          "line": 434,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "fixture",
@@ -63657,7 +63681,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_leading_tag_per_kind",
-          "line": 450,
+          "line": 451,
           "called": [
             "as_str",
             "bytes",
@@ -63880,7 +63904,7 @@
         {
           "kind": "fn",
           "name": "encode_action_deterministic",
-          "line": 26,
+          "line": 27,
           "called": [
             "action",
             "actor",
@@ -63890,7 +63914,7 @@
         {
           "kind": "fn",
           "name": "encode_action_distinguishes_distinct_register_identities",
-          "line": 43,
+          "line": 44,
           "called": [
             "actor",
             "encode_action"
@@ -63899,7 +63923,7 @@
         {
           "kind": "fn",
           "name": "signing_input_non_empty",
-          "line": 66,
+          "line": 67,
           "called": [
             "action",
             "bytes",
@@ -63913,7 +63937,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_deployments",
-          "line": 80,
+          "line": 81,
           "called": [
             "action",
             "nonce",
@@ -63925,7 +63949,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_nonces",
-          "line": 97,
+          "line": 98,
           "called": [
             "action",
             "r",
@@ -63936,7 +63960,7 @@
         {
           "kind": "fn",
           "name": "encode_signed_action_deterministic",
-          "line": 114,
+          "line": 115,
           "called": [
             "action",
             "encode_signed_action",
@@ -63948,7 +63972,7 @@
         {
           "kind": "fn",
           "name": "address_book_monotone",
-          "line": 129,
+          "line": 130,
           "called": [
             "addr",
             "assign",
@@ -63958,7 +63982,7 @@
         {
           "kind": "fn",
           "name": "address_book_lookup_after_assign",
-          "line": 146,
+          "line": 147,
           "called": [
             "_",
             "addr",
@@ -63969,7 +63993,7 @@
         {
           "kind": "fn",
           "name": "translate_first_time_registers_address",
-          "line": 160,
+          "line": 161,
           "called": [
             "actor",
             "addr",
@@ -63983,7 +64007,7 @@
         {
           "kind": "fn",
           "name": "translate_revoked_returns_none",
-          "line": 183,
+          "line": 184,
           "called": [
             "actor",
             "addr",
@@ -63997,7 +64021,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_deterministic",
-          "line": 209,
+          "line": 210,
           "called": [
             "action",
             "encode_action",
@@ -64008,7 +64032,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_resource_parametric",
-          "line": 246,
+          "line": 247,
           "called": [
             "encode_action",
             "len",
@@ -64018,7 +64042,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_deterministic",
-          "line": 284,
+          "line": 285,
           "called": [
             "action",
             "encode_action",
@@ -64028,7 +64052,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_deterministic",
-          "line": 308,
+          "line": 309,
           "called": [
             "action",
             "encode_action",
@@ -64038,7 +64062,7 @@
         {
           "kind": "fn",
           "name": "top_up_variants_byte_distinct",
-          "line": 336,
+          "line": 337,
           "called": [
             "b",
             "encode_action"
@@ -64047,7 +64071,7 @@
         {
           "kind": "fn",
           "name": "fee_split_arithmetic_invariants",
-          "line": 372,
+          "line": 373,
           "called": [
             "FeeSplitInput",
             "MAX_BUDGET_PER_DEPOSIT",
@@ -64060,7 +64084,7 @@
         {
           "kind": "fn",
           "name": "reorg_window_linear_advance",
-          "line": 400,
+          "line": 401,
           "called": [
             "BlockHeader",
             "advance",
@@ -64074,7 +64098,7 @@
         {
           "kind": "fn",
           "name": "decode_event_never_panics_on_arbitrary_input",
-          "line": 432,
+          "line": 433,
           "called": [
             "EthAddress",
             "IngestedEvent",
@@ -64087,7 +64111,7 @@
         {
           "kind": "fn",
           "name": "decode_event_with_valid_topic0_never_panics_on_adversarial_payload",
-          "line": 465,
+          "line": 466,
           "called": [
             "EthAddress",
             "IngestedEvent",

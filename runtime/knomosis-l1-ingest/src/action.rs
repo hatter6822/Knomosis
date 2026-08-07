@@ -78,11 +78,15 @@ pub type ActorId = u64;
 /// `Authority.ResourceId`.
 pub type ResourceId = u64;
 
-/// `Nat`-valued Amount — abbreviation for Lean's
-/// `Authority.Amount`.  Mirrors `Lean.Nat`'s unbounded representation
-/// at the type level; the CBE encoder enforces `< 2^64` at the
-/// boundary (per `Encoding.Action.fieldsBounded`).
-pub type Amount = u128;
+/// `Nat`-valued Amount — abbreviation for Lean's `Authority.Amount`.
+///
+/// The bound is `< 256^32 = 2^256`, which is what
+/// `Encoding.Action.fieldsBounded` actually states for every
+/// value-carrying arm (`a < 256 ^ 32`) and what `Laws.maxAmount`
+/// caps a credit at.  An earlier version of this docstring claimed
+/// the encoder enforced `< 2^64`; it does not, and the claim outlived
+/// the `encode_u128_checked` path that once made it true.
+pub type Amount = knomosis_amount::Amount;
 
 /// Per-actor monotone counter — abbreviation for Lean's
 /// `Authority.Nonce`.
@@ -407,7 +411,7 @@ pub enum Action {
         budget_units: u64,
         /// The trusted budget→gas exchange rate (wei per budget unit).
         /// Pinned by the admission gate; same `Nat`-as-CBE encoding.
-        wei_per_budget_unit: u128,
+        wei_per_budget_unit: Amount,
         /// The gas-pool actor the refund is paid from.
         pool_actor: ActorId,
     },
@@ -496,6 +500,7 @@ fn hex_nibble(n: u8) -> char {
 
 #[cfg(test)]
 mod tests {
+    use super::Amount;
     use super::{Action, EthAddress, PublicKey};
 
     /// Tag indices match the frozen Lean table.
@@ -507,7 +512,7 @@ mod tests {
                 r: 0,
                 sender: 0,
                 receiver: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
             }
             .tag(),
             0
@@ -516,7 +521,7 @@ mod tests {
             Action::Mint {
                 r: 0,
                 to: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             1
@@ -525,7 +530,7 @@ mod tests {
             Action::Burn {
                 r: 0,
                 from_actor: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             2
@@ -543,7 +548,7 @@ mod tests {
             Action::Reward {
                 r: 0,
                 to: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             5
@@ -552,7 +557,7 @@ mod tests {
             Action::DistributeOthers {
                 r: 0,
                 excluded: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             6
@@ -561,7 +566,7 @@ mod tests {
             Action::ProportionalDilute {
                 r: 0,
                 excluded: 0,
-                total_reward: 0
+                total_reward: Amount::from_u64(0)
             }
             .tag(),
             7
@@ -580,7 +585,7 @@ mod tests {
             Action::Deposit {
                 r: 0,
                 recipient: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 deposit_id: 0
             }
             .tag(),
@@ -590,7 +595,7 @@ mod tests {
             Action::Withdraw {
                 r: 0,
                 sender: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 recipient_l1: EthAddress::ZERO
             }
             .tag(),
@@ -622,11 +627,11 @@ mod tests {
                 r: 0,
                 recipient: 0,
                 pool_actor: 0,
-                user_amount: 0,
-                pool_amount: 0,
+                user_amount: Amount::from_u64(0),
+                pool_amount: Amount::from_u64(0),
                 budget_grant: 0,
                 deposit_id: 0,
-                seed_amount: 0,
+                seed_amount: Amount::from_u64(0),
             }
             .tag(),
             19
@@ -634,7 +639,7 @@ mod tests {
         assert_eq!(
             Action::TopUpActionBudget {
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -645,7 +650,7 @@ mod tests {
             Action::TopUpActionBudgetFor {
                 recipient: 0,
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -656,8 +661,8 @@ mod tests {
             Action::AmmSwap {
                 from_resource: 0,
                 to_resource: 1,
-                amount_in: 0,
-                amount_out: 0,
+                amount_in: Amount::from_u64(0),
+                amount_out: Amount::from_u64(0),
                 amm_reserve_actor: 0,
             }
             .tag(),
@@ -666,7 +671,7 @@ mod tests {
         assert_eq!(
             Action::ReclaimAmmReserves {
                 r: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 reserve_actor: 3,
                 pool_actor: 1,
             }
@@ -684,22 +689,22 @@ mod tests {
             r: 0,
             recipient: 0,
             pool_actor: 0,
-            user_amount: 0,
-            pool_amount: 0,
+            user_amount: Amount::from_u64(0),
+            pool_amount: Amount::from_u64(0),
             budget_grant: 0,
             deposit_id: 0,
-            seed_amount: 0,
+            seed_amount: Amount::from_u64(0),
         };
         let top_up = Action::TopUpActionBudget {
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: 0,
             pool_actor: 0,
         };
         let top_up_for = Action::TopUpActionBudgetFor {
             recipient: 0,
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: 0,
             pool_actor: 0,
         };

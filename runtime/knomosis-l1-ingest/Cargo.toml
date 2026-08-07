@@ -70,6 +70,10 @@ path = "examples/gen_fee_split_fixtures.rs"
 
 [dependencies]
 knomosis-cli-common = { workspace = true }
+# `knomosis-amount` supplies the 256-bit `Amount` this crate's
+# wire-decoded value fields carry.  See that crate's docs for why
+# the width is exactly 256 bits.
+knomosis-amount = { path = "../knomosis-amount" }
 # `k256` provides the ECDSA signing primitive that bridge-actor
 # private keys feed into.  `default-features = false` (workspace
 # default) keeps the production cdylib lean; the ingestor itself

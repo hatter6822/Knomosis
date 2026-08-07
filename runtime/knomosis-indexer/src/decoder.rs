@@ -221,7 +221,7 @@ impl<'a> Cursor<'a> {
     /// word, so no value the L1 can hold is one the head cannot carry.
     /// `Amount` is `u128` here and `Nat` on Lean's side, so the top 16
     /// bytes are REQUIRED to be zero and an over-wide value is a
-    /// decode error, never a truncation (see `AmountTooWide`).
+    /// decode error, never a truncation.
     ///
     /// Rejects the uint tag rather than accepting either width — one
     /// logical value must have exactly one byte form, or the state

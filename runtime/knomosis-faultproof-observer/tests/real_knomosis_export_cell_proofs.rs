@@ -29,6 +29,7 @@
 //! hand-pinned JSON examples in `submitter.rs::tests`).
 
 use knomosis_faultproof_observer::submitter::CellProof;
+use knomosis_l1_ingest::action::Amount;
 use knomosis_l1_ingest::action::{Action, EthAddress};
 use knomosis_l1_ingest::encoding::encode_signed_action;
 use std::path::PathBuf;
@@ -94,7 +95,7 @@ fn build_synthetic_log_with_transfer() -> Vec<u8> {
         r: 1,
         sender: 1,
         receiver: 2,
-        amount: 100,
+        amount: Amount::from_u64(100),
     };
     // SignedAction: signer=1, nonce=0, sig=zeros
     let signed_action_bytes = encode_signed_action(&action, 1, 0, &[0u8; 32]).unwrap();
@@ -310,7 +311,7 @@ fn real_knomosis_export_cell_proofs_withdraw() {
     let action = Action::Withdraw {
         r: 2,
         sender: 3,
-        amount: 50,
+        amount: Amount::from_u64(50),
         recipient_l1,
     };
     let signed_action_bytes = encode_signed_action(&action, 3, 0, &[0u8; 32]).unwrap();

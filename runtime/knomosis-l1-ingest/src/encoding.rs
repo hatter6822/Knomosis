@@ -66,7 +66,7 @@
 //!
 //! See `action.rs` for the frozen tag table.
 
-use crate::action::{Action, EthAddress};
+use crate::action::{Action, Amount, EthAddress};
 
 /// CBE type tag for unsigned integers.  Matches Lean's
 /// `Encoding.CBOR.cbeTagUint`.
@@ -115,24 +115,25 @@ fn write_head(out: &mut Vec<u8>, tag: u8, n: u64) {
 
 /// Encode a CBE amount head: `CBE_TAG_AMOUNT` + 32-byte LE value.
 /// Mirrors Lean's `Encoding.CBOR.cborAmountHeadEncode`.
-fn write_amount_head(out: &mut Vec<u8>, n: u128) {
+///
+/// The head is 32 bytes because Lean's is, and Lean's is because the
+/// state root must be able to see any balance the L1 can hold (finding
+/// C-3).  It now carries a full-width value: the retired `u128`
+/// parameter left the high 16 bytes structurally zero, so the encoder
+/// could not express an amount the kernel admits.
+fn write_amount_head(out: &mut Vec<u8>, n: Amount) {
     out.push(CBE_TAG_AMOUNT);
     out.extend_from_slice(&n.to_le_bytes());
-    // The high 16 bytes of the 32-byte little-endian body.  `n` is a
-    // `u128`, so they are always zero here; the head is 32 bytes wide
-    // because Lean's is, and Lean's is because the state root must be
-    // able to see any balance the L1 can hold (finding C-3).
-    out.extend_from_slice(&[0u8; 16]);
 }
 
 /// Encode a `u128` as a CBE amount (tag 0x06 + 32-byte LE).  Mirrors
 /// Lean's `Encoding.Encodable.encodeAmount`.
 ///
 /// Total, unlike [`encode_u128_checked`]: the 32-byte head covers the
-/// whole `u128` range with 16 bytes to spare, which is why
-/// value-carrying fields ride it.
+/// whole [`Amount`] range exactly, which is why value-carrying fields
+/// ride it.
 #[must_use]
-pub fn encode_amount_u128(value: u128) -> Vec<u8> {
+pub fn encode_amount(value: Amount) -> Vec<u8> {
     let mut out = Vec::with_capacity(AMOUNT_HEAD_LEN);
     write_amount_head(&mut out, value);
     out
@@ -457,17 +458,6 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
     Ok(out)
 }
 
-/// Encode an `Amount` (`u128` on the Rust side) as a CBE amount head.
-///
-/// Infallible: the 32-byte amount body represents every `u128`.  The
-/// earlier form routed through [`encode_u128_checked`] and rejected
-/// anything `>= 2^64` — a bound a wei-denominated amount crosses at
-/// ~18.45 ETH, so the runtime could not express an amount the kernel
-/// can hold.
-fn encode_amount(amount: u128) -> Vec<u8> {
-    encode_amount_u128(amount)
-}
-
 /// Encode a `Nonce` as a CBE uint on the 8-byte head.
 ///
 /// A nonce is a per-actor COUNTER, not a value: it must stay on the
@@ -575,6 +565,7 @@ mod tests {
         encode_u128_checked, encode_u64, signing_input, write_u64_le, AMOUNT_HEAD_LEN,
         CBE_TAG_AMOUNT, CBE_TAG_BYTES, CBE_TAG_UINT, HEAD_LEN, SIGNED_ACTION_DOMAIN,
     };
+    use crate::action::Amount;
     use crate::action::{Action, EthAddress, PublicKey};
 
     /// `write_u64_le` produces 8 little-endian bytes.
@@ -653,7 +644,7 @@ mod tests {
             r: 0,
             sender: 1,
             receiver: 2,
-            amount: 100,
+            amount: Amount::from_u64(100),
         };
         let encoded = encode_action(&action).unwrap();
         // Layout: tag(0) ++ r(0) ++ sender(1) ++ receiver(2) ++ amount(100).
@@ -728,7 +719,7 @@ mod tests {
         let action = Action::Withdraw {
             r: 5,
             sender: 9,
-            amount: 1000,
+            amount: Amount::from_u64(1000),
             recipient_l1: recipient,
         };
         let encoded = encode_action(&action).unwrap();
@@ -933,11 +924,11 @@ mod tests {
             r: 0,
             recipient: 1,
             pool_actor: 2,
-            user_amount: 1000,
-            pool_amount: 500,
+            user_amount: Amount::from_u64(1000),
+            pool_amount: Amount::from_u64(500),
             budget_grant: 10,
             deposit_id: 42,
-            seed_amount: 25,
+            seed_amount: Amount::from_u64(25),
         };
         let encoded = encode_action(&action).unwrap();
         // 6 narrow heads (tag, r, recipient, pool_actor, budget_grant,
@@ -980,7 +971,7 @@ mod tests {
     fn encode_top_up_action_budget_layout() {
         let action = Action::TopUpActionBudget {
             gas_resource: 0,
-            gas_amount: 100,
+            gas_amount: Amount::from_u64(100),
             budget_increment: 5,
             pool_actor: 2,
         };
@@ -1012,7 +1003,7 @@ mod tests {
         let action = Action::TopUpActionBudgetFor {
             recipient: 7,
             gas_resource: 0,
-            gas_amount: 100,
+            gas_amount: Amount::from_u64(100),
             budget_increment: 5,
             pool_actor: 2,
         };
@@ -1067,11 +1058,11 @@ mod tests {
             r: 0,
             recipient: 1,
             pool_actor: 2,
-            user_amount: 1000,
-            pool_amount: 500,
+            user_amount: Amount::from_u64(1000),
+            pool_amount: Amount::from_u64(500),
             budget_grant: 10,
             deposit_id: 42,
-            seed_amount: 25,
+            seed_amount: Amount::from_u64(25),
         };
         let actual = encode_action(&action).unwrap();
         let mut expected: Vec<u8> = vec![
@@ -1106,21 +1097,21 @@ mod tests {
             r: 0,
             recipient: 1,
             pool_actor: 2,
-            user_amount: 1000,
-            pool_amount: 500,
+            user_amount: Amount::from_u64(1000),
+            pool_amount: Amount::from_u64(500),
             budget_grant: 10,
             deposit_id: 42,
-            seed_amount: 25,
+            seed_amount: Amount::from_u64(25),
         };
         let bold_action = Action::DepositWithFee {
             r: 1,
             recipient: 1,
             pool_actor: 2,
-            user_amount: 1000,
-            pool_amount: 500,
+            user_amount: Amount::from_u64(1000),
+            pool_amount: Amount::from_u64(500),
             budget_grant: 10,
             deposit_id: 42,
-            seed_amount: 25,
+            seed_amount: Amount::from_u64(25),
         };
         let eth_bytes = encode_action(&eth_action).unwrap();
         let bold_bytes = encode_action(&bold_action).unwrap();
@@ -1148,7 +1139,7 @@ mod tests {
     fn encode_top_up_action_budget_known_vector() {
         let action = Action::TopUpActionBudget {
             gas_resource: 0,
-            gas_amount: 100,
+            gas_amount: Amount::from_u64(100),
             budget_increment: 5,
             pool_actor: 2,
         };
@@ -1175,7 +1166,7 @@ mod tests {
         let action = Action::TopUpActionBudgetFor {
             recipient: 7,
             gas_resource: 0,
-            gas_amount: 100,
+            gas_amount: Amount::from_u64(100),
             budget_increment: 5,
             pool_actor: 2,
         };
@@ -1203,7 +1194,7 @@ mod tests {
         let action = Action::ClaimBudgetRefund {
             gas_resource: 0,
             budget_units: 50,
-            wei_per_budget_unit: 5,
+            wei_per_budget_unit: Amount::from_u64(5),
             pool_actor: 2,
         };
         let actual = encode_action(&action).unwrap();
@@ -1229,8 +1220,8 @@ mod tests {
         let action = Action::AmmSwap {
             from_resource: 0,
             to_resource: 1,
-            amount_in: 1000,
-            amount_out: 500,
+            amount_in: Amount::from_u64(1000),
+            amount_out: Amount::from_u64(500),
             amm_reserve_actor: 3,
         };
         let actual = encode_action(&action).unwrap();
@@ -1261,7 +1252,7 @@ mod tests {
     fn encode_reclaim_amm_reserves_known_vector() {
         let action = Action::ReclaimAmmReserves {
             r: 0,
-            amount: 5000,
+            amount: Amount::from_u64(5000),
             reserve_actor: 3,
             pool_actor: 1,
         };
@@ -1318,7 +1309,7 @@ mod tests {
         // reclaimAmmReserves: tag, r, amount.
         let bytes = encode_action(&Action::ReclaimAmmReserves {
             r: 0,
-            amount: big,
+            amount: Amount::from(big),
             reserve_actor: 3,
             pool_actor: 1,
         })
@@ -1331,11 +1322,11 @@ mod tests {
             r: 0,
             recipient: 1,
             pool_actor: 2,
-            user_amount: big,
-            pool_amount: huge,
+            user_amount: Amount::from(big),
+            pool_amount: Amount::from(huge),
             budget_grant: 0,
             deposit_id: 0,
-            seed_amount: big,
+            seed_amount: Amount::from(big),
         })
         .expect("full-width deposit amounts must encode");
         assert_amount_at(&bytes, HEAD_LEN * 4, big, "depositWithFee.userAmount");
@@ -1356,7 +1347,7 @@ mod tests {
         // topUpActionBudget: tag, gasResource, gasAmount.
         let bytes = encode_action(&Action::TopUpActionBudget {
             gas_resource: 0,
-            gas_amount: big,
+            gas_amount: Amount::from(big),
             budget_increment: 0,
             pool_actor: 0,
         })
@@ -1367,7 +1358,7 @@ mod tests {
         let bytes = encode_action(&Action::TopUpActionBudgetFor {
             recipient: 0,
             gas_resource: 0,
-            gas_amount: big,
+            gas_amount: Amount::from(big),
             budget_increment: 0,
             pool_actor: 0,
         })
@@ -1398,14 +1389,14 @@ mod tests {
     fn top_up_action_budget_variants_distinct_bytes() {
         let self_funded = Action::TopUpActionBudget {
             gas_resource: 0,
-            gas_amount: 100,
+            gas_amount: Amount::from_u64(100),
             budget_increment: 5,
             pool_actor: 2,
         };
         let delegated = Action::TopUpActionBudgetFor {
             recipient: 7,
             gas_resource: 0,
-            gas_amount: 100,
+            gas_amount: Amount::from_u64(100),
             budget_increment: 5,
             pool_actor: 2,
         };
@@ -1430,11 +1421,11 @@ mod tests {
             r: 0,
             recipient: 1,
             pool_actor: 2,
-            user_amount: 1000,
-            pool_amount: 500,
+            user_amount: Amount::from_u64(1000),
+            pool_amount: Amount::from_u64(500),
             budget_grant: 10,
             deposit_id: 42,
-            seed_amount: 25,
+            seed_amount: Amount::from_u64(25),
         };
         let signing_bytes = signing_input(&action, 99, 7, b"test-deployment").unwrap();
         // Domain prefix: 9-byte head + 27-byte ASCII.
@@ -1469,18 +1460,18 @@ mod tests {
             r: 1,
             recipient: 7,
             pool_actor: 3,
-            user_amount: 999,
-            pool_amount: 1,
+            user_amount: Amount::from_u64(999),
+            pool_amount: Amount::from_u64(1),
             budget_grant: 1,
             deposit_id: 1,
-            seed_amount: 1,
+            seed_amount: Amount::from_u64(1),
         };
         let e1 = encode_action(&a).unwrap();
         let e2 = encode_action(&a).unwrap();
         assert_eq!(e1, e2);
         let b = Action::TopUpActionBudget {
             gas_resource: 0,
-            gas_amount: 50,
+            gas_amount: Amount::from_u64(50),
             budget_increment: 1,
             pool_actor: 3,
         };
@@ -1490,7 +1481,7 @@ mod tests {
         let c = Action::TopUpActionBudgetFor {
             recipient: 7,
             gas_resource: 0,
-            gas_amount: 50,
+            gas_amount: Amount::from_u64(50),
             budget_increment: 1,
             pool_actor: 3,
         };

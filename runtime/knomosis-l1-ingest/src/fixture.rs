@@ -65,6 +65,7 @@
 use crate::action::EthAddress;
 use crate::events::IngestedEvent;
 use crate::translation::UnsignedAction;
+use knomosis_amount::Amount;
 
 /// Tag bytes for the event variants in the fixture input format.
 const EVENT_TAG_REGISTERED_ECDSA: u8 = 0;
@@ -779,8 +780,8 @@ impl FeeSplitInput {
             r: self.resource_id,
             recipient: self.recipient,
             pool_actor: self.pool_actor,
-            user_amount,
-            pool_amount,
+            user_amount: Amount::from(user_amount),
+            pool_amount: Amount::from(pool_amount),
             budget_grant,
             deposit_id: self.deposit_id,
             // The fee-split model mirrors the L1 `DepositFeeSplit`
@@ -788,7 +789,7 @@ impl FeeSplitInput {
             // leg (Workstream SB) is attested separately by the
             // deposit-materialisation path, so the corpus action is
             // seedless.
-            seed_amount: 0,
+            seed_amount: Amount::from_u64(0),
         })
     }
 }
@@ -904,6 +905,7 @@ mod tests {
         decode_expected, decode_input, encode_expected, encode_input, FixtureError,
         FixtureExpected, FixtureInput,
     };
+    use crate::action::Amount;
     use crate::action::{Action, EthAddress, PublicKey};
     use crate::events::IngestedEvent;
     use crate::translation::UnsignedAction;
@@ -1390,11 +1392,11 @@ mod tests {
                 assert_eq!(pool_actor, 2);
                 assert_eq!(deposit_id, 42);
                 let (eu, ep, eb) = input.split();
-                assert_eq!(user_amount, eu);
-                assert_eq!(pool_amount, ep);
+                assert_eq!(user_amount, Amount::from(eu));
+                assert_eq!(pool_amount, Amount::from(ep));
                 assert_eq!(budget_grant, eb);
                 // The fee-split model is seedless (see `to_action`).
-                assert_eq!(seed_amount, 0);
+                assert_eq!(seed_amount, Amount::from_u64(0));
             }
             _ => panic!("expected DepositWithFee constructor"),
         }

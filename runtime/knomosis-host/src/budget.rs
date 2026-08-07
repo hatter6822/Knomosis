@@ -84,6 +84,7 @@
 //! point is `2^64`, already past the CBE-encodable bound, so it is
 //! unreachable for any value that survives a round-trip.
 
+use knomosis_amount::Amount;
 use std::collections::BTreeMap;
 
 /// The reserved bridge-actor id.  Mirrors Lean's
@@ -552,8 +553,8 @@ pub enum ActionBudgetKind {
         /// The gas-pool actor credited the gas payment.
         pool_actor: u64,
         /// The gas amount transferred (must be `> 0`).  Wei-denominated,
-        /// so it is `u128` and rides the CBE amount head.
-        gas_amount: u128,
+        /// so it is an `Amount` and rides the CBE amount head.
+        gas_amount: Amount,
         /// The budget units credited to the signer.  A UNIT count, not
         /// wei, so it stays `u64` on the uint head.
         budget_increment: u64,
@@ -570,8 +571,8 @@ pub enum ActionBudgetKind {
         /// The gas-pool actor credited the gas payment.
         pool_actor: u64,
         /// The gas amount transferred (must be `> 0`).  Wei-denominated,
-        /// so it is `u128` and rides the CBE amount head.
-        gas_amount: u128,
+        /// so it is an `Amount` and rides the CBE amount head.
+        gas_amount: Amount,
         /// The budget units credited to `recipient`.  A UNIT count, not
         /// wei, so it stays `u64` on the uint head.
         budget_increment: u64,
@@ -598,9 +599,10 @@ pub enum ActionBudgetKind {
         budget_units: u64,
         /// The trusted budget→gas exchange rate (`≥ 1` enables the
         /// refund; `0` is the disabled default the gate rejects).
-        /// Wei-denominated, so it is `u128` and rides the CBE amount
-        /// head; `budget_units` above is a UNIT count and does not.
-        wei_per_budget_unit: u128,
+        /// Wei-denominated, so it is an `Amount` and rides the CBE
+        /// amount head; `budget_units` above is a UNIT count and does
+        /// not.
+        wei_per_budget_unit: Amount,
     },
 }
 
@@ -627,17 +629,6 @@ pub enum BudgetDecodeError {
         offset: usize,
         /// The tag byte actually found.
         found: u8,
-    },
-    /// A CBE amount head carried a value above this crate's `u128`
-    /// range.  The wire is 32 bytes wide because the Lean state root
-    /// is; representing an amount as `u128` here is a deliberate
-    /// narrowing, so the over-wide case fails closed rather than
-    /// wrapping.  Unreachable in practice: `2^128` wei is ~`3.4e20`
-    /// ETH.
-    #[error("amount at offset {offset} exceeds this decoder's u128 range")]
-    AmountTooWide {
-        /// Byte offset of the bad head.
-        offset: usize,
     },
     /// A CBE amount head carried the wrong type tag.  In particular
     /// this fires when a value-carrying field arrives on the narrower
@@ -782,7 +773,7 @@ impl<'a> CbeCursor<'a> {
     /// a uint would leave the cursor 8 bytes short and every
     /// subsequent field — including `signer`, which the budget gate
     /// authorises against — would be read from the wrong offset.
-    fn read_amount(&mut self) -> Result<u128, BudgetDecodeError> {
+    fn read_amount(&mut self) -> Result<Amount, BudgetDecodeError> {
         let end = self
             .pos
             .checked_add(AMOUNT_HEAD_LEN)
@@ -803,13 +794,15 @@ impl<'a> CbeCursor<'a> {
         // truncated — truncation is finding C-3 itself, and this
         // decoder feeds the budget admission gate, where reading a
         // halved amount would admit a step the L2 refuses.
-        if head[17..AMOUNT_HEAD_LEN].iter().any(|&b| b != 0) {
-            return Err(BudgetDecodeError::AmountTooWide { offset: self.pos });
-        }
-        let mut le = [0u8; 16];
-        le.copy_from_slice(&head[1..17]);
+        //
+        // The width check that used to sit here (`AmountTooWide` when
+        // the high 16 bytes were non-zero) is gone because it is
+        // unreachable: `Amount` spans the whole 32-byte payload, so
+        // every well-formed head decodes.
+        let mut le = [0u8; knomosis_amount::AMOUNT_BYTES];
+        le.copy_from_slice(&head[1..AMOUNT_HEAD_LEN]);
         self.pos = end;
-        Ok(u128::from_le_bytes(le))
+        Ok(Amount::from_le_bytes(le))
     }
 
     /// Read a CBE amount head and discard its value.
@@ -1194,7 +1187,7 @@ pub struct BudgetGate {
     /// Strict-mode gas-balance oracle: `(gasResource, actor) ->
     /// balance`.  A missing entry reads as `0`.  Only consulted in
     /// strict mode.
-    balances: BTreeMap<(u64, u64), u128>,
+    balances: BTreeMap<(u64, u64), Amount>,
     /// Strict-mode delegated-top-up consent oracle: the set of
     /// `(recipient, signer)` pairs the recipient has authorised
     /// (mirrors `delegatedTopUpConsentBool`).  Only consulted in
@@ -1284,7 +1277,7 @@ impl BudgetGate {
     }
 
     /// Set the strict-mode balance for `(gas_resource, actor)`.
-    pub fn set_balance(&mut self, gas_resource: u64, actor: u64, balance: u128) {
+    pub fn set_balance(&mut self, gas_resource: u64, actor: u64, balance: Amount) {
         self.balances.insert((gas_resource, actor), balance);
     }
 
@@ -1321,11 +1314,11 @@ impl BudgetGate {
     /// `u128` to match the wire type: a balance is wei-denominated and
     /// crosses `2^64` at ~18.45 ETH, so a `u64` view would compare a
     /// truncated balance against a full-width `gas_amount`.
-    fn balance_of(&self, gas_resource: u64, actor: u64) -> u128 {
+    fn balance_of(&self, gas_resource: u64, actor: u64) -> Amount {
         self.balances
             .get(&(gas_resource, actor))
             .copied()
-            .unwrap_or(0)
+            .unwrap_or(Amount::ZERO)
     }
 
     /// Evaluate the gate against `view`, returning the post-admission
@@ -1383,7 +1376,7 @@ impl BudgetGate {
                 if budget_increment > MAX_TOPUP_BUDGET_PER_ACTION {
                     return Err(GateRejection::TopUpBudgetCeilingExceeded);
                 }
-                if gas_amount == 0 {
+                if gas_amount == Amount::from_u64(0) {
                     return Err(GateRejection::ZeroGasTopUp);
                 }
                 // GP.9.1 round-trip non-profitability: the Lean gate ALSO
@@ -1427,7 +1420,7 @@ impl BudgetGate {
                 if budget_increment > MAX_TOPUP_BUDGET_PER_ACTION {
                     return Err(GateRejection::TopUpBudgetCeilingExceeded);
                 }
-                if gas_amount == 0 {
+                if gas_amount == Amount::from_u64(0) {
                     return Err(GateRejection::ZeroGasTopUp);
                 }
                 // GP.9.1 round-trip non-profitability (delegated variant):
@@ -1477,15 +1470,38 @@ impl BudgetGate {
                 if gas_resource != 0 && gas_resource != 1 {
                     return Err(GateRejection::RefundNonCanonicalResource);
                 }
-                if wei_per_budget_unit == 0 {
+                if wei_per_budget_unit == Amount::from_u64(0) {
                     return Err(GateRejection::RefundRateDisabled);
                 }
                 if budget_units == 0 {
                     return Err(GateRejection::RefundZeroUnits);
                 }
                 if self.strict {
-                    // Pool solvency (uint128: the payout can reach ~2^128).
-                    let refund_amount = u128::from(budget_units) * wei_per_budget_unit;
+                    // Pool solvency.  BOTH operands are decoded from
+                    // the submitted action -- `budget_units` via
+                    // `read_uint` and `wei_per_budget_unit` via
+                    // `read_amount` -- so both are caller-controlled,
+                    // whatever the latter's "trusted rate" intent.
+                    //
+                    // This product used to be an unchecked `u128` `*`.
+                    // A `u64` count times a `u128` rate spans up to
+                    // 2^192, so it could exceed `u128` and WRAP in a
+                    // release build: at `wei_per_budget_unit = 2^127`
+                    // and `budget_units = 4` the product is 2^129,
+                    // which wraps to exactly ZERO, and the comparison
+                    // below then passed against any pool balance.
+                    //
+                    // At this width the wrap is unreachable rather
+                    // than merely guarded (2^192 < 2^256), so the
+                    // `checked_mul` cannot in fact return `None` on
+                    // these operands; it is written as a checked call
+                    // so the property does not silently depend on the
+                    // operand types staying what they are today.
+                    let Some(refund_amount) =
+                        Amount::from(budget_units).checked_mul(wei_per_budget_unit)
+                    else {
+                        return Err(GateRejection::RefundInsufficientPool);
+                    };
                     if self.balance_of(gas_resource, pool_actor) < refund_amount {
                         return Err(GateRejection::RefundInsufficientPool);
                     }
@@ -1564,6 +1580,7 @@ mod tests {
         BudgetPolicy, EpochBudgetState, GateRejection, SignedActionBudgetView, BRIDGE_ACTOR,
         CBE_TAG_AMOUNT, CBE_TAG_MAP, CBE_TAG_UINT, GAS_POOL_ACTOR, MAX_TOPUP_BUDGET_PER_ACTION,
     };
+    use knomosis_amount::Amount;
 
     // ---- CBE test helpers (independent re-derivation of the wire
     // ---- layout, so the known-vector tests are non-circular). ----
@@ -1579,10 +1596,13 @@ mod tests {
     /// counterpart of [`u`]; using the wrong one shifts every
     /// subsequent field by 24 bytes, which is exactly the failure the
     /// decoder's tag check now surfaces.
-    fn amt(n: u128) -> Vec<u8> {
+    fn amt(n: Amount) -> Vec<u8> {
         let mut v = vec![CBE_TAG_AMOUNT];
+        // `Amount::to_le_bytes` is already the full 32-byte payload;
+        // the retired helper wrote a 16-byte `u128` and padded the
+        // rest, which meant a fixture could not express a head the
+        // decoder now accepts.
         v.extend_from_slice(&n.to_le_bytes());
-        v.extend_from_slice(&[0u8; 16]);
         v
     }
 
@@ -1903,7 +1923,7 @@ mod tests {
     /// Transfer decodes to `Ordinary` and recovers the signer.
     #[test]
     fn decode_transfer_ordinary() {
-        let action = cat(&[u(0), u(1), u(10), u(20), amt(100)]); // tag, r, sender, receiver, amount
+        let action = cat(&[u(0), u(1), u(10), u(20), amt(Amount::from_u64(100))]); // tag, r, sender, receiver, amount
         let sa = signed(&action, 42);
         let view = decode_budget_view(&sa).unwrap();
         assert_eq!(view.signer, 42);
@@ -1916,28 +1936,40 @@ mod tests {
     fn decode_simple_variants() {
         // (tag, action-bytes-after-tag)
         let cases: Vec<(u64, Vec<u8>)> = vec![
-            (1, cat(&[u(1), u(2), amt(3)])),                      // mint
-            (2, cat(&[u(1), u(2), amt(3)])),                      // burn
-            (3, cat(&[u(1)])),                                    // freezeResource
-            (4, cat(&[u(7), bytes(&[0x02; 33])])),                // replaceKey
-            (5, cat(&[u(1), u(2), amt(3)])),                      // reward
-            (6, cat(&[u(1), u(2), amt(3)])),                      // distributeOthers
-            (7, cat(&[u(1), u(2), amt(3)])),                      // proportionalDilute
-            (9, cat(&[u(4)])),                                    // disputeWithdraw
-            (11, cat(&[u(8)])),                                   // rollback
-            (12, cat(&[u(7), bytes(&[0x02; 33])])),               // registerIdentity
-            (13, cat(&[u(1), u(2), amt(3), u(4)])),               // deposit
-            (14, cat(&[u(1), u(2), amt(3), bytes(&[0x11; 20])])), // withdraw
+            (1, cat(&[u(1), u(2), amt(Amount::from_u64(3))])), // mint
+            (2, cat(&[u(1), u(2), amt(Amount::from_u64(3))])), // burn
+            (3, cat(&[u(1)])),                                 // freezeResource
+            (4, cat(&[u(7), bytes(&[0x02; 33])])),             // replaceKey
+            (5, cat(&[u(1), u(2), amt(Amount::from_u64(3))])), // reward
+            (6, cat(&[u(1), u(2), amt(Amount::from_u64(3))])), // distributeOthers
+            (7, cat(&[u(1), u(2), amt(Amount::from_u64(3))])), // proportionalDilute
+            (9, cat(&[u(4)])),                                 // disputeWithdraw
+            (11, cat(&[u(8)])),                                // rollback
+            (12, cat(&[u(7), bytes(&[0x02; 33])])),            // registerIdentity
+            (13, cat(&[u(1), u(2), amt(Amount::from_u64(3)), u(4)])), // deposit
+            (
+                14,
+                cat(&[u(1), u(2), amt(Amount::from_u64(3)), bytes(&[0x11; 20])]),
+            ), // withdraw
             // ammSwap(23) and reclaimAmmReserves(24) are shipped and
             // frozen; an unknown tag surfaces as `Verdict::ParseError`.
-            (23, cat(&[u(0), u(1), amt(500), amt(480), u(3)])), // ammSwap
-            (24, cat(&[u(0), amt(123_456), u(3), u(1)])),       // reclaimAmmReserves
-            (16, vec![]),                                       // revokeLocalPolicy
+            (
+                23,
+                cat(&[
+                    u(0),
+                    u(1),
+                    amt(Amount::from_u64(500)),
+                    amt(Amount::from_u64(480)),
+                    u(3),
+                ]),
+            ), // ammSwap
+            (24, cat(&[u(0), amt(Amount::from_u64(123_456)), u(3), u(1)])), // reclaimAmmReserves
+            (16, vec![]),                                                   // revokeLocalPolicy
             (
                 17,
                 cat(&[bytes(&[0xAA; 32]), u(1), u(2), bytes(&[0xBB; 32])]),
             ), // faultProofChallenge
-            (18, cat(&[bytes(&[0xCC; 32]), u(1), u(2), u(3)])), // faultProofResolution
+            (18, cat(&[bytes(&[0xCC; 32]), u(1), u(2), u(3)])),             // faultProofResolution
         ];
         for (tag, fields) in cases {
             let action = cat(&[u(tag), fields]);
@@ -1959,11 +1991,11 @@ mod tests {
             u(0),
             u(10),
             u(1),
-            amt(1000),
-            amt(500),
+            amt(Amount::from_u64(1000)),
+            amt(Amount::from_u64(500)),
             u(50),
             u(7),
-            amt(25),
+            amt(Amount::from_u64(25)),
         ]);
         let sa = signed(&action, BRIDGE_ACTOR);
         let view = decode_budget_view(&sa).unwrap();
@@ -1981,7 +2013,7 @@ mod tests {
     #[test]
     fn decode_top_up_action_budget() {
         // tag 20: gasResource, gasAmount, budgetIncrement, poolActor
-        let action = cat(&[u(20), u(0), amt(100), u(25), u(1)]);
+        let action = cat(&[u(20), u(0), amt(Amount::from_u64(100)), u(25), u(1)]);
         let sa = signed(&action, 10);
         let view = decode_budget_view(&sa).unwrap();
         assert_eq!(view.signer, 10);
@@ -1990,7 +2022,7 @@ mod tests {
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
                 pool_actor: 1,
-                gas_amount: 100,
+                gas_amount: Amount::from_u64(100),
                 budget_increment: 25
             }
         );
@@ -2000,7 +2032,7 @@ mod tests {
     #[test]
     fn decode_top_up_action_budget_for() {
         // tag 21: recipient, gasResource, gasAmount, budgetIncrement, poolActor
-        let action = cat(&[u(21), u(7), u(0), amt(100), u(25), u(1)]);
+        let action = cat(&[u(21), u(7), u(0), amt(Amount::from_u64(100)), u(25), u(1)]);
         let sa = signed(&action, 10);
         let view = decode_budget_view(&sa).unwrap();
         assert_eq!(view.signer, 10);
@@ -2010,7 +2042,7 @@ mod tests {
                 recipient: 7,
                 gas_resource: 0,
                 pool_actor: 1,
-                gas_amount: 100,
+                gas_amount: Amount::from_u64(100),
                 budget_increment: 25
             }
         );
@@ -2062,14 +2094,14 @@ mod tests {
     #[test]
     fn decode_rejects_missing_nonce_sig() {
         // transfer action + signer, but no nonce / sig.
-        let mut buf = cat(&[u(0), u(1), u(10), u(20), amt(100)]);
+        let mut buf = cat(&[u(0), u(1), u(10), u(20), amt(Amount::from_u64(100))]);
         buf.extend_from_slice(&u(42)); // signer only
         match decode_budget_view(&buf) {
             Err(BudgetDecodeError::UnexpectedEnd) => {}
             other => panic!("expected UnexpectedEnd, got {other:?}"),
         }
         // action + signer + nonce, but no sig, is also incomplete.
-        let mut buf2 = cat(&[u(0), u(1), u(10), u(20), amt(100)]);
+        let mut buf2 = cat(&[u(0), u(1), u(10), u(20), amt(Amount::from_u64(100))]);
         buf2.extend_from_slice(&u(42)); // signer
         buf2.extend_from_slice(&u(0)); // nonce; sig still missing
         match decode_budget_view(&buf2) {
@@ -2083,7 +2115,7 @@ mod tests {
     /// suffix a peer could use to smuggle data past the gate).
     #[test]
     fn decode_view_rejects_trailing_after_sig() {
-        let action = cat(&[u(0), u(1), u(10), u(20), amt(100)]);
+        let action = cat(&[u(0), u(1), u(10), u(20), amt(Amount::from_u64(100))]);
         let mut sa = signed(&action, 42);
         sa.extend_from_slice(&u(7)); // garbage past the signature
         match decode_budget_view(&sa) {
@@ -2187,7 +2219,7 @@ mod tests {
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 100,
             },
         );
@@ -2216,7 +2248,7 @@ mod tests {
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 1,
+                gas_amount: Amount::from_u64(1),
                 budget_increment: u64::MAX,
             },
         );
@@ -2236,7 +2268,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
                     pool_actor: GAS_POOL_ACTOR,
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: inc,
                 },
             )
@@ -2267,7 +2299,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
                     pool_actor: 99, // a colluding peer, not the pool
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: 100,
                 }
             )),
@@ -2279,7 +2311,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 7, // neither ETH (0) nor BOLD (1)
                     pool_actor: GAS_POOL_ACTOR,
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: 100,
                 }
             )),
@@ -2292,7 +2324,7 @@ mod tests {
                     recipient: 20,
                     gas_resource: 0,
                     pool_actor: 99,
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: 100,
                 }
             )),
@@ -2312,7 +2344,7 @@ mod tests {
                 gas_resource: 0,
                 pool_actor: 2,
                 budget_units: 10,
-                wei_per_budget_unit: 5,
+                wei_per_budget_unit: Amount::from_u64(5),
             },
         );
         assert!(gate.admit(&v).is_ok());
@@ -2337,19 +2369,19 @@ mod tests {
             )
         };
         assert_eq!(
-            mk().admit(&refund(BRIDGE_ACTOR, 2, 10, 5)),
+            mk().admit(&refund(BRIDGE_ACTOR, 2, 10, Amount::from_u64(5))),
             Err(GateRejection::RefundByBridgeActor)
         );
         assert_eq!(
-            mk().admit(&refund(2, 2, 10, 5)),
+            mk().admit(&refund(2, 2, 10, Amount::from_u64(5))),
             Err(GateRejection::RefundToSelfPool)
         );
         assert_eq!(
-            mk().admit(&refund(10, 2, 10, 0)),
+            mk().admit(&refund(10, 2, 10, Amount::from_u64(0))),
             Err(GateRejection::RefundRateDisabled)
         );
         assert_eq!(
-            mk().admit(&refund(10, 2, 0, 5)),
+            mk().admit(&refund(10, 2, 0, Amount::from_u64(5))),
             Err(GateRejection::RefundZeroUnits)
         );
         // Non-canonical gas resource (2) rejected even with a positive
@@ -2361,7 +2393,7 @@ mod tests {
                     gas_resource: 2,
                     pool_actor: 99,
                     budget_units: 10,
-                    wei_per_budget_unit: 5,
+                    wei_per_budget_unit: Amount::from_u64(5),
                 },
             )),
             Err(GateRejection::RefundNonCanonicalResource)
@@ -2379,18 +2411,70 @@ mod tests {
                 gas_resource: 0,
                 pool_actor: 2,
                 budget_units: 10,
-                wei_per_budget_unit: 5,
+                wei_per_budget_unit: Amount::from_u64(5),
             },
         );
         let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(100, 1, 1)).with_strict_checks();
-        gate.set_balance(0, 2, 40); // pool 40 < 50 => reject
+        gate.set_balance(0, 2, Amount::from_u64(40)); // pool 40 < 50 => reject
         assert_eq!(
             gate.evaluate(&v),
             Err(GateRejection::RefundInsufficientPool)
         );
-        gate.set_balance(0, 2, 50); // pool exactly 50 => admitted
+        gate.set_balance(0, 2, Amount::from_u64(50)); // pool exactly 50 => admitted
         assert!(gate.admit(&v).is_ok());
         assert_eq!(gate.current_budget(10), 89);
+    }
+
+    /// GP.9.1 STRICT MODE: the solvency product does not WRAP.
+    ///
+    /// Both operands reach this gate off the wire — `budget_units` via
+    /// `read_uint` and `wei_per_budget_unit` via `read_amount` — so a
+    /// caller picks both, whatever the latter's "trusted rate" intent.
+    /// While the product was an unchecked `u128` `*`, the pair below
+    /// computed `2^127 × 4 = 2^129`, which is exactly `0` modulo
+    /// `2^128`: the refund read as ZERO, `pool < 0` was false, and the
+    /// gate admitted a refund against an EMPTY pool.  In a debug build
+    /// it panicked instead; in the release build a daemon actually
+    /// runs, it wrapped silently.
+    ///
+    /// At 256 bits the product is representable, so the comparison
+    /// sees the real number and refuses.  This case fails on the
+    /// retired arithmetic in both build profiles, which is what makes
+    /// it a regression test rather than a restatement.
+    #[test]
+    fn strict_gate_refund_solvency_product_does_not_wrap() {
+        let wrapping_rate = Amount::from_u128(1u128 << 127);
+        let v = view(
+            10,
+            ActionBudgetKind::ClaimBudgetRefund {
+                gas_resource: 0,
+                pool_actor: 2,
+                budget_units: 4,
+                wei_per_budget_unit: wrapping_rate,
+            },
+        );
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(100, 1, 1)).with_strict_checks();
+
+        // The pool is empty, and the claim is for 2^129 wei.
+        gate.set_balance(0, 2, Amount::ZERO);
+        assert_eq!(
+            gate.evaluate(&v),
+            Err(GateRejection::RefundInsufficientPool),
+            "a refund of 2^129 against an empty pool must be refused"
+        );
+
+        // The demonstration that the operands really do wrap a `u128`:
+        // the retired expression is rebuilt here, so the case cannot
+        // pass merely because the numbers happen to be large.
+        let wrapped = 4u128.wrapping_mul(1u128 << 127);
+        assert_eq!(wrapped, 0, "the retired product wrapped to zero");
+
+        // And the exact value the widened gate compares against.
+        let exact = Amount::from_u64(4)
+            .checked_mul(wrapping_rate)
+            .expect("2^129 fits in 256 bits");
+        assert!(exact > Amount::from_u128(u128::MAX));
+        assert_eq!(exact.to_u128(), None);
     }
 
     /// `depositWithFee` (bridge-signed) grants the recipient without
@@ -2420,7 +2504,7 @@ mod tests {
                 recipient: 7,
                 gas_resource: 0,
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 100,
             },
         );
@@ -2443,7 +2527,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
                     pool_actor: GAS_POOL_ACTOR,
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: 1
                 }
             )),
@@ -2458,7 +2542,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
                     pool_actor: 10,
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: 1
                 }
             )),
@@ -2473,7 +2557,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
                     pool_actor: GAS_POOL_ACTOR,
-                    gas_amount: 0,
+                    gas_amount: Amount::from_u64(0),
                     budget_increment: 1
                 }
             )),
@@ -2489,7 +2573,7 @@ mod tests {
                     recipient: 10,
                     gas_resource: 0,
                     pool_actor: GAS_POOL_ACTOR,
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: 1
                 }
             )),
@@ -2527,7 +2611,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
                     pool_actor: 10,
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: 1
                 }
             ))
@@ -2587,7 +2671,7 @@ mod tests {
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 100,
             },
         );
@@ -2604,7 +2688,7 @@ mod tests {
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 100,
             },
         );
@@ -2613,10 +2697,10 @@ mod tests {
         assert!(gate.is_strict());
         assert_eq!(gate.evaluate(&v), Err(GateRejection::InsufficientGas));
         // Insufficient balance (4 < 5) -> still rejected.
-        gate.set_balance(0, 10, 4);
+        gate.set_balance(0, 10, Amount::from_u64(4));
         assert_eq!(gate.evaluate(&v), Err(GateRejection::InsufficientGas));
         // Sufficient balance -> admitted + grant applied.
-        gate.set_balance(0, 10, 5);
+        gate.set_balance(0, 10, Amount::from_u64(5));
         assert!(gate.admit(&v).is_ok());
         assert_eq!(gate.current_budget(10), 100);
     }
@@ -2630,14 +2714,14 @@ mod tests {
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 1, // BOLD
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 100,
             },
         );
         let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks();
-        gate.set_balance(0, 10, 1000); // funds resource 0, not 1
+        gate.set_balance(0, 10, Amount::from_u64(1000)); // funds resource 0, not 1
         assert_eq!(gate.evaluate(&v), Err(GateRejection::InsufficientGas));
-        gate.set_balance(1, 10, 5); // now fund resource 1
+        gate.set_balance(1, 10, Amount::from_u64(5)); // now fund resource 1
         assert!(gate.admit(&v).is_ok());
     }
 
@@ -2652,12 +2736,12 @@ mod tests {
                 recipient: 7,
                 gas_resource: 0,
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 100,
             },
         );
         let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks();
-        gate.set_balance(0, 10, 5); // gas covered, but no consent yet
+        gate.set_balance(0, 10, Amount::from_u64(5)); // gas covered, but no consent yet
         assert_eq!(
             gate.evaluate(&v),
             Err(GateRejection::DelegationNotAuthorized)
@@ -2679,13 +2763,13 @@ mod tests {
     #[test]
     fn strict_gate_keeps_balance_independent_conjuncts() {
         let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks();
-        gate.set_balance(0, 10, 1000);
+        gate.set_balance(0, 10, Amount::from_u64(1000));
         let v = view(
             10,
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 0, // zero gas
+                gas_amount: Amount::from_u64(0), // zero gas
                 budget_increment: 100,
             },
         );
@@ -2696,7 +2780,7 @@ mod tests {
     #[test]
     fn gate_drives_decoded_view() {
         let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(2, 1, 1));
-        let action = cat(&[u(0), u(1), u(10), u(20), amt(100)]); // transfer
+        let action = cat(&[u(0), u(1), u(10), u(20), amt(Amount::from_u64(100))]); // transfer
         let sa = signed(&action, 10);
         let v = decode_budget_view(&sa).unwrap();
         assert!(gate.admit(&v).is_ok());
@@ -2859,7 +2943,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
                     pool_actor: GAS_POOL_ACTOR,
-                    gas_amount: 5,
+                    gas_amount: Amount::from_u64(5),
                     budget_increment: 50,
                 },
             ))
@@ -3066,7 +3150,7 @@ mod tests {
         let action = match kind {
             // transfer(0): r, sender, receiver, amount — the amount on
             // the wide head.
-            ActionBudgetKind::Ordinary => cat(&[u(0), u(1), u(2), u(3), amt(4)]),
+            ActionBudgetKind::Ordinary => cat(&[u(0), u(1), u(2), u(3), amt(Amount::from_u64(4))]),
             ActionBudgetKind::DepositWithFee {
                 recipient,
                 budget_grant,
@@ -3075,11 +3159,11 @@ mod tests {
                 u(7),
                 u(recipient),
                 u(8),
-                amt(9),  // userAmount
-                amt(10), // poolAmount
+                amt(Amount::from_u64(9)),  // userAmount
+                amt(Amount::from_u64(10)), // poolAmount
                 u(budget_grant),
                 u(11),
-                amt(12), // seedAmount (Workstream SB)
+                amt(Amount::from_u64(12)), // seedAmount (Workstream SB)
             ]),
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource,
@@ -3136,21 +3220,21 @@ mod tests {
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 3,
                 pool_actor: 5,
-                gas_amount: 6,
+                gas_amount: Amount::from_u64(6),
                 budget_increment: 7,
             },
             ActionBudgetKind::TopUpActionBudgetFor {
                 recipient: 8,
                 gas_resource: 4,
                 pool_actor: GAS_POOL_ACTOR,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 11,
             },
             ActionBudgetKind::ClaimBudgetRefund {
                 gas_resource: 0,
                 pool_actor: 1,
                 budget_units: 50,
-                wei_per_budget_unit: 5,
+                wei_per_budget_unit: Amount::from_u64(5),
             },
         ];
         for kind in kinds {
@@ -3170,6 +3254,7 @@ mod tests {
             SignedActionBudgetView,
         };
         use super::encode_view_bytes;
+        use knomosis_amount::Amount;
         use proptest::prelude::*;
 
         proptest! {
@@ -3224,7 +3309,7 @@ mod tests {
                 p in any::<u64>(), g in any::<u128>(), i in any::<u64>()
             ) {
                 let kind = ActionBudgetKind::TopUpActionBudgetFor {
-                    recipient: r, gas_resource: gr, pool_actor: p, gas_amount: g, budget_increment: i,
+                    recipient: r, gas_resource: gr, pool_actor: p, gas_amount: Amount::from(g), budget_increment: i,
                 };
                 let bytes = encode_view_bytes(signer, kind);
                 prop_assert_eq!(

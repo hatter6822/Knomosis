@@ -228,29 +228,22 @@ pub fn preview_ingest(
 }
 
 /// Errors surfaced by the deposit-materialising translation
-/// ([`preview_ingest_materialising`]).  Fail-closed: an event whose
-/// numeric payload cannot be represented is REFUSED — the watcher
-/// halts for operator intervention — never truncated.
+/// ([`preview_ingest_materialising`]).
+///
+/// Currently empty.  It carried one variant, `AmountOverflow`, raised
+/// when a raw `uint256` amount field exceeded the runtime's `u128`
+/// `Amount` representation — fail-closed, never truncating, which was
+/// the right posture for a limit the runtime could not lift.  Widening
+/// `Amount` to the kernel's own `2^256` bound lifted it: every L1
+/// `uint256` word is now representable, so the refusal has no
+/// remaining trigger.
+///
+/// The type is retained rather than removed because
+/// `preview_ingest_materialising` is fallible in shape and the watcher
+/// matches on it; a future materialisation check (a malformed address
+/// book, an unassignable depositor) belongs here.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum MaterialiseError {
-    /// A raw `uint256` amount field exceeds the runtime's `u128`
-    /// `Amount` representation.  The Lean encoding bound
-    /// (`Action.fieldsBounded`) admits amounts up to `2^256`; the
-    /// `u128` ceiling is a Rust-representation limit (its widening
-    /// is tracked separately), so an over-range value is refused
-    /// with the offending field named, never silently truncated.
-    #[error(
-        "deposit materialisation: {field} = 0x{value_hex} exceeds the \
-         u128 Amount representation; refusing to truncate"
-    )]
-    AmountOverflow {
-        /// The event field that overflowed (e.g.
-        /// `"DepositWithFeeInitiated.userAmount"`).
-        field: &'static str,
-        /// The full 32-byte value, hex-encoded for diagnostics.
-        value_hex: String,
-    },
-}
+pub enum MaterialiseError {}
 
 /// Derive the L2 deposit id from an L1 deposit's `receiptHash`: the
 /// first 8 bytes, big-endian.  Content-derived and deterministic —
@@ -274,30 +267,27 @@ pub fn deposit_id_from_receipt(receipt_hash: &[u8; 32]) -> DepositId {
     u64::from_be_bytes(prefix)
 }
 
-/// Convert a raw big-endian `uint256` event field to the runtime
-/// `Amount` (`u128`), REFUSING any value whose high 16 bytes are
-/// non-zero.  Never truncates: an over-range amount surfaces as
-/// [`MaterialiseError::AmountOverflow`] naming `field`.
+/// Decode an L1 `uint256` field into an [`crate::action::Amount`].
 ///
-/// # Errors
+/// TOTAL: every 32-byte big-endian word denotes a valid amount, so
+/// there is no rejection path.
 ///
-/// Returns [`MaterialiseError::AmountOverflow`] when any of
-/// `bytes[0..16]` is non-zero.
-pub fn amount_from_be_bytes(
-    bytes: &[u8; 32],
-    field: &'static str,
-) -> Result<crate::action::Amount, MaterialiseError> {
-    if bytes[0..16].iter().any(|b| *b != 0) {
-        use std::fmt::Write as _;
-        let mut value_hex = String::with_capacity(64);
-        for b in bytes {
-            let _ = write!(value_hex, "{b:02x}");
-        }
-        return Err(MaterialiseError::AmountOverflow { field, value_hex });
-    }
-    let mut low = [0u8; 16];
-    low.copy_from_slice(&bytes[16..32]);
-    Ok(u128::from_be_bytes(low))
+/// It used to have one.  While an `Amount` was a `u128` this refused
+/// any word with a non-zero high half, returning
+/// `MaterialiseError::AmountOverflow` -- fail-closed rather than
+/// truncating, which was the right call, but it meant a legitimate L1
+/// deposit at or above `2^128` could not be materialised at all even
+/// though the kernel admits anything below `2^256`.  Widening the
+/// representation removes the refusal rather than relaxing it: the
+/// values that used to be rejected are now representable.
+///
+/// `field` is retained in the signature for call-site readability and
+/// to keep the diff at those sites empty; it no longer names anything
+/// that can fail.
+#[must_use]
+pub fn amount_from_be_bytes(bytes: &[u8; 32], field: &'static str) -> crate::action::Amount {
+    let _ = field;
+    crate::action::Amount::from_be_bytes(*bytes)
 }
 
 /// The deposit-materialising translation (Workstream SB.9).  Like
@@ -339,7 +329,7 @@ pub fn preview_ingest_materialising(
             receipt_hash,
             ..
         } => {
-            let amount = amount_from_be_bytes(amount, "DepositInitiated.amount")?;
+            let amount = amount_from_be_bytes(amount, "DepositInitiated.amount");
             let deposit_id = deposit_id_from_receipt(receipt_hash);
             let r = *resource_id;
             Ok(materialise_deposit_for(
@@ -365,11 +355,11 @@ pub fn preview_ingest_materialising(
             ..
         } => {
             let user_amount =
-                amount_from_be_bytes(user_amount, "DepositWithFeeInitiated.userAmount")?;
+                amount_from_be_bytes(user_amount, "DepositWithFeeInitiated.userAmount");
             let pool_amount =
-                amount_from_be_bytes(pool_amount, "DepositWithFeeInitiated.poolAmount")?;
+                amount_from_be_bytes(pool_amount, "DepositWithFeeInitiated.poolAmount");
             let seed_amount =
-                amount_from_be_bytes(amm_seed_amount, "DepositWithFeeInitiated.ammSeedAmount")?;
+                amount_from_be_bytes(amm_seed_amount, "DepositWithFeeInitiated.ammSeedAmount");
             let deposit_id = deposit_id_from_receipt(receipt_hash);
             let r = *resource_id;
             let budget_grant = *budget_grant;
@@ -594,6 +584,7 @@ pub enum TranslationError {
 #[cfg(test)]
 mod tests {
     use super::{ingest, UnsignedAction};
+    use crate::action::Amount;
     use crate::action::{Action, EthAddress};
     use crate::address_book::{AddressBook, BRIDGE_ACTOR_ID};
     use crate::events::IngestedEvent;
@@ -1086,8 +1077,7 @@ mod tests {
     // ---- SB.9 deposit materialisation ----
 
     use super::{
-        amount_from_be_bytes, deposit_id_from_receipt, preview_ingest_materialising,
-        MaterialiseError, Translated,
+        amount_from_be_bytes, deposit_id_from_receipt, preview_ingest_materialising, Translated,
     };
     use crate::address_book::GAS_POOL_ACTOR_ID;
 
@@ -1151,7 +1141,7 @@ mod tests {
                     Action::Deposit {
                         r: 0,
                         recipient: recipient_id,
-                        amount: 1_000_000,
+                        amount: Amount::from_u64(1_000_000),
                         deposit_id: 42,
                     }
                 );
@@ -1194,11 +1184,11 @@ mod tests {
                         r: 1,
                         recipient: recipient_id,
                         pool_actor: GAS_POOL_ACTOR_ID,
-                        user_amount: 600,
-                        pool_amount: 400,
+                        user_amount: Amount::from_u64(600),
+                        pool_amount: Amount::from_u64(400),
                         budget_grant: 33,
                         deposit_id: 99,
-                        seed_amount: 320,
+                        seed_amount: Amount::from_u64(320),
                     }
                 );
             }
@@ -1258,40 +1248,40 @@ mod tests {
 
     /// OVERFLOW: an amount whose high 16 bytes are non-zero is
     /// REFUSED with the offending field named — never truncated.
+    /// A deposit whose amount sits ABOVE the retired `u128` ceiling
+    /// now materialises, exactly.
+    ///
+    /// This case used to assert the opposite: that such an amount was
+    /// REFUSED with `MaterialiseError::AmountOverflow`, naming the
+    /// offending field.  Refusing was right while the runtime could
+    /// not represent the value -- truncating would have been finding
+    /// C-3 all over again -- but it meant a legitimate L1 deposit the
+    /// kernel admits could not be brought to L2 at all.  Widening
+    /// removed the refusal by removing its cause, so the assertion
+    /// inverts: the action is BUILT, and it carries the exact value.
     #[test]
-    fn materialised_amount_overflow_rejected_never_truncated() {
+    fn materialised_amount_above_the_retired_ceiling_is_carried_exactly() {
         let mut book = AddressBook::new();
         let depositor = EthAddress::from_bytes(&[9u8; 20]).unwrap();
         book.try_assign(&depositor).unwrap();
         let mut over = be_amount(1);
-        over[15] = 0x01; // lowest bit of the high half
+        over[15] = 0x01; // lowest bit of the high half -> 2^128 + 1
+        let expected = Amount::from_be_bytes(over);
+        assert_eq!(expected.to_u128(), None, "the probe is out of u128 range");
+
         let event = deposit_event(depositor, over, [0; 32], 1, [0; 32], 0);
-        match preview_ingest_materialising(&book, &event, 0) {
-            Err(MaterialiseError::AmountOverflow { field, .. }) => {
-                assert_eq!(field, "DepositInitiated.amount");
-            }
-            other => panic!("expected AmountOverflow, got {other:?}"),
-        }
-        // The fee-split event names ITS offending field.
-        let event = IngestedEvent::DepositWithFeeInitiated {
-            sender: depositor,
-            resource_id: 0,
-            token: EthAddress::ZERO,
-            user_amount: be_amount(1),
-            pool_amount: over,
-            amm_seed_amount: be_amount(0),
-            budget_grant: 0,
-            depositor_nonce: 0,
-            receipt_hash: [0; 32],
-            block_number: 1,
-            tx_hash: [0; 32],
-            log_index: 0,
+        let translated = preview_ingest_materialising(&book, &event, 0)
+            .expect("an amount past the retired ceiling must materialise");
+        let action = match translated {
+            Translated::Emit(u) => u.action,
+            Translated::EmitWithAssignment { action, .. } => action.action,
+            Translated::NoAction => panic!("expected a materialised deposit, got NoAction"),
         };
-        match preview_ingest_materialising(&book, &event, 0) {
-            Err(MaterialiseError::AmountOverflow { field, .. }) => {
-                assert_eq!(field, "DepositWithFeeInitiated.poolAmount");
+        match action {
+            crate::action::Action::Deposit { amount, .. } => {
+                assert_eq!(amount, expected, "the amount must survive intact");
             }
-            other => panic!("expected AmountOverflow, got {other:?}"),
+            other => panic!("expected a Deposit action, got {other:?}"),
         }
     }
 
@@ -1300,8 +1290,8 @@ mod tests {
     #[test]
     fn materialised_amount_u128_max_passes() {
         assert_eq!(
-            amount_from_be_bytes(&be_amount(u128::MAX), "t").unwrap(),
-            u128::MAX
+            amount_from_be_bytes(&be_amount(u128::MAX), "t"),
+            Amount::from_u128(u128::MAX)
         );
     }
 

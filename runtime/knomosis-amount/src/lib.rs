@@ -51,12 +51,22 @@
 //!
 //! # What this crate deliberately does not do
 //!
-//! No multiplication, division or modular arithmetic beyond what
-//! decimal formatting and parsing need internally.  The host workspace
-//! is a *view* over kernel-computed values: it adds credits, subtracts
-//! debits and compares. Pricing (`AmmMath`) is the kernel's job, and
-//! exposing a general numeric tower here would invite a second,
-//! unproved implementation of it.
+//! No division, no modular arithmetic, and no operator overloads.  The
+//! host workspace is a *view* over kernel-computed values: it adds
+//! credits, subtracts debits, compares, and — in exactly one place —
+//! multiplies a unit count by a rate.  Pricing (`AmmMath`) is the
+//! kernel's job, and exposing a general numeric tower here would
+//! invite a second, unproved implementation of it.
+//!
+//! [`Amount::checked_mul`] is the narrow exception, and it earns its
+//! place: `knomosis-host`'s refund gate computes `budget_units ×
+//! wei_per_budget_unit` from two operands it decodes off the wire, and
+//! at `u128` that product could exceed the type and WRAP.  Both
+//! operands together span at most `2^64 × 2^128 = 2^192`, so at this
+//! width the product always fits and the wrap is unreachable rather
+//! than merely guarded.  Arithmetic is offered as `checked_*` methods
+//! only, never as `*`/`+`/`-`, so no caller can reach a wrapping or
+//! panicking operation by writing the obvious thing.
 
 #![doc(html_root_url = "https://docs.rs/knomosis-amount/0.15.0")]
 
@@ -187,6 +197,21 @@ impl Amount {
     #[must_use]
     pub fn checked_sub(self, rhs: Self) -> Option<Self> {
         Option::<U256>::from(self.0.checked_sub(&rhs.0)).map(Self)
+    }
+
+    /// Checked multiplication — `None` on overflow past
+    /// [`Amount::MAX`].
+    ///
+    /// The one multiplication the workspace needs (see the crate
+    /// docs): a unit count times a per-unit rate, both decoded from an
+    /// untrusted wire.  Provided so no caller has to hand-roll
+    /// 256-bit multiplication, and `checked_` so no caller can reach a
+    /// wrapping `*` — which is precisely the shape of the defect this
+    /// width closes, where a `u64 × u128` product wrapped `u128` and a
+    /// solvency check read the wrapped remainder as the real cost.
+    #[must_use]
+    pub fn checked_mul(self, rhs: Self) -> Option<Self> {
+        Option::<U256>::from(self.0.checked_mul(&rhs.0)).map(Self)
     }
 
     /// Saturating addition — clamps to [`Amount::MAX`] on overflow.

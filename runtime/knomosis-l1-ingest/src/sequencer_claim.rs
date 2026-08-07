@@ -188,7 +188,7 @@ impl SequencerClaim {
         match self.action {
             Action::Transfer { amount, .. } => amount,
             // Unreachable: `build` only ever produces a `Transfer`.
-            _ => 0,
+            _ => Amount::ZERO,
         }
     }
 
@@ -410,7 +410,16 @@ impl GasReceipt {
     /// the per-action `cap` then bounds further down).
     #[must_use]
     pub fn reimbursement(&self) -> Amount {
-        self.gas_used.saturating_mul(self.gas_price)
+        // EXACT at this width rather than saturating: the operands are
+        // both `u128`, so their product is at most `(2^128 - 1)^2 <
+        // 2^256` and always fits an `Amount`.  The `unwrap_or` branch
+        // is therefore unreachable on these operand types; it is
+        // written rather than `expect`ed so a future widening of
+        // `gas_used` or `gas_price` degrades to the documented
+        // saturating cap instead of panicking in a daemon.
+        Amount::from(self.gas_used)
+            .checked_mul(Amount::from(self.gas_price))
+            .unwrap_or(Amount::MAX)
     }
 
     /// The maximum BOLD reimbursement (BOLD base units) this receipt
@@ -457,10 +466,17 @@ pub fn bold_receipt_reimbursement(
     rate_den: u128,
 ) -> Amount {
     if rate_den == 0 {
-        return 0;
+        return Amount::from_u64(0);
     }
+    // Kept in `u128` deliberately.  The rate conversion is a product
+    // FOLLOWED BY a division, and `wei * rate_num` can reach ~2^384 —
+    // past even the widened `Amount`, so moving it up would not make
+    // it exact, only differently approximate.  `Amount` offers no
+    // division for the same reason it offers no numeric tower: the
+    // one place the workspace needs it is here, bounded further
+    // downstream by the per-action `cap`.
     let wei = gas_used.saturating_mul(gas_price);
-    wei.saturating_mul(rate_num) / rate_den
+    Amount::from(wei.saturating_mul(rate_num) / rate_den)
 }
 
 /// The maximum reimbursement (wei) a verified L1 gas expenditure
@@ -469,12 +485,16 @@ pub fn bold_receipt_reimbursement(
 /// `gasReceiptReimbursement`.
 #[must_use]
 pub fn gas_receipt_reimbursement(gas_used: u128, gas_price: u128) -> Amount {
-    gas_used.saturating_mul(gas_price)
+    // Exact for the same reason as `GasReceipt::reimbursement`.
+    Amount::from(gas_used)
+        .checked_mul(Amount::from(gas_price))
+        .unwrap_or(Amount::MAX)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::action::Amount;
 
     /// A fixed, valid secp256k1 scalar for the pool key under test.
     const TEST_SCALAR: [u8; 32] = [
@@ -490,7 +510,15 @@ mod tests {
     #[test]
     fn claim_is_capped_gas_pool_to_sequencer_transfer() {
         let key = test_key();
-        let claim = SequencerClaim::build(&key, 0, 500, 1000, 7, b"dep").unwrap();
+        let claim = SequencerClaim::build(
+            &key,
+            0,
+            Amount::from_u64(500),
+            Amount::from_u64(1000),
+            7,
+            b"dep",
+        )
+        .unwrap();
         match claim.action {
             Action::Transfer {
                 r,
@@ -501,7 +529,11 @@ mod tests {
                 assert_eq!(r, 0);
                 assert_eq!(sender, GAS_POOL_ACTOR_ID);
                 assert_eq!(receiver, SEQUENCER_ACTOR_ID);
-                assert_eq!(amount, 500, "under-cap request passes through");
+                assert_eq!(
+                    amount,
+                    Amount::from_u64(500),
+                    "under-cap request passes through"
+                );
             }
             _ => panic!("claim must be a Transfer"),
         }
@@ -511,8 +543,20 @@ mod tests {
     #[test]
     fn over_cap_request_is_clamped_to_cap() {
         let key = test_key();
-        let claim = SequencerClaim::build(&key, 1, 9_999, 1000, 0, b"dep").unwrap();
-        assert_eq!(claim.amount(), 1000, "over-cap request clamps to the cap");
+        let claim = SequencerClaim::build(
+            &key,
+            1,
+            Amount::from_u64(9_999),
+            Amount::from_u64(1000),
+            0,
+            b"dep",
+        )
+        .unwrap();
+        assert_eq!(
+            claim.amount(),
+            Amount::from_u64(1000),
+            "over-cap request clamps to the cap"
+        );
         // And the recipient is still the sequencer — wrong-recipient is
         // unconstructible regardless of the requested amount.
         match claim.action {
@@ -524,7 +568,15 @@ mod tests {
     #[test]
     fn signature_verifies_against_the_pool_public_key() {
         let key = test_key();
-        let claim = SequencerClaim::build(&key, 0, 250, 1000, 3, b"deployment-xyz").unwrap();
+        let claim = SequencerClaim::build(
+            &key,
+            0,
+            Amount::from_u64(250),
+            Amount::from_u64(1000),
+            3,
+            b"deployment-xyz",
+        )
+        .unwrap();
         // Recompute the domain-separated signing input and verify the
         // claim's signature against the pool's public key.
         // Verify through the PRODUCTION wire verifier (the semantics
@@ -546,8 +598,24 @@ mod tests {
     fn build_is_deterministic_and_encodes() {
         // RFC6979 deterministic ECDSA: identical inputs ⇒ identical wire.
         let key = test_key();
-        let a = SequencerClaim::build(&key, 1, 42, 1000, 11, b"dep").unwrap();
-        let b = SequencerClaim::build(&key, 1, 42, 1000, 11, b"dep").unwrap();
+        let a = SequencerClaim::build(
+            &key,
+            1,
+            Amount::from_u64(42),
+            Amount::from_u64(1000),
+            11,
+            b"dep",
+        )
+        .unwrap();
+        let b = SequencerClaim::build(
+            &key,
+            1,
+            Amount::from_u64(42),
+            Amount::from_u64(1000),
+            11,
+            b"dep",
+        )
+        .unwrap();
         assert_eq!(a.encode().unwrap(), b.encode().unwrap());
         assert!(!a.encode().unwrap().is_empty());
     }
@@ -567,20 +635,47 @@ mod tests {
     #[test]
     fn reimbursement_is_gas_used_times_gas_price() {
         // Mirror of the Lean `gasReceiptReimbursement` value test.
-        assert_eq!(gas_receipt_reimbursement(21_000, 50), 1_050_000);
-        assert_eq!(test_receipt(21_000, 50).reimbursement(), 1_050_000);
+        assert_eq!(
+            gas_receipt_reimbursement(21_000, 50),
+            Amount::from_u64(1_050_000)
+        );
+        assert_eq!(
+            test_receipt(21_000, 50).reimbursement(),
+            Amount::from_u64(1_050_000)
+        );
         // Zero corners: no free claim.
-        assert_eq!(gas_receipt_reimbursement(0, 999), 0);
-        assert_eq!(gas_receipt_reimbursement(999, 0), 0);
+        assert_eq!(gas_receipt_reimbursement(0, 999), Amount::from_u64(0));
+        assert_eq!(gas_receipt_reimbursement(999, 0), Amount::from_u64(0));
     }
 
+    /// The wei product is EXACT at this width, not saturated.
+    ///
+    /// This case used to assert saturation to the representation
+    /// ceiling, because the product of two `u128`s could exceed a
+    /// `u128`.  It cannot exceed an `Amount`: `(2^128 - 1)^2 < 2^256`,
+    /// so the widening turns a clamp into the real number.  Asserting
+    /// the exact value is what makes the case a regression test —
+    /// under the retired representation both of these capped, and the
+    /// first would have read as `u128::MAX` rather than as twice
+    /// `u128::MAX - 1`.
     #[test]
-    fn reimbursement_saturates_instead_of_wrapping() {
-        // A pathological receipt caps at Amount::MAX rather than wrapping.
-        assert_eq!(gas_receipt_reimbursement(u128::MAX, 2), u128::MAX);
-        assert_eq!(
-            test_receipt(u128::MAX, u128::MAX).reimbursement(),
-            u128::MAX
+    fn reimbursement_is_exact_rather_than_saturating() {
+        let max = Amount::from_u128(u128::MAX);
+
+        let doubled = gas_receipt_reimbursement(u128::MAX, 2);
+        assert_eq!(doubled, max.checked_mul(Amount::from_u64(2)).unwrap());
+        assert!(
+            doubled > max,
+            "the exact product exceeds the retired ceiling"
+        );
+        assert_eq!(doubled.to_u128(), None, "and is out of u128 range");
+
+        let squared = test_receipt(u128::MAX, u128::MAX).reimbursement();
+        assert_eq!(squared, max.checked_mul(max).unwrap());
+        assert!(squared > doubled);
+        assert!(
+            squared < Amount::MAX,
+            "and still short of the 256-bit ceiling"
         );
     }
 
@@ -590,12 +685,18 @@ mod tests {
         // binding constraint — this is the v2 teeth over v1's cap-only.
         let key = test_key();
         let receipt = test_receipt(21_000, 50);
-        let claim =
-            SequencerClaim::build_receipt_backed(&key, &receipt, 9_999_999, 10_000_000, 1, b"dep")
-                .unwrap();
+        let claim = SequencerClaim::build_receipt_backed(
+            &key,
+            &receipt,
+            Amount::from_u64(9_999_999),
+            Amount::from_u64(10_000_000),
+            1,
+            b"dep",
+        )
+        .unwrap();
         assert_eq!(
             claim.amount(),
-            1_050_000,
+            Amount::from_u64(1_050_000),
             "amount clamps to the receipt cost"
         );
         assert!(claim.is_receipt_backed_by(&receipt));
@@ -610,7 +711,7 @@ mod tests {
                 assert_eq!(r, 0, "receipt-backed claims are ETH-leg only");
                 assert_eq!(sender, GAS_POOL_ACTOR_ID);
                 assert_eq!(receiver, SEQUENCER_ACTOR_ID);
-                assert_eq!(amount, 1_050_000);
+                assert_eq!(amount, Amount::from_u64(1_050_000));
             }
             _ => panic!("claim must be a Transfer"),
         }
@@ -622,10 +723,20 @@ mod tests {
         // binds — v2 is a strengthening, never a relaxation, of v1.
         let key = test_key();
         let receipt = test_receipt(21_000, 50);
-        let claim =
-            SequencerClaim::build_receipt_backed(&key, &receipt, 9_999_999, 1000, 2, b"dep")
-                .unwrap();
-        assert_eq!(claim.amount(), 1000, "amount clamps to the cap");
+        let claim = SequencerClaim::build_receipt_backed(
+            &key,
+            &receipt,
+            Amount::from_u64(9_999_999),
+            Amount::from_u64(1000),
+            2,
+            b"dep",
+        )
+        .unwrap();
+        assert_eq!(
+            claim.amount(),
+            Amount::from_u64(1000),
+            "amount clamps to the cap"
+        );
         assert!(claim.is_receipt_backed_by(&receipt));
     }
 
@@ -634,9 +745,16 @@ mod tests {
         // requested (500) < cap and < reimbursement: passes through.
         let key = test_key();
         let receipt = test_receipt(21_000, 50);
-        let claim = SequencerClaim::build_receipt_backed(&key, &receipt, 500, 1_000_000, 3, b"dep")
-            .unwrap();
-        assert_eq!(claim.amount(), 500);
+        let claim = SequencerClaim::build_receipt_backed(
+            &key,
+            &receipt,
+            Amount::from_u64(500),
+            Amount::from_u64(1_000_000),
+            3,
+            b"dep",
+        )
+        .unwrap();
+        assert_eq!(claim.amount(), Amount::from_u64(500));
         assert!(claim.is_receipt_backed_by(&receipt));
     }
 
@@ -646,14 +764,30 @@ mod tests {
         // receipt-backed — the runtime mirror of the Lean negative.
         let key = test_key();
         let receipt = test_receipt(21_000, 50); // reimbursement = 1_050_000
-        let overspend = SequencerClaim::build(&key, 0, 2_000_000, 10_000_000, 4, b"dep").unwrap();
-        assert_eq!(overspend.amount(), 2_000_000);
+        let overspend = SequencerClaim::build(
+            &key,
+            0,
+            Amount::from_u64(2_000_000),
+            Amount::from_u64(10_000_000),
+            4,
+            b"dep",
+        )
+        .unwrap();
+        assert_eq!(overspend.amount(), Amount::from_u64(2_000_000));
         assert!(
             !overspend.is_receipt_backed_by(&receipt),
             "an over-receipt amount must NOT be receipt-backed"
         );
         // Exactly at the receipt cost is backed (boundary).
-        let at_cost = SequencerClaim::build(&key, 0, 1_050_000, 10_000_000, 5, b"dep").unwrap();
+        let at_cost = SequencerClaim::build(
+            &key,
+            0,
+            Amount::from_u64(1_050_000),
+            Amount::from_u64(10_000_000),
+            5,
+            b"dep",
+        )
+        .unwrap();
         assert!(at_cost.is_receipt_backed_by(&receipt));
     }
 
@@ -679,7 +813,7 @@ mod tests {
                 r: 1,
                 sender: GAS_POOL_ACTOR_ID,
                 receiver: SEQUENCER_ACTOR_ID,
-                amount: small,
+                amount: Amount::from(small),
             })
             .is_receipt_backed_by(&receipt),
             "BOLD-leg claim must NOT be receipt-backed"
@@ -690,7 +824,7 @@ mod tests {
                 r: 0,
                 sender: GAS_POOL_ACTOR_ID,
                 receiver: 9,
-                amount: small,
+                amount: Amount::from(small),
             })
             .is_receipt_backed_by(&receipt),
             "wrong-recipient claim must NOT be receipt-backed"
@@ -701,7 +835,7 @@ mod tests {
                 r: 0,
                 sender: 9,
                 receiver: SEQUENCER_ACTOR_ID,
-                amount: small,
+                amount: Amount::from(small),
             })
             .is_receipt_backed_by(&receipt),
             "wrong-sender claim must NOT be receipt-backed"
@@ -711,7 +845,7 @@ mod tests {
             !mk(Action::Mint {
                 r: 0,
                 to: SEQUENCER_ACTOR_ID,
-                amount: small,
+                amount: Amount::from(small),
             })
             .is_receipt_backed_by(&receipt),
             "non-transfer action must NOT be receipt-backed"
@@ -722,7 +856,7 @@ mod tests {
                 r: 0,
                 sender: GAS_POOL_ACTOR_ID,
                 receiver: SEQUENCER_ACTOR_ID,
-                amount: small,
+                amount: Amount::from(small),
             })
             .is_receipt_backed_by(&receipt),
             "canonical ETH-leg claim within cost MUST be receipt-backed"
@@ -735,8 +869,15 @@ mod tests {
         // back a second — the runtime mirror of consumeReceipt_blocks_reuse.
         let key = test_key();
         let receipt = test_receipt(21_000, 50); // reimbursement = 1_050_000
-        let claim = SequencerClaim::build_receipt_backed(&key, &receipt, 500, 1_000_000, 1, b"dep")
-            .unwrap();
+        let claim = SequencerClaim::build_receipt_backed(
+            &key,
+            &receipt,
+            Amount::from_u64(500),
+            Amount::from_u64(1_000_000),
+            1,
+            b"dep",
+        )
+        .unwrap();
         // Fresh (nothing consumed) → backed.
         assert!(claim.is_receipt_fresh_and_backed(&receipt, &[]));
         // After this receipt's binding hash is consumed → NOT fresh → rejected.
@@ -750,7 +891,15 @@ mod tests {
         assert!(claim.is_receipt_fresh_and_backed(&receipt, &other));
         // An overspend is rejected even when the receipt is fresh
         // (shape/amount check still applies).
-        let overspend = SequencerClaim::build(&key, 0, 2_000_000, 10_000_000, 2, b"dep").unwrap();
+        let overspend = SequencerClaim::build(
+            &key,
+            0,
+            Amount::from_u64(2_000_000),
+            Amount::from_u64(10_000_000),
+            2,
+            b"dep",
+        )
+        .unwrap();
         assert!(!overspend.is_receipt_fresh_and_backed(&receipt, &[]));
     }
 
@@ -760,9 +909,15 @@ mod tests {
         // still verify against the pool public key.
         let key = test_key();
         let receipt = test_receipt(21_000, 50);
-        let claim =
-            SequencerClaim::build_receipt_backed(&key, &receipt, 500, 1_000_000, 9, b"dep-xyz")
-                .unwrap();
+        let claim = SequencerClaim::build_receipt_backed(
+            &key,
+            &receipt,
+            Amount::from_u64(500),
+            Amount::from_u64(1_000_000),
+            9,
+            b"dep-xyz",
+        )
+        .unwrap();
         let input = signing_input(&claim.action, claim.signer, claim.nonce, b"dep-xyz").unwrap();
         assert!(
             knomosis_verify_secp256k1::verify_signed_message(
@@ -790,27 +945,45 @@ mod tests {
         // 21000 gas @ 50 wei = 1.05e6 wei; at 3000 BOLD/wei (den 1) = 3.15e9.
         assert_eq!(
             bold_receipt_reimbursement(21_000, 50, 3000, 1),
-            3_150_000_000
+            Amount::from_u64(3_150_000_000)
         );
         assert_eq!(
             test_receipt(21_000, 50).bold_reimbursement(&test_rate(3000, 1)),
-            3_150_000_000
+            Amount::from_u64(3_150_000_000)
         );
     }
 
     #[test]
     fn bold_reimbursement_floors_and_fail_closes() {
         // Floor: 10 wei * 1 / 3 = 3 (not 4) — never over-reimburses.
-        assert_eq!(bold_receipt_reimbursement(10, 1, 1, 3), 3);
-        assert_eq!(bold_receipt_reimbursement(2, 1, 1, 3), 0);
+        assert_eq!(bold_receipt_reimbursement(10, 1, 1, 3), Amount::from_u64(3));
+        assert_eq!(bold_receipt_reimbursement(2, 1, 1, 3), Amount::from_u64(0));
         // Zero corners.
-        assert_eq!(bold_receipt_reimbursement(0, 50, 3000, 1), 0);
-        assert_eq!(bold_receipt_reimbursement(21_000, 0, 3000, 1), 0);
-        assert_eq!(bold_receipt_reimbursement(21_000, 50, 0, 1), 0);
+        assert_eq!(
+            bold_receipt_reimbursement(0, 50, 3000, 1),
+            Amount::from_u64(0)
+        );
+        assert_eq!(
+            bold_receipt_reimbursement(21_000, 0, 3000, 1),
+            Amount::from_u64(0)
+        );
+        assert_eq!(
+            bold_receipt_reimbursement(21_000, 50, 0, 1),
+            Amount::from_u64(0)
+        );
         // den = 0 is fail-closed (mirrors Lean `_ / 0 = 0`).
-        assert_eq!(bold_receipt_reimbursement(21_000, 50, 3000, 0), 0);
+        assert_eq!(
+            bold_receipt_reimbursement(21_000, 50, 3000, 0),
+            Amount::from_u64(0)
+        );
         // Saturating product never wraps.
-        assert_eq!(bold_receipt_reimbursement(u128::MAX, 2, 1, 1), u128::MAX);
+        // The BOLD leg keeps its `u128` internals (product THEN
+        // division; see `bold_receipt_reimbursement`), so this one
+        // still caps.
+        assert_eq!(
+            bold_receipt_reimbursement(u128::MAX, 2, 1, 1),
+            Amount::from_u128(u128::MAX)
+        );
     }
 
     #[test]
@@ -824,15 +997,15 @@ mod tests {
             &key,
             &receipt,
             &rate,
-            9_999_999_999,
-            10_000_000_000,
+            Amount::from_u64(9_999_999_999),
+            Amount::from_u64(10_000_000_000),
             1,
             b"dep",
         )
         .unwrap();
         assert_eq!(
             claim.amount(),
-            2_100_000,
+            Amount::from_u64(2_100_000),
             "clamps to the converted BOLD cost"
         );
         assert!(claim.is_bold_receipt_backed_by(&receipt, &rate));
@@ -847,7 +1020,7 @@ mod tests {
                 assert_eq!(r, 1, "receipt-backed-bold claims are BOLD-leg");
                 assert_eq!(sender, GAS_POOL_ACTOR_ID);
                 assert_eq!(receiver, SEQUENCER_ACTOR_ID);
-                assert_eq!(amount, 2_100_000);
+                assert_eq!(amount, Amount::from_u64(2_100_000));
             }
             _ => panic!("claim must be a Transfer"),
         }
@@ -860,10 +1033,20 @@ mod tests {
         let receipt = test_receipt(21_000, 50);
         let rate = test_rate(2, 1);
         let claim = SequencerClaim::build_receipt_backed_bold(
-            &key, &receipt, &rate, 9_999_999, 1000, 2, b"dep",
+            &key,
+            &receipt,
+            &rate,
+            Amount::from_u64(9_999_999),
+            Amount::from_u64(1000),
+            2,
+            b"dep",
         )
         .unwrap();
-        assert_eq!(claim.amount(), 1000, "amount clamps to the BOLD cap");
+        assert_eq!(
+            claim.amount(),
+            Amount::from_u64(1000),
+            "amount clamps to the BOLD cap"
+        );
         assert!(claim.is_bold_receipt_backed_by(&receipt, &rate));
     }
 
@@ -887,7 +1070,7 @@ mod tests {
                 r: 0,
                 sender: GAS_POOL_ACTOR_ID,
                 receiver: SEQUENCER_ACTOR_ID,
-                amount: small,
+                amount: Amount::from(small),
             })
             .is_bold_receipt_backed_by(&receipt, &rate),
             "ETH-leg claim must NOT be BOLD-receipt-backed"
@@ -898,7 +1081,7 @@ mod tests {
                 r: 1,
                 sender: GAS_POOL_ACTOR_ID,
                 receiver: 9,
-                amount: small,
+                amount: Amount::from(small),
             })
             .is_bold_receipt_backed_by(&receipt, &rate),
             "wrong-recipient claim must NOT be BOLD-receipt-backed"
@@ -909,7 +1092,7 @@ mod tests {
                 r: 1,
                 sender: GAS_POOL_ACTOR_ID,
                 receiver: SEQUENCER_ACTOR_ID,
-                amount: 2_100_001,
+                amount: Amount::from_u64(2_100_001),
             })
             .is_bold_receipt_backed_by(&receipt, &rate),
             "over-converted-cost claim must NOT be BOLD-receipt-backed"
@@ -920,7 +1103,7 @@ mod tests {
                 r: 1,
                 sender: GAS_POOL_ACTOR_ID,
                 receiver: SEQUENCER_ACTOR_ID,
-                amount: small,
+                amount: Amount::from(small),
             })
             .is_bold_receipt_backed_by(&receipt, &rate),
             "canonical BOLD-leg claim within cost MUST be BOLD-receipt-backed"
@@ -935,7 +1118,13 @@ mod tests {
         let receipt = test_receipt(21_000, 50);
         let rate = test_rate(2, 1);
         let claim = SequencerClaim::build_receipt_backed_bold(
-            &key, &receipt, &rate, 500, 1_000_000, 1, b"dep",
+            &key,
+            &receipt,
+            &rate,
+            Amount::from_u64(500),
+            Amount::from_u64(1_000_000),
+            1,
+            b"dep",
         )
         .unwrap();
         assert!(claim.is_bold_receipt_fresh_and_backed(&receipt, &rate, &[]));

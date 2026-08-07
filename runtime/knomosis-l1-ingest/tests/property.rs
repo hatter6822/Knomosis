@@ -11,6 +11,7 @@
 //! and the translation function across pseudo-random inputs to
 //! catch edge cases the curated unit tests miss.
 
+use knomosis_amount::Amount;
 use knomosis_l1_ingest::action::{Action, EthAddress, PublicKey};
 use knomosis_l1_ingest::address_book::AddressBook;
 use knomosis_l1_ingest::encoding::{encode_action, encode_signed_action, signing_input};
@@ -221,11 +222,11 @@ proptest! {
             r,
             recipient,
             pool_actor,
-            user_amount: u128::from(user_amount),
-            pool_amount: u128::from(pool_amount),
+            user_amount: Amount::from(user_amount),
+            pool_amount: Amount::from(pool_amount),
             budget_grant,
             deposit_id,
-            seed_amount: u128::from(seed_amount),
+            seed_amount: Amount::from(seed_amount),
         };
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
@@ -257,11 +258,11 @@ proptest! {
             r,
             recipient,
             pool_actor,
-            user_amount: u128::from(user_amount),
-            pool_amount: u128::from(pool_amount),
+            user_amount: Amount::from(user_amount),
+            pool_amount: Amount::from(pool_amount),
             budget_grant,
             deposit_id,
-            seed_amount: u128::from(seed_amount),
+            seed_amount: Amount::from(seed_amount),
         };
         let eth = encode_action(&mk(0)).unwrap();
         let bold = encode_action(&mk(1)).unwrap();
@@ -290,7 +291,7 @@ proptest! {
     ) {
         let action = Action::TopUpActionBudget {
             gas_resource,
-            gas_amount: u128::from(gas_amount),
+            gas_amount: Amount::from(gas_amount),
             budget_increment,
             pool_actor,
         };
@@ -316,7 +317,7 @@ proptest! {
         let action = Action::TopUpActionBudgetFor {
             recipient,
             gas_resource,
-            gas_amount: u128::from(gas_amount),
+            gas_amount: Amount::from(gas_amount),
             budget_increment,
             pool_actor,
         };
@@ -343,14 +344,14 @@ proptest! {
     ) {
         let self_funded = Action::TopUpActionBudget {
             gas_resource,
-            gas_amount: u128::from(gas_amount),
+            gas_amount: Amount::from(gas_amount),
             budget_increment,
             pool_actor,
         };
         let delegated = Action::TopUpActionBudgetFor {
             recipient,
             gas_resource,
-            gas_amount: u128::from(gas_amount),
+            gas_amount: Amount::from(gas_amount),
             budget_increment,
             pool_actor,
         };

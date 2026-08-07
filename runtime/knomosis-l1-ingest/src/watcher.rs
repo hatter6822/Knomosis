@@ -720,6 +720,7 @@ impl Clone for ReorgError {
 
 #[cfg(test)]
 mod tests {
+    use crate::action::Amount;
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
@@ -1554,7 +1555,7 @@ mod tests {
             } => {
                 assert_eq!(*r, 0);
                 assert_eq!(*recipient, 4, "fresh id 4 post-GP.11.5 genesis");
-                assert_eq!(*amount, 1_000);
+                assert_eq!(*amount, Amount::from_u64(1_000));
                 assert_eq!(*deposit_id, 7777, "receipt-hash-prefix deposit id");
             }
             other => panic!("expected Deposit, got {other:?}"),
@@ -1657,14 +1658,17 @@ mod tests {
         config.materialise_deposits = true;
         let mut watcher =
             WatcherLoop::new(config, source, submitter, test_key(), &state_path).unwrap();
-        match watcher.run_iteration() {
-            Err(super::WatcherError::Materialise(
-                crate::translation::MaterialiseError::AmountOverflow { field, .. },
-            )) => {
-                assert_eq!(field, "DepositInitiated.amount");
-            }
-            other => panic!("expected Materialise(AmountOverflow), got {other:?}"),
-        }
-        assert!(watcher.submitter.is_empty(), "nothing was submitted");
+        // The iteration used to HALT here, on
+        // `MaterialiseError::AmountOverflow`, because the amount sat
+        // above the retired `u128` ceiling.  It is representable now,
+        // so the watcher does its job instead of stopping: the
+        // deposit is materialised and submitted.
+        watcher
+            .run_iteration()
+            .expect("an amount past the retired ceiling no longer halts the watcher");
+        assert!(
+            !watcher.submitter.is_empty(),
+            "the deposit must be submitted rather than refused"
+        );
     }
 }

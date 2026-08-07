@@ -19,6 +19,7 @@
 //!
 //! Hash-independent: no keccak-binding gate needed.
 
+use knomosis_amount::Amount;
 use std::path::PathBuf;
 
 use knomosis_l1_ingest::action::Action;
@@ -248,8 +249,8 @@ fn amm_swap_corpus_byte_equivalence() {
         let action = Action::AmmSwap {
             from_resource: e.from_resource,
             to_resource: e.to_resource,
-            amount_in,
-            amount_out: expected_out,
+            amount_in: Amount::from(amount_in),
+            amount_out: Amount::from(expected_out),
             amm_reserve_actor: e.amm_reserve_actor,
         };
         let actual = encode_action(&action).unwrap_or_else(|err| {
@@ -299,8 +300,8 @@ fn amm_swap_corpus_tag_pin() {
         let action = Action::AmmSwap {
             from_resource: e.from_resource,
             to_resource: e.to_resource,
-            amount_in,
-            amount_out: expected_out,
+            amount_in: Amount::from(amount_in),
+            amount_out: Amount::from(expected_out),
             amm_reserve_actor: e.amm_reserve_actor,
         };
         assert_eq!(

@@ -329,6 +329,7 @@ dependencies = [
 name = "knomosis-bench"
 version = "0.15.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-host",
  "knomosis-l1-ingest",
@@ -451,6 +452,7 @@ dependencies = [
 name = "knomosis-host"
 version = "0.15.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-cli-common",
  "proptest",
  "rustls",
@@ -484,6 +486,7 @@ version = "0.15.0"
 dependencies = [
  "hex",
  "k256",
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-cross-stack",
  "knomosis-host",
