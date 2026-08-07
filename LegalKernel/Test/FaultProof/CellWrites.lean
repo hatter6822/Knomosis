@@ -203,7 +203,7 @@ def tests : List TestCase :=
           "and adds exactly one cell"
         -- Every OTHER variant pays nothing for the split.
         for a in [Authority.Action.transfer 1 7 8 5, .mint 1 7 5, .freezeResource 1,
-                  .deposit 1 7 5 3, .ammSwap 1 2 5 1 9] do
+                  .deposit 1 7 5 3, .reserveSwap 1 2 7 5 1 3] do
           assertEq (expected := (Authority.Action.writeCells a 7).map (fun t => repr t |>.pretty))
             (actual := (Authority.Action.writeCellsAt seeded a 7).map (fun t => repr t |>.pretty))
             s!"writeCellsAt widened a non-withdraw action: {repr a}"

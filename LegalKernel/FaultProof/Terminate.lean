@@ -158,9 +158,6 @@ def plannedBalances (read : BalanceReader)
   | .claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa =>
       deriveRefundBalances read gr pa signer
         (budgetUnits * weiPerBudgetUnit)
-  | .ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      deriveAmmSwapBalances read fromResource toResource
-        amountIn amountOut reserveActor
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       deriveReclaimBalances read r reserveActor poolActor amount
   | .reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
@@ -298,9 +295,6 @@ theorem plannedBalances_alias_consistent (read : BalanceReader) (a : Action)
   | claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa =>
       exact deriveRefundBalances_alias_consistent read gr pa signer
         (budgetUnits * weiPerBudgetUnit) plan h
-  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      exact deriveAmmSwapBalances_alias_consistent read fromResource toResource
-        amountIn amountOut reserveActor plan h
   | reclaimAmmReserves r amount reserveActor poolActor =>
       exact deriveReclaimBalances_alias_consistent read r reserveActor poolActor
         amount plan h
@@ -680,11 +674,6 @@ theorem plannedBalances_stepMultiBundle (es : ExtendedState) (st : SignedAction)
         (budgetUnits * weiPerBudgetUnit)
         (key gr pa (by rw [h_act]; simp [Action.writeCells]))
         (key gr st.signer (by rw [h_act]; simp [Action.writeCells]))
-  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      exact deriveAmmSwapBalances_congr _ _ fromResource toResource
-        amountIn amountOut reserveActor
-        (key fromResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
-        (key toResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
   | reclaimAmmReserves r amount reserveActor poolActor =>
       exact deriveReclaimBalances_congr _ _ r reserveActor poolActor amount
         (key r reserveActor (by rw [h_act]; simp [Action.writeCells]))
@@ -874,18 +863,6 @@ theorem plannedBalanceAt_correct (es : ExtendedState) (st : SignedAction) (idx :
       · exact plannedBalanceAt?_of_mem _ _ _ _
           (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
       · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
-  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      rw [h_act] at h_plan h_mem
-      dsimp only [plannedBalances] at h_plan
-      rw [deriveAmmSwapBalances_correct es st idx fromResource toResource
-        amountIn amountOut reserveActor h_act] at h_plan
-      simp only [Option.some.injEq] at h_plan; subst h_plan
-      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
-        CellTag.balance.injEq, reduceCtorEq] at h_mem
-      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
-      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
-      · exact plannedBalanceAt?_of_mem _ _ _ _
-          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
   | reclaimAmmReserves r' amount reserveActor poolActor =>
       rw [h_act] at h_plan h_mem
       dsimp only [plannedBalances] at h_plan
@@ -1129,7 +1106,7 @@ theorem plannedBalances_stateBalanceReader_isSome (es : ExtendedState)
       deriveCreditBalance, deriveBurnBalance, deriveDepositBalance,
       deriveWithdrawBalance, deriveChainPair, deriveTopUpBalances,
       deriveDelegatedTopUpBalances, deriveRefundBalances,
-      deriveAmmSwapBalances, deriveReclaimBalances,
+      deriveReclaimBalances,
       deriveReserveSwapBalances] <;>
     (repeat' split) <;> simp_all
 

@@ -593,17 +593,6 @@ theorem productionApplyBudget_getBalance_of_not_written
       (balance_pair_ne h.1)]
     exact getBalance_setBalance_of_ne _ gr pa _ r a
       (balance_pair_ne h.2.1)
-  | ammSwap fr tr amountIn amountOut ra =>
-    rw [hact] at h
-    simp only [Action.writeCells, Action.stateWriteCells, List.append_nil,
-      List.mem_append, List.mem_cons, List.not_mem_nil, or_false, not_or] at h
-    show LegalKernel.getBalance
-      ((Laws.ammSwap fr tr amountIn amountOut ra).apply_impl es.base) r a = _
-    simp only [Laws.ammSwap]
-    rw [getBalance_setBalance_of_ne _ tr ra _ r a
-      (balance_pair_ne h.2.1)]
-    exact getBalance_setBalance_of_ne _ fr ra _ r a
-      (balance_pair_ne h.1)
   | reclaimAmmReserves r' amount ra pa =>
     rw [hact] at h
     simp only [Action.writeCells, Action.stateWriteCells, List.append_nil,

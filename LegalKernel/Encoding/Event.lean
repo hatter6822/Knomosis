@@ -195,13 +195,8 @@ def Event.encode : Event → Stream
       Encodable.encode (T := Nat) 20 ++
       Encodable.encode (T := Nat) actor.toNat ++
       Encodable.encode (T := Nat) amount
-  | .ammSwapExecuted fromResource toResource amountIn amountOut ammReserveActor =>
-      Encodable.encode (T := Nat) 21 ++
-      Encodable.encode (T := Nat) fromResource.toNat ++
-      Encodable.encode (T := Nat) toResource.toNat ++
-      encodeAmount amountIn ++
-      encodeAmount amountOut ++
-      Encodable.encode (T := Nat) ammReserveActor.toNat
+  -- Tag 21 (`ammSwapExecuted`) is RETIRED — no encode arm; the
+  -- decoder refuses the tag below.
   | .ammReservesReclaimed resource amount reserveActor poolActor =>
       Encodable.encode (T := Nat) 22 ++
       Encodable.encode (T := Nat) resource.toNat ++
@@ -486,24 +481,8 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
       | .ok (amount, s₃) => .ok (.budgetConsumed actor amount, s₃)
       | .error e => .error e
     | .error e => .error e
-  | .ok (21, s₁) =>
-    match Action.readUInt64Field s₁ with
-    | .ok (fromResource, s₂) =>
-      match Action.readUInt64Field s₂ with
-      | .ok (toResource, s₃) =>
-        match Action.readAmountField s₃ with
-        | .ok (amountIn, s₄) =>
-          match Action.readAmountField s₄ with
-          | .ok (amountOut, s₅) =>
-            match Action.readUInt64Field s₅ with
-            | .ok (ammReserveActor, s₆) =>
-              .ok (.ammSwapExecuted fromResource toResource amountIn amountOut
-                    ammReserveActor, s₆)
-            | .error e => .error e
-          | .error e => .error e
-        | .error e => .error e
-      | .error e => .error e
-    | .error e => .error e
+  -- Tag 21 (`ammSwapExecuted`) is RETIRED: it falls through to the
+  -- unknown-tag refusal below, exactly like a never-assigned tag.
   | .ok (22, s₁) =>
     match Action.readUInt64Field s₁ with
     | .ok (resource, s₂) =>
@@ -599,7 +578,6 @@ theorem Event.tag_matches_encode_tag (e : Event) :
   | gasPoolClaim _ _ _                  => exact ⟨_, rfl⟩
   | delegatedActionBudgetTopUp _ _ _ _ _ _ => exact ⟨_, rfl⟩
   | budgetConsumed _ _                  => exact ⟨_, rfl⟩
-  | ammSwapExecuted _ _ _ _ _           => exact ⟨_, rfl⟩
   | ammReservesReclaimed _ _ _ _        => exact ⟨_, rfl⟩
   | reserveSwapExecuted _ _ _ _ _ _     => exact ⟨_, rfl⟩
   | reserveSeeded _ _ _ _               => exact ⟨_, rfl⟩

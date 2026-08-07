@@ -175,13 +175,8 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- this layer (the refund's budget DEBIT is an admission-layer effect
   -- that `kernelOnlyApply` deliberately doesn't model).
   | .claimBudgetRefund _ _ _ _     => es''
-  -- Workstream GP (GP.11.4): L2 AMM swap.  The swap is NOT signer-
-  -- aware; `Action.compileTransition` (and thus `Action.toTransition`)
-  -- maps it directly to `Laws.ammSwap`.  No registry / local-policy
-  -- mutation.
-  | .ammSwap _ _ _ _ _             => es''
-  -- Workstream GP (GP.11.10): post-disable reserve sweep.  Like
-  -- `ammSwap`, the sweep is NOT signer-aware; `Action.compileTransition`
+  -- Workstream GP (GP.11.10): post-disable reserve sweep.  The sweep
+  -- is NOT signer-aware; `Action.compileTransition`
   -- maps it directly to `Laws.reclaimAmmReserves` (handled by the
   -- kernel step above).  No registry / local-policy mutation; the
   -- kill-switch admission gate (`BridgeAdmissibleWith` conjunct 9) is
@@ -659,7 +654,6 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- `Action.toTransition`, wrapped in `step_impl`.
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
-  | ammSwap _ _ _ _ _             => rfl
   -- GP.11.10: the reserve sweep is signer-unaware (it compiles
   -- directly to `Laws.reclaimAmmReserves`); both paths wrap the same
   -- transition in `step_impl`, so they stay byte-identical.

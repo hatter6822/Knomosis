@@ -54,7 +54,6 @@ import LegalKernel.Test.Laws.Deposit
 import LegalKernel.Test.Laws.Withdraw
 import LegalKernel.Test.Laws.DepositWithFee
 import LegalKernel.Test.Laws.TopUpActionBudget
-import LegalKernel.Test.Laws.AmmSwap
 import LegalKernel.Test.Laws.ReclaimAmmReserves
 import LegalKernel.Test.Laws.ReserveSwap
 import LegalKernel.Test.Authority.Action
@@ -157,7 +156,6 @@ import LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction
 import LegalKernel.Test.Bridge.CrossCheck.SigningInput
 import LegalKernel.Test.Bridge.CrossCheck.BoldDeposit
 import LegalKernel.Test.Bridge.CrossCheck.AmmMath
-import LegalKernel.Test.Bridge.CrossCheck.AmmSwap
 import LegalKernel.Test.Bridge.CrossCheck.EventCbe
 import LegalKernel.Test.Bridge.CrossCheck.WithdrawalProof
 import LegalKernel.Test.Bridge.CrossCheck.DisputeEvidence
@@ -246,7 +244,6 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "proportionalDilute"  Laws.ProportionalDiluteTests.tests)
   failed := failed + (← runAll "deposit"             Laws.DepositTests.tests)
   failed := failed + (← runAll "withdraw"            Laws.WithdrawTests.tests)
-  failed := failed + (← runAll "amm-swap"            Laws.AmmSwapTests.tests)
   failed := failed + (← runAll "reclaim-amm-reserves" Laws.ReclaimAmmReservesTests.tests)
   failed := failed + (← runAll "laws-reserve-swap"    Laws.ReserveSwapTests.tests)
   failed := failed + (← runAll "authority-action"   Authority.ActionTests.tests)
@@ -418,8 +415,6 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.BoldDeposit.tests)
   failed := failed + (← runAll "crosscheck-amm-getamountout"
                                     Bridge.CrossCheck.AmmMathCrossCheck.tests)
-  failed := failed + (← runAll "crosscheck-amm-swap"
-                                    Bridge.CrossCheck.AmmSwapCrossCheck.tests)
   failed := failed + (← runAll "crosscheck-event-cbe"
                                     Bridge.CrossCheck.EventCbe.tests)
   failed := failed + (← runAll "crosscheck-withdrawal-proof"

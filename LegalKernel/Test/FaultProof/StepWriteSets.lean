@@ -129,7 +129,6 @@ def tests : List TestCase :=
                  , .topUpActionBudget 1 5 2 9
                  , .topUpActionBudgetFor 8 1 5 2 9
                  , .claimBudgetRefund 1 2 1 9
-                 , .ammSwap 1 2 5 1 8
                  , .reclaimAmmReserves 1 5 8 9 ] do
           checkComplete a
     }
@@ -491,7 +490,6 @@ def tests : List TestCase :=
         check (.topUpActionBudgetFor 8 1 5 2 9)
           (deriveDelegatedTopUpBalances read 1 7 9 8 5)
         check (.claimBudgetRefund 1 2 3 9) (deriveRefundBalances read 1 9 7 (2 * 3))
-        check (.ammSwap 1 2 5 4 9) (deriveAmmSwapBalances read 1 2 5 4 9)
         check (.reclaimAmmReserves 1 25 9 8) (deriveReclaimBalances read 1 9 8 25)
     }
   , { name := "a partial reader derives nothing"
@@ -503,7 +501,7 @@ def tests : List TestCase :=
         let blind : BalanceReader := fun _ _ => none
         assert (deriveTransferBalances blind 1 7 8 30 |>.isNone)
           "a blind reader must derive nothing"
-        assert (deriveAmmSwapBalances blind 1 2 5 4 9 |>.isNone)
+        assert (deriveReserveSwapBalances blind 1 2 7 5 4 9 |>.isNone)
           "...on the cross-resource variant too"
         -- Half-blind: the sender opens, the receiver does not.
         let partial_ : BalanceReader := fun r a =>
@@ -571,7 +569,7 @@ def tests : List TestCase :=
         -- so both directions are exercised on real actions.
         for a in [Authority.Action.transfer 1 7 8 30, .mint 1 8 5,
                   .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero,
-                  .deposit 1 8 5 3, .ammSwap 1 2 5 4 9,
+                  .deposit 1 8 5 3,
                   .reclaimAmmReserves 1 25 9 8] do
           assert (FaultProofAdjudicable a)
             s!"{repr a} must be adjudicable"

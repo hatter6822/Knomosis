@@ -103,7 +103,8 @@ def nonTransferSamples : List (Nat × Action) :=
   , (20, .topUpActionBudget 0 5 5 gasPoolActor)
   , (21, .topUpActionBudgetFor someUser 0 5 5 gasPoolActor)
   , (22, .claimBudgetRefund 0 5 5 gasPoolActor)
-  , (23, .ammSwap 0 1 5 4 someUser)
+  -- 23 is the RETIRED `ammSwap` index — no constructor exists; the
+  -- deny-list still contains it (checked below).
   , (24, .reclaimAmmReserves 0 5 someUser gasPoolActor)
   , (25, .reserveSwap 0 1 someUser 5 1 someUser) ]
 
@@ -131,7 +132,7 @@ def tests : List TestCase :=
           if t ≠ 0 then
             assert (decide (t ∈ gasPoolDeniedTags)) s!"tag {t} should be denied"
     }
-  , { name := "GP.7.2: 23 ∈ gasPoolDeniedTags (ammSwap denied for pool)"
+  , { name := "GP.7.2: 23 ∈ gasPoolDeniedTags (the retired tag stays denied)"
     , body := do
         -- Index 23 (`ammSwap`) is denied for gasPoolActor; the pool
         -- cannot sign an AMM swap (swaps are bridge-attested).

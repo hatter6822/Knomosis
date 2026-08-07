@@ -250,21 +250,11 @@ inductive Event
       bridgeActor's L1-gas-gated authority makes L2 budget
       gating redundant).  Frozen index 20. -/
   | budgetConsumed         (actor : ActorId) (amount : Nat)
-  /-- An L2 AMM swap was executed (Workstream GP / GP.11.4).  Carries
-      the `fromResource` (credited to the reserve), `toResource`
-      (debited from the reserve), the `amountIn` (input amount credited
-      to the reserve at `fromResource`), the `amountOut` (output amount
-      debited from the reserve at `toResource`), and the
-      `ammReserveActor` whose balance cells were mutated.  Indexers
-      consume this event to maintain AMM reserve views and LP yield
-      accounting (every swap accrues the fee into the reserves, so
-      `k = reserveFrom × reserveTo` is monotonically non-decreasing).
-      Distinct from `balanceChanged` so subscribers can identify
-      AMM-class balance mutations without re-deriving the action's
-      intent.  Frozen index 21. -/
-  | ammSwapExecuted        (fromResource toResource : ResourceId)
-                            (amountIn amountOut : Amount)
-                            (ammReserveActor : ActorId)
+  -- Index 21 (`ammSwapExecuted`) is RETIRED.  It mirrored the L1
+  -- embedded AMM's swaps; the L1 AMM was excised under the one-AMM
+  -- L2-primary topology (the live swap event is
+  -- `reserveSwapExecuted`, index 23).  The index stays reserved —
+  -- the decoder refuses tag 21 and nothing may ever reuse it.
   /-- An `Action.reclaimAmmReserves` was applied (Workstream
       GP.11.10): the disabled AMM's frozen L2 reserve balance at
       `resource` was swept — exactly `amount`, the reserve actor's
@@ -340,7 +330,7 @@ above):
   18 — `gasPoolClaim`            (Workstream GP §15E v1.0)
   19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4)
   20 — `budgetConsumed`          (Workstream GP / GP.6.4)
-  21 — `ammSwapExecuted`         (Workstream GP / GP.11.4)
+  21 — RETIRED (`ammSwapExecuted`; the excised L1-AMM mirror — never reuse)
   22 — `ammReservesReclaimed`    (Workstream GP / GP.11.10)
   23 — `reserveSwapExecuted`     (Workstream SB)
   24 — `reserveSeeded`           (Workstream SB)
@@ -372,7 +362,7 @@ def Event.tag : Event → Nat
   | .gasPoolClaim         _ _ _       => 18
   | .delegatedActionBudgetTopUp _ _ _ _ _ _ => 19
   | .budgetConsumed       _ _         => 20
-  | .ammSwapExecuted     _ _ _ _ _   => 21
+  -- 21 is the RETIRED `ammSwapExecuted` index — reserved, never reused.
   | .ammReservesReclaimed _ _ _ _    => 22
   | .reserveSwapExecuted  _ _ _ _ _ _ => 23
   | .reserveSeeded        _ _ _ _    => 24
@@ -419,8 +409,6 @@ def Event.actor : Event → Option ActorId
   | .delegatedActionBudgetTopUp recipient _ _ _ _ _ => some recipient
   -- GP.6.4: the actor whose budget was debited.
   | .budgetConsumed a _                             => some a
-  -- GP.11.4: the reserve actor whose balances were mutated.
-  | .ammSwapExecuted _ _ _ _ ra                     => some ra
   -- GP.11.10: the reserve actor whose balance was swept (indexers
   -- close out the reserve view keyed on this actor; the pool credit
   -- surfaces via the accompanying `balanceChanged`).

@@ -72,7 +72,8 @@ def sampleEvents : List Event :=
   , .gasPoolClaim 0 2 250
   , .delegatedActionBudgetTopUp 9 7 0 500 10 1
   , .budgetConsumed 42 1
-  , .ammSwapExecuted 0 1 1000 995 77
+  -- Tag 21 (`ammSwapExecuted`) is RETIRED — no sample; the
+  -- retired-tag negative control below pins the decoder's refusal.
   , .ammReservesReclaimed 0 5000 77 88
   , .reserveSwapExecuted 0 1 9 1000 993 3
   , .reserveSeeded 0 2500 3 12 ]
@@ -111,7 +112,7 @@ def requiredTag : Event → Nat
   | .gasPoolClaim               .. => 18
   | .delegatedActionBudgetTopUp .. => 19
   | .budgetConsumed             .. => 20
-  | .ammSwapExecuted            .. => 21
+  -- 21 is the RETIRED `ammSwapExecuted` index — reserved, never reused.
   | .ammReservesReclaimed       .. => 22
   | .reserveSwapExecuted        .. => 23
   | .reserveSeeded              .. => 24
@@ -129,23 +130,25 @@ def assertRoundtrips (e : Event) : IO Unit := do
 
 /-- Every frozen constructor round-trips encode→decode. -/
 def roundtripAllConstructors : TestCase := {
-  name := "Event codec round-trips all 25 constructors"
+  name := "Event codec round-trips all 24 live constructors"
   body := do
     for e in sampleEvents do
       assertRoundtrips e
 }
 
-/-- The round-trip sweep covers exactly the 25 frozen tags 0..24,
-    one event per tag (catches an omitted / duplicated constructor
-    in `sampleEvents`), and each sample's `Event.tag` agrees with the
-    hand-spelled `requiredTag` table (catches a renumbering). -/
+/-- The round-trip sweep covers exactly the 24 LIVE frozen tags —
+    0..24 minus the retired 21 — one event per tag (catches an
+    omitted / duplicated constructor in `sampleEvents`), and each
+    sample's `Event.tag` agrees with the hand-spelled `requiredTag`
+    table (catches a renumbering). -/
 def roundtripCoversAllTags : TestCase := {
-  name := "Event round-trip sweep covers tags 0..24"
+  name := "Event round-trip sweep covers the live tags 0..24 \\ {21}"
   body := do
     let tags := (sampleEvents.map Event.tag)
-    assertEq (25 : Nat) tags.length "sample count"
-    -- Tags are exactly 0..24 in order.
-    assertEq (List.range 25) tags "sample tags are 0..24 in order"
+    assertEq (24 : Nat) tags.length "sample count"
+    -- Tags are exactly 0..24 minus the retired 21, in order.
+    assertEq ((List.range 25).filter (· ≠ 21)) tags
+      "sample tags are 0..24 minus the retired 21, in order"
     -- Non-circular cross-check against the total `requiredTag` match:
     -- `Event.tag` must agree with the independently spelled table, so
     -- a renumbering of either is caught here rather than silently
@@ -235,6 +238,19 @@ def decodeRejectsUnknownTag : TestCase := {
     | other => throw <| IO.userError s!"expected invalidConstructorIndex, got {repr other}"
 }
 
+/-- **Negative control: the RETIRED tag 21 is refused.**  The excised
+    `ammSwapExecuted` L1-mirror event's index must behave exactly like
+    a never-assigned tag — a stream leading with 21 fails to decode,
+    so the hole cannot be silently reused or replayed. -/
+def decodeRejectsRetiredTag21 : TestCase := {
+  name := "retired event tag 21 is refused by the decoder"
+  body := do
+    let bytes := Encodable.encode (T := Nat) 21
+    match Event.decode bytes with
+    | .error (.invalidConstructorIndex n) => assertEq (21 : Nat) n "retired tag value"
+    | other => throw <| IO.userError s!"expected invalidConstructorIndex, got {repr other}"
+}
+
 /-- Decoder is total / never panics on adversarial byte patterns
     (returns `.ok` or `.error`, never diverges). -/
 def decodeNeverPanics : TestCase := {
@@ -287,6 +303,7 @@ def tests : List TestCase :=
   , gasPoolFamilyDistinct
   , encodeDeterministic
   , decodeRejectsUnknownTag
+  , decodeRejectsRetiredTag21
   , decodeNeverPanics
   , tagMatchesEncodeTagAPI ]
 

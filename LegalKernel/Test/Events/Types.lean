@@ -331,10 +331,9 @@ example (recipient signer : ActorId) (gr : ResourceId) (ga : Amount)
 example (a : ActorId) (amount : Nat) :
     Event.tag (.budgetConsumed a amount) = 20 := rfl
 
-/-- AR.6 regression pin: `ammSwapExecuted` holds frozen index 21
-    (Workstream GP.11.4). -/
-example (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
-    Event.tag (.ammSwapExecuted fr tr ai ao ra) = 21 := rfl
+-- Index 21 (`ammSwapExecuted`) is RETIRED with the excised L1
+-- embedded AMM; the pins that its NEIGHBOURS keep 20 and 22
+-- (above/below) guard the hole from silent reuse.
 
 /-- AR.6 regression pin: `ammReservesReclaimed` holds frozen index 22
     (Workstream GP.11.10). -/

@@ -86,7 +86,7 @@ def Action.tag : Action → Nat
   | .topUpActionBudget   _ _ _ _ => 20
   | .topUpActionBudgetFor _ _ _ _ _ => 21
   | .claimBudgetRefund   _ _ _ _ => 22
-  | .ammSwap             _ _ _ _ _ => 23
+  -- 23 is the RETIRED `ammSwap` L1-mirror index — reserved, never reused.
   | .reclaimAmmReserves  _ _ _ _ => 24
   | .reserveSwap         _ _ _ _ _ _ => 25
 

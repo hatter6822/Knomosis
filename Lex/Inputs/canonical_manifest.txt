@@ -304,24 +304,6 @@ satisfies:
   (none)
 source: Lex/Examples/ExampleLex.lean
 
-## reserved.gp.ammSwap (action_index = 20)
-version: 1.0.0
-intent: Mirror an L1 constant-product AMM swap onto L2 by adjusting the AMM-reserve actor's balances.  The bridge actor signs this action in response to an L1 `AmmSwapExecuted` event.  `ammReserveActor` receives `amountIn` of `fromResource` and sends `amountOut` of `toResource`.
-params:
-  - fromResource : ResourceId (explicit)
-  - toResource : ResourceId (explicit)
-  - amountIn : Amount (explicit)
-  - amountOut : Amount (explicit)
-  - ammReserveActor : ActorId (explicit)
-signed_by: bridge
-registry_effect: none
-satisfies:
-  - local
-  - freeze_preserving
-  - nonce_advances
-  - registry_preserving
-source: LegalKernel/Laws/AmmSwap.lean
-
 ## reserved.gp.reclaimAmmReserves (action_index = 21)
 version: 1.0.0
 intent: Sweep the disabled AMM's frozen L2 reserve balance at one resource into the gas-pool actor.  The bridge actor signs this action after the L1 `emergencyDisableAmm()` kill switch fires; admission additionally requires the L2 `ammDisabled` state-root mirror to be set.  The sweep is exact (the action's `amount` must equal the reserve actor's entire balance), so the reserve drains to zero and the reclaimed liquidity becomes ordinary sequencer-claimable free-pool funds.

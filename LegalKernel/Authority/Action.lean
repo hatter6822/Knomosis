@@ -85,7 +85,6 @@ import LegalKernel.Laws.DepositWithFee
 import LegalKernel.Laws.TopUpActionBudget
 import LegalKernel.Laws.TopUpActionBudgetFor
 import LegalKernel.Laws.ClaimBudgetRefund
-import LegalKernel.Laws.AmmSwap
 import LegalKernel.Laws.ReclaimAmmReserves
 import LegalKernel.Laws.ReserveSwap
 import LegalKernel.Authority.Crypto
@@ -489,16 +488,12 @@ inductive Action
       units), leaving the signer at or above the free tier. -/
   | claimBudgetRefund (gasResource : ResourceId) (budgetUnits : Nat)
                       (weiPerBudgetUnit : Nat) (poolActor : ActorId)
-  /-- Workstream GP (GP.11.4): L2 AMM swap action.  A bridge-attested
-      constant-product ETH↔BOLD exchange mirroring the L1
-      `KnomosisBridge.ammSwap`.  The kernel-level effect credits
-      `ammReserveActor` at `fromResource` by `amountIn` and debits
-      `ammReserveActor` at `toResource` by `amountOut`.  The swap-math
-      (`getAmountOut`, k-monotonicity, no-drain) is authoritative at L1;
-      the L2 action records the already-computed amounts attested by the
-      bridge actor.  Frozen action index 23. -/
-  | ammSwap (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
-            (ammReserveActor : ActorId)
+  -- Index 23 (`ammSwap`) is RETIRED.  It was the bridge-attested L2
+  -- mirror of the L1 embedded AMM's swaps; the L1 embedded AMM was
+  -- excised under the one-AMM L2-primary topology (the user-facing
+  -- swap is `reserveSwap`, index 25), so the mirror vocabulary has
+  -- nothing left to mirror.  The index stays reserved — the decoder
+  -- refuses tag 23 and nothing may ever reuse it.
   /-- Workstream GP (GP.11.10): post-disable AMM reserve reclamation.
       A bridge-attested EXACT SWEEP of the disabled AMM's frozen L2
       reserve balance at one resource into the gas-pool actor: the
@@ -516,9 +511,8 @@ inductive Action
       exchanges `amountIn` of `fromResource` for `toResource` against
       the AMM-reserve actor's live balances, priced IN THE KERNEL by
       `Bridge.AmmMath.getAmountOut` at the fixed `AmmMath.swapFeeBps`
-      (see `Laws.reserveSwap` — unlike the bridge-attested `ammSwap`
-      mirror at index 23, this action has a user party, computes its
-      own price, and conserves BOTH resources).
+      (see `Laws.reserveSwap` — the action has a user party, computes
+      its own price, and conserves BOTH resources).
 
       Fields:
         * `fromResource` / `toResource` — the swap pair.
@@ -530,8 +524,8 @@ inductive Action
         * `minAmountOut` — the user's slippage floor; the law refuses
                             a quote below `max 1 minAmountOut`.
         * `reserveActor` — the counterparty reserve.  Carried as a
-                            field (the `ammSwap` / `reclaimAmmReserves`
-                            pattern) and pinned to the canonical
+                            field (the `reclaimAmmReserves` pattern)
+                            and pinned to the canonical
                             `Bridge.ammReserveActor` by the same
                             `reserveSwapUserBinding` policy — an
                             unpinned field would let a signer name an
@@ -549,8 +543,9 @@ inductive Action
   -- Workstream H reserves indices 17 and 18; Workstream GP reserves
   -- indices 19 (`depositWithFee`), 20 (`topUpActionBudget`),
   -- 21 (`topUpActionBudgetFor`), 22 (`claimBudgetRefund`),
-  -- 23 (`ammSwap`), and 24 (`reclaimAmmReserves`); Workstream SB
-  -- reserves index 25 (`reserveSwap`).
+  -- 23 (RETIRED — the excised `ammSwap` L1-mirror; never reuse), and
+  -- 24 (`reclaimAmmReserves`); Workstream SB reserves index 25
+  -- (`reserveSwap`).
   -- Future Lex-generated ctors (M2+) will append at index 26+.
   -- BEGIN LEX-GENERATED (do not edit by hand)
   -- END LEX-GENERATED
@@ -666,13 +661,9 @@ def Action.compileTransition : Action → Transition
   -- `Action.toTransition` / `kernelOnlyApply` /
   -- `apply_admissible_with`, all of which have the signer in scope.
   | .claimBudgetRefund _ _ _ _      => Laws.freezeResource 0
-  -- Workstream GP (GP.11.4): L2 AMM swap.  The swap is NOT
-  -- signer-aware (both amounts are bridge-attested), so it compiles
-  -- directly to the kernel law.
-  | .ammSwap fr tr ai ao ra         => Laws.ammSwap fr tr ai ao ra
-  -- Workstream GP (GP.11.10): post-disable reserve reclamation.  Like
-  -- ammSwap, the sweep is NOT signer-aware (the amount and both actors
-  -- are bridge-attested action fields), so it compiles directly to the
+  -- Workstream GP (GP.11.10): post-disable reserve reclamation.  The
+  -- sweep is NOT signer-aware (the amount and both actors are
+  -- bridge-attested action fields), so it compiles directly to the
   -- kernel law.
   | .reclaimAmmReserves r amt ra pa => Laws.reclaimAmmReserves r amt ra pa
   -- Workstream SB: the user-facing L2 swap.  The kernel-level effect
@@ -806,7 +797,6 @@ theorem Action.toTransition_eq_compileTransition_of_ne_topUp
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
   | depositWithFee _ _ _ _ _ _ _ _ => rfl
-  | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
   | reserveSwap _ _ _ _ _ _       => rfl
 

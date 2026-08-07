@@ -250,10 +250,6 @@ theorem balancesBounded_apply_impl (a : Action) (signer : ActorId) (s : State)
         (balancesBounded_setBalance (balancesBounded_setBalance hs hpre.1)
           hpre.2.1)
         hpre.2.2.2
-  -- Credit at one resource, debit at another.
-  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      exact balancesBounded_setBalance_sub
-        (balancesBounded_setBalance hs hpre.2.2.2)
   -- Workstream SB: the four-write user swap — debit, credit, debit,
   -- credit; each credit's bound is its own precondition conjunct,
   -- stated over exactly the chained intermediate state the law's

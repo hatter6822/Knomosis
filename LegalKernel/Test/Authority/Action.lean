@@ -133,9 +133,9 @@ example (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat)
 example (gr : ResourceId) (bu w : Nat) (pa : ActorId) :
     Action.tag (.claimBudgetRefund gr bu w pa) = 22 := rfl
 
-/-- AR.5 regression pin: `ammSwap` holds frozen index 23. -/
-example (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
-    Action.tag (.ammSwap fr tr ai ao ra) = 23 := rfl
+-- Index 23 (`ammSwap`) is RETIRED with the excised L1 embedded AMM;
+-- the pin that its NEIGHBOURS keep 22 and 24 (above/below) is what
+-- guards the hole from silent reuse.
 
 /-- AR.5 regression pin: `reclaimAmmReserves` holds frozen index 24
     (Workstream GP.11.10). -/

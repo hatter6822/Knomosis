@@ -60,7 +60,7 @@ it is the largest remaining piece of the state-root swap.
   * **The balances**, for every variant that writes one — transfer,
     mint, reward, burn, deposit, withdraw, depositWithFee,
     topUpActionBudget, topUpActionBudgetFor, claimBudgetRefund,
-    ammSwap, reclaimAmmReserves.  This is the per-variant part, and
+    reclaimAmmReserves, reserveSwap.  This is the per-variant part, and
     the only part the L1 handlers already compute; what they do NOT do
     is either of the two things every derivation here does:
 
@@ -79,10 +79,7 @@ it is the largest remaining piece of the state-root swap.
     reading the ALREADY-WRITTEN state — whose `x = y` case is reachable
     in every one (a self-transfer, a signer who is the pool actor) and
     is where reading the second cell from the pre-state would
-    miscount.  `ammSwap` is the one that touches two DIFFERENT
-    resources, so its cells are independent; that is sound only
-    because `fromResource ≠ toResource` is a precondition conjunct
-    rather than an assumption.
+    miscount.
 
   * **The registry, local-policy and bridge cells** of the eight
     variants that write them.  These are the cheap ones, and for a
@@ -1430,73 +1427,6 @@ theorem deriveReclaimBalances_correct
     exact deriveChainPair_correct es r reserveActor poolActor _ _
   · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
 
-/-- **`ammSwap`'s balance writes** — the one variant that touches two
-    DIFFERENT resources, so the two cells are independent and the
-    chained-pair lemma does not apply.
-
-    `fromResource ≠ toResource` is a precondition conjunct rather than
-    an assumption, which is what makes the independence sound: without
-    it a same-resource swap would be a chain and reading the second
-    cell from the pre-state would miscount. -/
-def deriveAmmSwapBalances (read : BalanceReader)
-    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
-    (ammReserveActor : ActorId) : Option (List ((ResourceId × ActorId) × Nat)) :=
-  match read fromResource ammReserveActor, read toResource ammReserveActor with
-  | some fromBal, some toBal =>
-    if toBal ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0 ∧
-       fromBal + amountIn < Laws.maxAmount then
-      some [ ((fromResource, ammReserveActor), fromBal + amountIn)
-           , ((toResource, ammReserveActor), toBal - amountOut) ]
-    else
-      some [ ((fromResource, ammReserveActor), fromBal)
-           , ((toResource, ammReserveActor), toBal) ]
-  | _, _ => none
-
-/-- The verifier's `ammSwap` balances are the sequencer's. -/
-theorem deriveAmmSwapBalances_correct
-    (es : ExtendedState) (st : SignedAction) (idx : Nat)
-    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
-    (ammReserveActor : ActorId)
-    (h_act : st.action = .ammSwap fromResource toResource amountIn amountOut
-      ammReserveActor) :
-    deriveAmmSwapBalances (stateBalanceReader es) fromResource toResource
-        amountIn amountOut ammReserveActor
-      = some [ ((fromResource, ammReserveActor), LegalKernel.getBalance
-                  (productionApplyBudget es st idx).base fromResource ammReserveActor)
-             , ((toResource, ammReserveActor), LegalKernel.getBalance
-                  (productionApplyBudget es st idx).base toResource ammReserveActor) ] := by
-  rw [productionApplyBudget_base, h_act]
-  unfold deriveAmmSwapBalances stateBalanceReader step_impl
-  simp only []
-  have h_iff : (LegalKernel.getBalance es.base toResource ammReserveActor ≥ amountOut ∧
-      fromResource ≠ toResource ∧ amountIn > 0 ∧
-      LegalKernel.getBalance es.base fromResource ammReserveActor + amountIn
-        < Laws.maxAmount)
-      ↔ (Action.toTransition (.ammSwap fromResource toResource amountIn amountOut
-          ammReserveActor) st.signer).pre es.base :=
-    Iff.rfl
-  by_cases h : LegalKernel.getBalance es.base toResource ammReserveActor ≥ amountOut ∧
-      fromResource ≠ toResource ∧ amountIn > 0 ∧
-      LegalKernel.getBalance es.base fromResource ammReserveActor + amountIn
-        < Laws.maxAmount
-  · rw [if_pos h, if_pos (h_iff.mp h)]
-    show _ = some [((fromResource, ammReserveActor), LegalKernel.getBalance
-                      ((Laws.ammSwap fromResource toResource amountIn amountOut
-                        ammReserveActor).apply_impl es.base) fromResource ammReserveActor),
-                   ((toResource, ammReserveActor), LegalKernel.getBalance
-                      ((Laws.ammSwap fromResource toResource amountIn amountOut
-                        ammReserveActor).apply_impl es.base) toResource ammReserveActor)]
-    simp only [Laws.ammSwap]
-    -- The credit lands at `fromResource`, the debit at `toResource`;
-    -- the resources differ, so neither write is visible to the other.
-    rw [getBalance_setBalance_other _ toResource fromResource ammReserveActor
-      ammReserveActor _ (Or.inl (fun he => h.2.1 he.symm))]
-    rw [getBalance_setBalance_same]
-    rw [getBalance_setBalance_same]
-    rw [getBalance_setBalance_other _ fromResource toResource ammReserveActor
-      ammReserveActor _ (Or.inl h.2.1)]
-  · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
-
 /-- **`reserveSwap`'s balance writes** (Workstream SB) — the four-cell
     variant: the user and the reserve each move at BOTH resources.
 
@@ -2408,38 +2338,6 @@ theorem deriveRefundBalances_alias_consistent (read : BalanceReader)
         subst h
         exact aliasConsistent_read_pair read gr gr poolActor claimant poolBal claimBal hp hq
 
-/-- `deriveAmmSwapBalances` is alias-consistent.  Its two cells are at
-    DIFFERENT resources in the admitted branch — `fromResource ≠
-    toResource` is a precondition conjunct — and both are pre-values in
-    the refusal branch. -/
-theorem deriveAmmSwapBalances_alias_consistent (read : BalanceReader)
-    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
-    (ammReserveActor : ActorId) (plan : List ((ResourceId × ActorId) × Nat))
-    (h : deriveAmmSwapBalances read fromResource toResource amountIn amountOut
-           ammReserveActor = some plan) :
-    aliasConsistent plan = true := by
-  unfold deriveAmmSwapBalances at h
-  cases hf : read fromResource ammReserveActor with
-  | none => rw [hf] at h; cases read toResource ammReserveActor <;> simp at h
-  | some fromBal =>
-    cases ht : read toResource ammReserveActor with
-    | none => rw [hf, ht] at h; simp at h
-    | some toBal =>
-      rw [hf, ht] at h
-      simp only [] at h
-      by_cases hpre : toBal ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0 ∧
-          fromBal + amountIn < Laws.maxAmount
-      · rw [if_pos hpre] at h
-        simp only [Option.some.injEq] at h
-        subst h
-        refine aliasConsistent_pair _ _ _ _ (fun hk => ?_)
-        exact absurd ((Prod.mk.injEq ..).mp hk).1 hpre.2.1
-      · rw [if_neg hpre] at h
-        simp only [Option.some.injEq] at h
-        subst h
-        exact aliasConsistent_read_pair read fromResource toResource
-          ammReserveActor ammReserveActor fromBal toBal hf ht
-
 /-- `deriveReclaimBalances` is alias-consistent: `reserveActor ≠
     poolActor` guards the admitted branch, and the refusal branch is a
     pair of pre-values. -/
@@ -2942,17 +2840,6 @@ theorem deriveRefundBalances_congr (read₁ read₂ : BalanceReader)
   unfold deriveRefundBalances
   rw [hp, hc, deriveChainPair_congr read₁ read₂ gr poolActor claimant
         (fun b => b - refundAmount) (fun b => b + refundAmount) hp hc]
-
-/-- `ammSwap` reads the reserve actor's cell at BOTH resources. -/
-theorem deriveAmmSwapBalances_congr (read₁ read₂ : BalanceReader)
-    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
-    (ammReserveActor : ActorId)
-    (hf : read₁ fromResource ammReserveActor = read₂ fromResource ammReserveActor)
-    (ht : read₁ toResource ammReserveActor = read₂ toResource ammReserveActor) :
-    deriveAmmSwapBalances read₁ fromResource toResource amountIn amountOut ammReserveActor
-      = deriveAmmSwapBalances read₂ fromResource toResource amountIn amountOut
-          ammReserveActor := by
-  unfold deriveAmmSwapBalances; rw [hf, ht]
 
 /-- `reclaimAmmReserves` reads the reserve actor's and the pool's
     cells. -/

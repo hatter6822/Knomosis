@@ -101,11 +101,6 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   -- (over the signer's epoch budget + the trusted rate), not L1
   -- step-VM cell reads.
   | .claimBudgetRefund _ _ _ _,    signer => [.registry signer]
-  -- GP.11.4: L2 AMM swap.  Reads only the signer's registry entry.
-  -- The swap is bridge-attested; no deposit-id dedup is needed (the
-  -- L1 contract prevents double-execution operationally via
-  -- nonReentrant + single-atomic-swap semantics).
-  | .ammSwap _ _ _ _ _,            signer => [.registry signer]
   -- GP.11.10: post-disable reserve sweep.  Reads only the signer's
   -- registry entry; the exact-sweep + kill-switch gates are
   -- admission-layer checks (`BridgeAdmissibleWith` conjunct 9 over the
@@ -224,11 +219,6 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- step-VM's static cell declaration.
   | .claimBudgetRefund gr _ _ pa,  signer =>
       [.balance gr signer, .balance gr pa, .nonce signer, .epochBudget signer]
-  -- GP.11.4: L2 AMM swap writes the ammReserveActor's balances at
-  -- BOTH resources (credit at fromResource, debit at toResource) plus
-  -- the signer's nonce.
-  | .ammSwap fr tr _ _ ra,         signer =>
-      [.balance fr ra, .balance tr ra, .nonce signer, .epochBudget signer]
   -- GP.11.10: post-disable reserve sweep writes BOTH actors' balances
   -- at the single swept resource (debit the reserve actor to zero,
   -- credit the pool actor) plus the signer's nonce.

@@ -52,7 +52,7 @@ The constructor-tag map (frozen):
   | 20  | `topUpActionBudget`  | `gasResource`, `gasAmount`, `budgetIncrement`, `poolActor` |
   | 21  | `topUpActionBudgetFor` | `recipient`, `gasResource`, `gasAmount`, `budgetIncrement`, `poolActor` |
   | 22  | `claimBudgetRefund`  | `gasResource`, `budgetUnits`, `weiPerBudgetUnit`, `poolActor` |
-  | 23  | `ammSwap`            | `fromResource`, `toResource`, `amountIn`, `amountOut`, `ammReserveActor` |
+  | 23  | RETIRED (`ammSwap`)  | the excised L1-AMM mirror — the decoder refuses tag 23; never reuse |
   | 24  | `reclaimAmmReserves` | `r`, `amount`, `reserveActor`, `poolActor`              |
   | 25  | `reserveSwap`        | `fromResource`, `toResource`, `user`, `amountIn`, `minAmountOut`, `reserveActor` |
 
@@ -147,10 +147,6 @@ def Action.fieldsBounded : Action → Prop
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       gasResource.toNat < 256 ^ 8 ∧ budgetUnits < 256 ^ 8 ∧
       weiPerBudgetUnit < 256 ^ 32 ∧ poolActor.toNat < 256 ^ 8
-  -- Workstream GP (GP.11.4): ammSwap.
-  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      fromResource.toNat < 256 ^ 8 ∧ toResource.toNat < 256 ^ 8 ∧
-      amountIn < 256 ^ 32 ∧ amountOut < 256 ^ 32 ∧ ammReserveActor.toNat < 256 ^ 8
   -- Workstream GP (GP.11.10): reclaimAmmReserves.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       r.toNat < 256 ^ 8 ∧ amount < 256 ^ 32 ∧
@@ -299,14 +295,8 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) budgetUnits ++
       encodeAmount weiPerBudgetUnit ++
       Encodable.encode (T := Nat) poolActor.toNat
-  -- Workstream GP (GP.11.4): ammSwap.
-  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      Encodable.encode (T := Nat) 23 ++
-      Encodable.encode (T := Nat) fromResource.toNat ++
-      Encodable.encode (T := Nat) toResource.toNat ++
-      encodeAmount amountIn ++
-      encodeAmount amountOut ++
-      Encodable.encode (T := Nat) ammReserveActor.toNat
+  -- Tag 23 (`ammSwap`) is RETIRED — no encode arm; the decoder
+  -- refuses the tag below.
   -- Workstream GP (GP.11.10): reclaimAmmReserves.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       Encodable.encode (T := Nat) 24 ++
@@ -626,25 +616,8 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
         | .error e => .error e
       | .error e => .error e
     | .error e => .error e
-  | .ok (23, s₁) =>
-    -- ammSwap (fromResource, toResource, amountIn, amountOut, ammReserveActor)
-    match Action.readUInt64Field s₁ with
-    | .ok (fromResource, s₂) =>
-      match Action.readUInt64Field s₂ with
-      | .ok (toResource, s₃) =>
-        match Action.readAmountField s₃ with
-        | .ok (amountIn, s₄) =>
-          match Action.readAmountField s₄ with
-          | .ok (amountOut, s₅) =>
-            match Action.readUInt64Field s₅ with
-            | .ok (ammReserveActor, s₆) =>
-              .ok (.ammSwap fromResource toResource amountIn amountOut
-                      ammReserveActor, s₆)
-            | .error e => .error e
-          | .error e => .error e
-        | .error e => .error e
-      | .error e => .error e
-    | .error e => .error e
+  -- Tag 23 (`ammSwap`) is RETIRED: it falls through to the
+  -- unknown-tag refusal below, exactly like a never-assigned tag.
   | .ok (24, s₁) =>
     -- reclaimAmmReserves (r, amount, reserveActor, poolActor)
     match Action.readUInt64Field s₁ with
@@ -1180,35 +1153,6 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readAmountField_roundtrip weiPerBudgetUnit _ h3]
     dsimp only
     rw [readUInt64Field_roundtrip poolActor rest]
-  | ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-    obtain ⟨_, _, h3, h4, _⟩ := h
-    show Action.decode (Action.encode
-            (.ammSwap fromResource toResource amountIn amountOut ammReserveActor) ++ rest)
-        = .ok (_, rest)
-    unfold Action.encode Action.decode
-    rw [show
-      Encodable.encode (T := Nat) 23 ++ Encodable.encode (T := Nat) fromResource.toNat ++
-        Encodable.encode (T := Nat) toResource.toNat ++
-        encodeAmount amountIn ++
-        encodeAmount amountOut ++
-        Encodable.encode (T := Nat) ammReserveActor.toNat ++ rest =
-      Encodable.encode (T := Nat) 23 ++ (Encodable.encode (T := Nat) fromResource.toNat ++
-        (Encodable.encode (T := Nat) toResource.toNat ++
-        (encodeAmount amountIn ++
-        (encodeAmount amountOut ++
-        (Encodable.encode (T := Nat) ammReserveActor.toNat ++ rest)))))
-        from by simp [List.append_assoc]]
-    rw [nat_roundtrip 23 _ (by decide)]
-    dsimp only
-    rw [readUInt64Field_roundtrip fromResource _]
-    dsimp only
-    rw [readUInt64Field_roundtrip toResource _]
-    dsimp only
-    rw [readAmountField_roundtrip amountIn _ h3]
-    dsimp only
-    rw [readAmountField_roundtrip amountOut _ h4]
-    dsimp only
-    rw [readUInt64Field_roundtrip ammReserveActor rest]
   | reclaimAmmReserves r amount reserveActor poolActor =>
     obtain ⟨_, h2, _, _⟩ := h
     show Action.decode (Action.encode
@@ -1341,7 +1285,6 @@ theorem Action.tag_matches_encode_tag (a : Action) :
   | topUpActionBudget _ _ _ _     => exact ⟨_, rfl⟩
   | topUpActionBudgetFor _ _ _ _ _ => exact ⟨_, rfl⟩
   | claimBudgetRefund _ _ _ _     => exact ⟨_, rfl⟩
-  | ammSwap _ _ _ _ _             => exact ⟨_, rfl⟩
   | reclaimAmmReserves _ _ _ _    => exact ⟨_, rfl⟩
   | reserveSwap _ _ _ _ _ _       => exact ⟨_, rfl⟩
 

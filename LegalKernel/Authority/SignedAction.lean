@@ -1314,7 +1314,6 @@ theorem apply_admissible_base
   | faultProofChallenge _ _ _ _   => simp_all [step_impl]
   | faultProofResolution _ _ _ _  => simp_all [step_impl]
   | depositWithFee _ _ _ _ _ _ _ _  => simp_all [step_impl]
-  | ammSwap _ _ _ _ _             => simp_all [step_impl]
   | reclaimAmmReserves _ _ _ _    => simp_all [step_impl]
   | reserveSwap _ _ _ _ _ _       => simp_all [step_impl]
 
@@ -1603,7 +1602,6 @@ theorem admission_consumes_budget_on_success
     | revokeLocalPolicy             => rw [← hsuc]
     | faultProofChallenge _ _ _ _   => rw [← hsuc]
     | faultProofResolution _ _ _ _  => rw [← hsuc]
-    | ammSwap _ _ _ _ _             => rw [← hsuc]
     | reclaimAmmReserves _ _ _ _    => rw [← hsuc]
     | reserveSwap _ _ _ _ _ _       => rw [← hsuc]
   rw [hgrant]
@@ -1782,7 +1780,6 @@ theorem bridgeActor_budget_exempt
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
   | reserveSwap _ _ _ _ _ _       => rfl
 
@@ -2145,7 +2142,6 @@ theorem admission_locality_in_budget
     | revokeLocalPolicy             => rw [← hsuc]
     | faultProofChallenge _ _ _ _   => rw [← hsuc]
     | faultProofResolution _ _ _ _  => rw [← hsuc]
-    | ammSwap _ _ _ _ _             => rw [← hsuc]
     | reclaimAmmReserves _ _ _ _    => rw [← hsuc]
     | reserveSwap _ _ _ _ _ _       => rw [← hsuc]
   rw [hgrant]
@@ -2940,7 +2936,6 @@ theorem non_registry_mutating_preserves_registry
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
-  | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
   | reserveSwap _ _ _ _ _ _       => rfl
   -- Workstream-LX (LX.19): codegen-managed Lex
@@ -3162,7 +3157,6 @@ theorem non_meta_preserves_localPolicies
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
-  | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
   | reserveSwap _ _ _ _ _ _       => rfl
 
@@ -3210,7 +3204,6 @@ theorem localPolicies_other_actor_untouched
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
-  | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
   | reserveSwap _ _ _ _ _ _       => rfl
 
@@ -3420,16 +3413,6 @@ instance claimBudgetRefund_registryPreserving
     (poolActor : ActorId) :
     RegistryPreserving (.claimBudgetRefund gasResource budgetUnits
                           weiPerBudgetUnit poolActor) where
-  preserves := fun _ => rfl
-
-/-- Workstream GP (GP.11.4): `ammSwap` preserves the registry.  Both
-    reserve-balance legs live in `State.balances`, never the
-    `KeyRegistry`. -/
-instance ammSwap_registryPreserving
-    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
-    (ammReserveActor : ActorId) :
-    RegistryPreserving (.ammSwap fromResource toResource amountIn amountOut
-                          ammReserveActor) where
   preserves := fun _ => rfl
 
 /-- Workstream GP (GP.11.10): `reclaimAmmReserves` preserves the

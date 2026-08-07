@@ -334,11 +334,8 @@ def actionKindByte : Action → UInt8
   -- now returns the empty-hash sentinel only for kinds `≥ 23` (see
   -- `stepVMHash_unknown_kind_empty`).
   | .claimBudgetRefund _ _ _ _      => 22
-  -- Workstream GP (GP.11.4): L2 AMM swap.  Dispatcher index 23.
-  -- The `stepVMHash` execution arm (kind 23, `stepCommitAmmSwap`), the
-  -- Solidity `_stepAmmSwap` decoder, and the cross-stack fixtures ship
-  -- alongside, so kind 23 is L1-fault-proof-*executable*.
-  | .ammSwap _ _ _ _ _              => 23
+  -- Index 23 (`ammSwap`) is RETIRED with the excised L1 embedded AMM;
+  -- the dispatcher slot stays reserved and no kind may reuse it.
   -- Workstream GP (GP.11.10): post-disable reserve sweep.  Dispatcher
   -- index 24.  The `stepVMHash` execution arm (kind 24,
   -- `stepCommitReclaimAmmReserves`), the Solidity
@@ -496,15 +493,6 @@ def actionFieldsForL1 : Action → ByteArray
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       uint64BE gasResource.toNat ++ uint64BE budgetUnits ++
       uint256BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
-  -- Workstream GP (GP.11.4): ammSwap is a structured variant:
-  -- `uint64BE fromResource || uint64BE toResource || uint256BE amountIn
-  -- || uint256BE amountOut || uint64BE ammReserveActor`.  The kernel-
-  -- state effect (credit ammReserveActor at fromResource by amountIn,
-  -- debit ammReserveActor at toResource by amountOut) is mirrored
-  -- byte-for-byte by the Solidity `_stepAmmSwap`.
-  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      uint64BE fromResource.toNat ++ uint64BE toResource.toNat ++
-      uint256BE amountIn ++ uint256BE amountOut ++ uint64BE ammReserveActor.toNat
   -- Workstream GP (GP.11.10): reclaimAmmReserves is a structured
   -- variant: `uint64BE r || uint256BE amount || uint64BE reserveActor
   -- || uint64BE poolActor`.  The kernel-state effect (debit

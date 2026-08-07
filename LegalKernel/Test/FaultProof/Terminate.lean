@@ -86,7 +86,6 @@ def probes : List (String × Authority.Action) :=
     -- claimant: the two orders are opposite, and a verifier that
     -- confused them computes the mirror of the law.
   , ("claimBudgetRefund",   .claimBudgetRefund 1 2 3 9)
-  , ("ammSwap",             .ammSwap 1 2 5 10 9)
   , ("registerIdentity",    .registerIdentity 8 (ByteArray.mk #[1, 2, 3]))
   , ("replaceKey",          .replaceKey 8 (ByteArray.mk #[0xAA, 0xBB]))
   , ("declareLocalPolicy",  .declareLocalPolicy Authority.LocalPolicy.empty)

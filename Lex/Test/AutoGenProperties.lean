@@ -111,7 +111,6 @@ def genTestState (nActors : Nat := 4) (balanceMax : Nat := 100)
 -- legalkernel.withdraw: unsupported by auto-generator (deployment-private or unknown signature); coverage manifest only
 -- legalkernel.declareLocalPolicy: unsupported by auto-generator (deployment-private or unknown signature); coverage manifest only
 -- legalkernel.revokeLocalPolicy: unsupported by auto-generator (deployment-private or unknown signature); coverage manifest only
--- reserved.gp.ammSwap: unsupported by auto-generator (deployment-private or unknown signature); coverage manifest only
 -- reserved.gp.reclaimAmmReserves: unsupported by auto-generator (deployment-private or unknown signature); coverage manifest only
 
 /-- Auto-gen LX.38: legalkernel.transfer.conservative property holds (100 samples). -/

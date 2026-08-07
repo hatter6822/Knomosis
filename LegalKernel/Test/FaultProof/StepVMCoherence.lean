@@ -168,13 +168,8 @@ def tests : List TestCase :=
             (.claimBudgetRefund 0 0 0 0))
           "claimBudgetRefund"
     }
-  , { name := "actionKindByte: ammSwap is 23"
-    , body := do
-        assertEq (expected := (23 : UInt8))
-          (actual := actionKindByte
-            (.ammSwap 0 1 0 0 3))
-          "ammSwap"
-    }
+  -- Kind 23 (`ammSwap`) is RETIRED with the excised L1 embedded AMM;
+  -- the neighbouring pins (22 above, 24 below) guard the hole.
   , { name := "actionKindByte: reclaimAmmReserves is 24"
     , body := do
         assertEq (expected := (24 : UInt8))
@@ -520,7 +515,7 @@ def tests : List TestCase :=
           , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
           , .depositWithFee 1 8 9 5 1 1 3 1, .topUpActionBudget 1 5 1 9
           , .topUpActionBudgetFor 8 1 5 1 9, .claimBudgetRefund 1 1 5 9
-          , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 5 9 8 ]
+          , .reclaimAmmReserves 1 5 9 8 ]
         for a in actions do
           if !((Action.writeCells a signer).contains (.nonce signer)) then
             throw <| IO.userError
@@ -611,7 +606,7 @@ def tests : List TestCase :=
           , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
           , .depositWithFee 1 8 9 5 1 1 3 1, .topUpActionBudget 1 5 1 9
           , .topUpActionBudgetFor 8 1 5 1 9, .claimBudgetRefund 1 1 5 9
-          , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 5 9 8 ]
+          , .reclaimAmmReserves 1 5 9 8 ]
         for a in actions do
           if !((Action.writeCells a signer).contains (.epochBudget signer)) then
             throw <| IO.userError

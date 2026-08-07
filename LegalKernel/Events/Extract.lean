@@ -323,23 +323,6 @@ def actionEvents
       [Event.balanceChanged gasResource poolActor poolOld poolNew]
     else
       []
-  | .ammSwap fromResource toResource _amountIn _amountOut ammReserveActor =>
-    -- Workstream GP (GP.11.4): L2 AMM swap.  The swap credits the
-    -- reserve actor at `fromResource` and debits at `toResource`; emit
-    -- delta-filtered `balanceChanged` events for both legs.  The
-    -- semantic `ammSwapExecuted` event is emitted by `extractEvents`
-    -- (which has the full action payload in scope).
-    let fromOld := LegalKernel.getBalance preState  fromResource ammReserveActor
-    let fromNew := LegalKernel.getBalance postState fromResource ammReserveActor
-    let toOld   := LegalKernel.getBalance preState  toResource ammReserveActor
-    let toNew   := LegalKernel.getBalance postState toResource ammReserveActor
-    let evFrom := if fromOld != fromNew then
-                    [Event.balanceChanged fromResource ammReserveActor fromOld fromNew]
-                  else []
-    let evTo   := if toOld != toNew then
-                    [Event.balanceChanged toResource ammReserveActor toOld toNew]
-                  else []
-    evFrom ++ evTo
   | .reclaimAmmReserves resource _amount reserveActor poolActor =>
     -- Workstream GP (GP.11.10): post-disable reserve sweep.  The sweep
     -- debits the reserve actor (to zero) and credits the pool actor at
@@ -485,13 +468,6 @@ def extractEvents
       -- (delegate/payer) comes from the enclosing SignedAction.
       [Event.delegatedActionBudgetTopUp recipient st.signer gasResource
                                 gasAmount budgetIncrement poolActor]
-    | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      -- GP.11.4: L2 AMM swap semantic event.  Emitted UNCONDITIONALLY
-      -- (mirroring bridge / LP / fault-proof / reward events): indexers
-      -- consume this event to maintain AMM reserve views and LP yield
-      -- accounting (k-monotonicity tracking).
-      [Event.ammSwapExecuted fromResource toResource amountIn amountOut
-                              ammReserveActor]
     | .reclaimAmmReserves resource amount reserveActor poolActor =>
       -- GP.11.10: post-disable reserve sweep semantic event.  Emitted
       -- UNCONDITIONALLY like the other bridge-family events: indexers

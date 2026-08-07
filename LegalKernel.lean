@@ -162,7 +162,6 @@ import LegalKernel.Laws.DepositWithFee
 import LegalKernel.Laws.TopUpActionBudget
 import LegalKernel.Laws.TopUpActionBudgetFor
 import LegalKernel.Laws.ClaimBudgetRefund
-import LegalKernel.Laws.AmmSwap
 import LegalKernel.Laws.ReclaimAmmReserves
 import LegalKernel.Laws.ReserveSwap
 import LegalKernel.Authority.Crypto

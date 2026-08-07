@@ -148,7 +148,7 @@ def entries : List Json :=
   , mkEntry "topUpActionBudgetFor:canonical"
       (.topUpActionBudgetFor 7 0 100 5 2) 8 19
   , mkEntry "claimBudgetRefund:canonical" (.claimBudgetRefund 0 50 5 2) 2 20
-  , mkEntry "ammSwap:canonical" (.ammSwap 0 1 1000 900 3) 1 21
+  -- Tag 23 (`ammSwap`) is RETIRED — no canonical signing vector.
   , mkEntry "reclaimAmmReserves:canonical" (.reclaimAmmReserves 0 777 3 2) 1 22
   , mkEntry "reserveSwap:canonical" (.reserveSwap 0 1 7 1000 900 3) 7 23
     -- Boundary rows.
@@ -185,12 +185,12 @@ def fixtureName : String := "signing_input.json"
     action, the domain prefix leads, the deployment id follows), and
     the fixture write. -/
 def tests : List TestCase :=
-  [ { name := "FA.1: signing_input fixture has 30 entries"
+  [ { name := "FA.1: signing_input fixture has 29 entries"
     , body := do
-        if entries.length ≠ 30 then
-          throw <| IO.userError s!"expected 30 entries, got {entries.length}"
+        if entries.length ≠ 29 then
+          throw <| IO.userError s!"expected 29 entries, got {entries.length}"
     }
-  , { name := "FA.1: every frozen kind 0..25 appears at least once"
+  , { name := "FA.1: every live frozen kind (0..25 minus the retired 23) appears"
     , body := do
         let kinds := entries.filterMap fun e =>
           match e with
@@ -199,9 +199,13 @@ def tests : List TestCase :=
             | some (.num k) => some k
             | _ => none
           | _ => none
-        for k in List.range 26 do
+        for k in (List.range 26).filter (· ≠ 23) do
           if ¬ kinds.contains k then
             throw <| IO.userError s!"kind {k} missing from the corpus"
+        -- The RETIRED kind 23 must NOT appear: a signing vector for a
+        -- constructor that no longer exists would be unverifiable.
+        if kinds.contains 23 then
+          throw <| IO.userError "retired kind 23 must not appear in the corpus"
     }
   , { name := "FA.1: every sign-input embeds domain ++ deploymentId ++ cbeAction"
     , body := do

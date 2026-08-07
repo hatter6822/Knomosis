@@ -404,13 +404,6 @@ def Action.doesNotDebitPoolAt (rLeg : ResourceId) (signer : ActorId) : Action �
   -- by the free-tier-excluding budget consume — so the two outflow
   -- paths have independent bounds rather than a shared cap.
   | .claimBudgetRefund gr _ _ pa    => gr ≠ rLeg ∨ pa ≠ gasPoolActor
-  -- GP.11.4: an ammSwap debits `ammReserveActor` at `toResource`.  It
-  -- misses the pool's `rLeg` slot exactly when the to-resource differs
-  -- OR the reserve actor is not `gasPoolActor`.  In practice
-  -- `ammReserveActor ≠ gasPoolActor` (the AMM reserve is a distinct
-  -- actor), but the proof obligation requires the structural guard.
-  | .ammSwap _ toResource _ _ ammReserveActor =>
-      toResource ≠ rLeg ∨ ammReserveActor ≠ gasPoolActor
   -- GP.11.10: a reclaim debits its `reserveActor` field at `r` (the
   -- exact sweep).  It misses the pool's `rLeg` slot exactly when the
   -- resource differs OR the named reserve actor is not `gasPoolActor`.
@@ -571,21 +564,6 @@ theorem pool_nondecreasing_of_does_not_debit
         (getBalance_credit_nondecreasing _ gasResource rLeg st.signer gasPoolActor
           (budgetUnits * weiPerBudgetUnit))
       exact (getBalance_setBalance_other es.base gasResource rLeg poolActor gasPoolActor _
-        hsafe).symm
-  | ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      -- GP.11.4: an AMM swap credits `ammReserveActor` at `fromResource`
-      -- (inner; non-decreasing for pool) then debits `ammReserveActor` at
-      -- `toResource` (outer; misses pool's `rLeg` cell under `hsafe`).
-      intro hsafe; simp only [Action.doesNotDebitPoolAt] at hsafe
-      show getBalance es.base rLeg gasPoolActor ≤
-        getBalance ((Laws.ammSwap fromResource toResource amountIn amountOut
-          ammReserveActor).apply_impl es.base) rLeg gasPoolActor
-      simp only [Laws.ammSwap]
-      refine Nat.le_trans
-        (getBalance_credit_nondecreasing es.base fromResource rLeg ammReserveActor
-          gasPoolActor amountIn)
-        (Nat.le_of_eq ?_)
-      exact (getBalance_setBalance_other _ toResource rLeg ammReserveActor gasPoolActor _
         hsafe).symm
   | reclaimAmmReserves r amount reserveActor poolActor =>
       -- GP.11.10: a reclaim debits `reserveActor` at `r` (inner; misses
