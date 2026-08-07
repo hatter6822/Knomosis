@@ -25,7 +25,7 @@ import {MockLiquityV2TroveManager} from "test/utils/MockLiquityV2.sol";
 /// @notice Minimal stand-in for a deployed-but-not-yet-activated
 ///         `KnomosisMigration` successor.  The bridge consults exactly one
 ///         selector on its `migration` immutable (`activated()`, from the
-///         `circuitOpen` modifier and the `ammSwap` migration arm), so the
+///         `circuitOpen` modifier), so the
 ///         stand-in implements exactly that.  Lets the benchmark suite
 ///         measure the per-operation cost of the external `activated()`
 ///         read that every migration-wired deployment pays.
@@ -39,7 +39,7 @@ contract InactiveMigration {
 /// @title BenchmarkGasV1_3Base
 /// @notice Workstream GP.11.9 — gas-cost benchmarks for the v1.3 L1
 ///         operations (`depositETHWithFee`, `depositBoldWithFee`, the BOLD
-///         `approve` prerequisite, `ammSwap` in both directions and both
+///         `approve` prerequisite, and both
 ///         approval shapes, the BOLD circuit-breaker surface, the AMM kill
 ///         switch, the Liquity auto-trigger paths, and the
 ///         `withdrawWithProof` exit legs) plus the fault proof's
@@ -231,7 +231,7 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
     /// @param  migration_ The migration immutable: `address(0)` for the
     ///         initial-deployment shape (no successor planned), or a
     ///         not-yet-activated successor for the migration-wired shape
-    ///         (every `circuitOpen` operation and every `ammSwap` then
+    ///         (every `circuitOpen` operation then
     ///         pays an external `activated()` read).
     function _deployBridge(address migration_) internal returns (KnomosisBridge) {
         return _deployBridgeWithRecovery(migration_, AMM_DR);
@@ -289,19 +289,11 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
 
     /// @notice Pre-warm `b` to its steady-state shape: the LP's two
     ///         max-fee deposits make `totalLockedValue` and
-    ///         `boldTotalLockedValue` non-zero, and the staging then
-    ///         installs the steady-state L1 AMM reserves (15 ETH /
-    ///         45 000 BOLD — exactly what the pre-topology LP deposits
-    ///         used to accrue) DIRECTLY: under the SB L2-primary
-    ///         topology a deposit no longer grows the L1 books, and a
-    ///         live deployment's reserves are pre-existing liquidity.
-    ///         Storage writes in staging leave the deployed contract
-    ///         the EXACT production bytecode, so no benchmarked call's
-    ///         gas is perturbed by a harness shape — and the reserve
-    ///         values match the retired deposit-driven staging
-    ///         byte-for-byte, so the swap benchmarks' operand shapes
-    ///         are unchanged.  The deposits above already escrow the
-    ///         backing (100 ETH / 300 000 BOLD ≥ the books).
+    ///         `boldTotalLockedValue` non-zero, so every benchmarked
+    ///         call runs against warm (non-zero) accounting slots.
+    ///         (The excised L1 AMM's book staging is gone with the
+    ///         books; the LIVE pool is L2 state no L1 benchmark
+    ///         touches.)
     function _seedPool(KnomosisBridge b) internal {
         vm.deal(lp, LP_ETH_DEPOSIT);
         vm.prank(lp);
@@ -309,17 +301,6 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
         _mintApprove(b, lp, LP_BOLD_DEPOSIT);
         vm.prank(lp);
         b.depositBoldWithFee(LP_BOLD_DEPOSIT, LP_FEE_BPS);
-        stdstore.target(address(b)).sig("ammReserveEth()").checked_write(
-            uint256(15 ether)
-        );
-        stdstore.target(address(b)).sig("ammReserveBold()").checked_write(
-            uint256(45_000 ether)
-        );
-    }
-
-    /// @notice A deadline comfortably in the future for the swap benchmarks.
-    function _farDeadline() internal view returns (uint256) {
-        return block.timestamp + 1 hours;
     }
 }
 
@@ -444,7 +425,7 @@ contract BenchmarkGasV1_3DepositsTest is BenchmarkGasV1_3Base {
 
     /// @notice The BOLD `approve` prerequisite transaction (fresh
     ///         allowance slot, 0 → non-zero): every `depositBoldWithFee`
-    ///         / BOLD→ETH `ammSwap` flow pays this once beforehand.
+    ///         flow pays this once beforehand.
     function test_gas_boldApprove_fresh() public {
         _bench(
             "boldApprove_fresh",
@@ -464,8 +445,6 @@ contract BenchmarkGasV1_3DepositsTest is BenchmarkGasV1_3Base {
         assertEq(bridge.depositNonce(bob), 2, "bob has deposited twice");
         assertGt(bridge.totalLockedValue(), 0, "pool pre-warmed");
         assertGt(bridge.boldTotalLockedValue(), 0, "BOLD pool pre-warmed");
-        assertGt(bridge.ammReserveEth(), 0, "ETH reserve seeded");
-        assertGt(bridge.ammReserveBold(), 0, "BOLD reserve seeded");
         assertEq(
             MockBoldOz(BOLD).allowance(alice, address(bridge)),
             BENCH_BOLD_AMOUNT,
@@ -527,193 +506,18 @@ contract BenchmarkGasV1_3DepositsTest is BenchmarkGasV1_3Base {
     }
 }
 
-/// @title BenchmarkGasV1_3SwapsTest
-/// @notice GP.11.9 `ammSwap` benchmarks over reserves seeded to a
-///         realistic 15 ETH : 45 000 BOLD depth.  ETH→BOLD is measured in
-///         both recurring shapes — the swapper's FIRST BOLD (the output
-///         credits a fresh ERC-20 balance slot, 0 → non-zero) and a REPEAT
-///         swap (non-zero → non-zero) — and BOLD→ETH in BOTH approval
-///         shapes: exact approval (`transferFrom` writes the allowance to
-///         zero) and infinite approval (production BOLD's OZ
-///         `_spendAllowance` skips the allowance write entirely —
-///         reproduced faithfully by the OZ-based `MockBoldOz`).
-contract BenchmarkGasV1_3SwapsTest is BenchmarkGasV1_3Base {
-    /// @dev ETH→BOLD swapper holding no BOLD yet.
-    address internal ethSwapperFresh = address(0x5A1);
-    /// @dev ETH→BOLD swapper already holding BOLD.
-    address internal ethSwapperRepeat = address(0x5A2);
-    /// @dev BOLD→ETH swapper with a staged EXACT approval.
-    address internal boldSwapperExact = address(0x5A3);
-    /// @dev BOLD→ETH swapper with a staged INFINITE approval.
-    address internal boldSwapperInfinite = address(0x5A4);
-
-    function setUp() public {
-        _etchMocks();
-        bridge = _deployBridge(address(0));
-        _seedPool(bridge);
-
-        vm.deal(ethSwapperFresh, 1000 ether);
-        vm.deal(ethSwapperRepeat, 1000 ether);
-        vm.deal(boldSwapperExact, 1000 ether);
-        vm.deal(boldSwapperInfinite, 1000 ether);
-
-        // The repeat swapper already holds BOLD, so the swap output lands
-        // in a non-zero balance slot.
-        MockBoldOz(BOLD).mint(ethSwapperRepeat, 100 ether);
-
-        // Both BOLD->ETH swappers hold more BOLD than the swap input
-        // (typical residual); one approves exactly the input, the other
-        // grants the infinite-approval wallet pattern.
-        MockBoldOz(BOLD).mint(boldSwapperExact, 10_000 ether);
-        vm.prank(boldSwapperExact);
-        MockBoldOz(BOLD).approve(address(bridge), BENCH_BOLD_AMOUNT);
-        MockBoldOz(BOLD).mint(boldSwapperInfinite, 10_000 ether);
-        vm.prank(boldSwapperInfinite);
-        MockBoldOz(BOLD).approve(address(bridge), type(uint256).max);
-    }
-
-    /// @dev The canonical swap calldata for this suite's swaps.
-    function _swapData(uint64 fromResource, uint256 amountIn) internal view returns (bytes memory) {
-        return abi.encodeCall(bridge.ammSwap, (fromResource, amountIn, 1, _farDeadline()));
-    }
-
-    /// @notice `ammSwap` ETH→BOLD where the output credits the swapper's
-    ///         first-ever BOLD (fresh balance-slot SSTORE).
-    function test_gas_ammSwap_ethToBold_firstBoldRecipient() public {
-        _bench(
-            "ammSwap_ethToBold_firstBoldRecipient",
-            ethSwapperFresh,
-            address(bridge),
-            BENCH_ETH_AMOUNT,
-            _swapData(NATIVE_ETH, BENCH_ETH_AMOUNT),
-            true
-        );
-    }
-
-    /// @notice `ammSwap` ETH→BOLD where the swapper already holds BOLD
-    ///         (steady-state shape).
-    function test_gas_ammSwap_ethToBold_repeatRecipient() public {
-        _bench(
-            "ammSwap_ethToBold_repeatRecipient",
-            ethSwapperRepeat,
-            address(bridge),
-            BENCH_ETH_AMOUNT,
-            _swapData(NATIVE_ETH, BENCH_ETH_AMOUNT),
-            true
-        );
-    }
-
-    /// @notice `ammSwap` BOLD→ETH in the exact-approval shape (the
-    ///         `transferFrom` writes the allowance down to zero).
-    function test_gas_ammSwap_boldToEth_exactApproval() public {
-        _bench(
-            "ammSwap_boldToEth_exactApproval",
-            boldSwapperExact,
-            address(bridge),
-            0,
-            _swapData(BOLD_RID, BENCH_BOLD_AMOUNT),
-            true
-        );
-    }
-
-    /// @notice `ammSwap` BOLD→ETH in the infinite-approval shape (OZ
-    ///         `_spendAllowance` skips the allowance write — the cheaper
-    ///         recurring path for wallets holding a standing approval).
-    function test_gas_ammSwap_boldToEth_infiniteApproval() public {
-        _bench(
-            "ammSwap_boldToEth_infiniteApproval",
-            boldSwapperInfinite,
-            address(bridge),
-            0,
-            _swapData(BOLD_RID, BENCH_BOLD_AMOUNT),
-            true
-        );
-    }
-
-    /// @notice Pins the seeded reserve depths and the swapper staging the
-    ///         swap benchmarks depend on.
-    function test_sanity_swapScenarioAssumptions() public view {
-        // 100 ETH * 50% fee * 30% seed = 15 ETH; 300k BOLD * 50% * 30% = 45k.
-        assertEq(bridge.ammReserveEth(), 15 ether, "ETH reserve == 15");
-        assertEq(bridge.ammReserveBold(), 45_000 ether, "BOLD reserve == 45 000");
-        assertEq(MockBoldOz(BOLD).balanceOf(ethSwapperFresh), 0, "fresh swapper holds no BOLD");
-        assertGt(MockBoldOz(BOLD).balanceOf(ethSwapperRepeat), 0, "repeat swapper holds BOLD");
-        assertEq(
-            MockBoldOz(BOLD).allowance(boldSwapperExact, address(bridge)),
-            BENCH_BOLD_AMOUNT,
-            "exact approval staged"
-        );
-        assertEq(
-            MockBoldOz(BOLD).allowance(boldSwapperInfinite, address(bridge)),
-            type(uint256).max,
-            "infinite approval staged"
-        );
-        assertGt(
-            MockBoldOz(BOLD).balanceOf(boldSwapperExact),
-            BENCH_BOLD_AMOUNT,
-            "exact-approval swapper keeps a residual balance"
-        );
-        assertGt(
-            MockBoldOz(BOLD).balanceOf(boldSwapperInfinite),
-            BENCH_BOLD_AMOUNT,
-            "infinite-approval swapper keeps a residual balance"
-        );
-    }
-
-    /// @notice The benchmarked swaps produce real output in both
-    ///         directions, the swap value is paid by the pranked swapper
-    ///         (pinning the harness's value-accounting assumption), and
-    ///         the infinite approval is NOT decremented (the OZ
-    ///         `_spendAllowance` skip the infinite-approval benchmark
-    ///         exists to measure).
-    function test_sanity_swapEffects() public {
-        uint256 ethBeforeIn = ethSwapperFresh.balance;
-        vm.prank(ethSwapperFresh);
-        uint256 boldOut = bridge.ammSwap{value: BENCH_ETH_AMOUNT}(
-            NATIVE_ETH, BENCH_ETH_AMOUNT, 1, _farDeadline()
-        );
-        assertGt(boldOut, 0, "ETH->BOLD output non-zero");
-        assertEq(MockBoldOz(BOLD).balanceOf(ethSwapperFresh), boldOut, "BOLD credited");
-        assertEq(
-            ethSwapperFresh.balance, ethBeforeIn - BENCH_ETH_AMOUNT, "swap input paid by swapper"
-        );
-
-        uint256 ethBefore = boldSwapperExact.balance;
-        vm.prank(boldSwapperExact);
-        uint256 ethOut = bridge.ammSwap(BOLD_RID, BENCH_BOLD_AMOUNT, 1, _farDeadline());
-        assertGt(ethOut, 0, "BOLD->ETH output non-zero");
-        assertEq(boldSwapperExact.balance, ethBefore + ethOut, "ETH paid out");
-        assertEq(
-            MockBoldOz(BOLD).allowance(boldSwapperExact, address(bridge)),
-            0,
-            "exact approval consumed"
-        );
-
-        vm.prank(boldSwapperInfinite);
-        uint256 ethOut2 = bridge.ammSwap(BOLD_RID, BENCH_BOLD_AMOUNT, 1, _farDeadline());
-        assertGt(ethOut2, 0, "infinite-approval swap output non-zero");
-        assertEq(
-            MockBoldOz(BOLD).allowance(boldSwapperInfinite, address(bridge)),
-            type(uint256).max,
-            "infinite approval NOT decremented (OZ skip)"
-        );
-    }
-}
-
 /// @title BenchmarkGasV1_3MigrationWiredTest
 /// @notice GP.11.9 — the migration-wired deployment shape.  Production
 ///         deployments are encouraged to pre-wire a predicted
 ///         `KnomosisMigration` successor address (solidity/README,
 ///         "Production deployment notes"); every `circuitOpen` operation
-///         (deposits, state-root submission) and every `ammSwap` then
+///         (deposits, state-root submission) then
 ///         pays an external `activated()` read on the successor.  These
 ///         rows measure that recurring premium against the unwired rows
 ///         of the same shape in the deposit / swap suites.
 contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
     /// @dev Repeat depositor on the migration-wired bridge.
     address internal bob = address(0xB0B);
-    /// @dev ETH→BOLD swapper already holding BOLD (repeat shape).
-    address internal ethSwapperRepeat = address(0x5A2);
 
     InactiveMigration internal successor;
 
@@ -724,15 +528,12 @@ contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
         _seedPool(bridge);
 
         vm.deal(bob, 1000 ether);
-        vm.deal(ethSwapperRepeat, 1000 ether);
 
-        // Stage bob as a repeat depositor (one prior deposit) and the
-        // swapper as a repeat BOLD recipient, mirroring the unwired
-        // repeat-shape scenarios so the wired-vs-unwired delta is the
-        // ONLY difference.
+        // Stage bob as a repeat depositor (one prior deposit),
+        // mirroring the unwired repeat-shape scenario so the
+        // wired-vs-unwired delta is the ONLY difference.
         vm.prank(bob);
         bridge.depositETHWithFee{value: BENCH_ETH_AMOUNT}(BENCH_FEE_BPS);
-        MockBoldOz(BOLD).mint(ethSwapperRepeat, 100 ether);
     }
 
     /// @notice `depositETHWithFee`, repeat shape, on a migration-wired
@@ -749,32 +550,12 @@ contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
         );
     }
 
-    /// @notice `ammSwap` ETH→BOLD, repeat shape, on a migration-wired
-    ///         bridge (the swap body's migration arm performs the
-    ///         `activated()` read; delta against
-    ///         `ammSwap_ethToBold_repeatRecipient`).
-    function test_gas_ammSwap_ethToBold_repeat_migrationWired() public {
-        _bench(
-            "ammSwap_ethToBold_repeat_migrationWired",
-            ethSwapperRepeat,
-            address(bridge),
-            BENCH_ETH_AMOUNT,
-            abi.encodeCall(bridge.ammSwap, (NATIVE_ETH, BENCH_ETH_AMOUNT, 1, _farDeadline())),
-            true
-        );
-    }
 
-    /// @notice Pins the migration wiring + the staged repeat shapes.
+    /// @notice Pins the migration wiring + the staged repeat shape.
     function test_sanity_migrationWiredAssumptions() public view {
         assertEq(bridge.migration(), address(successor), "migration wired");
         assertFalse(successor.activated(), "successor not activated");
         assertEq(bridge.depositNonce(bob), 1, "bob is a repeat depositor");
-        assertGt(MockBoldOz(BOLD).balanceOf(ethSwapperRepeat), 0, "repeat swapper holds BOLD");
-        // The staged steady-state reserves (SB L2-primary): bob's
-        // staging deposit does NOT grow the L1 book — its 0.003 ETH
-        // seed rides the event to the L2 reserve actor instead.
-        assertEq(bridge.ammReserveEth(), 15 ether, "ETH reserve == 15");
-        assertEq(bridge.ammReserveBold(), 45_000 ether, "BOLD reserve == 45 000");
     }
 
     /// @notice The wired bridge's operations still succeed (the breaker
@@ -783,11 +564,6 @@ contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
         vm.prank(bob);
         bridge.depositETHWithFee{value: BENCH_ETH_AMOUNT}(BENCH_FEE_BPS);
         assertEq(bridge.depositNonce(bob), 2, "wired deposit succeeded");
-        vm.prank(ethSwapperRepeat);
-        uint256 out = bridge.ammSwap{value: BENCH_ETH_AMOUNT}(
-            NATIVE_ETH, BENCH_ETH_AMOUNT, 1, _farDeadline()
-        );
-        assertGt(out, 0, "wired swap succeeded");
     }
 }
 
@@ -1260,7 +1036,6 @@ contract BenchmarkGasV1_3DisasterRecoveryTest is BenchmarkGasV1_3Base {
         assertEq(multisig.confirmationCount(), 1, "one staged confirmation");
         assertFalse(multisig.executed(), "not executed in the staged state");
         assertFalse(bridge.ammDisabled(), "AMM live in the staged state");
-        assertGt(bridge.ammReserveEth(), 0, "pool seeded");
     }
 }
 

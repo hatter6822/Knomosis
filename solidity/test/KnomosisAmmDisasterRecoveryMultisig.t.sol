@@ -28,7 +28,7 @@ contract KnomosisAmmDisasterRecoveryMultisigTest is DisasterRecoveryTestBase {
     event ConfirmationRoundExpired(uint256 indexed staleRoundId, uint256 indexed newRoundId);
     event AmmDisableExecuted(uint256 indexed roundId, uint256 timestamp);
     /// @dev Local copy of the bridge event for `vm.expectEmit`.
-    event AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256 reserveBold);
+    event AmmDisabled(uint256 timestamp);
 
     /// @dev The constructor-validation cases pass the placeholder bridge
     ///      `address(0xB81D6E)`; give it code so the multisig's new
@@ -199,11 +199,9 @@ contract KnomosisAmmDisasterRecoveryMultisigTest is DisasterRecoveryTestBase {
         assertFalse(multisig.executed(), "below threshold: not executed");
         assertFalse(bridge.ammDisabled(), "below threshold: AMM still enabled");
 
-        // The AMM is still fully operational: a swap succeeds.
-        _seedBothLegs(bridge);
-        vm.prank(swapper);
-        uint256 out = bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
-        assertGt(out, 0, "swap still works under a sub-threshold quorum");
+        // The pool is still fully operational: deposits still seed it.
+        vm.prank(lp);
+        bridge.depositETHWithFee{value: 10 ether}(5000);
     }
 
     /// @notice End-to-end: the THIRD confirmation fires the kill switch in
@@ -211,7 +209,6 @@ contract KnomosisAmmDisasterRecoveryMultisigTest is DisasterRecoveryTestBase {
     ///         reserves are preserved, and both contracts emit their events.
     function test_thirdConfirmation_disablesAmm() public {
         (KnomosisAmmDisasterRecoveryMultisig multisig, KnomosisBridge bridge) = _deployWired();
-        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
 
         vm.prank(SIGNER_OPERATOR);
         multisig.confirmDisable();
@@ -223,19 +220,16 @@ contract KnomosisAmmDisasterRecoveryMultisigTest is DisasterRecoveryTestBase {
         vm.expectEmit(true, false, false, true, address(multisig));
         emit AmmDisableExecuted(0, block.timestamp);
         vm.expectEmit(false, false, false, true, address(bridge));
-        emit AmmDisabled(block.timestamp, rEth, rBold);
+        emit AmmDisabled(block.timestamp);
 
         vm.prank(SIGNER_AUDITOR);
         multisig.confirmDisable();
 
         assertTrue(multisig.executed(), "executed at threshold");
         assertTrue(bridge.ammDisabled(), "bridge kill switch fired");
-        assertEq(bridge.ammReserveEth(), rEth, "ETH reserve preserved");
-        assertEq(bridge.ammReserveBold(), rBold, "BOLD reserve preserved");
-
-        vm.expectRevert(KnomosisBridge.AmmIsDisabled.selector);
-        vm.prank(swapper);
-        bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
+        // The L2 halt is the committed `ammDisabled` mirror: swap
+        // inadmissibility is proven and tested on the Lean side
+        // (`reserveSwap_inadmissible_while_amm_disabled`).
     }
 
     /// @notice Once executed, further confirmations and revocations revert

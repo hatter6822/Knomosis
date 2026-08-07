@@ -875,7 +875,6 @@ contract BridgeFeeSplitBoldTest is
         (, uint256 poolAmount,) = FeeSplitMath.split(amount, feeBps, bridge.weiPerBudgetUnitBold());
         (uint256 seed,) = FeeSplitMath.ammSeedSplit(poolAmount, 8000);
         assertGt(seed, 0, "non-trivial seed");
-        assertEq(bridge.ammReserveBold(), 0, "L1 BOLD book untouched by the deposit");
         assertEq(bridge.totalLockedValue(), amount, "TVL == full deposit");
         assertEq(bridge.boldTotalLockedValue(), amount, "BOLD TVL == full deposit");
 
@@ -905,7 +904,6 @@ contract BridgeFeeSplitBoldTest is
         assertEq(uint256(wAmount), amount - seed, "withdrew all non-seed value");
         assertEq(bridge.totalLockedValue(), seed, "TVL drained to the seed-backing floor");
         assertEq(bridge.boldTotalLockedValue(), seed, "BOLD TVL drained to the seed-backing floor");
-        assertEq(bridge.ammReserveBold(), 0, "L1 BOLD book still untouched after withdrawal");
     }
 
     /// @notice Sign a state-root attestation with the attestor key.

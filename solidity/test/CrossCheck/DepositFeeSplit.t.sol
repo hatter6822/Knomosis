@@ -375,9 +375,8 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework, DepositEventDecoder, 
             checkEq(p, fixPool, "live poolAmount != Lean fixture");
             checkEq(ammSeed, fixSeed, "live ammSeedAmount != Lean fixture (GP.11.2)");
             checkEq(uint256(g), fixBudget, "live budgetGrant != Lean fixture");
-            // SB L2-primary topology: the live L1 reserve is UNTOUCHED
-            // — the emitted seed is the L2 reserve actor's credit.
-            checkEq(bridge.ammReserveEth(), 0, "live L1 reserve must stay untouched");
+            // One-AMM topology: the emitted seed is the L2 reserve
+            // actor's credit (the excised L1 books no longer exist).
 
             // The bridge computes receiptHash with real keccak256 over
             // ITS OWN deploymentId + the emitted fields; re-derive via the

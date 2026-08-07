@@ -7,7 +7,6 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
-import {AmmLiquidityHarness} from "test/utils/AmmTestBase.sol";
 import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
 import {MockBold} from "test/utils/MockBold.sol";
 
@@ -20,7 +19,7 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         sequencer-claimable free-pool remainder — and the seed is
 ///         credited ON L2 (the `depositWithFee` law's third leg, to
 ///         the reserve actor) from the event, while the L1
-///         `ammReserve*` books are NEVER grown by a deposit.  The
+///         seed leg is credited on L2 only.  The
 ///         non-growth is asserted throughout this suite: it is the
 ///         topology guarantee.
 ///
@@ -174,7 +173,7 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
     ///         canonical `DepositWithFeeInitiated` carrying
     ///         `ammSeedAmount == floor(poolAmount / 2)` (with the bound
     ///         `receiptHash`) — the value the L2 credits to the reserve
-    ///         actor — while the L1 `ammReserveEth` stays UNTOUCHED and
+    ///         actor — the L1 books are excised, so nothing L1-side moves, and
     ///         the FULL deposit is credited to TVL (the wei backing the
     ///         L2 seed stays in general escrow).
     function test_ethDeposit_seedsReserve_andEventCarriesSplit() public {
@@ -208,9 +207,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         vm.prank(alice);
         bridge.depositETHWithFee{value: value}(feeBps);
 
-        assertEq(bridge.ammReserveEth(), 0,
-            "L1 ETH reserve untouched (L2-primary: the seed is credited on L2)");
-        assertEq(bridge.ammReserveBold(), 0, "BOLD reserve untouched by an ETH deposit");
         assertEq(bridge.totalLockedValue(), value, "TVL credits the FULL deposit");
         assertEq(address(bridge).balance, value, "escrow holds the FULL deposit");
         assertEq(ammSeed + freePool, poolAmount, "conservation: seed + freePool == poolAmount");
@@ -235,8 +231,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         assertEq(eventSeed, ammSeed, "event seed == floor(poolAmount * 80%)");
         assertEq(eventSeed, (poolAmount * 8000) / 10_000, "event seed matches direct recompute");
         assertLe(eventSeed, p, "seed never exceeds the pool fee");
-        assertEq(bridge.ammReserveEth(), 0,
-            "L1 ETH reserve untouched (the seed is credited on L2)");
     }
 
     /// @notice An AMM-disabled deployment (ratio 0) seeds nothing and the
@@ -250,7 +244,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         (, , uint256 ammSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
         assertEq(ammSeed, 0, "event ammSeedAmount == 0 when AMM disabled");
-        assertEq(bridge.ammReserveEth(), 0, "ETH reserve untouched (disabled)");
         assertEq(bridge.totalLockedValue(), 2 ether, "full deposit credited to TVL");
     }
 
@@ -267,7 +260,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         assertEq(p, 0, "no pool fee");
         assertEq(ammSeed, 0, "no seed when there is no pool fee");
         assertEq(u, 3 ether, "whole deposit is the user's");
-        assertEq(bridge.ammReserveEth(), 0, "reserve untouched");
     }
 
     /// @notice A dust pool fee whose seed floors to zero
@@ -284,7 +276,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
 
         assertEq(p, 1, "dust pool fee");
         assertEq(ammSeed, 0, "dust seed floors to zero in the event");
-        assertEq(bridge.ammReserveEth(), 0, "reserve untouched on a floored seed");
     }
 
     // ------------------------------------------------------------------
@@ -408,8 +399,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         assertEq(ethSeed, (uint256(1 ether) * 8000) / 10_000, "ETH leg splits");
         uint256 boldSeed = h.exposed_ammSeedSplit(1, 2 ether);
         assertEq(boldSeed, (uint256(2 ether) * 8000) / 10_000, "BOLD leg splits");
-        assertEq(h.ammReserveEth(), 0, "ETH reserve never moves");
-        assertEq(h.ammReserveBold(), 0, "BOLD reserve never moves");
     }
 
     /// @notice Deploy a `SeedHarness` (AMM-enabled at `ratio`) exposing the
@@ -472,9 +461,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         (, , uint256 eventSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
         assertEq(eventSeed, ammSeed, "event ammSeedAmount == BOLD seed");
-        assertEq(bridge.ammReserveBold(), 0,
-            "L1 BOLD reserve untouched (the seed is credited on L2)");
-        assertEq(bridge.ammReserveEth(), 0, "ETH reserve untouched by a BOLD deposit");
         assertEq(bridge.totalLockedValue(), amount, "global TVL credits full deposit");
         assertEq(bridge.boldTotalLockedValue(), amount, "per-BOLD TVL credits full deposit");
     }
@@ -505,8 +491,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         assertEq(ethEventSeed, ethSeed, "ETH event seed == ETH reference");
         assertEq(boldEventSeed, boldSeed, "BOLD event seed == BOLD reference");
         assertTrue(ethSeed != 0 && boldSeed != 0, "both legs split a non-zero seed");
-        assertEq(bridge.ammReserveEth(), 0, "L1 ETH reserve untouched");
-        assertEq(bridge.ammReserveBold(), 0, "L1 BOLD reserve untouched");
     }
 
     // ------------------------------------------------------------------
@@ -534,8 +518,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
 
             assertEq(eventSeed, ammSeed, "each event seed == reference");
             running += eventSeed;
-            assertEq(bridge.ammReserveEth(), 0,
-                "L1 reserve stays zero across the whole run");
         }
         assertGt(running, 0, "the L2-bound seeds accumulated a positive sum");
     }
@@ -558,11 +540,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         vm.prank(alice);
         bridge.depositBoldWithFee(boldAmt, 5000);
 
-        assertLe(
-            bridge.ammReserveEth() + bridge.ammReserveBold(),
-            bridge.totalLockedValue(),
-            "reserves are a subset of total locked value"
-        );
     }
 
     // ------------------------------------------------------------------
@@ -585,13 +562,11 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         bridge.depositETHWithFee{value: 1 ether}(5000);
         (, , uint256 eventSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
         assertEq(eventSeed, seed1, "first (at-cap) deposit's event carries the seed");
-        assertEq(bridge.ammReserveEth(), 0, "L1 reserve untouched by the admitted deposit");
 
         // The next deposit pushes TVL over the cap: it reverts.
         vm.expectRevert(KnomosisBridge.TvlCapReached.selector);
         vm.prank(alice);
         bridge.depositETHWithFee{value: 1 wei}(5000);
-        assertEq(bridge.ammReserveEth(), 0, "capped deposit changes nothing");
     }
 
     /// @notice The non-fee-split entry point `depositETH()` never seeds the
@@ -605,8 +580,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         bridge.depositETH{value: 5 ether}();
 
         assertEq(bridge.totalLockedValue(), 5 ether, "plain deposit credited to TVL");
-        assertEq(bridge.ammReserveEth(), 0, "plain depositETH never seeds the AMM");
-        assertEq(bridge.ammReserveBold(), 0, "plain depositETH never seeds the AMM");
     }
 
     // ------------------------------------------------------------------
@@ -666,7 +639,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         bridge.depositETHWithFee{value: value}(feeBps);
         (, , uint256 eventSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
-        assertEq(bridge.ammReserveEth(), 0, "L1 reserve untouched (L2-primary)");
         assertEq(eventSeed, ammSeed, "event ammSeedAmount == reference seed");
         assertLe(ammSeed, poolAmount, "seed never exceeds pool fee");
         assertEq(ammSeed + freePool, poolAmount, "conservation: seed + freePool == poolAmount");
@@ -690,11 +662,9 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         bridge.depositBoldWithFee(amount, feeBps);
         (, , uint256 eventSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
-        assertEq(bridge.ammReserveBold(), 0, "L1 BOLD reserve untouched (L2-primary)");
         assertEq(eventSeed, ammSeed, "event ammSeedAmount == reference seed");
         assertLe(ammSeed, poolAmount, "seed never exceeds pool fee");
         assertEq(ammSeed + freePool, poolAmount, "conservation: seed + freePool == poolAmount");
-        assertEq(bridge.ammReserveEth(), 0, "ETH reserve untouched");
         assertEq(bridge.boldTotalLockedValue(), amount, "full BOLD deposit credited");
     }
 
@@ -717,7 +687,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
         bridge.depositETHWithFee{value: value}(feeBps);
         (, , uint256 eventSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
-        assertEq(bridge.ammReserveEth(), 0, "L1 reserve untouched across ratios");
         assertEq(eventSeed, ammSeed, "event seed == reference across ratios");
         assertLe(ammSeed, poolAmount, "seed never exceeds pool fee");
         assertEq(ammSeed + freePool, poolAmount, "conservation across ratios");
@@ -725,219 +694,6 @@ contract AmmDepositSeedingTest is Test, BoldTestSupport, DepositEventDecoder {
             assertEq(ammSeed, 0, "disabled ratio never seeds");
         }
         assertEq(bridge.totalLockedValue(), value, "full deposit credited across ratios");
-    }
-}
-
-/// @title AmmSeedingHandler
-/// @notice Drives random ETH + BOLD deposits against a seeding-enabled
-///         bridge, tracking the cumulative seed each leg SHOULD have
-///         accrued (recomputed via the `FeeSplitMath` reference on every
-///         admitted deposit).  The invariant runner asserts the live
-///         reserves equal those running sums.
-contract AmmSeedingHandler is BoldTestSupport {
-    Vm internal constant VM_CHEATS = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-
-    KnomosisBridge public immutable bridge;
-    address public immutable actor;
-    uint16 public immutable ratio;
-
-    uint256 public sumSeededEth;
-    uint256 public sumSeededBold;
-
-    constructor(KnomosisBridge bridge_, address actor_) {
-        bridge = bridge_;
-        actor = actor_;
-        ratio = bridge_.ammSeedRatioBps();
-    }
-
-    function depositEth(uint256 value, uint16 feeBps) external {
-        value = _bound(value, 0, 100 ether);
-        feeBps = uint16(_bound(uint256(feeBps), 0, 5000));
-        VM_CHEATS.deal(actor, value);
-        (, uint256 poolAmount,) = FeeSplitMath.split(value, feeBps, bridge.weiPerBudgetUnitEth());
-        (uint256 ammSeed,) = FeeSplitMath.ammSeedSplit(poolAmount, ratio);
-        VM_CHEATS.prank(actor);
-        try bridge.depositETHWithFee{value: value}(feeBps) {
-            sumSeededEth += ammSeed;
-        } catch {
-            // ZeroDeposit (value 0), TvlCapReached, etc.: nothing seeded.
-        }
-    }
-
-    function depositBold(uint256 amount, uint16 feeBps) external {
-        amount = _bound(amount, 0, 100 ether);
-        feeBps = uint16(_bound(uint256(feeBps), 0, 5000));
-        MockBold(BOLD).mint(actor, amount);
-        VM_CHEATS.prank(actor);
-        MockBold(BOLD).approve(address(bridge), amount);
-        (, uint256 poolAmount,) = FeeSplitMath.split(amount, feeBps, bridge.weiPerBudgetUnitBold());
-        (uint256 ammSeed,) = FeeSplitMath.ammSeedSplit(poolAmount, ratio);
-        VM_CHEATS.prank(actor);
-        try bridge.depositBoldWithFee(amount, feeBps) {
-            sumSeededBold += ammSeed;
-        } catch {
-            // ZeroDeposit and friends: nothing seeded.
-        }
-    }
-
-}
-
-/// @title AmmDepositSeedingInvariantTest
-/// @notice Stateful Foundry-invariant runner for the SB L2-primary
-///         topology: across ARBITRARY sequences of ETH and BOLD
-///         deposits (some of which revert at the TVL cap), the live L1
-///         reserves stay EXACTLY at the pre-installed legacy liquidity
-///         — no deposit grows them — while remaining a subset of TVL
-///         and backed by real tokens.  The handler's running seed sums
-///         (the L2-bound credits) are accumulated so the non-growth
-///         invariants are exercised against sequences that genuinely
-///         carry non-zero seeds.
-contract AmmDepositSeedingInvariantTest is Test, BoldTestSupport {
-    address private constant BOLD_BREAKER = address(0xB12E6B6E);
-    address private constant BOLD_ADMIN = address(0xAD814);
-    /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.
-    address private constant AMM_DR = address(0xA33D6);
-    address private constant ACTOR = address(0xACC0);
-
-    KnomosisBridge private bridge;
-    AmmSeedingHandler private handler;
-
-    /// @dev The legacy L1 liquidity installed at setUp — the value the
-    ///      reserves must stay at across every deposit sequence.
-    uint256 private constant LEGACY_ETH = 30 ether;
-    uint256 private constant LEGACY_BOLD = 90_000 ether;
-
-    function setUp() public {
-        vm.etch(BOLD, address(new MockBold()).code);
-
-        uint64[] memory rids = new uint64[](0);
-        address[] memory toks = new address[](0);
-        // A moderate global cap so the handler's larger deposits sometimes
-        // REVERT at the cap, while smaller ones keep succeeding.  The
-        // reserves-never-grow invariant must hold regardless.
-        bridge = new AmmLiquidityHarness(
-            KnomosisBridge.ConstructorArgs({
-                knomosisVersionTag: keccak256("knomosis-amm-seeding-invariant"),
-                attestor: address(0xA11CE),
-                disputeVerifier: address(0xDEAD),
-                sequencerStake: address(0xBEEF),
-                migration: address(0),
-                disputeWindowBlocks: 100,
-                maxRedemptionWindowBlocks: 50,
-                maxAttestationStaleBlocks: 200,
-                cooldownBlocks: 50,
-                tvlCap: 5000 ether,
-                minFeeBps: 0,
-                maxFeeBps: 5000,
-                weiPerBudgetUnitEth: 1_000_000_000,
-                weiPerBudgetUnitBold: 1_000_000_000,
-                boldTokenAddress: BOLD,
-                boldTvlCap: 5000 ether,
-                boldCircuitBreaker: BOLD_BREAKER,
-                boldAdmin: BOLD_ADMIN,
-                enableLiquityAutoCircuitTrigger: false,
-                ammSeedRatioBps: 6000,
-                ammDisasterRecovery: AMM_DR,
-                faultProofRollbackAuthority: address(0),
-                erc20ResourceIds: rids,
-                erc20TokenAddrs: toks
-            })
-        );
-
-        // Install the legacy L1 liquidity the invariants pin: books +
-        // backing move together through the harness, exactly the state
-        // a live pre-topology deployment carries.
-        MockBold(BOLD).mint(address(this), LEGACY_BOLD);
-        MockBold(BOLD).approve(address(bridge), LEGACY_BOLD);
-        vm.deal(address(this), LEGACY_ETH);
-        AmmLiquidityHarness(payable(address(bridge)))
-            .harnessInstallLegacyLiquidity{value: LEGACY_ETH}(LEGACY_BOLD);
-
-        handler = new AmmSeedingHandler(bridge, ACTOR);
-        targetContract(address(handler));
-    }
-
-    /// @notice THE topology invariant: the live ETH reserve stays
-    ///         exactly at the installed legacy liquidity across every
-    ///         deposit sequence — a deposit growing it is the SB
-    ///         L2-primary regression this suite exists to catch.
-    function invariant_ethReserveNeverGrownByDeposits() public view {
-        assertEq(
-            bridge.ammReserveEth(),
-            LEGACY_ETH,
-            "ammReserveEth stays at the installed legacy liquidity"
-        );
-    }
-
-    /// @notice The BOLD-leg topology invariant.
-    function invariant_boldReserveNeverGrownByDeposits() public view {
-        assertEq(
-            bridge.ammReserveBold(),
-            LEGACY_BOLD,
-            "ammReserveBold stays at the installed legacy liquidity"
-        );
-    }
-
-    /// @notice The reserves are always a subset of the total locked value.
-    function invariant_reservesSubsetOfTvl() public view {
-        assertLe(
-            bridge.ammReserveEth() + bridge.ammReserveBold(),
-            bridge.totalLockedValue(),
-            "reserves <= total locked value"
-        );
-    }
-
-    /// @notice Per-currency: the BOLD reserve never exceeds the per-BOLD
-    ///         locked value.  Strictly stronger than the global bound — it
-    ///         catches a BOLD seed mis-routed to the ETH reserve (or a
-    ///         missed `boldTotalLockedValue` increment) that the global
-    ///         invariant would mask whenever the ETH leg has slack.
-    function invariant_boldReserveSubsetOfBoldTvl() public view {
-        assertLe(
-            bridge.ammReserveBold(),
-            bridge.boldTotalLockedValue(),
-            "ammReserveBold <= boldTotalLockedValue"
-        );
-    }
-
-    /// @notice Per-currency: the ETH reserve fits within the ETH portion of
-    ///         TVL (`totalLockedValue - boldTotalLockedValue`).  Stated as
-    ///         `ammReserveEth + boldTotalLockedValue <= totalLockedValue` to
-    ///         avoid an underflowing subtraction; catches an ETH seed
-    ///         mis-routed to the BOLD reserve.  Together with the BOLD bound
-    ///         this subsumes the global `reservesSubsetOfTvl` invariant.
-    function invariant_ethReserveWithinEthTvl() public view {
-        assertLe(
-            bridge.ammReserveEth() + bridge.boldTotalLockedValue(),
-            bridge.totalLockedValue(),
-            "ammReserveEth fits within the ETH portion of TVL"
-        );
-    }
-
-    /// @notice REAL-TOKEN backing (the ultimate solvency statement): the ETH
-    ///         reserve is backed by actual ETH the bridge holds, not merely
-    ///         by the TVL accounting variable.  Independent of the TVL
-    ///         invariants — it catches a TVL-vs-actual-balance divergence
-    ///         (e.g. a reserve credited without the matching ETH escrowed)
-    ///         that the accounting-only bounds would miss.  Holds because
-    ///         every ETH seed is carved from an ETH deposit's pool fee, which
-    ///         is a subset of the `msg.value` added to `address(this).balance`.
-    function invariant_ethReserveBackedByRealEth() public view {
-        assertLe(
-            bridge.ammReserveEth(),
-            address(bridge).balance,
-            "ammReserveEth <= bridge's actual ETH balance"
-        );
-    }
-
-    /// @notice REAL-TOKEN backing for the BOLD leg: the BOLD reserve is
-    ///         backed by actual BOLD the bridge holds.
-    function invariant_boldReserveBackedByRealBold() public view {
-        assertLe(
-            bridge.ammReserveBold(),
-            MockBold(BOLD).balanceOf(address(bridge)),
-            "ammReserveBold <= bridge's actual BOLD balance"
-        );
     }
 }
 

@@ -4,7 +4,7 @@ pragma solidity ^0.8.36;
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisAmmDisasterRecoveryMultisig} from
     "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
-import {AmmLiquidityHarness, AmmTestBase} from "test/utils/AmmTestBase.sol";
+import {AmmTestBase} from "test/utils/AmmTestBase.sol";
 
 /// @title DisasterRecoveryTestBase
 /// @notice Shared scaffolding for the WU GP.11.10 disaster-recovery multisig
@@ -51,10 +51,7 @@ abstract contract DisasterRecoveryTestBase is AmmTestBase {
             vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
         args.ammDisasterRecovery = predictedMultisig;
-        // Deployed as the liquidity harness so the suites can install
-        // pre-existing L1 reserves (`_seedBothLegs` — deposits no
-        // longer grow the L1 books under the SB L2-primary topology).
-        bridge = new AmmLiquidityHarness(args);
+        bridge = new KnomosisBridge(args);
         multisig = new KnomosisAmmDisasterRecoveryMultisig(address(bridge), _signerSet(), 3);
         assertEq(address(multisig), predictedMultisig, "multisig landed at the predicted address");
         assertEq(bridge.ammDisasterRecovery(), address(multisig), "multisig holds the role");

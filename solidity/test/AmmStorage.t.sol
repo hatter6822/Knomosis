@@ -227,7 +227,9 @@ contract AmmStorageTest is Test, BoldTestSupport {
     ///         pins these two constants).
     function test_ammCompileTimeCaps_pinned() public {
         KnomosisBridge bridge = _deploy(0);
-        assertEq(bridge.AMM_SWAP_FEE_BPS(), 30, "AMM_SWAP_FEE_BPS == 30 bps (0.30%)");
+        // The swap fee lives on as `AmmMath.SWAP_FEE_BPS` (pinned by
+        // `AmmMath.t.sol` + the kind-25 cross-stack corpus); the bridge
+        // itself no longer carries a swap surface.
         assertEq(bridge.MAX_AMM_SEED_RATIO_BPS(), 8000, "MAX_AMM_SEED_RATIO_BPS == 8000 bps (80%)");
     }
 
@@ -248,8 +250,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
     function test_ammSeedRatioBps_zero_disablesAmm() public {
         KnomosisBridge bridge = _deploy(0);
         assertEq(bridge.ammSeedRatioBps(), 0, "ammSeedRatioBps == 0 (AMM disabled)");
-        assertEq(bridge.ammReserveEth(), 0, "ammReserveEth starts 0");
-        assertEq(bridge.ammReserveBold(), 0, "ammReserveBold starts 0");
     }
 
     /// @notice The cap boundary itself (8000 bps == MAX) is accepted; the
@@ -287,12 +287,8 @@ contract AmmStorageTest is Test, BoldTestSupport {
     ///         occurred yet, and there is no constructor-side seeding).
     function test_ammReserves_startAtZero() public {
         KnomosisBridge disabled = _deploy(0);
-        assertEq(disabled.ammReserveEth(), 0, "disabled: ETH reserve 0");
-        assertEq(disabled.ammReserveBold(), 0, "disabled: BOLD reserve 0");
 
         KnomosisBridge enabled = _deploy(5000);
-        assertEq(enabled.ammReserveEth(), 0, "enabled: ETH reserve 0 (no deposit yet)");
-        assertEq(enabled.ammReserveBold(), 0, "enabled: BOLD reserve 0 (no deposit yet)");
     }
 
     // ------------------------------------------------------------------
@@ -334,8 +330,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
 
         assertEq(bridge.totalLockedValue(), value, "TVL grows by the FULL deposit (v1.2 behaviour)");
         assertEq(bridge.depositNonce(alice), nonce + 1, "nonce advanced");
-        assertEq(bridge.ammReserveEth(), 0, "AMM ETH reserve untouched (disabled)");
-        assertEq(bridge.ammReserveBold(), 0, "AMM BOLD reserve untouched (disabled)");
     }
 
     /// @notice GP.11.3 review fix (comment 1): a BOLD-DISABLED deployment
@@ -370,8 +364,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
         vm.prank(alice);
         bridge.depositETHWithFee{value: value}(feeBps);
 
-        assertEq(bridge.ammReserveEth(), 0, "BOLD-disabled: no ETH seeded despite ratio > 0");
-        assertEq(bridge.ammReserveBold(), 0, "BOLD reserve always 0 when BOLD disabled");
         assertEq(bridge.totalLockedValue(), value, "full deposit still credited to TVL");
     }
 
@@ -402,9 +394,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
             value,
             "TVL grows by the FULL deposit (the L2-bound seed stays in escrow)"
         );
-        assertEq(bridge.ammReserveEth(), 0,
-            "L1 ETH reserve untouched (SB L2-primary: the seed is credited on L2)");
-        assertEq(bridge.ammReserveBold(), 0, "AMM BOLD reserve untouched by an ETH deposit");
     }
 
     /// @notice The CORE fee split is ratio-invariant, but the GP.11.2
@@ -454,9 +443,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
             disabled.totalLockedValue(), maxSeed.totalLockedValue(), "identical TVL across ratios"
         );
         assertEq(disabled.totalLockedValue(), value, "TVL == full deposit on both");
-        assertEq(disabled.ammReserveEth(), 0, "disabled never seeds the reserve");
-        assertEq(maxSeed.ammReserveEth(), 0,
-            "max-seed leaves the L1 reserve untouched too (the 80% split rides the event to L2)");
         assertEq(
             disabled.depositNonce(alice), maxSeed.depositNonce(alice), "identical nonce advance"
         );
@@ -491,9 +477,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
         }
 
         assertEq(bridge.ammSeedRatioBps(), 5000, "seed ratio immutable across deposits");
-        assertEq(bridge.ammReserveEth(), 0,
-            "L1 ETH reserve stays zero across all three deposits (L2-primary)");
-        assertEq(bridge.ammReserveBold(), 0, "BOLD reserve untouched by ETH deposits");
         assertEq(bridge.totalLockedValue(), 3 ether, "three deposits all credited to TVL");
     }
 
@@ -508,8 +491,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
         ratio = uint16(bound(uint256(ratio), 0, 8000));
         KnomosisBridge bridge = _deploy(ratio);
         assertEq(bridge.ammSeedRatioBps(), ratio, "in-range ratio stored exactly");
-        assertEq(bridge.ammReserveEth(), 0, "ETH reserve starts 0");
-        assertEq(bridge.ammReserveBold(), 0, "BOLD reserve starts 0");
     }
 
     /// @notice Any ratio strictly above the cap reverts
@@ -568,8 +549,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
 
         // The getters remain the only read surface and read unchanged.
         assertEq(bridge.ammSeedRatioBps(), 5000, "seed ratio unchanged");
-        assertEq(bridge.ammReserveEth(), 0, "ETH reserve unchanged");
-        assertEq(bridge.ammReserveBold(), 0, "BOLD reserve unchanged");
     }
 
     // ------------------------------------------------------------------
@@ -601,9 +580,6 @@ contract AmmStorageTest is Test, BoldTestSupport {
 
         assertEq(bridge.totalLockedValue(), amount, "BOLD deposit credits the full global TVL");
         assertEq(bridge.boldTotalLockedValue(), amount, "BOLD deposit credits the per-BOLD TVL");
-        assertEq(bridge.ammReserveBold(), 0,
-            "L1 BOLD reserve untouched (the seed is credited on L2)");
-        assertEq(bridge.ammReserveEth(), 0, "ETH reserve untouched by a BOLD deposit");
     }
 
     // ------------------------------------------------------------------
