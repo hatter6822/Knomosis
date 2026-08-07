@@ -80,6 +80,40 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     /// @notice The fault-proof game contract address.  Used for
     ///         cross-validation.
     address public immutable faultProofGame;
+
+    /// @notice Address authorised to halt and resume state-root
+    ///         submission (`haltSubmissions` / `resumeSubmissions`).
+    ///         Set in the constructor; immutable.
+    ///
+    /// @dev    Modelled on `KnomosisBridge.boldCircuitBreaker`, and
+    ///         deliberately as narrow: this role can ONLY pause and
+    ///         unpause `submitStateRoot`.  It cannot move funds, slash
+    ///         a bond, revert or finalise a root, alter any immutable,
+    ///         or touch the fault-proof game.
+    ///
+    ///         Required non-zero, and required DISTINCT from
+    ///         `sequencer`.  The distinctness is the load-bearing
+    ///         part: the automatic latch below fires precisely when a
+    ///         challenger proves the sequencer wrong, so a sequencer
+    ///         who could clear its own halt would make the breaker
+    ///         decorative.
+    address public immutable submissionBreaker;
+
+    /// @notice When true, `submitStateRoot` is refused.
+    ///
+    /// @dev    Latched automatically by `revertStateRootsFrom` — the
+    ///         fault-proof game's entry point, reached only when a
+    ///         challenger has WON — and clearable only by
+    ///         `submissionBreaker`.  Deliberately NOT self-clearing:
+    ///         the trip means a submitted root was proven invalid, and
+    ///         deciding that the cause has been addressed is a
+    ///         judgement a human makes, not a block count.
+    ///
+    ///         Scoped to new submissions only.  Finalisation,
+    ///         slashing, reversion and bond reclamation stay open
+    ///         while halted, so a halt freezes the frontier without
+    ///         stranding the settlement of what came before it.
+    bool public submissionsHalted;
     /// @notice The deployment ID for cross-deployment-replay
     ///         protection.
     bytes32 public immutable deploymentId;
@@ -191,6 +225,19 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         bytes32 actionsRoot
     );
 
+    /// @notice Emitted when state-root submission is halted.
+    /// @param  by         the caller (the fault-proof game on an
+    ///                    automatic latch, otherwise the breaker role).
+    /// @param  fromIdx    the reverted-from index on an automatic
+    ///                    latch; `0` on a manual halt.
+    /// @param  automatic  true when latched by `revertStateRootsFrom`.
+    event SubmissionsHalted(address indexed by, uint64 fromIdx, bool automatic);
+
+    /// @notice Emitted when state-root submission is resumed.  Only
+    ///         ever by `submissionBreaker` — there is no automatic
+    ///         path back.
+    event SubmissionsResumed(address indexed by);
+
     /// @notice A reverted, undisputed record's bond returned to its
     ///         sequencer (SB ruling R4).  Without this path a
     ///         reverted DESCENDANT record — one nobody disputed,
@@ -281,6 +328,28 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     ///         both submit and adjudicate its own roots.
     error SequencerIsFaultProofGame();
 
+    /// @notice The constructor was handed a `submissionBreaker` equal
+    ///         to the `sequencer`.  Refused: the breaker latches on a
+    ///         proven-faulty sequencer, so that sequencer must not be
+    ///         able to clear its own halt.
+    error BreakerIsSequencer();
+
+    /// @notice `submitStateRoot` was called while submissions are
+    ///         halted.  Clearable only by `submissionBreaker` via
+    ///         `resumeSubmissions`.
+    error SubmissionsAreHalted();
+
+    /// @notice A halt/resume call came from an address other than
+    ///         `submissionBreaker`.
+    error NotSubmissionBreaker();
+
+    /// @notice `resumeSubmissions` was called while not halted, or
+    ///         `haltSubmissions` while already halted.  Refused rather
+    ///         than treated as a no-op so an operator cannot believe a
+    ///         halt took effect when it was already in place (or was
+    ///         cleared when it was never set).
+    error HaltStateUnchanged();
+
     /* ---------------------------------------------------------- */
     /* Constructor                                                */
     /* ---------------------------------------------------------- */
@@ -295,10 +364,16 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         bytes32 _deploymentId,
         uint64  _withdrawalFinalisationWindow,
         bytes32 _genesisStateCommit,
-        uint64  _maxActionsPerBatch
+        uint64  _maxActionsPerBatch,
+        address _submissionBreaker
     ) {
         if (_sequencer == address(0)) revert ZeroAddress();
         if (_faultProofGame == address(0)) revert ZeroAddress();
+        if (_submissionBreaker == address(0)) revert ZeroAddress();
+        // The breaker latches exactly when a challenger proves the
+        // sequencer wrong, so a sequencer able to clear its own halt
+        // would make it decorative.
+        if (_submissionBreaker == _sequencer) revert BreakerIsSequencer();
         // Privilege separation: the sequencer and the fault-proof game are
         // distinct principals (one submits roots, the other adjudicates).
         if (_sequencer == _faultProofGame) revert SequencerIsFaultProofGame();
@@ -328,6 +403,7 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         MAX_OUTSTANDING_ROOTS_PER_SEQUENCER = _maxOutstandingRoots;
         sequencer = _sequencer;
         faultProofGame = _faultProofGame;
+        submissionBreaker = _submissionBreaker;
         deploymentId = _deploymentId;
         MAX_ACTIONS_PER_BATCH = _maxActionsPerBatch;
 
@@ -391,6 +467,13 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
         bytes32 stateCommit,
         bytes32 actionsRoot
     ) external payable nonReentrant {
+        // The breaker.  Checked FIRST, before any bond accounting or
+        // cadence arithmetic, so a halted registry refuses on the
+        // halt rather than on whichever incidental guard happens to
+        // trip next -- an operator reading the revert should learn
+        // that submissions are stopped, not that the interval was
+        // short.
+        if (submissionsHalted) revert SubmissionsAreHalted();
         if (msg.sender != sequencer) revert NotSequencer();
         if (msg.value != STATE_ROOT_SUBMISSION_BOND) revert InvalidBond();
         if (endIndex <= prevEndIndex) revert EmptyBatch();
@@ -600,6 +683,39 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     }
 
     /* ---------------------------------------------------------- */
+    /* External: the submission breaker                           */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Halt state-root submission.  Only `submissionBreaker`.
+    ///
+    /// @dev    The manual arm of the breaker, for the emergencies a
+    ///         fault proof does not cover — a sequencer key suspected
+    ///         compromised, an upstream dependency found unsound, a
+    ///         planned migration.  The automatic arm lives in
+    ///         `revertStateRootsFrom`.
+    function haltSubmissions() external {
+        if (msg.sender != submissionBreaker) revert NotSubmissionBreaker();
+        if (submissionsHalted) revert HaltStateUnchanged();
+        submissionsHalted = true;
+        emit SubmissionsHalted(msg.sender, 0, false);
+    }
+
+    /// @notice Resume state-root submission.  Only `submissionBreaker`.
+    ///
+    /// @dev    The ONLY path back, by design: an automatic latch means
+    ///         a root was proven invalid, and deciding the cause has
+    ///         been addressed is a judgement rather than a timeout.
+    ///         Nothing about resuming un-reverts a root — the
+    ///         reverted range and its floor/ceiling are untouched, so
+    ///         the sequencer still re-extends from `canonicalTip`.
+    function resumeSubmissions() external {
+        if (msg.sender != submissionBreaker) revert NotSubmissionBreaker();
+        if (!submissionsHalted) revert HaltStateUnchanged();
+        submissionsHalted = false;
+        emit SubmissionsResumed(msg.sender);
+    }
+
+    /* ---------------------------------------------------------- */
     /* External: revertToPriorRoot (called by faultProofGame)     */
     /* ---------------------------------------------------------- */
 
@@ -625,6 +741,17 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     ///         reverted forever (its recovery path was a dead end).
     function revertStateRootsFrom(uint64 fromIdx) external nonReentrant {
         if (msg.sender != faultProofGame) revert NotFaultProofGame();
+
+        // The automatic latch.  Reaching here means the game settled
+        // AGAINST a submitted root, which is the strongest evidence
+        // available that the sequencer is faulty; continuing to accept
+        // its roots while the operator investigates is exactly the
+        // window an attacker wants.  Idempotent -- a second revert on
+        // an already-halted registry re-emits nothing.
+        if (!submissionsHalted) {
+            submissionsHalted = true;
+            emit SubmissionsHalted(msg.sender, fromIdx, true);
+        }
 
         // Update the floor (no-op if a lower floor is already in
         // place).  The `NO_REVERTED_FLOOR` sentinel makes `fromIdx = 0`

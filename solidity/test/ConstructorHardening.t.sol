@@ -25,6 +25,11 @@ import {KnomosisFaultProofMigration} from "src/contracts/KnomosisFaultProofMigra
 ///         `script/DeploySepolia.s.sol` + the per-contract suites; these tests
 ///         assert the guards reject the misconfiguration they were added for.
 contract ConstructorHardeningTest is Test {
+    /// @dev The EG.2 submission-breaker role.  A literal distinct
+    ///      from every sequencer in these fixtures: the constructor
+    ///      refuses a breaker equal to the sequencer.
+    address internal constant BREAKER = address(0xB4EA4E4);
+
     address internal constant BURN = address(0xdEaD);
 
     /// @dev Place minimal (1-byte) runtime code at `a` so `a.code.length > 0`.
@@ -160,8 +165,36 @@ contract ConstructorHardeningTest is Test {
         vm.expectRevert(KnomosisStateRootSubmission.SequencerIsFaultProofGame.selector);
         new KnomosisStateRootSubmission(
             1 ether, 216_000, 100, 100, same, same, keccak256("dep"), 216_000,
-            keccak256("genesis"), 65_536
-        );
+            keccak256("genesis"), 65_536,
+            BREAKER);
+    }
+
+    // ---- KnomosisStateRootSubmission: the submission breaker (EG.2) -----
+
+    /// @notice A zero breaker is refused.  Without this the automatic
+    ///         latch would be a one-way door: a challenger win halts
+    ///         submission and nobody can ever clear it.
+    function test_state_root_rejects_zero_breaker() public {
+        vm.expectRevert(KnomosisStateRootSubmission.ZeroAddress.selector);
+        new KnomosisStateRootSubmission(
+            1 ether, 216_000, 100, 100, address(0x5E9), address(0x6A3E),
+            keccak256("dep"), 216_000, keccak256("genesis"), 65_536,
+            address(0));
+    }
+
+    /// @notice A breaker equal to the sequencer is refused.
+    /// @dev    The load-bearing one.  The latch fires precisely when a
+    ///         challenger proves the SEQUENCER wrong, so a sequencer
+    ///         able to clear its own halt makes the breaker
+    ///         decorative — it could resume and keep submitting the
+    ///         moment it was caught.
+    function test_state_root_rejects_breaker_equals_sequencer() public {
+        address seq = address(0x5E9);
+        vm.expectRevert(KnomosisStateRootSubmission.BreakerIsSequencer.selector);
+        new KnomosisStateRootSubmission(
+            1 ether, 216_000, 100, 100, seq, address(0x6A3E),
+            keccak256("dep"), 216_000, keccak256("genesis"), 65_536,
+            seq);
     }
 
     // ---- KnomosisStateRootSubmission: SB batching parameters ------------
@@ -170,16 +203,16 @@ contract ConstructorHardeningTest is Test {
         vm.expectRevert(KnomosisStateRootSubmission.ZeroGenesisCommit.selector);
         new KnomosisStateRootSubmission(
             1 ether, 216_000, 100, 100, address(0x5E9), address(0x6A3E),
-            keccak256("dep"), 216_000, bytes32(0), 65_536
-        );
+            keccak256("dep"), 216_000, bytes32(0), 65_536,
+            BREAKER);
     }
 
     function test_state_root_rejects_zero_batch_cap() public {
         vm.expectRevert(KnomosisStateRootSubmission.BatchTooLarge.selector);
         new KnomosisStateRootSubmission(
             1 ether, 216_000, 100, 100, address(0x5E9), address(0x6A3E),
-            keccak256("dep"), 216_000, keccak256("genesis"), 0
-        );
+            keccak256("dep"), 216_000, keccak256("genesis"), 0,
+            BREAKER);
     }
 
     // ---- KnomosisDisputeVerifierV2: zero sequencerStake / attestor ------

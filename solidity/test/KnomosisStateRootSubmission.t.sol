@@ -18,6 +18,24 @@ import {LogChain} from "src/lib/LogChain.sol";
 ///         resubmit the corrected chain and require it to be
 ///         canonical.
 contract KnomosisStateRootSubmissionTest is Test {
+    /// @dev The EG.2 submission-breaker role.  A literal distinct
+    ///      from every sequencer in these fixtures: the constructor
+    ///      refuses a breaker equal to the sequencer.
+    address internal constant BREAKER = address(0xB4EA4E4);
+
+    /// @dev The EG.2 operator flow after a revert.  `revertStateRootsFrom`
+    ///      latches the submission breaker, so the R1 recovery path --
+    ///      the sequencer re-extending from `canonicalTip` -- is now
+    ///      gated on a human clearing the halt.  Asserts the latch
+    ///      FIRED before clearing it, so a regression that stopped
+    ///      latching fails here rather than passing quietly.
+    function _clearHaltAfterRevert() internal {
+        assertTrue(registry.submissionsHalted(), "a revert must latch the breaker");
+        vm.prank(BREAKER);
+        registry.resumeSubmissions();
+        assertFalse(registry.submissionsHalted(), "the breaker clears it");
+    }
+
     KnomosisStateRootSubmission private registry;
 
     address private sequencer = address(0xBEEF);
@@ -62,8 +80,8 @@ contract KnomosisStateRootSubmissionTest is Test {
             DEPLOYMENT_ID,
             WITHDRAWAL_WINDOW,
             gsc,
-            maxBatch
-        );
+            maxBatch,
+            BREAKER);
     }
 
     /// Submit a batch as the sequencer, advancing past the rate
@@ -142,7 +160,8 @@ contract KnomosisStateRootSubmissionTest is Test {
         new KnomosisStateRootSubmission(
             BOND, DISPUTE_WINDOW, MIN_INTERVAL, MAX_OUTSTANDING,
             address(0), faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW,
-            GENESIS_COMMIT, MAX_BATCH);
+            GENESIS_COMMIT, MAX_BATCH,
+            BREAKER);
     }
 
     function test_constructor_rejects_zero_faultProofGame() public {
@@ -150,7 +169,8 @@ contract KnomosisStateRootSubmissionTest is Test {
         new KnomosisStateRootSubmission(
             BOND, DISPUTE_WINDOW, MIN_INTERVAL, MAX_OUTSTANDING,
             sequencer, address(0), DEPLOYMENT_ID, WITHDRAWAL_WINDOW,
-            GENESIS_COMMIT, MAX_BATCH);
+            GENESIS_COMMIT, MAX_BATCH,
+            BREAKER);
     }
 
     function test_constructor_rejects_dispute_window_too_short() public {
@@ -162,7 +182,8 @@ contract KnomosisStateRootSubmissionTest is Test {
             MIN_INTERVAL, MAX_OUTSTANDING,
             sequencer, faultProofGame, DEPLOYMENT_ID,
             100,  // withdrawal window > dispute window
-            GENESIS_COMMIT, MAX_BATCH);
+            GENESIS_COMMIT, MAX_BATCH,
+            BREAKER);
     }
 
     function test_constructor_rejects_zero_bond() public {
@@ -170,7 +191,8 @@ contract KnomosisStateRootSubmissionTest is Test {
         new KnomosisStateRootSubmission(
             0, DISPUTE_WINDOW, MIN_INTERVAL, MAX_OUTSTANDING,
             sequencer, faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW,
-            GENESIS_COMMIT, MAX_BATCH);
+            GENESIS_COMMIT, MAX_BATCH,
+            BREAKER);
     }
 
     /* -------- submitStateRoot: batch semantics -------- */
@@ -330,6 +352,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         // The game reverts from record 9 (its parent is record 5).
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(9);
+        _clearHaltAfterRevert();
 
         assertEq(registry.canonicalTip(), 5, "tip lowered to the parent");
         assertTrue(registry.isStateRootReverted(9), "disputed record reverted");
@@ -355,6 +378,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         _submit(9, 5, _commitOf(9));
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
+        _clearHaltAfterRevert();
         vm.roll(vm.getBlockNumber() + DISPUTE_WINDOW + 1);
         // The DESCENDANT — which no game ever touched — is reverted
         // with its ancestor and must not finalise.  The retired
@@ -369,15 +393,18 @@ contract KnomosisStateRootSubmissionTest is Test {
         _submit(9, 5, _commitOf(9));
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(9);
+        _clearHaltAfterRevert();
         assertEq(registry.canonicalTip(), 5);
         // Now the ancestor at 5 loses its own game.
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
+        _clearHaltAfterRevert();
         assertEq(registry.canonicalTip(), 0, "tip fell to genesis");
         // And a stale revert of the higher record again cannot raise
         // it back onto the reverted suffix.
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(9);
+        _clearHaltAfterRevert();
         assertEq(registry.canonicalTip(), 0, "monotone down");
     }
 
@@ -385,6 +412,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         _submit(5, 0, _commitOf(5));
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
+        _clearHaltAfterRevert();
         vm.prank(faultProofGame);
         vm.expectRevert(KnomosisStateRootSubmission.RootReverted.selector);
         registry.markDisputed(5);
@@ -397,6 +425,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         _submit(9, 5, _commitOf(9));
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
+        _clearHaltAfterRevert();
 
         uint256 before = sequencer.balance;
         // Permissionless: a stranger can only ever RETURN the bond.
@@ -424,6 +453,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         registry.markDisputed(9);
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
+        _clearHaltAfterRevert();
         // The record's own game is still open: its bond stays locked
         // until that game settles (slash or clear).
         vm.expectRevert(KnomosisStateRootSubmission.DisputeInProgress.selector);
@@ -436,6 +466,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         _submit(5, 0, _commitOf(5));
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
+        _clearHaltAfterRevert();
 
         // Resubmitting the SAME key while the old bond is still in
         // the record: refused, so no ETH is orphaned.
@@ -458,6 +489,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         _submit(5, 0, _commitOf(5));
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
+        _clearHaltAfterRevert();
         registry.reclaimRevertedBond(5);
         _submit(5, 0, _commitOf(555));
         // The resubmitted record is canonical again, and its key is
@@ -497,6 +529,8 @@ contract KnomosisStateRootSubmissionTest is Test {
         registry.slashSequencerBond(5, stranger);
         vm.expectRevert(KnomosisStateRootSubmission.NotFaultProofGame.selector);
         registry.revertStateRootsFrom(5);
+        // No `_clearHaltAfterRevert` here: the call above is expected to
+        // REVERT (wrong caller), so nothing latched.
         vm.stopPrank();
     }
 
@@ -550,4 +584,78 @@ contract KnomosisStateRootSubmissionTest is Test {
         // registry holds nothing.
         assertEq(address(registry).balance, 0, "fully drained");
     }
+    /* ---------------------------------------------------------- */
+    /* EG.2: the submission breaker                               */
+    /* ---------------------------------------------------------- */
+
+    /// @notice A manual halt refuses submission; a resume restores it.
+    function test_breaker_halts_and_resumes_submission() public {
+        _submit(5, 0, _commitOf(5));
+        vm.prank(BREAKER);
+        registry.haltSubmissions();
+        assertTrue(registry.submissionsHalted(), "halted");
+
+        vm.roll(vm.getBlockNumber() + MIN_INTERVAL + 1);
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisStateRootSubmission.SubmissionsAreHalted.selector);
+        registry.submitStateRoot{value: BOND}(
+            6, 5, _commitOf(6), ACTIONS_ROOT);
+
+        vm.prank(BREAKER);
+        registry.resumeSubmissions();
+        _submit(6, 5, _commitOf(6));
+    }
+
+    /// @notice Only `submissionBreaker` may halt or resume — the
+    ///         sequencer least of all, since the automatic latch fires
+    ///         on its own proven misbehaviour.
+    function test_breaker_role_is_exclusive() public {
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisStateRootSubmission.NotSubmissionBreaker.selector);
+        registry.haltSubmissions();
+        vm.prank(stranger);
+        vm.expectRevert(KnomosisStateRootSubmission.NotSubmissionBreaker.selector);
+        registry.haltSubmissions();
+        vm.prank(faultProofGame);
+        vm.expectRevert(KnomosisStateRootSubmission.NotSubmissionBreaker.selector);
+        registry.resumeSubmissions();
+    }
+
+    /// @notice A no-op halt/resume is REFUSED rather than silently
+    ///         accepted, so an operator cannot believe a halt took
+    ///         effect when it was already in place.
+    function test_breaker_refuses_a_no_op_transition() public {
+        vm.prank(BREAKER);
+        vm.expectRevert(KnomosisStateRootSubmission.HaltStateUnchanged.selector);
+        registry.resumeSubmissions();
+
+        vm.prank(BREAKER);
+        registry.haltSubmissions();
+        vm.prank(BREAKER);
+        vm.expectRevert(KnomosisStateRootSubmission.HaltStateUnchanged.selector);
+        registry.haltSubmissions();
+    }
+
+    /// @notice A halt freezes the FRONTIER only: finalisation,
+    ///         disputing, slashing and reversion all stay open.
+    /// @dev    The scoping claim the state variable's docstring makes.
+    ///         Without this, a halt could strand the settlement of
+    ///         everything already submitted — turning a safety brake
+    ///         into a liveness failure for funds already in flight.
+    function test_halt_does_not_strand_prior_settlement() public {
+        _submit(5, 0, _commitOf(5));
+        vm.prank(BREAKER);
+        registry.haltSubmissions();
+
+        // Disputing and slashing a halted registry still work.
+        vm.prank(faultProofGame);
+        registry.markDisputed(5);
+        vm.prank(faultProofGame);
+        registry.slashSequencerBond(5, stranger);
+        // ...and so does reverting.
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(5);
+        assertTrue(registry.isStateRootReverted(5), "reversion works while halted");
+    }
+
 }

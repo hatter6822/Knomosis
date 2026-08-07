@@ -47,6 +47,15 @@ contract DeployFaultProof is Script {
           vm.envOr("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL",
                    uint256(5)));
         address sequencer = vm.envAddress("KNOMOSIS_SEQUENCER_ADDRESS");
+        // The submission breaker (EG.2): may halt / resume state-root
+        // submission.  Defaults to the broadcaster so devnet and
+        // dry-run flows need no extra configuration; a production
+        // deploy sets it explicitly.  The constructor refuses a
+        // breaker equal to the sequencer, so deploying with the
+        // sequencer key fails loudly rather than silently handing
+        // the halt to the party it exists to restrain.
+        address submissionBreaker =
+            vm.envOr("KNOMOSIS_SUBMISSION_BREAKER_ADDRESS", msg.sender);
         address treasury  = vm.envAddress("KNOMOSIS_TREASURY_ADDRESS");
         address bridge    = vm.envAddress("KNOMOSIS_BRIDGE_ADDRESS");
         bytes32 deploymentId = vm.envBytes32("KNOMOSIS_DEPLOYMENT_ID");
@@ -124,7 +133,8 @@ contract DeployFaultProof is Script {
             deploymentId,
             withdrawalFinalisationWindow,
             genesisStateCommit,
-            maxActionsPerBatch);
+            maxActionsPerBatch,
+            submissionBreaker);
         require(address(submission) == predictedSubmission, "AddressMismatch");
 
         // Step 6: deploy verifier.  Same discipline.

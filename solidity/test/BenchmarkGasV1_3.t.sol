@@ -1455,8 +1455,8 @@ contract BenchmarkGasV1_3BatchSubmissionTest is BenchmarkGasV1_3Base {
             bytes32(uint256(0xBA7C4)),
             100, // withdrawal finalisation window
             keccak256("knomosis.bench.genesis"),
-            65_536 // max actions per batch (the operational default)
-        );
+            65_536, // max actions per batch (the operational default)
+            BREAKER);
         batchCommit = keccak256("knomosis.bench.batch.commit");
         batchActionsRoot = keccak256("knomosis.bench.batch.actionsRoot");
         vm.deal(SEQUENCER, 10 ether);
@@ -1572,8 +1572,8 @@ contract BenchmarkGasV1_3TerminateInclusionTest is
             DEPLOYMENT_ID,
             100,
             probe.preRoot, // genesis = the probe's pre-root
-            65_536
-        );
+            65_536,
+            BREAKER);
         game = new KnomosisFaultProofGame(
             100, // bisection response timeout
             CHALLENGE_BOND,

@@ -765,6 +765,15 @@ contract DeploySepolia is Script {
         // between the two prediction points.
         require(predV2 == predV2FromA, "cross-cluster V2 prediction drift");
 
+        // The submission breaker (EG.2): may halt / resume state-root
+        // submission.  Defaults to the broadcaster so a dry-run needs no
+        // extra configuration; a production deploy sets it explicitly.
+        // The constructor refuses a breaker equal to the sequencer, so
+        // deploying with the sequencer key fails loudly rather than
+        // handing the halt to the party it exists to restrain.
+        address submissionBreaker =
+            vm.envOr("KNOMOSIS_SUBMISSION_BREAKER_ADDRESS", msg.sender);
+
         KnomosisStateRootSubmission submission = new KnomosisStateRootSubmission(
             cfg.stateRootBond,
             cfg.srDisputeWindow,
@@ -775,8 +784,8 @@ contract DeploySepolia is Script {
             deploymentId,
             cfg.withdrawalFinalisationWindow,
             cfg.genesisStateCommit,
-            cfg.maxActionsPerBatch
-        );
+            cfg.maxActionsPerBatch,
+            submissionBreaker);
         require(address(submission) == predSub, "submission prediction mismatch");
 
         KnomosisDisputeVerifierV2 verifierV2 = new KnomosisDisputeVerifierV2(
@@ -878,6 +887,15 @@ contract DeploySepolia is Script {
         vm.serializeAddress(a, "sequencer", cfg.sequencer);
         vm.serializeAddress(a, "treasury", cfg.treasury);
         vm.serializeAddress(a, "boldCircuitBreaker", cfg.boldCircuitBreaker);
+        // The EG.2 submission breaker.  Read back OFF THE DEPLOYED
+        // CONTRACT rather than from config: the manifest is what an
+        // operator consults to learn which key can halt the chain, and
+        // an immutable read cannot drift from what was actually
+        // constructed.
+        vm.serializeAddress(
+            a,
+            "submissionBreaker",
+            KnomosisStateRootSubmission(d.stateRootSubmission).submissionBreaker());
         string memory actorsJson = vm.serializeAddress(a, "boldAdmin", cfg.boldAdmin);
 
         // Top-level manifest.

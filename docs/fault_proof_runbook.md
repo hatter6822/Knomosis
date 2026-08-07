@@ -322,6 +322,14 @@ that differs from the operator's L2 replay of the batch.
 A challenger win used to be a dead end (reverted indices could never
 be resubmitted); rulings R1/R3/R4 make the range recoverable:
 
+  0. **The submission breaker latched.**  `revertStateRootsFrom` sets
+     `submissionsHalted` on its way through, so step 2 below WILL
+     revert with `SubmissionsAreHalted` until the `submissionBreaker`
+     role calls `resumeSubmissions()`.  This is deliberate — a
+     proven-invalid root is the point at which a human should confirm
+     the cause before the chain resumes — but it means recovery is no
+     longer unattended.  Establish what went wrong, then resume.  See
+     `sepolia_deployment_runbook.md` §9A.
   1. The revert lowered `canonicalTip` to the disputed record's
      `prevEndIndex`, so the chain re-extends from the last good
      record.

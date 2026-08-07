@@ -45,6 +45,11 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 ///         real challenger win THROUGH to a corrected chain.
 contract BatchGameCrossCheck is
     CrossCheckFramework, WithdrawalFlowHarness, SignedActionProbe {
+    /// @dev The EG.2 submission-breaker role.  Distinct from every
+    ///      sequencer here: the constructor refuses a breaker equal
+    ///      to the sequencer.
+    address internal constant BREAKER = address(0xB4EA4E4);
+
     KnomosisStepVMRoot private stepVM;
     KnomosisStateRootSubmission private registry;
     KnomosisFaultProofGame private game;
@@ -172,8 +177,8 @@ contract BatchGameCrossCheck is
             DEPLOYMENT_ID,
             DISPUTE_WINDOW,         // withdrawal finalisation window
             LOW_ROOT,               // genesis state commit = probe pre-root
-            16                      // max actions per batch
-        );
+            16,                     // max actions per batch
+            BREAKER);
         game = new KnomosisFaultProofGame(
             BISECTION_TIMEOUT,
             MIN_CHALLENGE_BOND,
@@ -456,6 +461,20 @@ contract BatchGameCrossCheck is
             "challenger credited 95% of both bonds");
         vm.prank(challenger);
         game.withdraw();
+
+        // THE BREAKER (EG.2).  The challenger's win latched it on its
+        // way through `revertStateRootsFrom`, so the R1 recovery path
+        // below is now gated on a human clearing the halt.  Asserted
+        // rather than merely cleared: this is the case that pins the
+        // automatic arm firing on a REAL settlement rather than on a
+        // direct call.
+        assertTrue(registry.submissionsHalted(),
+            "a challenger win must halt further submission");
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisStateRootSubmission.NotSubmissionBreaker.selector);
+        registry.resumeSubmissions();
+        vm.prank(BREAKER);
+        registry.resumeSubmissions();
 
         // RECOVERY (the path the retired registry lacked): the
         // corrected batch resubmits at the SAME key — allowed because
