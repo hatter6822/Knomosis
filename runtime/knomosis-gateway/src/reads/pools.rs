@@ -117,6 +117,7 @@ fn read_failed(title: &str, detail: &str) -> RouteOutcome {
 mod tests {
     use super::pool_view;
     use crate::state::ReadState;
+    use knomosis_amount::Amount;
     use knomosis_indexer::cursor::CURSOR_KEY;
     use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
     use knomosis_storage::storage::Storage;
@@ -128,8 +129,8 @@ mod tests {
         let path = dir.path().join("index.db");
         let writer = SqliteStorage::open(&path).unwrap();
         let mut tx = writer.combined_transaction().unwrap();
-        tx.credit_pool_eth(161, 1000).unwrap();
-        tx.credit_pool_bold(161, 200).unwrap();
+        tx.credit_pool_eth(161, Amount::from_u64(1000)).unwrap();
+        tx.credit_pool_bold(161, Amount::from_u64(200)).unwrap();
         tx.commit().unwrap();
         writer.put(CURSOR_KEY, &42u64.to_be_bytes()).unwrap();
         let storage = SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()).unwrap();

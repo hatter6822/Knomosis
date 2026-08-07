@@ -16,8 +16,10 @@
 //! `Storage` impl and injects controlled failures on demand,
 //! plus tests that verify the indexer's recovery semantics.
 
+use knomosis_amount::Amount;
 use knomosis_indexer::event::Event;
 use knomosis_indexer::indexer::{Indexer, IndexerError, INDEXER_MAX_BATCH_EVENTS};
+use knomosis_storage::budget_storage::CounterValue;
 use knomosis_storage::combined_transaction::{
     CombinedStorage, CombinedTransactionError, CombinedTransactionOps,
 };
@@ -192,14 +194,14 @@ impl CombinedTransactionOps for FaultyCombinedTransaction<'_> {
         self.inner.as_ref().unwrap().kv_scan(prefix)
     }
 
-    fn get_actor_budget(&self, actor: u64) -> Result<u128, CombinedTransactionError> {
+    fn get_actor_budget(&self, actor: u64) -> Result<CounterValue, CombinedTransactionError> {
         self.inner.as_ref().unwrap().get_actor_budget(actor)
     }
 
     fn get_actor_budget_current_epoch_grants(
         &self,
         actor: u64,
-    ) -> Result<u128, CombinedTransactionError> {
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner
             .as_ref()
             .unwrap()
@@ -209,26 +211,26 @@ impl CombinedTransactionOps for FaultyCombinedTransaction<'_> {
     fn get_actor_budget_current_epoch_consumed(
         &self,
         actor: u64,
-    ) -> Result<u128, CombinedTransactionError> {
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner
             .as_ref()
             .unwrap()
             .get_actor_budget_current_epoch_consumed(actor)
     }
 
-    fn get_pool_eth(&self, p: u64) -> Result<u128, CombinedTransactionError> {
+    fn get_pool_eth(&self, p: u64) -> Result<CounterValue, CombinedTransactionError> {
         self.inner.as_ref().unwrap().get_pool_eth(p)
     }
 
-    fn get_pool_bold(&self, p: u64) -> Result<u128, CombinedTransactionError> {
+    fn get_pool_bold(&self, p: u64) -> Result<CounterValue, CombinedTransactionError> {
         self.inner.as_ref().unwrap().get_pool_bold(p)
     }
 
     fn credit_actor_budget(
         &mut self,
         actor: u64,
-        delta: u128,
-    ) -> Result<u128, CombinedTransactionError> {
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner
             .as_mut()
             .unwrap()
@@ -238,8 +240,8 @@ impl CombinedTransactionOps for FaultyCombinedTransaction<'_> {
     fn credit_actor_budget_current_epoch_grants(
         &mut self,
         actor: u64,
-        delta: u128,
-    ) -> Result<u128, CombinedTransactionError> {
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner
             .as_mut()
             .unwrap()
@@ -249,27 +251,43 @@ impl CombinedTransactionOps for FaultyCombinedTransaction<'_> {
     fn credit_actor_budget_current_epoch_consumed(
         &mut self,
         actor: u64,
-        delta: u128,
-    ) -> Result<u128, CombinedTransactionError> {
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner
             .as_mut()
             .unwrap()
             .credit_actor_budget_current_epoch_consumed(actor, delta)
     }
 
-    fn credit_pool_eth(&mut self, p: u64, delta: u128) -> Result<u128, CombinedTransactionError> {
+    fn credit_pool_eth(
+        &mut self,
+        p: u64,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner.as_mut().unwrap().credit_pool_eth(p, delta)
     }
 
-    fn credit_pool_bold(&mut self, p: u64, delta: u128) -> Result<u128, CombinedTransactionError> {
+    fn credit_pool_bold(
+        &mut self,
+        p: u64,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner.as_mut().unwrap().credit_pool_bold(p, delta)
     }
 
-    fn debit_pool_eth(&mut self, p: u64, delta: u128) -> Result<u128, CombinedTransactionError> {
+    fn debit_pool_eth(
+        &mut self,
+        p: u64,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner.as_mut().unwrap().debit_pool_eth(p, delta)
     }
 
-    fn debit_pool_bold(&mut self, p: u64, delta: u128) -> Result<u128, CombinedTransactionError> {
+    fn debit_pool_bold(
+        &mut self,
+        p: u64,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
         self.inner.as_mut().unwrap().debit_pool_bold(p, delta)
     }
 
@@ -320,8 +338,8 @@ fn commit_failure_truly_rolled_back_returns_storage_error() {
         &[Event::BalanceChanged {
             resource: 0,
             actor: 1,
-            old_value: 0,
-            new_value: 100,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(100),
         }],
     );
     match result {
@@ -339,8 +357,8 @@ fn commit_failure_truly_rolled_back_returns_storage_error() {
             &[Event::BalanceChanged {
                 resource: 0,
                 actor: 1,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             }],
         )
         .unwrap();
@@ -365,8 +383,8 @@ fn cascading_failure_poisons_indexer() {
         &[Event::BalanceChanged {
             resource: 0,
             actor: 1,
-            old_value: 0,
-            new_value: 100,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(100),
         }],
     );
     match result {
@@ -390,8 +408,8 @@ fn cascading_failure_poisons_indexer() {
         &[Event::BalanceChanged {
             resource: 0,
             actor: 1,
-            old_value: 0,
-            new_value: 200,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(200),
         }],
     );
     assert!(matches!(result, Err(IndexerError::Poisoned)));
@@ -407,8 +425,8 @@ fn batch_too_large_rejected() {
         .map(|i| Event::BalanceChanged {
             resource: 0,
             actor: i,
-            old_value: 0,
-            new_value: u128::from(i),
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from(i),
         })
         .collect();
     assert_eq!(events.len(), INDEXER_MAX_BATCH_EVENTS + 1);
@@ -428,8 +446,8 @@ fn batch_too_large_rejected() {
         .map(|i| Event::BalanceChanged {
             resource: 0,
             actor: i,
-            old_value: 0,
-            new_value: u128::from(i),
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from(i),
         })
         .collect();
     assert_eq!(events_at_limit.len(), INDEXER_MAX_BATCH_EVENTS);

@@ -271,6 +271,7 @@ mod tests {
     use super::{render_record, IndexCounter, Mux};
     use crate::events::fanout::ring::Cursor;
     use crate::events::fanout::FanoutState;
+    use knomosis_amount::Amount;
     use knomosis_indexer::client::KIND_EVENT;
     use knomosis_indexer::decoder::encode_event;
     use knomosis_indexer::event::Event;
@@ -287,8 +288,8 @@ mod tests {
         encode_event(&Event::BalanceChanged {
             resource: 0,
             actor,
-            old_value: 1000,
-            new_value: 900,
+            old_value: Amount::from_u64(1000),
+            new_value: Amount::from_u64(900),
         })
     }
 

@@ -469,6 +469,7 @@ fn render_known(event: &Event) -> Rendered {
 #[cfg(test)]
 mod tests {
     use super::{render_event, DecodeError, EventJson};
+    use knomosis_amount::Amount;
     use knomosis_event_subscribe::event_type::ALL_EVENT_TYPES;
     use knomosis_indexer::decoder::encode_event;
     use knomosis_indexer::event::Event;
@@ -485,8 +486,8 @@ mod tests {
         let json = render(&Event::BalanceChanged {
             resource: 0,
             actor: 161,
-            old_value: 1000,
-            new_value: 950,
+            old_value: Amount::from_u64(1000),
+            new_value: Amount::from_u64(950),
         });
         assert_eq!(json.seq, "104233");
         assert_eq!(json.index, 0);
@@ -512,7 +513,7 @@ mod tests {
         let json = render(&Event::RewardIssued {
             resource: 1,
             recipient: 7,
-            amount: big,
+            amount: Amount::from(big),
         });
         assert_eq!(json.payload["amount"], big.to_string());
         assert!(
@@ -534,7 +535,7 @@ mod tests {
         let json = render(&Event::WithdrawalRequested {
             resource: 0,
             sender: 9,
-            amount: 100,
+            amount: Amount::from_u64(100),
             recipient_l1: [0xAB; 20],
             withdrawal_id: 4,
         });
@@ -755,8 +756,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 0,
                 actor: 1,
-                old_value: 1,
-                new_value: 2,
+                old_value: Amount::from_u64(1),
+                new_value: Amount::from_u64(2),
             },
             Event::NonceAdvanced {
                 actor: 1,
@@ -781,19 +782,19 @@ mod tests {
             Event::RewardIssued {
                 resource: 0,
                 recipient: 1,
-                amount: 5,
+                amount: Amount::from_u64(5),
             },
             Event::WithdrawalRequested {
                 resource: 0,
                 sender: 1,
-                amount: 5,
+                amount: Amount::from_u64(5),
                 recipient_l1: [1; 20],
                 withdrawal_id: 1,
             },
             Event::DepositCredited {
                 resource: 0,
                 recipient: 1,
-                amount: 5,
+                amount: Amount::from_u64(5),
                 deposit_id: 1,
             },
             Event::LocalPolicyDeclared {
@@ -819,34 +820,34 @@ mod tests {
                 game_id: 1,
                 winner: 2,
                 loser: 3,
-                payout: 4,
+                payout: Amount::from_u64(4),
             },
             Event::DepositWithFeeCredited {
                 resource: 0,
                 recipient: 1,
                 pool_actor: 2,
-                user_amount: 5,
-                pool_amount: 1,
+                user_amount: Amount::from_u64(5),
+                pool_amount: Amount::from_u64(1),
                 budget_grant: 3,
                 deposit_id: 1,
             },
             Event::ActionBudgetTopUp {
                 signer: 1,
                 gas_resource: 0,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 3,
                 pool_actor: 2,
             },
             Event::GasPoolClaim {
                 resource: 0,
                 sequencer: 1,
-                amount: 5,
+                amount: Amount::from_u64(5),
             },
             Event::DelegatedActionBudgetTopUp {
                 recipient: 1,
                 signer: 2,
                 gas_resource: 0,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 3,
                 pool_actor: 4,
             },
@@ -857,13 +858,13 @@ mod tests {
             Event::AmmSwapExecuted {
                 from_resource: 0,
                 to_resource: 1,
-                amount_in: 5,
-                amount_out: 4,
+                amount_in: Amount::from_u64(5),
+                amount_out: Amount::from_u64(4),
                 amm_reserve_actor: 2,
             },
             Event::AmmReservesReclaimed {
                 resource: 0,
-                amount: 5,
+                amount: Amount::from_u64(5),
                 reserve_actor: 2,
                 pool_actor: 3,
             },
@@ -871,13 +872,13 @@ mod tests {
                 from_resource: 0,
                 to_resource: 1,
                 user: 7,
-                amount_in: 5,
-                amount_out: 4,
+                amount_in: Amount::from_u64(5),
+                amount_out: Amount::from_u64(4),
                 reserve_actor: 3,
             },
             Event::ReserveSeeded {
                 resource: 0,
-                amount: 5,
+                amount: Amount::from_u64(5),
                 reserve_actor: 3,
                 deposit_id: 42,
             },

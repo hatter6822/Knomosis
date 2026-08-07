@@ -21,6 +21,7 @@
 //! backpressure); and the `Idempotency-Key` replay cache (a duplicate key
 //! returns the cached response with no second host round-trip).
 
+use knomosis_amount::Amount;
 use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -118,24 +119,25 @@ fn start_harness_cfg(
     // Balances: actor 7 holds resources 0 (1000) and 1 (250); actor 9 a
     // distinct balance (must be excluded from actor 7's list).
     writer
-        .put(&balance_key(7, 0), &1000u128.to_be_bytes())
+        .put(&balance_key(7, 0), &Amount::from_u64(1000).to_be_bytes())
         .unwrap();
     writer
-        .put(&balance_key(7, 1), &250u128.to_be_bytes())
+        .put(&balance_key(7, 1), &Amount::from_u64(250).to_be_bytes())
         .unwrap();
     writer
-        .put(&balance_key(9, 0), &5u128.to_be_bytes())
+        .put(&balance_key(9, 0), &Amount::from_u64(5).to_be_bytes())
         .unwrap();
     // Budget: epoch 3, grants 100, consumed 30.
     let mut tx = writer.combined_transaction().unwrap();
-    tx.credit_actor_budget_current_epoch_grants(7, 100).unwrap();
-    tx.credit_actor_budget_current_epoch_consumed(7, 30)
+    tx.credit_actor_budget_current_epoch_grants(7, Amount::from_u64(100))
+        .unwrap();
+    tx.credit_actor_budget_current_epoch_consumed(7, Amount::from_u64(30))
         .unwrap();
     tx.commit().unwrap();
     writer.put(CURRENT_EPOCH_KEY, &3u64.to_be_bytes()).unwrap();
     // Pool 161: ETH 1000.
     let mut tx = writer.combined_transaction().unwrap();
-    tx.credit_pool_eth(161, 1000).unwrap();
+    tx.credit_pool_eth(161, Amount::from_u64(1000)).unwrap();
     tx.commit().unwrap();
     // Cursor.
     writer.put(CURSOR_KEY, &42u64.to_be_bytes()).unwrap();
@@ -454,8 +456,13 @@ fn concurrent_writer_keeps_reads_well_formed_and_monotonic() {
         let mut v: u128 = 1000;
         while !w_stop.load(Ordering::Relaxed) {
             let mut tx = writer.combined_transaction().unwrap();
-            tx.kv_put(&balance_key(7, 0), &v.to_be_bytes()).unwrap();
-            tx.kv_put(&balance_key(7, 1), &(v + 1).to_be_bytes())
+            // Written through `Amount::to_be_bytes`, so the concurrent
+            // writer produces cells at exactly the width the reader
+            // expects rather than at whatever a raw integer happens to
+            // be.
+            tx.kv_put(&balance_key(7, 0), &Amount::from(v).to_be_bytes())
+                .unwrap();
+            tx.kv_put(&balance_key(7, 1), &Amount::from(v + 1).to_be_bytes())
                 .unwrap();
             #[allow(clippy::cast_possible_truncation)]
             tx.kv_put(CURSOR_KEY, &(v as u64).to_be_bytes()).unwrap();
@@ -768,8 +775,8 @@ fn event_frame(seq: u64, actor: u64) -> Vec<u8> {
     let payload = encode_event(&Event::BalanceChanged {
         resource: 0,
         actor,
-        old_value: 1000,
-        new_value: 900,
+        old_value: Amount::from_u64(1000),
+        new_value: Amount::from_u64(900),
     });
     let mut v = vec![KIND_EVENT];
     v.extend_from_slice(&seq.to_be_bytes());

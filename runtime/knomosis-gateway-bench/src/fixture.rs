@@ -20,6 +20,7 @@
 
 use std::path::PathBuf;
 
+use knomosis_amount::Amount;
 use knomosis_indexer::balance::balance_key;
 use knomosis_indexer::cursor::{ensure_identifier, CURSOR_KEY};
 use knomosis_indexer::INDEXER_IDENTIFIER;
@@ -115,8 +116,11 @@ pub fn build(config: FixtureConfig) -> Result<Fixture, FixtureError> {
     for actor in 0..config.actors as u64 {
         for resource in 0..config.resources as u64 {
             let amount = balance_amount(config.seed, actor, resource);
-            tx.put(&balance_key(actor, resource), &amount.to_be_bytes())
-                .map_err(|e| FixtureError::Storage(e.to_string()))?;
+            tx.put(
+                &balance_key(actor, resource),
+                &Amount::from(amount).to_be_bytes(),
+            )
+            .map_err(|e| FixtureError::Storage(e.to_string()))?;
         }
     }
     // A non-zero cursor so the gateway's reads (which pair a cell read with a
@@ -139,6 +143,7 @@ pub fn build(config: FixtureConfig) -> Result<Fixture, FixtureError> {
 #[cfg(test)]
 mod tests {
     use super::{balance_amount, build, FixtureConfig, FixtureError};
+    use knomosis_amount::Amount;
     use knomosis_indexer::balance::BalanceView;
     use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
 
@@ -169,11 +174,11 @@ mod tests {
         for actor in 0..5u64 {
             for resource in 0..2u64 {
                 let got = view.get(actor, resource).expect("read balance");
-                assert_eq!(got, balance_amount(7, actor, resource));
+                assert_eq!(got, Amount::from(balance_amount(7, actor, resource)));
             }
         }
         // An unseeded actor reads back the kernel's "no cell ⇒ zero".
-        assert_eq!(view.get(99, 0).expect("read"), 0);
+        assert_eq!(view.get(99, 0).expect("read"), Amount::from_u64(0));
     }
 
     #[test]

@@ -47,6 +47,9 @@ knomosis-gateway = { path = "../knomosis-gateway" }
 # Seeds the read-only indexer fixture: `SqliteStorage` (the writer) +
 # the `balance_key` / cursor codecs the gateway reads.
 knomosis-storage = { path = "../knomosis-storage" }
+# `knomosis-amount` supplies the `Amount` the seeded balance fixture
+# encodes into read-only indexer cells.
+knomosis-amount = { path = "../knomosis-amount" }
 knomosis-indexer = { path = "../knomosis-indexer" }
 # Reuses the host bench's well-tested latency `Histogram` +
 # `LatencySummary` (a generic percentile tracker — DRY rather than a

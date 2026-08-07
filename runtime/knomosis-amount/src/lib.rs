@@ -189,6 +189,37 @@ impl Amount {
         Option::<U256>::from(self.0.checked_sub(&rhs.0)).map(Self)
     }
 
+    /// Saturating addition — clamps to [`Amount::MAX`] on overflow.
+    ///
+    /// **Not for stored balances.**  Use [`checked_add`] there: a
+    /// stored balance that overflows proves the event source
+    /// disagrees with the kernel, and clamping would publish a number
+    /// that is simply wrong (see the crate docs).
+    ///
+    /// This exists for DERIVED read-side aggregates — quantities
+    /// computed for display from operator configuration plus stored
+    /// state, where the alternative to a clamp is failing a read over
+    /// a value nobody can act on anyway.
+    ///
+    /// [`checked_add`]: Amount::checked_add
+    #[must_use]
+    pub fn saturating_add(self, rhs: Self) -> Self {
+        self.checked_add(rhs).unwrap_or(Self::MAX)
+    }
+
+    /// Saturating subtraction — clamps to zero on underflow.
+    ///
+    /// Unlike [`saturating_add`], the floor here is usually the
+    /// intended arithmetic rather than a fallback: "how much of an
+    /// allowance is left" is zero once consumption exceeds the grant,
+    /// not an error.
+    ///
+    /// [`saturating_add`]: Amount::saturating_add
+    #[must_use]
+    pub fn saturating_sub(self, rhs: Self) -> Self {
+        self.checked_sub(rhs).unwrap_or(Self::ZERO)
+    }
+
     /// The canonical fixed-width big-endian encoding.
     #[must_use]
     pub fn to_be_bytes(self) -> [u8; AMOUNT_BYTES] {
@@ -203,6 +234,24 @@ impl Amount {
     #[must_use]
     pub fn from_be_bytes(bytes: [u8; AMOUNT_BYTES]) -> Self {
         Self(U256::from_be_bytes(bytes))
+    }
+
+    /// The canonical fixed-width LITTLE-endian encoding.
+    ///
+    /// The CBE amount payload is little-endian
+    /// (`Encoding/CBOR.lean`), so wire codecs want this form while
+    /// storage keyspaces want the big-endian one (whose byte order
+    /// sorts numerically, which `SQLite`'s `BLOB` comparison relies on).
+    /// Both are provided so no caller hand-rolls a reversal.
+    #[must_use]
+    pub fn to_le_bytes(self) -> [u8; AMOUNT_BYTES] {
+        self.0.to_le_bytes()
+    }
+
+    /// Decode from the canonical fixed-width little-endian encoding.
+    #[must_use]
+    pub fn from_le_bytes(bytes: [u8; AMOUNT_BYTES]) -> Self {
+        Self(U256::from_le_bytes(bytes))
     }
 
     /// Decode from a big-endian slice, requiring exactly

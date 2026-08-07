@@ -41,6 +41,10 @@ knomosis-cli-common = { workspace = true }
 # indexer's SQLite database via `SqliteStorage::open_read_only` (the
 # G1.6a path — pure SQLITE_OPEN_READ_ONLY).
 knomosis-storage = { path = "../knomosis-storage" }
+# `knomosis-amount` supplies the 256-bit `Amount` the balance / budget
+# read paths decode.  Rendered to the §6.2 envelope as a decimal
+# string, which is `Amount`'s own `Display`.
+knomosis-amount = { path = "../knomosis-amount" }
 # The indexer's typed read views (BalanceView) + key/cursor codecs the
 # gateway renders to the JSON contract.
 knomosis-indexer = { path = "../knomosis-indexer" }

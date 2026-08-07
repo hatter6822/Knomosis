@@ -59,11 +59,10 @@
 //!
 //!   * `Authority.ActorId` (UInt64) → [`ActorId`] = `u64`.
 //!   * `Authority.ResourceId` (UInt64) → [`ResourceId`] = `u64`.
-//!   * `Authority.Amount` (Nat, bounded < 2^64 per
-//!     `Encoding.fieldsBounded`) → [`Amount`] = `u128`.
-//!     Stored as u128 in Rust because the field's encoding head
-//!     is an 8-byte LE value (matching `knomosis-l1-ingest`'s
-//!     `Amount = u128` convention).
+//!   * `Authority.Amount` (Nat, bounded `< Laws.maxAmount = 2^256`)
+//!     → [`Amount`] = [`knomosis_amount::Amount`], a 256-bit
+//!     unsigned integer.  The width is the kernel's own ceiling, not
+//!     a margin: see that crate's docs.
 //!   * `Authority.Nonce` → [`Nonce`] = `u128`.
 //!   * `Authority.PublicKey` (ByteArray) → `Vec<u8>`.
 //!   * `Bridge.WithdrawalId` (UInt64) → [`WithdrawalId`] = `u64`.
@@ -77,11 +76,13 @@ pub type ActorId = u64;
 /// 64-bit ResourceId mirroring `Authority.ResourceId`.
 pub type ResourceId = u64;
 
-/// 128-bit Amount mirroring `Authority.Amount`.  The encoder's
-/// `fieldsBounded` predicate restricts encoded amounts to < 2^64,
-/// but we carry u128 in Rust to match `knomosis-l1-ingest`'s
-/// convention.
-pub type Amount = u128;
+/// 256-bit Amount mirroring `Authority.Amount`.
+///
+/// The kernel bounds a credited amount by `Laws.maxAmount = 2^256`
+/// (`Laws.AmountBounded`), so this type holds exactly what the kernel
+/// admits.  It replaced a `u128`, under which a perfectly kernel-legal
+/// balance could exceed the representation by ordinary accumulation.
+pub type Amount = knomosis_amount::Amount;
 
 /// 128-bit Nonce mirroring `Authority.Nonce`.
 pub type Nonce = u128;
@@ -568,7 +569,7 @@ pub const EVENT_TAG_COUNT: u8 = 25;
 
 #[cfg(test)]
 mod tests {
-    use super::{Event, EVENT_TAG_COUNT, RESOURCE_ID_BOLD, RESOURCE_ID_ETH};
+    use super::{Amount, Event, EVENT_TAG_COUNT, RESOURCE_ID_BOLD, RESOURCE_ID_ETH};
 
     /// Tag values match the frozen indices in
     /// `LegalKernel/Events/Types.lean::Event.tag`.
@@ -580,8 +581,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 0,
                 actor: 0,
-                old_value: 0,
-                new_value: 0
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(0)
             }
             .tag(),
             0
@@ -626,7 +627,7 @@ mod tests {
             Event::RewardIssued {
                 resource: 0,
                 recipient: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             8
@@ -635,7 +636,7 @@ mod tests {
             Event::WithdrawalRequested {
                 resource: 0,
                 sender: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 recipient_l1: [0; 20],
                 withdrawal_id: 0
             }
@@ -646,7 +647,7 @@ mod tests {
             Event::DepositCredited {
                 resource: 0,
                 recipient: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 deposit_id: 0
             }
             .tag(),
@@ -688,7 +689,7 @@ mod tests {
                 game_id: 0,
                 winner: 0,
                 loser: 0,
-                payout: 0
+                payout: Amount::from_u64(0)
             }
             .tag(),
             15
@@ -699,8 +700,8 @@ mod tests {
                 resource: 0,
                 recipient: 0,
                 pool_actor: 0,
-                user_amount: 0,
-                pool_amount: 0,
+                user_amount: Amount::from_u64(0),
+                pool_amount: Amount::from_u64(0),
                 budget_grant: 0,
                 deposit_id: 0,
             }
@@ -711,7 +712,7 @@ mod tests {
             Event::ActionBudgetTopUp {
                 signer: 0,
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -722,7 +723,7 @@ mod tests {
             Event::GasPoolClaim {
                 resource: 0,
                 sequencer: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
             }
             .tag(),
             18
@@ -732,7 +733,7 @@ mod tests {
                 recipient: 0,
                 signer: 0,
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -753,8 +754,8 @@ mod tests {
             Event::AmmSwapExecuted {
                 from_resource: 0,
                 to_resource: 1,
-                amount_in: 0,
-                amount_out: 0,
+                amount_in: Amount::from_u64(0),
+                amount_out: Amount::from_u64(0),
                 amm_reserve_actor: 3,
             }
             .tag(),
@@ -763,7 +764,7 @@ mod tests {
         assert_eq!(
             Event::AmmReservesReclaimed {
                 resource: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 reserve_actor: 3,
                 pool_actor: 1,
             }
@@ -776,8 +777,8 @@ mod tests {
                 from_resource: 0,
                 to_resource: 1,
                 user: 7,
-                amount_in: 0,
-                amount_out: 0,
+                amount_in: Amount::from_u64(0),
+                amount_out: Amount::from_u64(0),
                 reserve_actor: 3,
             }
             .tag(),
@@ -786,7 +787,7 @@ mod tests {
         assert_eq!(
             Event::ReserveSeeded {
                 resource: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 reserve_actor: 3,
                 deposit_id: 0,
             }
@@ -812,15 +813,15 @@ mod tests {
             from_resource: 0,
             to_resource: 1,
             user: 42,
-            amount_in: 10,
-            amount_out: 9,
+            amount_in: Amount::from_u64(10),
+            amount_out: Amount::from_u64(9),
             reserve_actor: 3,
         };
         assert_eq!(swap.actor(), Some(42), "tag 23 projects the user");
         assert_eq!(swap.resource(), None, "tag 23 has no single resource");
         let seeded = Event::ReserveSeeded {
             resource: 1,
-            amount: 5,
+            amount: Amount::from_u64(5),
             reserve_actor: 3,
             deposit_id: 77,
         };
@@ -842,8 +843,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 1,
                 actor: 42,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             }
             .actor(),
             Some(42)
@@ -866,8 +867,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 99,
                 actor: 0,
-                old_value: 0,
-                new_value: 0,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(0),
             }
             .resource(),
             Some(99)
@@ -889,8 +890,8 @@ mod tests {
         assert!(Event::BalanceChanged {
             resource: 0,
             actor: 0,
-            old_value: 0,
-            new_value: 0
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(0)
         }
         .is_balance_change());
         assert!(!Event::IdentityRevoked { actor: 0 }.is_balance_change());
@@ -906,8 +907,8 @@ mod tests {
                 resource: 0,
                 recipient: 42,
                 pool_actor: 1,
-                user_amount: 100,
-                pool_amount: 10,
+                user_amount: Amount::from_u64(100),
+                pool_amount: Amount::from_u64(10),
                 budget_grant: 50,
                 deposit_id: 7,
             }
@@ -919,7 +920,7 @@ mod tests {
             Event::ActionBudgetTopUp {
                 signer: 99,
                 gas_resource: 0,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             }
@@ -931,7 +932,7 @@ mod tests {
             Event::GasPoolClaim {
                 resource: 0,
                 sequencer: 2,
-                amount: 1000,
+                amount: Amount::from_u64(1000),
             }
             .actor(),
             Some(2)
@@ -942,7 +943,7 @@ mod tests {
                 recipient: 55,
                 signer: 77,
                 gas_resource: 0,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             }
@@ -968,8 +969,8 @@ mod tests {
                 resource: 1,
                 recipient: 0,
                 pool_actor: 0,
-                user_amount: 0,
-                pool_amount: 0,
+                user_amount: Amount::from_u64(0),
+                pool_amount: Amount::from_u64(0),
                 budget_grant: 0,
                 deposit_id: 0,
             }
@@ -981,7 +982,7 @@ mod tests {
             Event::ActionBudgetTopUp {
                 signer: 0,
                 gas_resource: 7,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -992,7 +993,7 @@ mod tests {
             Event::GasPoolClaim {
                 resource: 9,
                 sequencer: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
             }
             .resource(),
             Some(9)
@@ -1003,7 +1004,7 @@ mod tests {
                 recipient: 0,
                 signer: 0,
                 gas_resource: 3,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -1020,8 +1021,8 @@ mod tests {
             resource: 0,
             recipient: 0,
             pool_actor: 0,
-            user_amount: 0,
-            pool_amount: 0,
+            user_amount: Amount::from_u64(0),
+            pool_amount: Amount::from_u64(0),
             budget_grant: 0,
             deposit_id: 0,
         }
@@ -1029,7 +1030,7 @@ mod tests {
         assert!(Event::ActionBudgetTopUp {
             signer: 0,
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: 0,
             pool_actor: 0,
         }
@@ -1037,14 +1038,14 @@ mod tests {
         assert!(Event::GasPoolClaim {
             resource: 0,
             sequencer: 0,
-            amount: 0,
+            amount: Amount::from_u64(0),
         }
         .is_gas_pool_family());
         assert!(Event::DelegatedActionBudgetTopUp {
             recipient: 0,
             signer: 0,
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: 0,
             pool_actor: 0,
         }
@@ -1059,14 +1060,14 @@ mod tests {
         assert!(!Event::BalanceChanged {
             resource: 0,
             actor: 0,
-            old_value: 0,
-            new_value: 0
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(0)
         }
         .is_gas_pool_family());
         assert!(!Event::DepositCredited {
             resource: 0,
             recipient: 0,
-            amount: 0,
+            amount: Amount::from_u64(0),
             deposit_id: 0,
         }
         .is_gas_pool_family());

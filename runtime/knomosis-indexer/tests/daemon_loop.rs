@@ -32,6 +32,7 @@
 //!   * **Out-of-order seq → ProtocolViolation, no commit**
 //!     ([`out_of_order_seq_protocol_violation`]).
 
+use knomosis_amount::Amount;
 use knomosis_indexer::client::SubscribeClient;
 use knomosis_indexer::daemon::{consume_stream, ConsumeOutcome};
 use knomosis_indexer::decoder::encode_event;
@@ -111,8 +112,8 @@ fn balance_changed_bytes(resource: u64, actor: u64, old_v: u128, new_v: u128) ->
     encode_event(&Event::BalanceChanged {
         resource,
         actor,
-        old_value: old_v,
-        new_value: new_v,
+        old_value: Amount::from(old_v),
+        new_value: Amount::from(new_v),
     })
 }
 
@@ -384,8 +385,8 @@ fn resume_from_carries_cursor() {
             &[Event::BalanceChanged {
                 resource: 0,
                 actor: 1,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             }],
         )
         .unwrap();
@@ -416,7 +417,7 @@ fn mixed_dispatch_via_wire() {
             &encode_event(&Event::RewardIssued {
                 resource: 0,
                 recipient: 1,
-                amount: 100,
+                amount: Amount::from_u64(100),
             }),
         ),
         // seq=2 triggers commit of seq=1's batch.
@@ -435,7 +436,7 @@ fn mixed_dispatch_via_wire() {
     // Balance for actor 1: must be 100, NOT 200 (double count).
     // This verifies the two-pass dispatch across the wire.
     let view = knomosis_indexer::balance::BalanceView::new(&storage);
-    assert_eq!(view.get(1, 0).unwrap(), 100);
+    assert_eq!(view.get(1, 0).unwrap(), Amount::from_u64(100));
 
     let _ = server.join().unwrap();
 }

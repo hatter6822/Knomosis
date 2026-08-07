@@ -955,7 +955,7 @@ fn read_cell(
         .optional()
         .map_err(|e| BudgetStorageError::Storage(StorageError::Backend(e.to_string())))?;
     match row {
-        None => Ok(0),
+        None => Ok(CounterValue::ZERO),
         Some(bytes) => decode_counter(&bytes).ok_or(BudgetStorageError::CorruptCell {
             table,
             actor,
@@ -1023,6 +1023,7 @@ fn checked_debit(
 mod tests {
     use super::{next_prefix_upper_bound, SqliteCombinedTransaction};
     use crate::sqlite::SqliteStorage;
+    use knomosis_amount::Amount;
 
     /// `next_prefix_upper_bound` produces the lex-smallest key
     /// strictly greater than every `prefix*` extension.
@@ -1045,11 +1046,11 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.combined_transaction().unwrap();
         tx.kv_put(b"some_key", b"some_value").unwrap();
-        tx.credit_actor_budget(42, 100).unwrap();
+        tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
         tx.commit().unwrap();
         // Both visible after commit.
         assert_eq!(s.get(b"some_key").unwrap(), Some(b"some_value".to_vec()));
-        assert_eq!(s.get_actor_budget(42).unwrap(), 100);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(100));
     }
 
     /// Combined transaction: rollback discards both kv + budget
@@ -1061,10 +1062,10 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.combined_transaction().unwrap();
         tx.kv_put(b"some_key", b"some_value").unwrap();
-        tx.credit_actor_budget(42, 100).unwrap();
+        tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
         tx.rollback().unwrap();
         assert_eq!(s.get(b"some_key").unwrap(), None);
-        assert_eq!(s.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(0));
     }
 
     /// Drop without commit/rollback ROLLBACKs as a safety net.
@@ -1076,11 +1077,11 @@ mod tests {
         {
             let mut tx = s.combined_transaction().unwrap();
             tx.kv_put(b"some_key", b"some_value").unwrap();
-            tx.credit_actor_budget(42, 100).unwrap();
+            tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
             // `tx` dropped without commit.
         }
         assert_eq!(s.get(b"some_key").unwrap(), None);
-        assert_eq!(s.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(0));
     }
 
     /// Credit overflow halts the combined tx + rolls back the
@@ -1092,15 +1093,16 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.combined_transaction().unwrap();
         tx.kv_put(b"k1", b"v1").unwrap();
-        tx.credit_actor_budget(42, u128::MAX - 5).unwrap();
+        tx.credit_actor_budget(42, Amount::MAX.checked_sub(Amount::from_u64(5)).unwrap())
+            .unwrap();
         // This credit overflows.
-        let result = tx.credit_actor_budget(42, 100);
+        let result = tx.credit_actor_budget(42, Amount::from_u64(100));
         assert!(result.is_err());
         // Rollback explicitly (or rely on Drop).
         tx.rollback().unwrap();
         // Both kv and budget reverted.
         assert_eq!(s.get(b"k1").unwrap(), None);
-        assert_eq!(s.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(0));
     }
 
     /// kv_scan honors the prefix correctly + ascending order.
@@ -1139,18 +1141,24 @@ mod tests {
         use crate::budget_storage::BudgetStorage;
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.combined_transaction().unwrap();
-        tx.credit_actor_budget(42, 1000).unwrap();
-        tx.credit_actor_budget_current_epoch_grants(42, 100)
+        tx.credit_actor_budget(42, Amount::from_u64(1000)).unwrap();
+        tx.credit_actor_budget_current_epoch_grants(42, Amount::from_u64(100))
             .unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(42, 50)
+        tx.credit_actor_budget_current_epoch_consumed(42, Amount::from_u64(50))
             .unwrap();
         tx.commit().unwrap();
         let mut tx = s.combined_transaction().unwrap();
         tx.reset_current_epoch().unwrap();
         tx.commit().unwrap();
-        assert_eq!(s.get_actor_budget(42).unwrap(), 1000);
-        assert_eq!(s.get_actor_budget_current_epoch_grants(42).unwrap(), 0);
-        assert_eq!(s.get_actor_budget_current_epoch_consumed(42).unwrap(), 0);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(1000));
+        assert_eq!(
+            s.get_actor_budget_current_epoch_grants(42).unwrap(),
+            Amount::from_u64(0)
+        );
+        assert_eq!(
+            s.get_actor_budget_current_epoch_consumed(42).unwrap(),
+            Amount::from_u64(0)
+        );
     }
 
     /// Compile-only: the type is Sized so it can be returned by
@@ -1177,23 +1185,35 @@ mod tests {
         // Seed via the write path.
         let mut wtx = s.combined_transaction().unwrap();
         wtx.kv_put(b"k", b"v").unwrap();
-        wtx.credit_actor_budget_current_epoch_grants(7, 100)
+        wtx.credit_actor_budget_current_epoch_grants(7, Amount::from_u64(100))
             .unwrap();
-        wtx.credit_actor_budget_current_epoch_consumed(7, 30)
+        wtx.credit_actor_budget_current_epoch_consumed(7, Amount::from_u64(30))
             .unwrap();
         wtx.commit().unwrap();
         // Read back via the inherent DEFERRED read transaction.
         let rtx = s.combined_read_transaction().unwrap();
         assert_eq!(rtx.kv_get(b"k").unwrap(), Some(b"v".to_vec()));
-        assert_eq!(rtx.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
-        assert_eq!(rtx.get_actor_budget_current_epoch_consumed(7).unwrap(), 30);
+        assert_eq!(
+            rtx.get_actor_budget_current_epoch_grants(7).unwrap(),
+            Amount::from_u64(100)
+        );
+        assert_eq!(
+            rtx.get_actor_budget_current_epoch_consumed(7).unwrap(),
+            Amount::from_u64(30)
+        );
         rtx.rollback().unwrap();
         // The boxed trait surface (`begin_combined_read_tx`) is
         // observationally equivalent.
         let btx = s.begin_combined_read_tx().unwrap();
-        assert_eq!(btx.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
+        assert_eq!(
+            btx.get_actor_budget_current_epoch_grants(7).unwrap(),
+            Amount::from_u64(100)
+        );
         btx.rollback().unwrap();
         // Sanity: the seeded state is unchanged by the read txs.
-        assert_eq!(s.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
+        assert_eq!(
+            s.get_actor_budget_current_epoch_grants(7).unwrap(),
+            Amount::from_u64(100)
+        );
     }
 }

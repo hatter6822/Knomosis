@@ -479,7 +479,7 @@ fn balance_get(
     let key = balance_key_bytes(actor, resource);
     let cell = tx.kv_get(&key).map_err(map_combined_err)?;
     match cell {
-        None => Ok(0),
+        None => Ok(Amount::ZERO),
         Some(bytes) if bytes.len() == BALANCE_VALUE_LEN => {
             let mut buf = [0u8; BALANCE_VALUE_LEN];
             buf.copy_from_slice(&bytes);
@@ -632,6 +632,7 @@ mod tests {
     use crate::balance::BalanceView;
     use crate::budget_view::BudgetReadView;
     use crate::event::{Event, RESOURCE_ID_ETH};
+    use knomosis_amount::Amount;
     use knomosis_storage::sqlite::SqliteStorage;
     use knomosis_storage::storage::Storage;
 
@@ -672,8 +673,8 @@ mod tests {
             let events = vec![Event::BalanceChanged {
                 resource: 1,
                 actor: 2,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             }];
             ix.apply_batch(1, &events).unwrap();
             assert_eq!(ix.cursor(), 1);
@@ -694,13 +695,13 @@ mod tests {
             &[Event::BalanceChanged {
                 resource: 1,
                 actor: 42,
-                old_value: 0,
-                new_value: 500,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(500),
             }],
         )
         .unwrap();
         let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(42, 1).unwrap(), 500);
+        assert_eq!(bv.get(42, 1).unwrap(), Amount::from_u64(500));
     }
 
     /// RewardIssued credits the recipient (via combined tx).
@@ -713,12 +714,12 @@ mod tests {
             &[Event::RewardIssued {
                 resource: 2,
                 recipient: 7,
-                amount: 100,
+                amount: Amount::from_u64(100),
             }],
         )
         .unwrap();
         let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(7, 2).unwrap(), 100);
+        assert_eq!(bv.get(7, 2).unwrap(), Amount::from_u64(100));
     }
 
     /// WithdrawalRequested debits the sender; underflow halts.
@@ -732,8 +733,8 @@ mod tests {
             &[Event::BalanceChanged {
                 resource: 1,
                 actor: 1,
-                old_value: 0,
-                new_value: 50,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(50),
             }],
         )
         .unwrap();
@@ -743,7 +744,7 @@ mod tests {
             &[Event::WithdrawalRequested {
                 resource: 1,
                 sender: 1,
-                amount: 100,
+                amount: Amount::from_u64(100),
                 recipient_l1: [0; 20],
                 withdrawal_id: 1,
             }],
@@ -752,7 +753,7 @@ mod tests {
         // Cursor stays at 1.
         assert_eq!(ix.cursor(), 1);
         let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 1).unwrap(), 50);
+        assert_eq!(bv.get(1, 1).unwrap(), Amount::from_u64(50));
     }
 
     /// `apply_batch` rejects an empty batch.
@@ -776,8 +777,8 @@ mod tests {
             &[Event::BalanceChanged {
                 resource: 1,
                 actor: 1,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             }],
         )
         .unwrap();
@@ -787,8 +788,8 @@ mod tests {
                 &[Event::BalanceChanged {
                     resource: 1,
                     actor: 1,
-                    old_value: 0,
-                    new_value: 200
+                    old_value: Amount::from_u64(0),
+                    new_value: Amount::from_u64(200)
                 }]
             ),
             Err(IndexerError::StaleEvent { seq: 5, cursor: 5 })
@@ -813,8 +814,8 @@ mod tests {
             &[Event::BalanceChanged {
                 resource: 0,
                 actor: 1,
-                old_value: 0,
-                new_value: 500,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(500),
             }],
         )
         .unwrap();
@@ -828,7 +829,7 @@ mod tests {
         let batch = [Event::DepositCredited {
             resource: 0,
             recipient: 1,
-            amount: 100,
+            amount: Amount::from_u64(100),
             deposit_id: 7,
         }];
         let err = ix.apply_batch(2, &batch).unwrap_err();
@@ -843,7 +844,10 @@ mod tests {
             "expected NonMonotonicAdvance at the externally-committed seq, got {err:?}"
         );
         // The transaction rolled back: the balance is untouched.
-        assert_eq!(BalanceView::new(&s).get(1, 0).unwrap(), 500);
+        assert_eq!(
+            BalanceView::new(&s).get(1, 0).unwrap(),
+            Amount::from_u64(500)
+        );
     }
 
     /// **Audit-regression**: a multi-event batch (transfer-shaped)
@@ -857,8 +861,8 @@ mod tests {
             &[Event::BalanceChanged {
                 resource: 0,
                 actor: 1,
-                old_value: 0,
-                new_value: 500,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(500),
             }],
         )
         .unwrap();
@@ -868,21 +872,21 @@ mod tests {
                 Event::BalanceChanged {
                     resource: 0,
                     actor: 1,
-                    old_value: 500,
-                    new_value: 300,
+                    old_value: Amount::from_u64(500),
+                    new_value: Amount::from_u64(300),
                 },
                 Event::BalanceChanged {
                     resource: 0,
                     actor: 2,
-                    old_value: 0,
-                    new_value: 200,
+                    old_value: Amount::from_u64(0),
+                    new_value: Amount::from_u64(200),
                 },
             ],
         )
         .unwrap();
         let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 0).unwrap(), 300);
-        assert_eq!(bv.get(2, 0).unwrap(), 200);
+        assert_eq!(bv.get(1, 0).unwrap(), Amount::from_u64(300));
+        assert_eq!(bv.get(2, 0).unwrap(), Amount::from_u64(200));
     }
 
     /// GP.6.4: depositWithFee credits BOTH balance view AND
@@ -897,21 +901,21 @@ mod tests {
                 Event::BalanceChanged {
                     resource: RESOURCE_ID_ETH,
                     actor: 42,
-                    old_value: 0,
-                    new_value: 900,
+                    old_value: Amount::from_u64(0),
+                    new_value: Amount::from_u64(900),
                 },
                 Event::BalanceChanged {
                     resource: RESOURCE_ID_ETH,
                     actor: 1,
-                    old_value: 0,
-                    new_value: 100,
+                    old_value: Amount::from_u64(0),
+                    new_value: Amount::from_u64(100),
                 },
                 Event::DepositWithFeeCredited {
                     resource: RESOURCE_ID_ETH,
                     recipient: 42,
                     pool_actor: 1,
-                    user_amount: 900,
-                    pool_amount: 100,
+                    user_amount: Amount::from_u64(900),
+                    pool_amount: Amount::from_u64(100),
                     budget_grant: 50,
                     deposit_id: 7,
                 },
@@ -920,14 +924,14 @@ mod tests {
         .unwrap();
         let bv = BalanceView::new(&s);
         let budget = BudgetReadView::new(&s);
-        assert_eq!(bv.get(42, RESOURCE_ID_ETH).unwrap(), 900);
-        assert_eq!(bv.get(1, RESOURCE_ID_ETH).unwrap(), 100);
-        assert_eq!(budget.get_actor_budget(42).unwrap(), 50);
+        assert_eq!(bv.get(42, RESOURCE_ID_ETH).unwrap(), Amount::from_u64(900));
+        assert_eq!(bv.get(1, RESOURCE_ID_ETH).unwrap(), Amount::from_u64(100));
+        assert_eq!(budget.get_actor_budget(42).unwrap(), Amount::from_u64(50));
         assert_eq!(
             budget.get_actor_budget_current_epoch_grants(42).unwrap(),
-            50
+            Amount::from_u64(50)
         );
-        assert_eq!(budget.get_pool_eth(1).unwrap(), 100);
+        assert_eq!(budget.get_pool_eth(1).unwrap(), Amount::from_u64(100));
     }
 
     /// GP.6.4: BudgetConsumed (tag 20) credits the current-epoch
@@ -947,7 +951,7 @@ mod tests {
         let budget = BudgetReadView::new(&s);
         assert_eq!(
             budget.get_actor_budget_current_epoch_consumed(42).unwrap(),
-            1
+            Amount::from_u64(1)
         );
     }
 
@@ -963,7 +967,7 @@ mod tests {
             &[Event::ActionBudgetTopUp {
                 signer: 99,
                 gas_resource: RESOURCE_ID_ETH,
-                gas_amount: 1000,
+                gas_amount: Amount::from_u64(1000),
                 budget_increment: 100,
                 pool_actor: 1,
             }],
@@ -975,13 +979,13 @@ mod tests {
             &[Event::GasPoolClaim {
                 resource: RESOURCE_ID_ETH,
                 sequencer: 2,
-                amount: 300,
+                amount: Amount::from_u64(300),
             }],
         )
         .unwrap();
         let budget = BudgetReadView::new(&s);
         // Pool ETH: 1000 - 300 = 700.
-        assert_eq!(budget.get_pool_eth(1).unwrap(), 700);
+        assert_eq!(budget.get_pool_eth(1).unwrap(), Amount::from_u64(700));
     }
 
     /// GP.6.4: epoch advancement resets per-epoch tables but
@@ -997,17 +1001,17 @@ mod tests {
             &[Event::ActionBudgetTopUp {
                 signer: 42,
                 gas_resource: RESOURCE_ID_ETH,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             }],
         )
         .unwrap();
         let budget = BudgetReadView::new(&s);
-        assert_eq!(budget.get_actor_budget(42).unwrap(), 100);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), Amount::from_u64(100));
         assert_eq!(
             budget.get_actor_budget_current_epoch_grants(42).unwrap(),
-            100
+            Amount::from_u64(100)
         );
         // Cross to epoch 1.  The kernel advances epoch at
         // logIndex == epochLength (= 10), which surfaces as
@@ -1019,7 +1023,7 @@ mod tests {
             &[Event::ActionBudgetTopUp {
                 signer: 42,
                 gas_resource: RESOURCE_ID_ETH,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 50,
                 pool_actor: 1,
             }],
@@ -1027,11 +1031,11 @@ mod tests {
         .unwrap();
         let budget = BudgetReadView::new(&s);
         // Lifetime accumulates (100 + 50 = 150).
-        assert_eq!(budget.get_actor_budget(42).unwrap(), 150);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), Amount::from_u64(150));
         // Current-epoch resets to just the new credit (50).
         assert_eq!(
             budget.get_actor_budget_current_epoch_grants(42).unwrap(),
-            50
+            Amount::from_u64(50)
         );
     }
 
@@ -1045,7 +1049,8 @@ mod tests {
         {
             use knomosis_storage::combined_transaction::CombinedStorage;
             let mut tx = s.begin_combined_tx().unwrap();
-            tx.credit_actor_budget(42, u128::MAX - 5).unwrap();
+            tx.credit_actor_budget(42, Amount::MAX.checked_sub(Amount::from_u64(5)).unwrap())
+                .unwrap();
             tx.commit().unwrap();
         }
         let mut ix = Indexer::open(&s).unwrap();
@@ -1057,13 +1062,13 @@ mod tests {
                 Event::BalanceChanged {
                     resource: 0,
                     actor: 99,
-                    old_value: 0,
-                    new_value: 555,
+                    old_value: Amount::from_u64(0),
+                    new_value: Amount::from_u64(555),
                 },
                 Event::ActionBudgetTopUp {
                     signer: 42,
                     gas_resource: RESOURCE_ID_ETH,
-                    gas_amount: 1,
+                    gas_amount: Amount::from_u64(1),
                     budget_increment: 100,
                     pool_actor: 1,
                 },
@@ -1074,7 +1079,7 @@ mod tests {
         // for actor 99 was rolled back.
         assert_eq!(ix.cursor(), 0);
         let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(99, 0).unwrap(), 0);
+        assert_eq!(bv.get(99, 0).unwrap(), Amount::from_u64(0));
     }
 
     /// `IndexerStorage` blanket impl: SqliteStorage qualifies
@@ -1117,8 +1122,8 @@ mod tests {
             &[Event::BalanceChanged {
                 resource: 0,
                 actor: 1,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             }],
         )
         .unwrap();

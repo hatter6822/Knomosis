@@ -338,6 +338,7 @@ impl<'a> PageBuilder<'a> {
 #[cfg(test)]
 mod tests {
     use super::{backfill, BackfillError, BackfillRequest, FROM_OLDEST};
+    use knomosis_amount::Amount;
     use knomosis_indexer::client::KIND_EVENT;
     use knomosis_indexer::client::{KIND_INVALID_REQUEST, KIND_TRUNCATED};
     use knomosis_indexer::decoder::encode_event;
@@ -471,8 +472,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 0,
                 actor,
-                old_value: 1000,
-                new_value: 900,
+                old_value: Amount::from_u64(1000),
+                new_value: Amount::from_u64(900),
             },
         )
     }

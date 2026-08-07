@@ -38,6 +38,7 @@
 //!   * Concurrency bugs (this test is single-threaded; see
 //!     `tests/budget_concurrency.rs` for that).
 
+use knomosis_amount::Amount;
 use std::collections::HashMap;
 
 use knomosis_indexer::budget_view::BudgetReadView;
@@ -54,15 +55,15 @@ use proptest::prelude::*;
 #[derive(Default)]
 struct Model {
     /// Lifetime cumulative grants per actor.
-    actor_budgets: HashMap<u64, u128>,
+    actor_budgets: HashMap<u64, Amount>,
     /// Current-epoch grants per actor (reset on epoch boundary).
-    cur_grants: HashMap<u64, u128>,
+    cur_grants: HashMap<u64, Amount>,
     /// Current-epoch consumed per actor (reset on epoch boundary).
-    cur_consumed: HashMap<u64, u128>,
+    cur_consumed: HashMap<u64, Amount>,
     /// Per-pool-actor ETH balance (resource 0).
-    pool_eth: HashMap<u64, u128>,
+    pool_eth: HashMap<u64, Amount>,
     /// Per-pool-actor BOLD balance (resource 1).
-    pool_bold: HashMap<u64, u128>,
+    pool_bold: HashMap<u64, Amount>,
     /// Persisted current epoch (resets per-epoch tables when seq
     /// crosses an epoch boundary).
     current_epoch: u64,
@@ -110,28 +111,28 @@ impl Model {
     /// for purposes of this property test by REJECTING overflows
     /// (the test generators bound values so overflow can't
     /// happen).
-    fn credit_grant(&mut self, actor: u64, delta: u128) -> Result<(), ()> {
-        let lt = self.actor_budgets.entry(actor).or_insert(0);
+    fn credit_grant(&mut self, actor: u64, delta: Amount) -> Result<(), ()> {
+        let lt = self.actor_budgets.entry(actor).or_insert(Amount::ZERO);
         *lt = lt.checked_add(delta).ok_or(())?;
-        let g = self.cur_grants.entry(actor).or_insert(0);
+        let g = self.cur_grants.entry(actor).or_insert(Amount::ZERO);
         *g = g.checked_add(delta).ok_or(())?;
         Ok(())
     }
 
-    fn credit_consumed(&mut self, actor: u64, delta: u128) -> Result<(), ()> {
-        let c = self.cur_consumed.entry(actor).or_insert(0);
+    fn credit_consumed(&mut self, actor: u64, delta: Amount) -> Result<(), ()> {
+        let c = self.cur_consumed.entry(actor).or_insert(Amount::ZERO);
         *c = c.checked_add(delta).ok_or(())?;
         Ok(())
     }
 
-    fn credit_pool(&mut self, resource: u64, pool_actor: u64, amount: u128) -> Result<(), ()> {
+    fn credit_pool(&mut self, resource: u64, pool_actor: u64, amount: Amount) -> Result<(), ()> {
         match resource {
             RESOURCE_ID_ETH => {
-                let v = self.pool_eth.entry(pool_actor).or_insert(0);
+                let v = self.pool_eth.entry(pool_actor).or_insert(Amount::ZERO);
                 *v = v.checked_add(amount).ok_or(())?;
             }
             RESOURCE_ID_BOLD => {
-                let v = self.pool_bold.entry(pool_actor).or_insert(0);
+                let v = self.pool_bold.entry(pool_actor).or_insert(Amount::ZERO);
                 *v = v.checked_add(amount).ok_or(())?;
             }
             _ => { /* unknown resource: silently ignored */ }
@@ -139,14 +140,14 @@ impl Model {
         Ok(())
     }
 
-    fn debit_pool(&mut self, resource: u64, pool_actor: u64, amount: u128) -> Result<(), ()> {
+    fn debit_pool(&mut self, resource: u64, pool_actor: u64, amount: Amount) -> Result<(), ()> {
         match resource {
             RESOURCE_ID_ETH => {
-                let v = self.pool_eth.entry(pool_actor).or_insert(0);
+                let v = self.pool_eth.entry(pool_actor).or_insert(Amount::ZERO);
                 *v = v.checked_sub(amount).ok_or(())?;
             }
             RESOURCE_ID_BOLD => {
-                let v = self.pool_bold.entry(pool_actor).or_insert(0);
+                let v = self.pool_bold.entry(pool_actor).or_insert(Amount::ZERO);
                 *v = v.checked_sub(amount).ok_or(())?;
             }
             _ => { /* unknown resource: silently ignored */ }
@@ -168,7 +169,7 @@ impl Model {
                 budget_grant,
                 ..
             } => {
-                self.credit_grant(*recipient, *budget_grant)?;
+                self.credit_grant(*recipient, Amount::from(*budget_grant))?;
                 self.credit_pool(*resource, *pool_actor, *pool_amount)?;
             }
             Event::ActionBudgetTopUp {
@@ -178,7 +179,7 @@ impl Model {
                 budget_increment,
                 pool_actor,
             } => {
-                self.credit_grant(*signer, *budget_increment)?;
+                self.credit_grant(*signer, Amount::from(*budget_increment))?;
                 self.credit_pool(*gas_resource, *pool_actor, *gas_amount)?;
             }
             Event::DelegatedActionBudgetTopUp {
@@ -189,7 +190,7 @@ impl Model {
                 pool_actor,
                 ..
             } => {
-                self.credit_grant(*recipient, *budget_increment)?;
+                self.credit_grant(*recipient, Amount::from(*budget_increment))?;
                 self.credit_pool(*gas_resource, *pool_actor, *gas_amount)?;
             }
             Event::GasPoolClaim {
@@ -200,7 +201,7 @@ impl Model {
                 }
             }
             Event::BudgetConsumed { actor, amount } => {
-                self.credit_consumed(*actor, *amount)?;
+                self.credit_consumed(*actor, Amount::from(*amount))?;
             }
             _ => {}
         }
@@ -243,8 +244,8 @@ fn gp_event_strategy() -> impl Strategy<Value = Event> {
                     resource: r,
                     recipient,
                     pool_actor: pa,
-                    user_amount: ua,
-                    pool_amount: pamt,
+                    user_amount: Amount::from(ua),
+                    pool_amount: Amount::from(pamt),
                     budget_grant: bg,
                     deposit_id: did,
                 }
@@ -260,7 +261,7 @@ fn gp_event_strategy() -> impl Strategy<Value = Event> {
             .prop_map(|(s, gr, ga, bi, pa)| Event::ActionBudgetTopUp {
                 signer: s,
                 gas_resource: gr,
-                gas_amount: ga,
+                gas_amount: Amount::from(ga),
                 budget_increment: bi,
                 pool_actor: pa,
             }),
@@ -269,7 +270,7 @@ fn gp_event_strategy() -> impl Strategy<Value = Event> {
             Event::GasPoolClaim {
                 resource: r,
                 sequencer: seq,
-                amount: amt,
+                amount: Amount::from(amt),
             }
         }),
         // tag 19
@@ -286,7 +287,7 @@ fn gp_event_strategy() -> impl Strategy<Value = Event> {
                     recipient: rec,
                     signer,
                     gas_resource: gr,
-                    gas_amount: ga,
+                    gas_amount: Amount::from(ga),
                     budget_increment: bi,
                     pool_actor: pa,
                 }
@@ -345,31 +346,51 @@ fn assert_model_matches(
     actors_to_check.dedup();
     for actor in actors_to_check {
         // actor_budgets (lifetime)
-        let want = model.actor_budgets.get(&actor).copied().unwrap_or(0);
+        let want = model
+            .actor_budgets
+            .get(&actor)
+            .copied()
+            .unwrap_or(Amount::from_u64(0));
         let got = view
             .get_actor_budget(actor)
             .map_err(|e| TestCaseError::fail(format!("get_actor_budget: {e:?}")))?;
         prop_assert_eq!(want, got, "actor_budgets[{}]", actor);
         // current-epoch grants
-        let want = model.cur_grants.get(&actor).copied().unwrap_or(0);
+        let want = model
+            .cur_grants
+            .get(&actor)
+            .copied()
+            .unwrap_or(Amount::from_u64(0));
         let got = view
             .get_actor_budget_current_epoch_grants(actor)
             .map_err(|e| TestCaseError::fail(format!("current_epoch_grants: {e:?}")))?;
         prop_assert_eq!(want, got, "current_epoch_grants[{}]", actor);
         // current-epoch consumed
-        let want = model.cur_consumed.get(&actor).copied().unwrap_or(0);
+        let want = model
+            .cur_consumed
+            .get(&actor)
+            .copied()
+            .unwrap_or(Amount::from_u64(0));
         let got = view
             .get_actor_budget_current_epoch_consumed(actor)
             .map_err(|e| TestCaseError::fail(format!("current_epoch_consumed: {e:?}")))?;
         prop_assert_eq!(want, got, "current_epoch_consumed[{}]", actor);
         // pool eth
-        let want = model.pool_eth.get(&actor).copied().unwrap_or(0);
+        let want = model
+            .pool_eth
+            .get(&actor)
+            .copied()
+            .unwrap_or(Amount::from_u64(0));
         let got = view
             .get_pool_eth(actor)
             .map_err(|e| TestCaseError::fail(format!("pool_eth: {e:?}")))?;
         prop_assert_eq!(want, got, "pool_eth[{}]", actor);
         // pool bold
-        let want = model.pool_bold.get(&actor).copied().unwrap_or(0);
+        let want = model
+            .pool_bold
+            .get(&actor)
+            .copied()
+            .unwrap_or(Amount::from_u64(0));
         let got = view
             .get_pool_bold(actor)
             .map_err(|e| TestCaseError::fail(format!("pool_bold: {e:?}")))?;
@@ -449,10 +470,10 @@ proptest! {
             }
             // Spot-check the pool actor (id 1) for both legs.
             let view = BudgetReadView::new(&s);
-            let want_eth = model.pool_eth.get(&1).copied().unwrap_or(0);
+            let want_eth = model.pool_eth.get(&1).copied().unwrap_or(Amount::from_u64(0));
             let got_eth = view.get_pool_eth(1).unwrap();
             prop_assert_eq!(want_eth, got_eth, "pool_eth[1]");
-            let want_bold = model.pool_bold.get(&1).copied().unwrap_or(0);
+            let want_bold = model.pool_bold.get(&1).copied().unwrap_or(Amount::from_u64(0));
             let got_bold = view.get_pool_bold(1).unwrap();
             prop_assert_eq!(want_bold, got_bold, "pool_bold[1]");
         }

@@ -399,6 +399,7 @@ dependencies = [
 name = "knomosis-gateway"
 version = "0.15.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-event-subscribe",
  "knomosis-host",
@@ -421,6 +422,7 @@ dependencies = [
 name = "knomosis-gateway-bench"
 version = "0.15.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-bench",
  "knomosis-cli-common",
  "knomosis-gateway",
@@ -464,6 +466,7 @@ name = "knomosis-indexer"
 version = "0.15.0"
 dependencies = [
  "hex",
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-storage",
  "proptest",
@@ -500,6 +503,7 @@ dependencies = [
 name = "knomosis-storage"
 version = "0.15.0"
 dependencies = [
+ "knomosis-amount",
  "proptest",
  "rusqlite",
  "tempfile",

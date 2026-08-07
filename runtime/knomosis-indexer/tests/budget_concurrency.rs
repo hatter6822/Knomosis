@@ -26,6 +26,7 @@
 //!     interleaving (Rust-level only — SQLite separately
 //!     serialises via BEGIN IMMEDIATE).
 
+use knomosis_amount::Amount;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -49,7 +50,7 @@ fn many_readers_same_value() {
             &[Event::ActionBudgetTopUp {
                 signer: 42,
                 gas_resource: RESOURCE_ID_ETH,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             }],
@@ -66,7 +67,7 @@ fn many_readers_same_value() {
         }));
     }
     for h in handles {
-        assert_eq!(h.join().unwrap(), 100);
+        assert_eq!(h.join().unwrap(), Amount::from_u64(100));
     }
 }
 
@@ -92,7 +93,7 @@ fn reader_sees_monotone_atomic_updates() {
                 &[Event::ActionBudgetTopUp {
                     signer: 42,
                     gas_resource: RESOURCE_ID_ETH,
-                    gas_amount: 1,
+                    gas_amount: Amount::from_u64(1),
                     budget_increment: 100,
                     pool_actor: 1,
                 }],
@@ -106,7 +107,7 @@ fn reader_sees_monotone_atomic_updates() {
     let reader_storage = Arc::clone(&storage);
     let reader = thread::spawn(move || {
         let view = BudgetReadView::new(&*reader_storage);
-        let mut observed: Vec<u128> = Vec::new();
+        let mut observed: Vec<Amount> = Vec::new();
         for _ in 0..200 {
             let v = view.get_actor_budget(42).unwrap();
             observed.push(v);
@@ -118,14 +119,20 @@ fn reader_sees_monotone_atomic_updates() {
     let observed = reader.join().unwrap();
     // Verify monotonicity AND atomicity (each observed value is
     // a multiple of 100, the per-batch credit).
-    let mut last = 0u128;
+    let mut last = Amount::ZERO;
+    // The per-batch credit is 100 and there are 5 batches, so every
+    // atomic observation is one of these.  Stated as set membership
+    // rather than a modulo test for the same reason as the sibling
+    // case above: it is the same claim and needs no `%` on a type
+    // that deliberately offers none.
+    let legal: [Amount; 6] = [0, 100, 200, 300, 400, 500].map(Amount::from_u64);
     for v in &observed {
         assert!(*v >= last, "monotonicity violated: {last} → {v}");
-        assert_eq!(*v % 100, 0, "torn read: {v} not a multiple of 100");
+        assert!(legal.contains(v), "torn read: {v} is not a batch boundary");
         last = *v;
     }
     // Final read should be 500 (5 batches × 100).
-    assert_eq!(*observed.last().unwrap(), 500);
+    assert_eq!(*observed.last().unwrap(), Amount::from_u64(500));
 }
 
 /// Two writer threads attempting to start combined transactions
@@ -164,7 +171,7 @@ fn concurrent_writers_serialise_via_mutex() {
                     &[Event::ActionBudgetTopUp {
                         signer: tid,
                         gas_resource: RESOURCE_ID_ETH,
-                        gas_amount: 1,
+                        gas_amount: Amount::from_u64(1),
                         budget_increment: 10,
                         pool_actor: 1,
                     }],
@@ -186,8 +193,13 @@ fn concurrent_writers_serialise_via_mutex() {
         // The point is: NO panics, NO deadlocks, queries succeed.
         // Each thread credited in MULTIPLES of 10, so the result
         // is in {0, 10, 20, 30, 40, 50}.
-        assert!(v.is_multiple_of(10), "tid {tid}: torn read {v}");
-        assert!(v <= 50, "tid {tid}: over-credited {v}");
+        // Stated as explicit set membership rather than
+        // "multiple of 10 and <= 50": it is the same claim, it reads
+        // as the comment above does, and it does not require a
+        // modulo operator on an accounting type that deliberately
+        // has none.
+        let legal: [Amount; 6] = [0, 10, 20, 30, 40, 50].map(Amount::from_u64);
+        assert!(legal.contains(&v), "tid {tid}: torn read {v}");
     }
 }
 
@@ -218,7 +230,7 @@ fn reader_blocks_during_writer_transaction() {
     let writer_storage = Arc::clone(&storage);
     let writer = thread::spawn(move || {
         let mut tx = writer_storage.begin_combined_tx().unwrap();
-        tx.credit_actor_budget(42, 100).unwrap();
+        tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
         // Signal AFTER the mutex is held + a mutation is staged.
         lock_held_tx.send(()).unwrap();
         // Hold the lock for a deterministic interval before commit.
@@ -234,7 +246,7 @@ fn reader_blocks_during_writer_transaction() {
     let elapsed = read_started.elapsed();
     writer.join().unwrap();
     // The reader observed the committed value (post-commit).
-    assert_eq!(v, 100);
+    assert_eq!(v, Amount::from_u64(100));
     // The reader blocked for most of the hold interval.  Use a
     // generous lower bound (half the hold) to absorb the small
     // window between the signal and the writer's sleep start while
@@ -263,15 +275,15 @@ fn balance_and_budget_views_consistent_after_commit() {
                 Event::BalanceChanged {
                     resource: RESOURCE_ID_ETH,
                     actor: 1,
-                    old_value: u128::from(i - 1) * 100,
-                    new_value: u128::from(i) * 100,
+                    old_value: Amount::from((i - 1) * 100),
+                    new_value: Amount::from(i * 100),
                 },
                 Event::DepositWithFeeCredited {
                     resource: RESOURCE_ID_ETH,
                     recipient: 1,
                     pool_actor: 99,
-                    user_amount: 100,
-                    pool_amount: 10,
+                    user_amount: Amount::from_u64(100),
+                    pool_amount: Amount::from_u64(10),
                     budget_grant: 5,
                     deposit_id: i,
                 },
@@ -284,9 +296,15 @@ fn balance_and_budget_views_consistent_after_commit() {
     let balance_view = BalanceView::new(&*storage);
     let budget_view = BudgetReadView::new(&*storage);
     // Balance: 10 batches × 100 = 1000.
-    assert_eq!(balance_view.get(1, RESOURCE_ID_ETH).unwrap(), 1000);
+    assert_eq!(
+        balance_view.get(1, RESOURCE_ID_ETH).unwrap(),
+        Amount::from_u64(1000)
+    );
     // Budget (lifetime grants): 10 batches × 5 = 50.
-    assert_eq!(budget_view.get_actor_budget(1).unwrap(), 50);
+    assert_eq!(
+        budget_view.get_actor_budget(1).unwrap(),
+        Amount::from_u64(50)
+    );
     // Pool ETH: 10 batches × 10 = 100.
-    assert_eq!(budget_view.get_pool_eth(99).unwrap(), 100);
+    assert_eq!(budget_view.get_pool_eth(99).unwrap(), Amount::from_u64(100));
 }

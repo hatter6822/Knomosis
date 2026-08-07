@@ -38,6 +38,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
+use knomosis_amount::Amount;
 use knomosis_event_subscribe::event_cache::EventCache;
 use knomosis_event_subscribe::extract::mock::{MockExtractor, MockResponse};
 use knomosis_event_subscribe::server::{Server as EventServer, ServerConfig as EventServerConfig};
@@ -199,12 +200,12 @@ fn seed_indexer_db(path: &std::path::Path) -> Result<SqliteStorage, String> {
     ensure_identifier(&writer, INDEXER_IDENTIFIER).map_err(|e| e.to_string())?;
     // Seed the gas pool (ETH + BOLD) in one combined transaction.
     let mut tx = writer.combined_transaction().map_err(|e| e.to_string())?;
-    tx.credit_pool_eth(DEV_GAS_POOL_ACTOR, 1_000_000)
+    tx.credit_pool_eth(DEV_GAS_POOL_ACTOR, Amount::from_u64(1_000_000))
         .map_err(|e| e.to_string())?;
-    tx.credit_pool_bold(DEV_GAS_POOL_ACTOR, 500_000)
+    tx.credit_pool_bold(DEV_GAS_POOL_ACTOR, Amount::from_u64(500_000))
         .map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
-    // Seed demo balances (16-byte big-endian u128 cells, the read view's codec).
+    // Seed demo balances (32-byte big-endian `Amount` cells, the read view's codec).
     for &(actor, resource, amount) in DEV_BALANCES {
         writer
             .put(&balance_key(actor, resource), &amount.to_be_bytes())
@@ -282,14 +283,14 @@ fn demo_event_responses() -> (Vec<MockResponse>, usize) {
             encode_event(&Event::BalanceChanged {
                 resource: 0,
                 actor: 1,
-                old_value: 1000,
-                new_value: 900,
+                old_value: Amount::from_u64(1000),
+                new_value: Amount::from_u64(900),
             }),
             encode_event(&Event::BalanceChanged {
                 resource: 0,
                 actor: 2,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             }),
         ]),
         // seq 2: actor 1's nonce advances.
@@ -302,8 +303,8 @@ fn demo_event_responses() -> (Vec<MockResponse>, usize) {
         MockResponse::Ok(vec![encode_event(&Event::BalanceChanged {
             resource: 0,
             actor: 3,
-            old_value: 0,
-            new_value: 500,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(500),
         })]),
     ];
     let frame_count = responses.len();

@@ -46,6 +46,10 @@ path = "src/main.rs"
 [dependencies]
 knomosis-cli-common = { workspace = true }
 knomosis-storage = { path = "../knomosis-storage" }
+# `knomosis-amount` supplies the 256-bit `Amount` this crate's balance
+# and pool views carry.  See that crate's docs for why the width is
+# exactly 256 bits.
+knomosis-amount = { path = "../knomosis-amount" }
 # `thiserror` derives our typed errors with `Display` /
 # `std::error::Error` impls and `#[from]` conversions.  Same
 # discipline as knomosis-host and knomosis-l1-ingest.
