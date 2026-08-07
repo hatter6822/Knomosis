@@ -70,8 +70,6 @@ def canonicalAbsentValue : CellTag → ByteArray
   | .bridgeConsumed _           => ByteArray.empty
   | .bridgePending _            => ByteArray.empty
   | .bridgeNextWdId             => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
-  | .bridgeAmmReserveEth        => ByteArray.mk (Encoding.encodeAmount 0).toArray
-  | .bridgeAmmReserveBold       => ByteArray.mk (Encoding.encodeAmount 0).toArray
   | .bridgeBoldCircuitClosed    => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
   | .bridgeBoldTvlCap           => ByteArray.mk (Encoding.encodeAmount 0).toArray
   | .bridgeBoldTotalLockedValue => ByteArray.mk (Encoding.encodeAmount 0).toArray
@@ -145,14 +143,11 @@ def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
       (Encodable.encode (T := Nat) es.bridge.nextWdId).toArray
   -- GP.11.8 / GP.11.10 bridge scalars.  `commitExtendedState` binds
   -- all of `BridgeState`, but until these tags existed there was no
-  -- cell to *prove* them against, so a dispute that turned on the AMM
-  -- mirror or the kill switch had nothing to open.  Reserves and the
-  -- TVL figures are value-carrying, so they ride the 33-byte amount
-  -- head; the two flags ride the uint head as 0/1.
-  | .bridgeAmmReserveEth =>
-    ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveEth).toArray
-  | .bridgeAmmReserveBold =>
-    ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveBold).toArray
+  -- cell to *prove* them against, so a dispute that turned on the
+  -- deposit guards or the kill switch had nothing to open.  The TVL
+  -- figures are value-carrying, so they ride the 33-byte amount
+  -- head; the two flags ride the uint head as 0/1.  (Kinds 7/8 —
+  -- the excised L1-AMM book mirrors — are retired holes.)
   | .bridgeBoldCircuitClosed =>
     ByteArray.mk
       (Encodable.encode (T := Nat) (if es.bridge.boldCircuitClosed then 1 else 0)).toArray
@@ -202,16 +197,6 @@ so a cell proof can bind it.  They are `rfl`-class by construction;
 the point is that they could not be stated at all before, and that
 a future field added to `ExtendedState` without a matching tag
 leaves an obvious hole here. -/
-
-/-- The AMM ETH reserve is readable through its cell. -/
-theorem getCellValue_ammReserveEth (es : ExtendedState) :
-    getCellValue es .bridgeAmmReserveEth =
-      ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveEth).toArray := rfl
-
-/-- The AMM BOLD reserve is readable through its cell. -/
-theorem getCellValue_ammReserveBold (es : ExtendedState) :
-    getCellValue es .bridgeAmmReserveBold =
-      ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveBold).toArray := rfl
 
 /-- The BOLD circuit-breaker flag is readable through its cell. -/
 theorem getCellValue_boldCircuitClosed (es : ExtendedState) :
@@ -385,14 +370,6 @@ def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
   -- head for the flags.  A decode failure is a no-op, matching every
   -- arm above — the cell-write primitive never fails, so a malformed
   -- value cannot corrupt the state.
-  | .bridgeAmmReserveEth =>
-    match Encoding.decodeAmount value.data.toList with
-    | .ok (v, _) => { es with bridge := { es.bridge with ammReserveEth := v } }
-    | .error _   => es
-  | .bridgeAmmReserveBold =>
-    match Encoding.decodeAmount value.data.toList with
-    | .ok (v, _) => { es with bridge := { es.bridge with ammReserveBold := v } }
-    | .error _   => es
   | .bridgeBoldCircuitClosed =>
     match Encodable.decode (T := Nat) value.data.toList with
     | .ok (n, _) =>

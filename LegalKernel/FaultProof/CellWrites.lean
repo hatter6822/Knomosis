@@ -328,14 +328,6 @@ theorem getCellValue_setCell_getCellValue
   | bridgeNextWdId =>
     rw [getCellValue_bridgeNextWdId]
     exact getCellValue_setCell_bridgeNextWdId target _ h_bounds.bs_nxt
-  | bridgeAmmReserveEth =>
-    show getCellValue (setCell target _ (amountCellValue source.bridge.ammReserveEth)) _
-      = amountCellValue source.bridge.ammReserveEth
-    exact getCellValue_setCell_bridgeAmmReserveEth target _ h_bounds.bs_ammEth
-  | bridgeAmmReserveBold =>
-    show getCellValue (setCell target _ (amountCellValue source.bridge.ammReserveBold)) _
-      = amountCellValue source.bridge.ammReserveBold
-    exact getCellValue_setCell_bridgeAmmReserveBold target _ h_bounds.bs_ammBold
   | bridgeBoldCircuitClosed =>
     show getCellValue (setCell target _
         (natCellValue (if source.bridge.boldCircuitClosed then 1 else 0))) _
@@ -509,8 +501,6 @@ theorem writeSetComplete_of_field_footprints
       post.bridge.pending[w]? = pre.bridge.pending[w]?)
     (h_nxt : CellTag.bridgeNextWdId ∉ action.writeCellsAt pre signer →
       post.bridge.nextWdId = pre.bridge.nextWdId)
-    (h_ammEth : post.bridge.ammReserveEth = pre.bridge.ammReserveEth)
-    (h_ammBold : post.bridge.ammReserveBold = pre.bridge.ammReserveBold)
     (h_circuit : post.bridge.boldCircuitClosed = pre.bridge.boldCircuitClosed)
     (h_tvlCap : post.bridge.boldTvlCap = pre.bridge.boldTvlCap)
     (h_tvl : post.bridge.boldTotalLockedValue = pre.bridge.boldTotalLockedValue)
@@ -532,12 +522,6 @@ theorem writeSetComplete_of_field_footprints
     rw [getCellValue_bridgePending, getCellValue_bridgePending, h_pend w h_notin]
   | bridgeNextWdId =>
     rw [getCellValue_bridgeNextWdId, getCellValue_bridgeNextWdId, h_nxt h_notin]
-  | bridgeAmmReserveEth =>
-    show getCellValue post .bridgeAmmReserveEth = _
-    unfold getCellValue; rw [h_ammEth]
-  | bridgeAmmReserveBold =>
-    show getCellValue post .bridgeAmmReserveBold = _
-    unfold getCellValue; rw [h_ammBold]
   | bridgeBoldCircuitClosed =>
     show getCellValue post .bridgeBoldCircuitClosed = _
     unfold getCellValue; rw [h_circuit]
@@ -587,14 +571,6 @@ theorem writeSetComplete_of_identity_advance
   | bridgeConsumed d => rw [getCellValue_bridgeConsumed, getCellValue_bridgeConsumed, h_bridge]
   | bridgePending w => rw [getCellValue_bridgePending, getCellValue_bridgePending, h_bridge]
   | bridgeNextWdId => rw [getCellValue_bridgeNextWdId, getCellValue_bridgeNextWdId, h_bridge]
-  | bridgeAmmReserveEth =>
-    show getCellValue post .bridgeAmmReserveEth = _
-    unfold getCellValue
-    rw [h_bridge]
-  | bridgeAmmReserveBold =>
-    show getCellValue post .bridgeAmmReserveBold = _
-    unfold getCellValue
-    rw [h_bridge]
   | bridgeBoldCircuitClosed =>
     show getCellValue post .bridgeBoldCircuitClosed = _
     unfold getCellValue

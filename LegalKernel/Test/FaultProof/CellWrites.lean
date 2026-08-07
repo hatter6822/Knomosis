@@ -77,7 +77,7 @@ def tests : List TestCase :=
         let untouched : List CellTag :=
           [ .balance 1 9, .balance 2 7, .nonce 8, .registry 7, .localPolicy 7
           , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
-          , .bridgeAmmReserveEth, .bridgeAmmDisabled, .epochBudget 7
+          , .bridgeBoldTvlCap, .bridgeAmmDisabled, .epochBudget 7
           , .budgetPolicy ]
         for t in untouched do
           assertEq (expected := (getCellValue base t).toList)

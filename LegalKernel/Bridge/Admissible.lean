@@ -582,11 +582,10 @@ binds the published value.  A sequencer therefore cannot smuggle a
 mirror flip into the middle of a committed action batch — the
 fault-proof game re-executes the batch through this very function. -/
 
-/-- The per-mirror agreement bundle: two bridge states share all six
-    GP.11.8 / GP.11.10 AMM-mirror fields. -/
+/-- The per-mirror agreement bundle: two bridge states share all four
+    GP.11.8 / GP.11.10 mirror fields (the BOLD deposit guards and the
+    kill switch; the two excised L1-AMM book mirrors are gone). -/
 def BridgeState.AmmMirrorsEq (bs₁ bs₂ : BridgeState) : Prop :=
-  bs₁.ammReserveEth = bs₂.ammReserveEth ∧
-  bs₁.ammReserveBold = bs₂.ammReserveBold ∧
   bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
   bs₁.boldTvlCap = bs₂.boldTvlCap ∧
   bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue ∧
@@ -595,7 +594,7 @@ def BridgeState.AmmMirrorsEq (bs₁ bs₂ : BridgeState) : Prop :=
 /-- `AmmMirrorsEq` is reflexive. -/
 theorem BridgeState.AmmMirrorsEq.refl (bs : BridgeState) :
     BridgeState.AmmMirrorsEq bs bs :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ⟨rfl, rfl, rfl, rfl⟩
 
 /-- `AmmMirrorsEq` is transitive. -/
 theorem BridgeState.AmmMirrorsEq.trans {bs₁ bs₂ bs₃ : BridgeState}
@@ -603,11 +602,10 @@ theorem BridgeState.AmmMirrorsEq.trans {bs₁ bs₂ bs₃ : BridgeState}
     (h₂₃ : BridgeState.AmmMirrorsEq bs₂ bs₃) :
     BridgeState.AmmMirrorsEq bs₁ bs₃ :=
   ⟨h₁₂.1.trans h₂₃.1, h₁₂.2.1.trans h₂₃.2.1, h₁₂.2.2.1.trans h₂₃.2.2.1,
-   h₁₂.2.2.2.1.trans h₂₃.2.2.2.1, h₁₂.2.2.2.2.1.trans h₂₃.2.2.2.2.1,
-   h₁₂.2.2.2.2.2.trans h₂₃.2.2.2.2.2⟩
+   h₁₂.2.2.2.trans h₂₃.2.2.2⟩
 
 /-- Per-action mirror invariance: EVERY action — bridge-mutating or
-    not — leaves all six AMM-mirror fields unchanged.  The three
+    not — leaves all four mirror fields unchanged.  The three
     mutating arms go through `markConsumed` / `appendWithdrawal`,
     both of which are `{ bs with … }` updates on the ledger triple
     only. -/
@@ -620,7 +618,7 @@ theorem applyActionToBridgeState_preserves_amm_mirrors
           BridgeState.appendWithdrawal]
 
 /-- Entry-point lift: one bridge-aware admitted step preserves all
-    six mirrors. -/
+    four mirrors. -/
 theorem apply_bridge_admissible_with_preserves_amm_mirrors
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
@@ -634,7 +632,7 @@ theorem apply_bridge_admissible_with_preserves_amm_mirrors
   exact applyActionToBridgeState_preserves_amm_mirrors es.bridge st.action idx
 
 /-- Runtime-entry lift: when the budget-gated bridge entry admits a
-    step (`= some es'`), all six mirrors carry over unchanged.  The
+    step (`= some es'`), all four mirrors carry over unchanged.  The
     budget layer wraps `apply_bridge_admissible_with` and further
     touches only `epochBudgets`. -/
 theorem apply_bridge_admissible_with_budget_preserves_amm_mirrors
@@ -700,7 +698,7 @@ inductive BridgeAdmittedTrace
         (apply_bridge_admissible_with verify P d es st idx hadm)
 
 /-- **GP.11.10 chain-level mirror constancy.**  Across ANY contiguous
-    trace of bridge-aware admitted steps, all six AMM-mirror fields —
+    trace of bridge-aware admitted steps, all four mirror fields —
     including the `ammDisabled` kill switch — are exactly their
     chain-entry values.  Together with
     `commitBridgeState_reflects_ammDisabled` (the commitment binding),
@@ -728,7 +726,7 @@ theorem ammDisabled_constant_over_admitted_trace
     (n : Nat) (es' : ExtendedState)
     (h : BridgeAdmittedTrace verify P d es0 n es') :
     es'.bridge.ammDisabled = es0.bridge.ammDisabled :=
-  (amm_mirrors_constant_over_admitted_trace verify P d es0 n es' h).2.2.2.2.2
+  (amm_mirrors_constant_over_admitted_trace verify P d es0 n es' h).2.2.2
 
 /-! ## Bridge-aware kernel agreement (§7.0a) -/
 

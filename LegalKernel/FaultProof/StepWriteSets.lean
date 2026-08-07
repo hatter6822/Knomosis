@@ -304,24 +304,22 @@ theorem productionApplyBudget_localPolicies_of_ne
 /-! ### The bridge scalars
 
 `applyActionToBridgeState` writes `consumed`, `pending` and `nextWdId`.
-It writes nothing else, and the six scalars below are the "nothing
+It writes nothing else, and the four scalars below are the "nothing
 else" made checkable — a future bridge action that touched one would
 break these rather than silently escaping the write set. -/
 
 /-- Every bridge field the step VM does not write survives one
-    `applyActionToBridgeState`, packaged as the six equations
+    `applyActionToBridgeState`, packaged as the four equations
     `writeSetComplete_of_field_footprints` asks for. -/
 theorem applyActionToBridgeState_scalars
     (bs : BridgeState) (action : Action) (idx : Nat) :
-    (applyActionToBridgeState bs action idx).ammReserveEth = bs.ammReserveEth ∧
-    (applyActionToBridgeState bs action idx).ammReserveBold = bs.ammReserveBold ∧
     (applyActionToBridgeState bs action idx).boldCircuitClosed = bs.boldCircuitClosed ∧
     (applyActionToBridgeState bs action idx).boldTvlCap = bs.boldTvlCap ∧
     (applyActionToBridgeState bs action idx).boldTotalLockedValue
       = bs.boldTotalLockedValue ∧
     (applyActionToBridgeState bs action idx).ammDisabled = bs.ammDisabled := by
   unfold applyActionToBridgeState
-  cases action <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  cases action <;> exact ⟨rfl, rfl, rfl, rfl⟩
 
 
 /-! ## The bridge maps
@@ -821,11 +819,7 @@ theorem writeSetComplete_productionApplyBudget
     ((productionApplyBudget_bridge es st idx) ▸
       (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.1)
     ((productionApplyBudget_bridge es st idx) ▸
-      (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.2.1)
-    ((productionApplyBudget_bridge es st idx) ▸
-      (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.2.2.1)
-    ((productionApplyBudget_bridge es st idx) ▸
-      (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.2.2.2)
+      (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.2)
     (fun a h => productionApplyBudget_epochBudgets_of_ne es st idx a
       (by intro he; subst he
           exact h (mem_writeCellsAt_epochBudget es st.action st.signer))

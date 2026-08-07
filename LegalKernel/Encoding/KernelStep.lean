@@ -84,8 +84,7 @@ def CellTag.encode : FaultProof.CellTag → Stream
     Encodable.encode (T := Nat) wd
   | .bridgeNextWdId =>
     Encodable.encode (T := Nat) 6
-  | .bridgeAmmReserveEth        => Encodable.encode (T := Nat) 7
-  | .bridgeAmmReserveBold       => Encodable.encode (T := Nat) 8
+  -- Tags 7/8 are the RETIRED book-mirror kinds — no encode arms.
   | .bridgeBoldCircuitClosed    => Encodable.encode (T := Nat) 9
   | .bridgeBoldTvlCap           => Encodable.encode (T := Nat) 10
   | .bridgeBoldTotalLockedValue => Encodable.encode (T := Nat) 11
@@ -162,8 +161,8 @@ def CellTag.decode (s : Stream) :
   -- kill switch, the per-actor epoch budget and the budget policy.
   -- All but `epochBudget` are singleton cells, so the tag alone is
   -- the whole encoding and the residual stream passes through.
-  | .ok (7, s₁)  => .ok (.bridgeAmmReserveEth, s₁)
-  | .ok (8, s₁)  => .ok (.bridgeAmmReserveBold, s₁)
+  -- Tags 7/8 are RETIRED: they fall through to the unknown-tag
+  -- refusal below, exactly like never-assigned tags.
   | .ok (9, s₁)  => .ok (.bridgeBoldCircuitClosed, s₁)
   | .ok (10, s₁) => .ok (.bridgeBoldTvlCap, s₁)
   | .ok (11, s₁) => .ok (.bridgeBoldTotalLockedValue, s₁)
@@ -319,14 +318,6 @@ theorem cellTag_roundtrip (t : FaultProof.CellTag) (rest : Stream)
     show CellTag.decode (Encodable.encode (T := Nat) 6 ++ rest) = _
     unfold CellTag.decode
     rw [nat_roundtrip 6 rest (by decide)]
-  | bridgeAmmReserveEth =>
-    show CellTag.decode (Encodable.encode (T := Nat) 7 ++ rest) = _
-    unfold CellTag.decode
-    rw [nat_roundtrip 7 rest (by decide)]
-  | bridgeAmmReserveBold =>
-    show CellTag.decode (Encodable.encode (T := Nat) 8 ++ rest) = _
-    unfold CellTag.decode
-    rw [nat_roundtrip 8 rest (by decide)]
   | bridgeBoldCircuitClosed =>
     show CellTag.decode (Encodable.encode (T := Nat) 9 ++ rest) = _
     unfold CellTag.decode

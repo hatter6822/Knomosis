@@ -71,17 +71,18 @@ Coverage map:
     `LegacyDepositRecord` + `DepositRecord.fromLegacy` /
     `DepositRecord.toLegacy` + the `toLegacy_fromLegacy`
     round-trip lemma.
-  * GP.11.8 — `BridgeState` extended with five AMM/BOLD
-    state fields (`ammReserveEth`, `ammReserveBold`,
-    `boldCircuitClosed`, `boldTvlCap`, `boldTotalLockedValue`)
-    so the fault-proof game can adjudicate disputes that turn
-    on AMM state.
+  * GP.11.8 — `BridgeState` extended with the BOLD deposit-guard
+    mirrors (`boldCircuitClosed`, `boldTvlCap`,
+    `boldTotalLockedValue`) so the fault-proof game can adjudicate
+    disputes that turn on the L1 deposit-guard state.  (The two
+    L1-AMM book mirrors this workstream also added were excised
+    with the L1 embedded AMM — see the field-site note below.)
   * GP.11.10 — `BridgeState` extended with the `ammDisabled`
     kill-switch mirror so the state-root preimage reflects the
     L1 `emergencyDisableAmm()` disaster-recovery state.  Per the
     GP.11.10 design decision there is NO `Action.disableAmm`
-    variant: the flag is a passive L1 mirror (like the five
-    GP.11.8 fields), populated by the deployment's ingest layer
+    variant: the flag is a passive L1 mirror (like the GP.11.8
+    fields), populated by the deployment's ingest layer
     and committed by `commitBridgeState`.
 -/
 
@@ -326,12 +327,13 @@ structure BridgeState where
   /-- The next withdrawal id to assign on the next `withdraw`
       action.  Monotonically increases; never reused. -/
   nextWdId : WithdrawalId
-  /-- GP.11.8: L2 reflection of L1 AMM ETH reserve.  Committed to the
-      state root so the fault-proof game can adjudicate disputes that
-      turn on AMM state. -/
-  ammReserveEth : Amount := 0
-  /-- GP.11.8: L2 reflection of L1 AMM BOLD reserve. -/
-  ammReserveBold : Amount := 0
+  -- The two GP.11.8 L1-AMM book mirrors (`ammReserveEth`,
+  -- `ammReserveBold`) that sat here were EXCISED with the L1 embedded
+  -- AMM under the one-AMM L2-primary topology: the live pool is the
+  -- L2 reserve actor's ordinary balances, which the state root
+  -- already commits, so a second commitment of L1 books that no
+  -- longer exist would be dead weight.  Their SMT cell kinds (7, 8)
+  -- retire as permanent holes.
   /-- GP.11.8: Whether the BOLD circuit breaker is closed on L1. -/
   boldCircuitClosed : Bool := false
   /-- GP.11.8: L1 per-BOLD TVL cap. -/
@@ -351,14 +353,12 @@ structure BridgeState where
 namespace BridgeState
 
 /-- The genesis bridge state: empty consumed set, empty pending set,
-    next withdrawal id 0, AMM reserves at zero, BOLD circuit open,
-    AMM enabled (kill switch not fired). -/
+    next withdrawal id 0, BOLD circuit open, AMM enabled (kill switch
+    not fired). -/
 def empty : BridgeState where
   consumed             := ∅
   pending              := ∅
   nextWdId             := 0
-  ammReserveEth        := 0
-  ammReserveBold       := 0
   boldCircuitClosed    := false
   boldTvlCap           := 0
   boldTotalLockedValue := 0
@@ -377,14 +377,6 @@ theorem empty_pending_empty :
 /-- §7.1.1 smoke-test: `BridgeState.empty.nextWdId = 0`. -/
 theorem empty_nextWdId_zero :
     empty.nextWdId = 0 := rfl
-
-/-- GP.11.8 smoke-test: `BridgeState.empty.ammReserveEth = 0`. -/
-theorem empty_ammReserveEth_zero :
-    empty.ammReserveEth = 0 := rfl
-
-/-- GP.11.8 smoke-test: `BridgeState.empty.ammReserveBold = 0`. -/
-theorem empty_ammReserveBold_zero :
-    empty.ammReserveBold = 0 := rfl
 
 /-- GP.11.8 smoke-test: `BridgeState.empty.boldCircuitClosed = false`. -/
 theorem empty_boldCircuitClosed_false :

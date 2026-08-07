@@ -82,8 +82,8 @@ def sign (a : Authority.Action) : SignedAction :=
 def probes : List CellTag :=
   [ .balance 5 20, .balance 5 7, .balance 1 21
   , .nonce 20, .nonce 21, .registry 20, .localPolicy 20
-  , .bridgeConsumed 77, .bridgePending 99, .bridgeAmmReserveEth
-  , .bridgeAmmReserveBold, .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
+  , .bridgeConsumed 77, .bridgePending 99
+  , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
   , .epochBudget 20, .budgetPolicy ]
 

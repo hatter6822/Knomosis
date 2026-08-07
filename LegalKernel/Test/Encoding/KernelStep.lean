@@ -55,8 +55,6 @@ def allTags : List CellTag :=
   , .bridgeConsumed 14
   , .bridgePending 15
   , .bridgeNextWdId
-  , .bridgeAmmReserveEth
-  , .bridgeAmmReserveBold
   , .bridgeBoldCircuitClosed
   , .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue
@@ -78,10 +76,11 @@ private def roundtripsWithResidual (t : CellTag) : Bool :=
 def tests : List TestCase :=
   [ { name := "every CellTag constructor has a representative"
     , body := do
-        -- The arity pin.  `CellTag` has fifteen constructors; adding
-        -- one without extending `allTags` must fail here rather than
-        -- quietly shrink the round-trip sweep below.
-        assertEq (expected := 15) (actual := allTags.length)
+        -- The arity pin.  `CellTag` has thirteen constructors (the
+        -- fifteen-tag space minus the retired book-mirror kinds 7/8);
+        -- adding one without extending `allTags` must fail here rather
+        -- than quietly shrink the round-trip sweep below.
+        assertEq (expected := 13) (actual := allTags.length)
           "allTags must cover every CellTag constructor"
     }
   , { name := "every CellTag round-trips, residual stream preserved"
@@ -90,24 +89,25 @@ def tests : List TestCase :=
           assert (roundtripsWithResidual t)
             s!"CellTag round-trip failed for {repr t}"
     }
-  , { name := "the eight tags the decoder used to reject now decode"
+  , { name := "the six live tags the decoder used to reject now decode"
     , body := do
         -- The regression proper.  Tags 7..14 were emitted by `encode`
-        -- and refused by `decode`; each of these is one of them.
+        -- and refused by `decode`; each of these is one of the LIVE
+        -- ones (7/8 have since been retired outright — their refusal
+        -- is pinned separately below).
         let regressed : List CellTag :=
-          [ .bridgeAmmReserveEth, .bridgeAmmReserveBold
-          , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
+          [ .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
           , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
           , .epochBudget 16, .budgetPolicy ]
-        assertEq (expected := 8) (actual := regressed.length)
-          "the gap was exactly eight tags wide"
+        assertEq (expected := 6) (actual := regressed.length)
+          "six of the eight once-unreachable tags remain live"
         for t in regressed do
           assert (roundtripsWithResidual t)
             s!"previously-unreachable tag failed to decode: {repr t}"
     }
   , { name := "the two cells EVERY step touches round-trip"
     , body := do
-        -- `.epochBudget` is written by all twenty-five variants and
+        -- `.epochBudget` is written by all twenty-four variants and
         -- `.budgetPolicy` leads every frontier, so these two are the
         -- reason the gap was not merely theoretical.
         assert (roundtripsWithResidual (.epochBudget 1))
@@ -122,6 +122,17 @@ def tests : List TestCase :=
         match CellTag.decode (Encodable.encode (T := Nat) 15) with
         | .error _   => assert true "unknown tag rejected"
         | .ok (t, _) => assert false s!"tag 15 must not decode, got {repr t}"
+    }
+  , { name := "NEGATIVE: the RETIRED tags 7 and 8 are refused"
+    , body := do
+        -- The excised L1-AMM book-mirror kinds must behave exactly
+        -- like never-assigned tags — a stream leading with either
+        -- fails to decode, so the holes cannot be silently reused.
+        for retired in [7, 8] do
+          match CellTag.decode (Encodable.encode (T := Nat) retired) with
+          | .error _   => pure ()
+          | .ok (t, _) =>
+            assert false s!"retired tag {retired} must not decode, got {repr t}"
     }
   , { name := "NEGATIVE: distinct tags do not share an encoding"
     , body := do

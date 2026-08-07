@@ -65,8 +65,7 @@ def corpusTags : List CellTag :=
   , .bridgePending 9                -- same key, different kind
   , .bridgeConsumed 0x1_0000_0000_0000_0000  -- beyond 2^64
   , .bridgeNextWdId
-  , .bridgeAmmReserveEth
-  , .bridgeAmmReserveBold
+  -- Kinds 7/8 are the RETIRED book-mirror cells — permanent holes.
   , .bridgeBoldCircuitClosed
   , .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue

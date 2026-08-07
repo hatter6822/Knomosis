@@ -1971,12 +1971,12 @@ preimage — which is what makes an absent cell openable at all, and a
 step crediting a fresh actor opens one on its first line.
 -/
 
-/-- One representative tag per cell kind, so the goldens cover all
-    fifteen rather than the handful a step happens to touch. -/
+/-- One representative tag per LIVE cell kind (7/8 are the retired
+    book-mirror holes), so the goldens cover all thirteen rather than
+    the handful a step happens to touch. -/
 def absentValueProbeTags : List CellTag :=
   [ .balance 1 7, .nonce 7, .registry 7, .localPolicy 7
   , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
-  , .bridgeAmmReserveEth, .bridgeAmmReserveBold
   , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
   , .epochBudget 7, .budgetPolicy ]

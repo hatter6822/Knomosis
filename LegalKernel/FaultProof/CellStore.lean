@@ -459,20 +459,6 @@ the value the advance gives it, and the generic round-trip law below
 A law with holes at six kinds would push a case split into every
 caller for the sake of six arms that are true. -/
 
-/-- The AMM ETH reserve reads back. -/
-theorem getCellValue_setCell_bridgeAmmReserveEth (es : ExtendedState) (n : Nat)
-    (h : n < 256 ^ 32) :
-    getCellValue (setCell es .bridgeAmmReserveEth (amountCellValue n))
-        .bridgeAmmReserveEth = amountCellValue n := by
-  simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
-
-/-- The AMM BOLD reserve reads back. -/
-theorem getCellValue_setCell_bridgeAmmReserveBold (es : ExtendedState) (n : Nat)
-    (h : n < 256 ^ 32) :
-    getCellValue (setCell es .bridgeAmmReserveBold (amountCellValue n))
-        .bridgeAmmReserveBold = amountCellValue n := by
-  simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
-
 /-- The BOLD TVL cap reads back. -/
 theorem getCellValue_setCell_bridgeBoldTvlCap (es : ExtendedState) (n : Nat)
     (h : n < 256 ^ 32) :

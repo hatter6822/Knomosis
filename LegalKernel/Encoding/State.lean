@@ -699,17 +699,19 @@ DepositId DepositRecord compare` (DepositId is `Nat`; DepositRecord is
 `(resource, userAmount, poolAmount, budgetGrant)`), a `pending : TreeMap
 WithdrawalId PendingWithdrawal compare` (WithdrawalId is `Nat`;
 PendingWithdrawal is `(resource, recipient, amount, l2LogIndex)`),
-and `nextWdId : Nat` — plus the GP.11.8 AMM/BOLD L1-mirror fields
-(`ammReserveEth`, `ammReserveBold`, `boldCircuitClosed`, `boldTvlCap`,
-`boldTotalLockedValue`) and the GP.11.10 `ammDisabled` kill-switch
-mirror.
+and `nextWdId : Nat` — plus the GP.11.8 BOLD deposit-guard mirrors
+(`boldCircuitClosed`, `boldTvlCap`, `boldTotalLockedValue`) and the
+GP.11.10 `ammDisabled` kill-switch mirror.  (The two L1-AMM book
+mirrors GP.11.8 also carried were EXCISED with the L1 embedded AMM;
+the wire drops their segments entirely — a breaking pre-production
+CBE change, like the depositWithFee widening before it.)
 
 Encoded canonically as the concatenation of two sorted-pair-list
-maps + seven CBE uints (the two Bool fields encode as canonical 0/1):
+maps + five CBE uints (the two Bool fields encode as canonical 0/1):
 
 ```
 BridgeState  → consumed-map ++ pending-map ++ nextWdId
-               ++ ammReserveEth ++ ammReserveBold ++ boldCircuitClosed
+               ++ boldCircuitClosed
                ++ boldTvlCap ++ boldTotalLockedValue ++ ammDisabled
 ```
 
@@ -838,21 +840,19 @@ def Bridge.BridgeState.encodePending (bs : Bridge.BridgeState) : Stream :=
     (wid, Bridge.PendingWithdrawal.encodeAsBytes wd)))
 
 /-- Encode a `BridgeState`:
-    `[consumed; pending; nextWdId; ammReserveEth; ammReserveBold;
-      boldCircuitClosed; boldTvlCap; boldTotalLockedValue;
-      ammDisabled]`.
-    GP.11.8 extends the v1.2 three-segment encoding with five
-    AMM/BOLD state fields so the state-root commitment covers
-    the full AMM state for fault-proof adjudication; GP.11.10
+    `[consumed; pending; nextWdId; boldCircuitClosed; boldTvlCap;
+      boldTotalLockedValue; ammDisabled]`.
+    GP.11.8 extends the v1.2 three-segment encoding with the BOLD
+    deposit-guard mirrors so the state-root commitment covers the
+    L1 deposit-guard state for fault-proof adjudication; GP.11.10
     appends the `ammDisabled` kill-switch flag (as a canonical
     0/1 CBE uint, mirroring `boldCircuitClosed`) so the
-    commitment also reflects the L1 disaster-recovery state. -/
+    commitment also reflects the L1 disaster-recovery state.  (The
+    two excised L1-AMM book segments are gone from the wire.) -/
 def Bridge.BridgeState.encode (bs : Bridge.BridgeState) : Stream :=
   Bridge.BridgeState.encodeConsumed bs ++
   Bridge.BridgeState.encodePending bs ++
   Encodable.encode (T := Nat) bs.nextWdId ++
-  encodeAmount bs.ammReserveEth ++
-  encodeAmount bs.ammReserveBold ++
   Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
   encodeAmount bs.boldTvlCap ++
   encodeAmount bs.boldTotalLockedValue ++
@@ -910,31 +910,24 @@ def Bridge.BridgeState.decode (s : Stream) :
     | .ok (pending, s₂) =>
       match Encodable.decode (T := Nat) s₂ with
       | .ok (nextWdId, s₃) =>
-        match decodeAmount s₃ with
-        | .ok (ammReserveEth, s₄) =>
+        match Encodable.decode (T := Nat) s₃ with
+        | .ok (circuitN, s₄) =>
+          if circuitN > 1 then .error (.nonCanonical "boldCircuitClosed: expected 0 or 1")
+          else
+          let boldCircuitClosed := circuitN == 1
           match decodeAmount s₄ with
-          | .ok (ammReserveBold, s₅) =>
-            match Encodable.decode (T := Nat) s₅ with
-            | .ok (circuitN, s₆) =>
-              if circuitN > 1 then .error (.nonCanonical "boldCircuitClosed: expected 0 or 1")
-              else
-              let boldCircuitClosed := circuitN == 1
-              match decodeAmount s₆ with
-              | .ok (boldTvlCap, s₇) =>
-                match decodeAmount s₇ with
-                | .ok (boldTotalLockedValue, s₈) =>
-                  match Encodable.decode (T := Nat) s₈ with
-                  | .ok (ammDisabledN, s₉) =>
-                    if ammDisabledN > 1 then
-                      .error (.nonCanonical "ammDisabled: expected 0 or 1")
-                    else
-                    let ammDisabled := ammDisabledN == 1
-                    .ok ({ consumed, pending, nextWdId,
-                           ammReserveEth, ammReserveBold,
-                           boldCircuitClosed, boldTvlCap,
-                           boldTotalLockedValue, ammDisabled }, s₉)
-                  | .error e => .error e
-                | .error e => .error e
+          | .ok (boldTvlCap, s₅) =>
+            match decodeAmount s₅ with
+            | .ok (boldTotalLockedValue, s₆) =>
+              match Encodable.decode (T := Nat) s₆ with
+              | .ok (ammDisabledN, s₇) =>
+                if ammDisabledN > 1 then
+                  .error (.nonCanonical "ammDisabled: expected 0 or 1")
+                else
+                let ammDisabled := ammDisabledN == 1
+                .ok ({ consumed, pending, nextWdId,
+                       boldCircuitClosed, boldTvlCap,
+                       boldTotalLockedValue, ammDisabled }, s₇)
               | .error e => .error e
             | .error e => .error e
           | .error e => .error e
