@@ -94,11 +94,14 @@ pub const GAS_POOL_ACTOR_ID: ActorId = 1;
 pub const SEQUENCER_ACTOR_ID: ActorId = 2;
 
 /// The reserved AMM-reserve-actor `ActorId` (Workstream GP.11.5).
-/// Matches Lean's `Bridge.ammReserveActor` constant — the L2 reflection
-/// of the L1 bridge's AMM liquidity (`ammReserveEth` / `ammReserveBold`)
-/// at both `ResourceId 0` (ETH) and `ResourceId 1` (BOLD).  Its balances
-/// are mutated only by bridge-attested `ammSwap` actions (action index
-/// 23); the runtime adaptor never issues this slot to a user identity.
+/// Matches Lean's `Bridge.ammReserveActor` constant — the L2 pool's
+/// reserve key, holding the live balances that price and fund the
+/// user-signed `reserveSwap` (action index 25) at both `ResourceId 0`
+/// (ETH) and `ResourceId 1` (BOLD), seeded by the deposit fee-split's
+/// seed leg.  Its balances move only as the swap's counterparty or by
+/// the bridge-signed post-disable `reclaimAmmReserves` sweep (action
+/// index 24); the runtime adaptor never issues this slot to a user
+/// identity.
 pub const AMM_RESERVE_ACTOR_ID: ActorId = 3;
 
 /// The initial `next_actor_id` value in a fresh AddressBook.  `4` is

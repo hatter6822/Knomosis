@@ -996,26 +996,34 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
                 wei_per_budget_unit,
             }
         }
-        // ammSwap(23): fromResource, toResource, amountIn, amountOut,
-        // ammReserveActor.  Carries no budget grant, so it is an
-        // ordinary budget-consuming action — but it MUST be decoded
-        // rather than rejected: the constructor is shipped and frozen,
-        // and an unknown tag surfaces to the client as
-        // `Verdict::ParseError`.
-        23 => {
-            cur.skip_uint()?; // fromResource
-            cur.skip_uint()?; // toResource
-            cur.skip_amount()?; // amountIn
-            cur.skip_amount()?; // amountOut
-            cur.skip_uint()?; // ammReserveActor
-            ActionBudgetKind::Ordinary
-        }
+        // Tag 23 (the retired L1-AMM ammSwap mirror) is a permanent
+        // hole: the Lean decoder refuses it like a never-assigned
+        // tag, so it falls to `UnknownActionTag` below and surfaces
+        // to the client as `Verdict::ParseError` — the intended
+        // retirement verdict.
+        //
         // reclaimAmmReserves(24): r, amount, reserveActor, poolActor.
         24 => {
             cur.skip_uint()?; // r
             cur.skip_amount()?; // amount
             cur.skip_uint()?; // reserveActor
             cur.skip_uint()?; // poolActor
+            ActionBudgetKind::Ordinary
+        }
+        // reserveSwap(25): fromResource, toResource, user, amountIn,
+        // minAmountOut, reserveActor.  The user-signed L2 swap
+        // (Workstream SB) carries no budget grant, so it is an
+        // ordinary budget-consuming action — but it MUST be decoded
+        // rather than rejected: the constructor is shipped and
+        // frozen, and an unknown tag surfaces to the client as
+        // `Verdict::ParseError`.
+        25 => {
+            cur.skip_uint()?; // fromResource
+            cur.skip_uint()?; // toResource
+            cur.skip_uint()?; // user
+            cur.skip_amount()?; // amountIn
+            cur.skip_amount()?; // minAmountOut
+            cur.skip_uint()?; // reserveActor
             ActionBudgetKind::Ordinary
         }
         // dispute(8) / verdict(10) / declareLocalPolicy(15): nested
@@ -1951,19 +1959,21 @@ mod tests {
                 14,
                 cat(&[u(1), u(2), amt(Amount::from_u64(3)), bytes(&[0x11; 20])]),
             ), // withdraw
-            // ammSwap(23) and reclaimAmmReserves(24) are shipped and
-            // frozen; an unknown tag surfaces as `Verdict::ParseError`.
+            // reclaimAmmReserves(24) and reserveSwap(25) are shipped
+            // and frozen; tag 23 (the retired ammSwap) is a permanent
+            // hole exercised by `decode_retired_tag_23` below.
+            (24, cat(&[u(0), amt(Amount::from_u64(123_456)), u(3), u(1)])), // reclaimAmmReserves
             (
-                23,
+                25,
                 cat(&[
                     u(0),
                     u(1),
-                    amt(Amount::from_u64(500)),
-                    amt(Amount::from_u64(480)),
+                    u(9),
+                    amt(Amount::from_u64(1000)),
+                    amt(Amount::from_u64(900)),
                     u(3),
                 ]),
-            ), // ammSwap
-            (24, cat(&[u(0), amt(Amount::from_u64(123_456)), u(3), u(1)])), // reclaimAmmReserves
+            ), // reserveSwap
             (16, vec![]),                                                   // revokeLocalPolicy
             (
                 17,
@@ -2063,15 +2073,27 @@ mod tests {
     }
 
     /// An out-of-range constructor tag reports `UnknownActionTag`.
-    /// Tag 23 is the first unknown tag (GP.9.1 added 22 =
-    /// claimBudgetRefund; 23 is the reserved future GP.11 `ammSwap`).
     #[test]
     fn decode_unknown_tag() {
-        // 25 is past the highest frozen constructor (24).
-        let action = cat(&[u(25)]);
+        // 26 is past the highest frozen constructor (25).
+        let action = cat(&[u(26)]);
         let sa = signed(&action, 5);
         match decode_budget_view(&sa) {
-            Err(BudgetDecodeError::UnknownActionTag { tag }) => assert_eq!(tag, 25),
+            Err(BudgetDecodeError::UnknownActionTag { tag }) => assert_eq!(tag, 26),
+            other => panic!("expected UnknownActionTag, got {other:?}"),
+        }
+    }
+
+    /// The retired tag 23 (the excised L1-AMM `ammSwap` mirror) is a
+    /// permanent hole: it is refused exactly like a never-assigned
+    /// tag, surfacing as `UnknownActionTag` → `Verdict::ParseError`,
+    /// and must never decode again.
+    #[test]
+    fn decode_retired_tag_23() {
+        let action = cat(&[u(23)]);
+        let sa = signed(&action, 5);
+        match decode_budget_view(&sa) {
+            Err(BudgetDecodeError::UnknownActionTag { tag }) => assert_eq!(tag, 23),
             other => panic!("expected UnknownActionTag, got {other:?}"),
         }
     }

@@ -38,7 +38,7 @@
 //! | 18  | `GasPoolClaim`                 | `resource, sequencer, amount`                                     |
 //! | 19  | `DelegatedActionBudgetTopUp`   | `recipient, signer, gas_resource, gas_amount, budget_inc, pool`   |
 //! | 20  | `BudgetConsumed`               | `actor, amount`                                                   |
-//! | 21  | `AmmSwapExecuted`              | `from_resource, to_resource, amount_in, amount_out, amm_actor`    |
+//! | 21  | RETIRED (`ammSwapExecuted`)    | the excised L1-AMM mirror's event — a permanent hole; never reuse |
 //! | 22  | `AmmReservesReclaimed`         | `resource, amount, reserve_actor, pool_actor`                     |
 //! | 23  | `ReserveSwapExecuted`          | `from_resource, to_resource, user, amount_in, amount_out, ra`     |
 //! | 24  | `ReserveSeeded`                | `resource, amount, reserve_actor, deposit_id`                     |
@@ -47,11 +47,12 @@
 //! `LegalKernel/Events/Types.lean::Event.tag` 16..=20).  Tags
 //! 16..=19 enable per-actor budget views; tag 20 (added in GP.6.4)
 //! enables per-epoch consumption tracking, completing the
-//! "N actions remaining this epoch" semantics.  Tag 21 (added in
-//! GP.11.4) is the AMM swap execution event.  Tags 23/24
-//! (Workstream SB) are the USER-swap execution event (unlike the
-//! bridge-attested tag 21, tag 23 has a user party and
-//! kernel-derived amounts) and the deposit-seed attribution event.
+//! "N actions remaining this epoch" semantics.  Tag 21 belonged to
+//! the bridge-attested L1-AMM swap mirror and was RETIRED with the
+//! L1 embedded AMM — the decoder refuses it like a never-assigned
+//! tag.  Tags 23/24 (Workstream SB) are the USER-swap execution
+//! event (with a user party and kernel-derived amounts) and the
+//! deposit-seed attribution event.
 //!
 //! ## Field types (mirrored from Lean)
 //!
@@ -361,20 +362,9 @@ pub enum Event {
         /// signers).
         amount: BudgetUnits,
     },
-    /// An AMM swap was executed (ETH↔BOLD exchange against the
-    /// gas-pool reserves; Workstream GP / GP.11.4).  Tag 21.
-    AmmSwapExecuted {
-        /// Source resource (the one the swapper pays in).
-        from_resource: ResourceId,
-        /// Destination resource (the one the swapper receives).
-        to_resource: ResourceId,
-        /// Amount paid in by the swapper.
-        amount_in: Amount,
-        /// Amount received by the swapper.
-        amount_out: Amount,
-        /// The AMM reserve actor.
-        amm_reserve_actor: ActorId,
-    },
+    // Tag 21 (the retired `ammSwapExecuted`, the excised L1-AMM
+    // mirror's event) is a permanent hole: the decoder refuses it
+    // like a never-assigned tag, and no variant may ever sit here.
     /// The disabled AMM's frozen L2 reserve balance was swept into
     /// the gas-pool actor (Workstream GP.11.10 post-disable
     /// reclamation; the exact sweep drains the reserve to zero).
@@ -391,8 +381,7 @@ pub enum Event {
     },
     /// A USER-signed L2 AMM swap was executed against the reserve
     /// actor's live balances (Workstream SB; `Laws.reserveSwap`).
-    /// Unlike the bridge-attested `AmmSwapExecuted` (21), this
-    /// event has a user party and `amount_out` is the
+    /// The event has a user party and `amount_out` is the
     /// kernel-COMPUTED constant-product quote, not an attested
     /// value.  Tag 23.
     ReserveSwapExecuted {
@@ -454,7 +443,7 @@ impl Event {
             Self::GasPoolClaim { .. } => 18,
             Self::DelegatedActionBudgetTopUp { .. } => 19,
             Self::BudgetConsumed { .. } => 20,
-            Self::AmmSwapExecuted { .. } => 21,
+            // 21 is the retired ammSwapExecuted's permanent hole.
             Self::AmmReservesReclaimed { .. } => 22,
             Self::ReserveSwapExecuted { .. } => 23,
             Self::ReserveSeeded { .. } => 24,
@@ -500,9 +489,6 @@ impl Event {
             Self::FaultProofGameSettled { winner, .. } => Some(*winner),
             Self::ActionBudgetTopUp { signer, .. } => Some(*signer),
             Self::GasPoolClaim { sequencer, .. } => Some(*sequencer),
-            Self::AmmSwapExecuted {
-                amm_reserve_actor, ..
-            } => Some(*amm_reserve_actor),
             // Tags 22/24 project the reserve actor; tag 23 projects
             // the swapping USER (per Lean's `Event.actor` — indexers
             // key trade history on the user; the reserve legs
@@ -559,12 +545,14 @@ impl Event {
     }
 }
 
-/// The number of frozen `Event` constructors.  Bumped by amendment
-/// when a new constructor lands.  Useful for exhaustive coverage
-/// tests.  GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`;
-/// GP.11.10 widened 22 → 23 by adding `AmmReservesReclaimed`;
-/// Workstream SB widened 23 → 25 by adding `ReserveSwapExecuted`
-/// and `ReserveSeeded`.
+/// The number of frozen `Event` tag SLOTS (the exclusive upper bound
+/// of the assigned range, NOT the live-constructor count).  Bumped by
+/// amendment when a new constructor lands.  Useful for exhaustive
+/// coverage tests.  GP.11.10 widened 22 → 23 by adding
+/// `AmmReservesReclaimed`; Workstream SB widened 23 → 25 by adding
+/// `ReserveSwapExecuted` and `ReserveSeeded`.  Tag 21 (the retired
+/// `ammSwapExecuted`) is a permanent hole INSIDE the range: the count
+/// stays 25 and sweeps over `0..EVENT_TAG_COUNT` must except it.
 pub const EVENT_TAG_COUNT: u8 = 25;
 
 #[cfg(test)]
@@ -749,18 +737,8 @@ mod tests {
             .tag(),
             20
         );
-        // GP.11.4 / GP.11.10: tags 21/22.
-        assert_eq!(
-            Event::AmmSwapExecuted {
-                from_resource: 0,
-                to_resource: 1,
-                amount_in: Amount::from_u64(0),
-                amount_out: Amount::from_u64(0),
-                amm_reserve_actor: 3,
-            }
-            .tag(),
-            21
-        );
+        // GP.11.10: tag 22.  (Tag 21 is the retired ammSwapExecuted's
+        // permanent hole — no constructor carries it.)
         assert_eq!(
             Event::AmmReservesReclaimed {
                 resource: 0,

@@ -790,18 +790,21 @@ pub enum ActionKind {
     /// production terminate-calldata path uses the raw `u8`, so kind 22
     /// already flowed through.
     ClaimBudgetRefund = 22,
-    /// `ammSwap(fromResource, toResource, amountIn, amountOut,
-    /// ammReserveActor)` — Workstream GP action-index 23 (GP.11.4
-    /// L2-side AMM mirroring).  The bridge actor signs this in
-    /// response to an L1 `AmmSwapExecuted` event: credit
-    /// `ammReserveActor` at `fromResource` by `amountIn`, debit at
-    /// `toResource` by `amountOut`.  The L1 step-VM execution arm
-    /// landed in GP.11.4.
-    AmmSwap = 23,
+    // Action-index 23 (the retired L1-AMM `ammSwap` mirror) is a
+    // permanent hole: the L2 decoder refuses the tag, the L1 step VM
+    // adjudicates nothing on it, and no variant may ever sit here.
     /// `ReclaimAmmReserves(r, amount, reserve_actor, pool_actor)` —
     /// the GP.11.10 post-disable exact sweep of the frozen AMM
     /// reserve into the gas pool.
     ReclaimAmmReserves = 24,
+    /// `reserveSwap(fromResource, toResource, user, amountIn,
+    /// minAmountOut, reserveActor)` — Workstream SB action-index 25.
+    /// The user-signed L2 swap against the reserve actor's live
+    /// balances, priced in-kernel; the L1 step-VM execution arm is
+    /// `StepPlan.planBalances4`'s kind-25 quad.  Consistency only —
+    /// the production terminate-calldata path uses the raw `u8`, so
+    /// kind 25 already flowed through.
+    ReserveSwap = 25,
 }
 
 /// Encode the FULL-FORM `terminateOnSingleStep` calldata.  The
@@ -1731,8 +1734,9 @@ mod tests {
         assert_eq!(ActionKind::TopUpActionBudget as u8, 20);
         assert_eq!(ActionKind::TopUpActionBudgetFor as u8, 21);
         assert_eq!(ActionKind::ClaimBudgetRefund as u8, 22);
-        assert_eq!(ActionKind::AmmSwap as u8, 23);
+        // 23 is the retired ammSwap's permanent hole — no variant.
         assert_eq!(ActionKind::ReclaimAmmReserves as u8, 24);
+        assert_eq!(ActionKind::ReserveSwap as u8, 25);
     }
 
     /// Game id is encoded as 32-byte big-endian.

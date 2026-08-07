@@ -186,12 +186,17 @@ fn gateway_renders_every_frozen_lean_event_type() {
         assert!(obj.contains_key("payload"));
         tags_seen.insert(e.tag);
     }
-    // Every frozen tag 0..=24 is exercised (the corpus is complete).
-    let expected: std::collections::BTreeSet<u64> = (0..=MAX_KNOWN_TAG).collect();
+    // Every LIVE frozen tag 0..=24 is exercised (the corpus is
+    // complete).  Tag 21 (the retired ammSwapExecuted, the excised
+    // L1-AMM mirror's event) is a permanent hole the corpus must
+    // NOT carry.
+    let expected: std::collections::BTreeSet<u64> =
+        (0..=MAX_KNOWN_TAG).filter(|t| *t != 21).collect();
     assert_eq!(
         tags_seen,
         expected,
-        "the fixture must cover every frozen tag 0..={MAX_KNOWN_TAG}; missing {:?}",
+        "the fixture must cover every live frozen tag 0..={MAX_KNOWN_TAG} \
+         (minus the retired tag-21 hole); missing {:?}",
         expected.difference(&tags_seen).collect::<Vec<_>>(),
     );
 }

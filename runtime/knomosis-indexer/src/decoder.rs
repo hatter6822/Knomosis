@@ -449,13 +449,10 @@ pub fn decode_event(payload: &[u8]) -> Result<Event, DecodeError> {
             actor: cursor.read_uint()?,
             amount: cursor.read_budget_units()?,
         },
-        21 => Event::AmmSwapExecuted {
-            from_resource: cursor.read_uint()?,
-            to_resource: cursor.read_uint()?,
-            amount_in: cursor.read_amount()?,
-            amount_out: cursor.read_amount()?,
-            amm_reserve_actor: cursor.read_uint()?,
-        },
+        // Tag 21 (the retired ammSwapExecuted, the excised L1-AMM
+        // mirror's event) is a permanent hole: it falls through to
+        // `UnknownTag` below, exactly like a never-assigned tag,
+        // mirroring the Lean decoder's refusal.
         22 => Event::AmmReservesReclaimed {
             resource: cursor.read_uint()?,
             amount: cursor.read_amount()?,
@@ -784,19 +781,6 @@ pub fn encode_event(event: &Event) -> Vec<u8> {
             write_uint(&mut out, *actor);
             write_budget_units(&mut out, *amount);
         }
-        Event::AmmSwapExecuted {
-            from_resource,
-            to_resource,
-            amount_in,
-            amount_out,
-            amm_reserve_actor,
-        } => {
-            write_uint(&mut out, *from_resource);
-            write_uint(&mut out, *to_resource);
-            write_amount(&mut out, *amount_in);
-            write_amount(&mut out, *amount_out);
-            write_uint(&mut out, *amm_reserve_actor);
-        }
         Event::AmmReservesReclaimed {
             resource,
             amount,
@@ -1036,19 +1020,6 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
         Event::BudgetConsumed { actor, amount } => {
             write_uint(&mut out, *actor);
             write_budget_units_checked(&mut out, *amount)?;
-        }
-        Event::AmmSwapExecuted {
-            from_resource,
-            to_resource,
-            amount_in,
-            amount_out,
-            amm_reserve_actor,
-        } => {
-            write_uint(&mut out, *from_resource);
-            write_uint(&mut out, *to_resource);
-            write_amount(&mut out, *amount_in);
-            write_amount(&mut out, *amount_out);
-            write_uint(&mut out, *amm_reserve_actor);
         }
         Event::AmmReservesReclaimed {
             resource,

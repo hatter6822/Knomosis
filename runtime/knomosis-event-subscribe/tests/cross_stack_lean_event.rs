@@ -214,9 +214,12 @@ fn lean_event_classify_known_matches_name() {
     }
 }
 
-/// The canonical entries cover all 20 known tags exactly once — a
-/// sync gate: if Lean appends a constructor, this fails until the
-/// fixture (and registry) catch up.
+/// The canonical entries cover every LIVE known tag exactly once —
+/// a sync gate: if Lean appends a constructor, this fails until the
+/// fixture (and registry) catch up.  The retired tag 21 (the
+/// excised L1-AMM mirror's `ammSwapExecuted`) is a permanent hole:
+/// the corpus must NOT carry it, and a fixture that does fails here
+/// too.
 #[test]
 fn lean_event_canonical_covers_all_known_tags() {
     let Some(fx) = load_fixture() else { return };
@@ -227,10 +230,11 @@ fn lean_event_canonical_covers_all_known_tags() {
         .map(|e| e.tag)
         .collect();
     canonical_tags.sort_unstable();
-    let expected: Vec<u64> = (0..KNOWN_EVENT_TAG_COUNT).collect();
+    let expected: Vec<u64> = (0..KNOWN_EVENT_TAG_COUNT).filter(|t| *t != 21).collect();
     assert_eq!(
         canonical_tags, expected,
-        "canonical entries must cover tags 0..{KNOWN_EVENT_TAG_COUNT} exactly once"
+        "canonical entries must cover the live tags of 0..{KNOWN_EVENT_TAG_COUNT} \
+         (minus the retired tag-21 hole) exactly once"
     );
     // Every canonical tag resolves through the registry.
     for tag in &canonical_tags {

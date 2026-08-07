@@ -459,7 +459,9 @@ pub(crate) struct _TerminateBundleCellProofDocsAnchor;
 ///     `actionKind` parameter; widened from 0..18 by Workstream
 ///     GP — indices 19 (`DepositWithFee`), 20
 ///     (`TopUpActionBudget`), 21 (`TopUpActionBudgetFor`),
-///     22 (`ClaimBudgetRefund`), and 23 (`AmmSwap`)).
+///     22 (`ClaimBudgetRefund`), 24 (`ReclaimAmmReserves`) and 25
+///     (`ReserveSwap`); 23 is the retired `ammSwap`'s permanent
+///     hole).
 ///   * `action_fields` — canonical byte layout the L1 `_stepXX`
 ///     decoder consumes.
 ///   * `signer` — the action's signer's `ActorId` (`u64`).
@@ -477,7 +479,9 @@ pub struct TerminateBundle {
     /// Solidity `actionKind` argument.  The range widened from
     /// 0..18 by Workstream GP — indices 19 (`DepositWithFee`),
     /// 20 (`TopUpActionBudget`), 21 (`TopUpActionBudgetFor`),
-    /// 22 (`ClaimBudgetRefund`), and 23 (`AmmSwap`).
+    /// 22 (`ClaimBudgetRefund`), 24 (`ReclaimAmmReserves`) and 25
+    /// (`ReserveSwap`); 23 is the retired `ammSwap`'s permanent
+    /// hole.
     pub action_kind: u8,
     /// Canonical byte layout the L1 `_stepXX` decoder consumes.
     ///

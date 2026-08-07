@@ -237,20 +237,18 @@ pub fn encode_input(input: &FixtureInput) -> Result<Vec<u8>, FixtureError> {
         }
         IngestedEvent::AmmDisabled {
             timestamp,
-            reserve_eth,
-            reserve_bold,
             block_number,
             tx_hash,
             log_index,
         } => {
-            // GP.11.10: the one-way kill switch marker.
+            // GP.11.10: the one-way kill switch marker.  (The two
+            // reserve-snapshot words left with the excised L1
+            // reserve books.)
             out.push(EVENT_TAG_AMM_DISABLED);
             out.extend_from_slice(&block_number.to_be_bytes());
             out.extend_from_slice(tx_hash);
             out.extend_from_slice(&log_index.to_be_bytes());
             out.extend_from_slice(timestamp);
-            out.extend_from_slice(reserve_eth);
-            out.extend_from_slice(reserve_bold);
         }
     }
     // Address book.
@@ -441,17 +439,12 @@ fn decode_event(bytes: &[u8], cursor: &mut usize) -> Result<IngestedEvent, Fixtu
             })
         }
         EVENT_TAG_AMM_DISABLED => {
-            // GP.11.10: the one-way kill switch marker.
+            // GP.11.10: the one-way kill switch marker (timestamp
+            // only since the L1-AMM excision).
             let mut timestamp = [0u8; 32];
             timestamp.copy_from_slice(read_bytes(bytes, cursor, 32)?);
-            let mut reserve_eth = [0u8; 32];
-            reserve_eth.copy_from_slice(read_bytes(bytes, cursor, 32)?);
-            let mut reserve_bold = [0u8; 32];
-            reserve_bold.copy_from_slice(read_bytes(bytes, cursor, 32)?);
             Ok(IngestedEvent::AmmDisabled {
                 timestamp,
-                reserve_eth,
-                reserve_bold,
                 block_number,
                 tx_hash,
                 log_index,
@@ -982,15 +975,9 @@ mod tests {
     fn amm_disabled_roundtrip() {
         let mut ts = [0u8; 32];
         ts[31] = 42;
-        let mut re = [0u8; 32];
-        re[30] = 1;
-        let mut rb = [0u8; 32];
-        rb[31] = 7;
         let input = FixtureInput {
             event: IngestedEvent::AmmDisabled {
                 timestamp: ts,
-                reserve_eth: re,
-                reserve_bold: rb,
                 block_number: 1234,
                 tx_hash: [0xAB; 32],
                 log_index: 5,

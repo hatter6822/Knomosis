@@ -67,7 +67,10 @@ does not parse them.  Byte-equality is the contract.
 | `l1_ingest.cxsf` | `L1Ingest` | `knomosis-l1-ingest`'s `examples/gen_ingest_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack.rs` |
 | `l1_ingest_fee_split.cxsf` | `L1IngestFeeSplit` | `knomosis-l1-ingest`'s `examples/gen_fee_split_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack_fee_split.rs` |
 | `l1_ingest_bold.cxsf` | `L1IngestBold` | `LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean` (Lean-authored, written by `lake test`) | `knomosis-l1-ingest`'s `tests/cross_stack_bold.rs` |
-| `amm_swap.cxsf` | `AmmSwap` | `LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean` (Lean-authored, written by `lake test`) | `knomosis-l1-ingest`'s `tests/cross_stack_amm_swap.rs` |
+
+The retired `amm_swap.cxsf` corpus (`FixtureKind` tag 8, the excised
+L1-AMM mirror's CBE differential) left with the L1 embedded AMM; its
+on-disk tag is a permanent hole no future fixture kind may reuse.
 
 Each downstream work unit's fixtures are committed alongside the
 implementing PR.  See

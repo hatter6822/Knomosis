@@ -393,23 +393,10 @@ fn render_known(event: &Event) -> Rendered {
             resource: None,
             payload: json!({ "actor": actor.to_string(), "amount": amount.to_string() }),
         },
-        Event::AmmSwapExecuted {
-            from_resource,
-            to_resource,
-            amount_in,
-            amount_out,
-            amm_reserve_actor,
-        } => Rendered {
-            actor: Some(amm_reserve_actor.to_string()),
-            resource: None,
-            payload: json!({
-                "fromResource": from_resource.to_string(),
-                "toResource": to_resource.to_string(),
-                "amountIn": amount_in.to_string(),
-                "amountOut": amount_out.to_string(),
-                "ammReserveActor": amm_reserve_actor.to_string(),
-            }),
-        },
+        // Tag 21 (the retired ammSwapExecuted, the excised L1-AMM
+        // mirror's event) is a permanent hole: the indexer decoder
+        // refuses the tag, so no `Event` variant reaches this
+        // renderer and none exists to render.
         Event::AmmReservesReclaimed {
             resource,
             amount,
@@ -616,7 +603,7 @@ mod tests {
     /// order — paired one-to-one with [`sample_events`].  Transcribed from
     /// the contract, *independent* of `render_known`, so the two cannot
     /// drift together.
-    #[allow(clippy::too_many_lines)] // a flat 25-entry golden table; splitting hurts the pin
+    #[allow(clippy::too_many_lines)] // a flat 24-entry golden table; splitting hurts the pin
     fn expected_envelopes() -> Vec<(Option<&'static str>, Option<&'static str>, Value)> {
         let l1 = format!("0x{}", "01".repeat(20));
         vec![
@@ -689,11 +676,7 @@ mod tests {
                 json!({"recipient":"1","signer":"2","gasResource":"0","gasAmount":"5","budgetIncrement":"3","poolActor":"4"}),
             ),
             (Some("1"), None, json!({"actor":"1","amount":"5"})),
-            (
-                Some("2"),
-                None,
-                json!({"fromResource":"0","toResource":"1","amountIn":"5","amountOut":"4","ammReserveActor":"2"}),
-            ),
+            // The retired tag 21 (ammSwapExecuted) is a hole — no row.
             (
                 Some("3"),
                 Some("0"),
@@ -855,13 +838,8 @@ mod tests {
                 actor: 1,
                 amount: 5,
             },
-            Event::AmmSwapExecuted {
-                from_resource: 0,
-                to_resource: 1,
-                amount_in: Amount::from_u64(5),
-                amount_out: Amount::from_u64(4),
-                amm_reserve_actor: 2,
-            },
+            // The retired tag 21 (ammSwapExecuted) is a hole — no
+            // sample, matching `ALL_EVENT_TYPES`.
             Event::AmmReservesReclaimed {
                 resource: 0,
                 amount: Amount::from_u64(5),

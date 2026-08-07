@@ -21,9 +21,11 @@
 //! initially in GP.6.3 — `DepositWithFeeCredited`,
 //! `ActionBudgetTopUp`, `GasPoolClaim`,
 //! `DelegatedActionBudgetTopUp`.  GP.6.4 added tag 20
-//! (`BudgetConsumed`); GP.11.4 / GP.11.10 added the AMM family —
-//! `AmmSwapExecuted` (21) and `AmmReservesReclaimed` (22).
-//! All round-trip byte-for-byte through the indexer.
+//! (`BudgetConsumed`); GP.11.10 added `AmmReservesReclaimed` (22).
+//! Tag 21 (the L1-AMM mirror's `ammSwapExecuted`) was RETIRED with
+//! the embedded L1 AMM and is a permanent hole the corpus no longer
+//! carries.  All live tags round-trip byte-for-byte through the
+//! indexer.
 //!
 //! Gated on the Lean-generated fixture's presence (written by
 //! `lake test`); skips locally when absent, fails under CI.
@@ -35,9 +37,10 @@ use knomosis_indexer::event::Event;
 use serde::Deserialize;
 
 /// The highest event tag the indexer's `Event` mirror models.
-/// GP.11.4 widened this to 21 (`AmmSwapExecuted`); GP.11.10 to 22
-/// (`AmmReservesReclaimed`); Workstream SB to 24
-/// (`ReserveSwapExecuted` at 23, `ReserveSeeded` at 24).
+/// GP.11.10 widened this to 22 (`AmmReservesReclaimed`);
+/// Workstream SB to 24 (`ReserveSwapExecuted` at 23,
+/// `ReserveSeeded` at 24).  Tag 21 is the retired
+/// `ammSwapExecuted`'s permanent hole INSIDE the range.
 const INDEXER_MAX_KNOWN_TAG: u64 = 24;
 
 /// Pinned generator identifier (a Lean-side version bump forces an
@@ -173,20 +176,22 @@ fn lean_event_bytes_round_trip_through_indexer() {
         }
     }
     // Sanity: the corpus exercised both the pre-GP family
-    // (tags 0..=15) and the extended family (tags 16..=21).
+    // (tags 0..=15) and the extended family (tags 16..=24 minus the
+    // retired tag-21 hole).
     assert!(
         known_seen >= 13,
         "expected the canonical 0..=15 tags, saw {known_seen}"
     );
     assert!(
         gp_seen >= 6,
-        "expected the extended-family 16..=21 tags, saw {gp_seen}"
+        "expected the extended-family tags, saw {gp_seen}"
     );
 }
 
-/// **GP.6.4 + GP.11.4** — Round-tripping the extended-family
-/// fixture entries (tags 16..=21) through the indexer's `Event`
-/// mirror preserves the field semantics, not just the byte shape.
+/// **GP.6.4 + Workstream SB** — Round-tripping the extended-family
+/// fixture entries (tags 16..=24, minus the retired tag-21 hole)
+/// through the indexer's `Event` mirror preserves the field
+/// semantics, not just the byte shape.
 /// Specifically:
 ///
 ///   * `DepositWithFeeCredited`: `Event::tag() == 16`, `actor()`
@@ -201,9 +206,6 @@ fn lean_event_bytes_round_trip_through_indexer() {
 ///     returns `gas_resource`.
 ///   * `BudgetConsumed`: `tag() == 20`, `actor()` returns the
 ///     actor, `resource()` returns `None`.
-///   * `AmmSwapExecuted`: `tag() == 21`, `actor()` returns the
-///     `amm_reserve_actor`, `resource()` returns `None` (the
-///     event is multi-resource: `from_resource` / `to_resource`).
 ///   * `ReserveSwapExecuted`: `tag() == 23`, `actor()` returns the
 ///     swapping USER, `resource()` returns `None` (multi-resource).
 ///   * `ReserveSeeded`: `tag() == 24`, `actor()` returns the
@@ -229,11 +231,12 @@ fn gp_family_field_projections_consistent() {
         );
         // Most GP-family events have a `resource()`, EXCEPT tag
         // 20 (`BudgetConsumed`) which is resource-independent
-        // (budget units, not a resource) and tags 21 / 23
-        // (`AmmSwapExecuted` / `ReserveSwapExecuted`) which are
-        // multi-resource (from/to; Lean's `Event.resource` returns
-        // `none` for both).
-        if e.tag != 20 && e.tag != 21 && e.tag != 23 {
+        // (budget units, not a resource) and tag 23
+        // (`ReserveSwapExecuted`) which is multi-resource
+        // (from/to; Lean's `Event.resource` returns `none`).
+        // (Tag 21 is the retired ammSwapExecuted's hole — the
+        // corpus carries no entry for it.)
+        if e.tag != 20 && e.tag != 23 {
             assert!(
                 decoded.resource().is_some(),
                 "tag-{} event {} ({}) has no resource",
@@ -243,8 +246,7 @@ fn gp_family_field_projections_consistent() {
             );
         }
         // `is_gas_pool_family` is exhaustive on tags 16..=20;
-        // tag 21 (`AmmSwapExecuted`) is an AMM event, not
-        // gas-pool family.
+        // the AMM-family tags (22..=24) are not gas-pool family.
         if e.tag <= 20 {
             assert!(
                 decoded.is_gas_pool_family(),

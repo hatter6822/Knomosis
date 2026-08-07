@@ -417,26 +417,8 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_amount(*wei_per_budget_unit));
             out.extend_from_slice(&encode_u64(*pool_actor));
         }
-        Action::AmmSwap {
-            from_resource,
-            to_resource,
-            amount_in,
-            amount_out,
-            amm_reserve_actor,
-        } => {
-            // Field order matches `Encoding/Action.lean::Action.encode`'s
-            // `.ammSwap` arm:
-            //   fromResource ‖ toResource ‖ amountIn ‖ amountOut
-            //     ‖ ammReserveActor.
-            // All five are CBE uints (9-byte heads).  `amountIn` and
-            // `amountOut` are `Nat`s on the Lean side, bounded < 2^64
-            // at the encoding level via `Action.fieldsBounded`.
-            out.extend_from_slice(&encode_u64(*from_resource));
-            out.extend_from_slice(&encode_u64(*to_resource));
-            out.extend_from_slice(&encode_amount(*amount_in));
-            out.extend_from_slice(&encode_amount(*amount_out));
-            out.extend_from_slice(&encode_u64(*amm_reserve_actor));
-        }
+        // Tag 23 (the retired L1-AMM ammSwap mirror) is a permanent
+        // hole — no encoder arm exists, matching the Lean encoder.
         Action::ReclaimAmmReserves {
             r,
             amount,
@@ -453,6 +435,27 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_amount(*amount));
             out.extend_from_slice(&encode_u64(*reserve_actor));
             out.extend_from_slice(&encode_u64(*pool_actor));
+        }
+        Action::ReserveSwap {
+            from_resource,
+            to_resource,
+            user,
+            amount_in,
+            min_amount_out,
+            reserve_actor,
+        } => {
+            // Field order matches `Encoding/Action.lean::Action.encode`'s
+            // `.reserveSwap` arm:
+            //   fromResource ‖ toResource ‖ user ‖ amountIn
+            //     ‖ minAmountOut ‖ reserveActor.
+            // The two amounts ride the 33-byte amount head; the four
+            // identifiers ride the 9-byte uint head.
+            out.extend_from_slice(&encode_u64(*from_resource));
+            out.extend_from_slice(&encode_u64(*to_resource));
+            out.extend_from_slice(&encode_u64(*user));
+            out.extend_from_slice(&encode_amount(*amount_in));
+            out.extend_from_slice(&encode_amount(*min_amount_out));
+            out.extend_from_slice(&encode_u64(*reserve_actor));
         }
     }
     Ok(out)
@@ -1212,32 +1215,34 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
-    /// Known-vector test for `AmmSwap` — pinned against
+    /// Known-vector test for `ReserveSwap` — pinned against
     /// `LegalKernel.Encoding.Action.encode
-    /// (.ammSwap 0 1 1000 500 3)`.
+    /// (.reserveSwap 0 1 9 1000 900 3)`.
     #[test]
-    fn encode_amm_swap_known_vector() {
-        let action = Action::AmmSwap {
+    fn encode_reserve_swap_known_vector() {
+        let action = Action::ReserveSwap {
             from_resource: 0,
             to_resource: 1,
+            user: 9,
             amount_in: Amount::from_u64(1000),
-            amount_out: Amount::from_u64(500),
-            amm_reserve_actor: 3,
+            min_amount_out: Amount::from_u64(900),
+            reserve_actor: 3,
         };
         let actual = encode_action(&action).unwrap();
-        // tag 23 | fromResource 0 | toResource 1
-        // amountIn 1000 (0xe803 LE) | amountOut 500 (0xf401 LE)
-        // ammReserveActor 3
+        // tag 25 | fromResource 0 | toResource 1 | user 9
+        // amountIn 1000 (0xe803 LE) | minAmountOut 900 (0x8403 LE)
+        // reserveActor 3
         let expected: Vec<u8> = vec![
-            // uint 23
-            0x00, 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
+            // uint 25
+            0x00, 0x19, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 0
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 1
-            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // uint 9
+            0x00, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             // amount 1000 — 33-byte head: tag + 32 LE
             0x06, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, // amount 500 — 33-byte head: tag + 32 LE
-            0x06, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, // amount 900 — 33-byte head: tag + 32 LE
+            0x06, 0x84, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, // uint 3
             0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
