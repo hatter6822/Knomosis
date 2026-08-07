@@ -2554,6 +2554,51 @@ mod tests {
         assert!(!obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(32)));
     }
 
+    /// **The `MoveKind` discriminator is load-bearing.**  Two
+    /// different moves at the SAME `(game_id, pivot)` must dedup
+    /// independently.
+    ///
+    /// The sibling case above only ever varies `pivot_idx`, so it
+    /// passes just as happily against a key collapsed to
+    /// `(game_id, pivot)`.  Under that key a `Respond` at a pivot
+    /// would mark the pivot spent and the observer would then decline
+    /// to `Terminate` at it — the terminal step is the LAST move of a
+    /// converged game, so declining it forfeits a game the observer
+    /// was winning, silently and only at the deadline.
+    ///
+    /// `Timeout` is included because it shares the same machinery
+    /// while not being a `HonestMove` at all: a claim at a pivot must
+    /// not be blocked by having already responded there.
+    #[test]
+    fn pivot_dedup_is_per_move_kind_not_per_pivot() {
+        let (mut obs, _dir) = fresh_observer();
+        obs.submitted_pivots
+            .insert((42, MoveKind::Respond, Some(16)));
+
+        assert!(
+            obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(16)),
+            "the kind that was submitted is deduped"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(42, MoveKind::Terminate, Some(16)),
+            "a Respond must NOT block the Terminate at the same pivot"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(42, MoveKind::Submit, Some(16)),
+            "...nor the Submit"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(42, MoveKind::Timeout, Some(16)),
+            "...nor a timeout claim"
+        );
+        // And the game id still separates: another game's identical
+        // move is untouched.
+        assert!(
+            !obs.has_submitted_for_pivot(43, MoveKind::Respond, Some(16)),
+            "dedup is per game"
+        );
+    }
+
     /// Install a live, hydrated game that the observer OWES a move
     /// on, and no events at all.  `hydratable_state` has the turn
     /// with the sequencer and a `0..1024` range, so a

@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "a9c8e993089432fe8646068821526d5dc26ee6a07847a4e8fae7319bbcbc2ec1"
+    "source_digest": "9d59f2d1bb10018efab150021fed44612e889b64d1f8853d10c22280627e3997"
   },
   "summary": {
     "module_count": 195,
-    "declaration_count": 6291
+    "declaration_count": 6292
   },
   "modules": [
     {
@@ -14359,7 +14359,7 @@
     {
       "module": "runtime::knomosis-faultproof-observer::src::observer",
       "path": "runtime/knomosis-faultproof-observer/src/observer.rs",
-      "declaration_count": 114,
+      "declaration_count": 115,
       "declarations": [
         {
           "kind": "const",
@@ -15285,8 +15285,18 @@
         },
         {
           "kind": "fn",
+          "name": "pivot_dedup_is_per_move_kind_not_per_pivot",
+          "line": 2572,
+          "called": [
+            "fresh_observer",
+            "has_submitted_for_pivot",
+            "insert"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "insert_owed_game",
-          "line": 2560,
+          "line": 2605,
           "called": [
             "GameRecord",
             "InMemoryL1Source",
@@ -15304,7 +15314,7 @@
         {
           "kind": "fn",
           "name": "an_owed_move_is_played_with_no_event_to_react_to",
-          "line": 2593,
+          "line": 2638,
           "called": [
             "commit",
             "fresh_observer",
@@ -15320,7 +15330,7 @@
         {
           "kind": "fn",
           "name": "a_deferred_move_is_retried_once_its_reason_clears",
-          "line": 2620,
+          "line": 2665,
           "called": [
             "commit",
             "fresh_observer",
@@ -15333,7 +15343,7 @@
         {
           "kind": "fn",
           "name": "a_failed_broadcast_does_not_consume_the_move",
-          "line": 2650,
+          "line": 2695,
           "called": [
             "commit",
             "fresh_observer",
@@ -15351,7 +15361,7 @@
         {
           "kind": "fn",
           "name": "the_broadcast_retry_budget_is_bounded",
-          "line": 2685,
+          "line": 2730,
           "called": [
             "commit",
             "config",
@@ -15369,7 +15379,7 @@
         {
           "kind": "fn",
           "name": "startup_does_not_treat_a_failed_record_as_submitted",
-          "line": 2717,
+          "line": 2762,
           "called": [
             "ResponseRecord",
             "WatcherConfig",
@@ -15387,7 +15397,7 @@
         {
           "kind": "struct",
           "name": "MapStateReader",
-          "line": 2790,
+          "line": 2835,
           "called": [
             "GameState"
           ]
@@ -15395,13 +15405,13 @@
         {
           "kind": "impl",
           "name": "MapStateReader",
-          "line": 2798,
+          "line": 2843,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 2799,
+          "line": 2844,
           "called": [
             "GameState"
           ]
@@ -15409,13 +15419,13 @@
         {
           "kind": "fn",
           "name": "with_turn_deadline",
-          "line": 2806,
+          "line": 2851,
           "called": []
         },
         {
           "kind": "impl",
           "name": "crate::state_reader::GameStateReader for MapStateReader",
-          "line": 2812,
+          "line": 2857,
           "called": [
             "MapStateReader"
           ]
@@ -15423,7 +15433,7 @@
         {
           "kind": "fn",
           "name": "read_and_validate",
-          "line": 2813,
+          "line": 2858,
           "called": [
             "Err",
             "GameState",
@@ -15438,7 +15448,7 @@
         {
           "kind": "fn",
           "name": "observed",
-          "line": 2839,
+          "line": 2884,
           "called": [
             "GameState",
             "ObservedGame",
@@ -15449,7 +15459,7 @@
         {
           "kind": "fn",
           "name": "observer_awaiting_opponent",
-          "line": 2852,
+          "line": 2897,
           "called": [
             "GameRecord",
             "InMemoryL1Source",
@@ -15469,7 +15479,7 @@
         {
           "kind": "fn",
           "name": "a_lapsed_opponent_deadline_is_claimed",
-          "line": 2894,
+          "line": 2939,
           "called": [
             "has_submitted_for_pivot",
             "len",
@@ -15483,7 +15493,7 @@
         {
           "kind": "fn",
           "name": "a_live_opponent_deadline_is_not_claimed",
-          "line": 2918,
+          "line": 2963,
           "called": [
             "games",
             "is_empty",
@@ -15497,7 +15507,7 @@
         {
           "kind": "fn",
           "name": "our_own_lapsed_deadline_is_never_claimed",
-          "line": 2936,
+          "line": 2981,
           "called": [
             "GameRecord",
             "config",
@@ -15517,7 +15527,7 @@
         {
           "kind": "fn",
           "name": "a_game_that_stays_unhydrated_is_not_claimed",
-          "line": 2984,
+          "line": 3029,
           "called": [
             "fresh_observer",
             "games",
@@ -15532,7 +15542,7 @@
         {
           "kind": "fn",
           "name": "hydratable_state",
-          "line": 3002,
+          "line": 3047,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15545,7 +15555,7 @@
         {
           "kind": "fn",
           "name": "insert_cold_start_game",
-          "line": 3029,
+          "line": 3074,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15567,7 +15577,7 @@
         {
           "kind": "fn",
           "name": "run_iteration_hydrates_cold_start_games",
-          "line": 3082,
+          "line": 3127,
           "called": [
             "fresh_observer",
             "games",
@@ -15583,7 +15593,7 @@
         {
           "kind": "fn",
           "name": "run_iteration_without_state_reader_is_a_noop_not_an_error",
-          "line": 3111,
+          "line": 3156,
           "called": [
             "fresh_observer",
             "games",
@@ -15594,7 +15604,7 @@
         {
           "kind": "fn",
           "name": "hydration_read_failure_does_not_halt_the_iteration",
-          "line": 3123,
+          "line": 3168,
           "called": [
             "fresh_observer",
             "games",
@@ -15606,7 +15616,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_transitions_cold_start_game",
-          "line": 3136,
+          "line": 3181,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15632,7 +15642,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_unknown_game_is_noop",
-          "line": 3213,
+          "line": 3258,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15648,7 +15658,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_rejects_mismatched_deployment_id",
-          "line": 3248,
+          "line": 3293,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15672,7 +15682,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_refuses_to_resurrect_settled_game",
-          "line": 3322,
+          "line": 3367,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15696,7 +15706,7 @@
         {
           "kind": "fn",
           "name": "h1_intent_record_recovery_re_broadcasts",
-          "line": 3394,
+          "line": 3439,
           "called": [
             "ResponseRecord",
             "_",
@@ -15715,7 +15725,7 @@
         {
           "kind": "fn",
           "name": "h1_intent_record_recovery_marks_failed_on_broadcast_error",
-          "line": 3433,
+          "line": 3478,
           "called": [
             "ResponseRecord",
             "_",
@@ -15734,7 +15744,7 @@
         {
           "kind": "fn",
           "name": "iteration_pivot_rollback_clears_cache_on_failed_iteration",
-          "line": 3480,
+          "line": 3525,
           "called": [
             "fresh_observer",
             "insert",
@@ -15745,7 +15755,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_is_idempotent",
-          "line": 3507,
+          "line": 3552,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15768,7 +15778,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_rejects_degenerate_range",
-          "line": 3583,
+          "line": 3628,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15790,7 +15800,7 @@
         {
           "kind": "fn",
           "name": "stop_signal_halts_run_loop",
-          "line": 3648,
+          "line": 3693,
           "called": [
             "config",
             "fresh_observer",
@@ -15803,13 +15813,13 @@
         {
           "kind": "fn",
           "name": "iteration_outcome_fields",
-          "line": 3665,
+          "line": 3710,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_settled_updates_state",
-          "line": 3681,
+          "line": 3726,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15832,7 +15842,7 @@
         {
           "kind": "fn",
           "name": "settled_for_unknown_game_skipped",
-          "line": 3735,
+          "line": 3780,
           "called": [
             "block_number",
             "event",
@@ -15844,7 +15854,7 @@
         {
           "kind": "fn",
           "name": "midpoint_for_unknown_game_skipped",
-          "line": 3754,
+          "line": 3799,
           "called": [
             "block_number",
             "commit",
@@ -15857,7 +15867,7 @@
         {
           "kind": "fn",
           "name": "response_for_unknown_game_skipped",
-          "line": 3773,
+          "line": 3818,
           "called": [
             "block_number",
             "event",
@@ -15869,7 +15879,7 @@
         {
           "kind": "fn",
           "name": "state_root_submitted_records_the_batch",
-          "line": 3794,
+          "line": 3839,
           "called": [
             "block_number",
             "commit",
@@ -15884,7 +15894,7 @@
         {
           "kind": "fn",
           "name": "resume_from_persistence",
-          "line": 3838,
+          "line": 3883,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15912,7 +15922,7 @@
         {
           "kind": "fn",
           "name": "duplicate_game_opened_idempotent",
-          "line": 3910,
+          "line": 3955,
           "called": [
             "block_number",
             "commit",
@@ -15925,7 +15935,7 @@
         {
           "kind": "fn",
           "name": "pivot_for_move_correct",
-          "line": 3931,
+          "line": 3976,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15939,7 +15949,7 @@
         {
           "kind": "fn",
           "name": "interruptible_sleep_responds_to_stop",
-          "line": 3991,
+          "line": 4036,
           "called": [
             "MemoryTerminateBundleOracle",
             "TerminateBundle",
@@ -15951,7 +15961,7 @@
         {
           "kind": "fn",
           "name": "make_terminate_bundle",
-          "line": 4015,
+          "line": 4060,
           "called": [
             "TerminateBundle",
             "commit",
@@ -15961,7 +15971,7 @@
         {
           "kind": "fn",
           "name": "observer_attaches_terminate_bundle_oracle",
-          "line": 4049,
+          "line": 4094,
           "called": [
             "Claim",
             "DisputedRange",
@@ -15981,7 +15991,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_without_oracle_defers",
-          "line": 4102,
+          "line": 4147,
           "called": [
             "Claim",
             "DisputedRange",
@@ -16000,7 +16010,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_with_matching_bundle_succeeds",
-          "line": 4145,
+          "line": 4190,
           "called": [
             "Claim",
             "DisputedRange",
@@ -16025,7 +16035,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_refuses_on_commit_mismatch",
-          "line": 4218,
+          "line": 4263,
           "called": [
             "Claim",
             "DisputedRange",
@@ -16048,7 +16058,7 @@
         {
           "kind": "fn",
           "name": "terminate_record_for_batch_tests",
-          "line": 4280,
+          "line": 4325,
           "called": [
             "Claim",
             "DisputedRange",
@@ -16064,37 +16074,6 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_defers_without_disputed_index",
-          "line": 4314,
-          "called": [
-            "block_number",
-            "build_terminate_calldata",
-            "commit",
-            "fresh_observer",
-            "insert",
-            "make_terminate_bundle",
-            "rec",
-            "terminate_record_for_batch_tests",
-            "with_terminate_bundle_oracle"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "build_terminate_calldata_defers_without_batch_record",
-          "line": 4342,
-          "called": [
-            "build_terminate_calldata",
-            "commit",
-            "fresh_observer",
-            "insert",
-            "make_terminate_bundle",
-            "rec",
-            "terminate_record_for_batch_tests",
-            "with_terminate_bundle_oracle"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "build_terminate_calldata_defers_on_bounds_mismatch",
           "line": 4359,
           "called": [
             "block_number",
@@ -16110,8 +16089,39 @@
         },
         {
           "kind": "fn",
+          "name": "build_terminate_calldata_defers_without_batch_record",
+          "line": 4387,
+          "called": [
+            "build_terminate_calldata",
+            "commit",
+            "fresh_observer",
+            "insert",
+            "make_terminate_bundle",
+            "rec",
+            "terminate_record_for_batch_tests",
+            "with_terminate_bundle_oracle"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "build_terminate_calldata_defers_on_bounds_mismatch",
+          "line": 4404,
+          "called": [
+            "block_number",
+            "build_terminate_calldata",
+            "commit",
+            "fresh_observer",
+            "insert",
+            "make_terminate_bundle",
+            "rec",
+            "terminate_record_for_batch_tests",
+            "with_terminate_bundle_oracle"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "build_calldata_for_move_delegates_non_terminate",
-          "line": 4388,
+          "line": 4433,
           "called": [
             "Claim",
             "DisputedRange",
