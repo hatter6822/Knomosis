@@ -336,7 +336,9 @@ knomosis-gateway --listen 127.0.0.1:8080 \
   --host-addr 127.0.0.1:7654 \
   --event-subscribe-addr 127.0.0.1:7655 \
   --auth-token-file /etc/knomosis/gw.tokens \
-  --gas-pool-actor 161 --free-tier 1000 --action-cost 5 --epoch-length 7200
+  --gas-pool-actor 161 --free-tier 1000 --action-cost 5 --epoch-length 7200 \
+  --l2-chain-id 8357          # production chain id for the /rpc shim
+                              # (default 83572 = test; §3)
 
 # Health / readiness / metadata:
 curl -fsS localhost:8080/healthz

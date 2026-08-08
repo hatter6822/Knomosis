@@ -151,7 +151,7 @@ python3 scripts/regenerate_codemaps.py
 
 ## Solidity and Rust mirrors
 
-### Solidity (Workstreams E/H)
+### Solidity L1 mirror (`solidity/`)
 
 ```bash
 cd solidity
@@ -162,7 +162,7 @@ make test-cross-stack
 make snapshot-gas-check   # GP.11.9 gas-benchmark regression gate
 ```
 
-### Rust host runtime (Workstream RH)
+### Rust host runtime (`runtime/`)
 
 ```bash
 cd runtime
@@ -176,13 +176,13 @@ cargo fmt --all -- --check
 
 Knomosis uses layered checks so regressions fail fast:
 
-1. **Elaboration and theorem checking** via `lake build`.
+1. **Elaboration and theorem checking** via `lake build` (strict linters; any Lean warning fails CI).
 2. **Behavioral regression tests** via `lake test`.
-3. **Kernel-integrity gates** (`count_sorries`, `tcb_audit`, `stub_audit`, naming/deferral audits).
-4. **Lex governance consistency** (`lex_lint`, `lex_codegen --check`).
-5. **Cross-stack verification** in Solidity and Rust test corpora.
+3. **Kernel-integrity gates** (`count_sorries`, `tcb_audit`, `stub_audit`, naming/deferral/mock-import audits, term-level API-stability pins).
+4. **Lex governance consistency** (`lex_lint`, `lex_codegen --check`, the canonical-manifest check).
+5. **Cross-stack verification** in Solidity and Rust test corpora, plus scheduled lanes that link the production keccak256/secp256k1 adaptors and prove Lean↔EVM byte-equivalence.
 
-CI workflows under `.github/workflows/` run these gates on pull requests.
+Ten CI workflows under `.github/workflows/` run these gates on pull requests (path-filtered per stack, with daily/weekly cross-stack, fuzz, and supply-chain lanes and a tag-triggered release gate); see [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §17 for the full reference.
 
 ## Trust assumptions
 

@@ -472,6 +472,19 @@ fixture), so Lean-only PRs do not trigger it. To regenerate a cross-stack
 fixture corpus, use the per-crate `examples/gen_*` generators (deterministic;
 commit the resulting `.cxsf` files) — see `runtime/README.md`.
 
+Two further Rust lanes ride their own workflows rather than the
+`--workspace` gates:
+
+- **Supply chain:** `runtime/deny.toml` is the cargo-deny policy
+  (licence allowlist, advisories, bans, sources) for **both** the stable
+  workspace and the `fuzz/` workspace; `ci-cargo-deny.yml` enforces it on
+  any manifest/lockfile change. Run `cargo deny check` locally after a
+  dependency change if you have `cargo-deny` installed.
+- **Fuzzing:** `runtime/fuzz/` is a **separate**, nightly-only cargo-fuzz
+  workspace (excluded from `--workspace` so the stable gates never build
+  it); `ci-fuzz.yml` compiles every target on each `runtime/**` change and
+  smoke-runs them weekly. Commands and target list: `runtime/fuzz/README.md`.
+
 ## 8. The Solidity workflow (`solidity/`)
 
 The Solidity tree is the **L1 mirror** of the kernel: 11 immutable contracts, 16
@@ -490,7 +503,9 @@ make audit-caps                 # GP.5.2 constitutional fee-split-cap gate
 make audit-caps-selftest        # proves the cap gate actually trips
 make snapshot-gas-check         # GP.11.9 gas-benchmark regression gate
 make snapshot-gas               # regenerate the gas baseline + runbook table
+make snapshot-gas-selftest      # self-tests for the gas gate itself
 make testnet-acceptance-dryrun  # in-memory deploy dry-run
+# (the deploy-* / devnet targets are covered in §10.5)
 ```
 
 `solidity/foundry.toml` pins the solc **binary path**
@@ -1162,7 +1177,12 @@ path that produced it.
   [`planning/open_questions.md`](planning/open_questions.md),
   [`planning/deferred_work_index.md`](planning/deferred_work_index.md).
 - Operator runbooks: [`fault_proof_runbook.md`](fault_proof_runbook.md),
-  [`gas_pool_runbook.md`](gas_pool_runbook.md).
+  [`gas_pool_runbook.md`](gas_pool_runbook.md),
+  [`gateway_runbook.md`](gateway_runbook.md),
+  [`sepolia_deployment_runbook.md`](sepolia_deployment_runbook.md).
+- Deployment readiness: [`testnet_readiness.md`](testnet_readiness.md),
+  [`launch_execution_checklist.md`](launch_execution_checklist.md),
+  [`deployment_parameters.md`](deployment_parameters.md).
 - Stack guides: [`../runtime/README.md`](../runtime/README.md),
   [`../solidity/README.md`](../solidity/README.md).
 
