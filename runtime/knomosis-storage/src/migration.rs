@@ -106,12 +106,16 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "gp_6_4_budget_views",
         apply: migration_002_budget_views,
     },
+    Migration {
+        name: "widen_amount_cells",
+        apply: migration_003_widen_amount_cells,
+    },
 ];
 
 /// Compile-time assertion that the migration table fits in u32.
 /// Without this, a future PR that adds u32::MAX + 1 migrations
 /// would silently truncate the version counter.  At time of
-/// writing (1 migration), this is trivially below the cap.
+/// writing (3 migrations), this is trivially below the cap.
 const _MIGRATIONS_FIT_IN_U32: () = assert!(
     MIGRATIONS.len() <= u32::MAX as usize,
     "knomosis-storage MIGRATIONS table overflows u32"
@@ -374,9 +378,129 @@ fn migration_002_budget_views(conn: &Connection) -> Result<(), rusqlite::Error> 
     Ok(())
 }
 
+/// The value width every amount-valued cell used before
+/// [`migration_003_widen_amount_cells`] ran.
+///
+/// Frozen at the retired `u128` width.  Deliberately a local constant
+/// rather than a reference to anything current: a migration describes
+/// the shape of the data it FINDS, and pinning it to a live constant
+/// would silently change what the migration matches the next time that
+/// constant moves.
+const RETIRED_AMOUNT_VALUE_LEN: usize = 16;
+
+/// Third migration: widen every amount-valued cell from the retired
+/// 16-byte encoding to the 32-byte one
+/// [`knomosis_amount::Amount`] uses.
+///
+/// # Why the widening is lossless
+///
+/// Big-endian zero-extension preserves the value exactly: a 16-byte BE
+/// integer and the same integer written in 32 BE bytes denote the same
+/// number, because the sixteen added bytes are leading zeros.  No cell
+/// can fail to fit, since every `u128` is representable as an
+/// `Amount`.  The migration therefore cannot lose or change data — it
+/// only re-spells it.
+///
+/// # What gets widened
+///
+///   * the `kv` table's balance cells — those and only those, matched
+///     by the `b/` key prefix `knomosis-indexer` writes.  Every other
+///     `kv` keyspace (the cursor, and anything a later workstream
+///     adds) is left untouched, so a migration for balances cannot
+///     corrupt a neighbouring keyspace that happens to hold a 16-byte
+///     value;
+///   * all five budget / pool tables from
+///     `migration_002_budget_views`, whose values are the same
+///     fixed-width integers.
+///
+/// # Why it is written in Rust rather than as one `UPDATE`
+///
+/// The obvious SQL — `SET value = zeroblob(16) || value` — is WRONG.
+/// SQLite's `||` is string concatenation: it coerces both operands to
+/// TEXT, which mangles any blob containing a NUL byte, and a balance
+/// cell is mostly NUL bytes. Doing the re-encode in Rust keeps the
+/// transformation on typed bytes.
+///
+/// # Idempotency and partial application
+///
+/// Every statement filters on `length(value) = 16`, so a cell that is
+/// already 32 bytes is skipped.  Re-running the migration against a
+/// fully- or partially-widened database is a no-op on the widened
+/// rows.  The whole body runs inside the caller's transaction
+/// ([`apply_migrations`] opens `BEGIN IMMEDIATE`), so a failure rolls
+/// the database back to the pre-migration version rather than leaving
+/// a half-widened table.
+///
+/// Frozen at index 3 (schema version 3).
+fn migration_003_widen_amount_cells(conn: &Connection) -> Result<(), rusqlite::Error> {
+    // The `kv` balance cells.  `substr(key, 1, 2) = 'b/'` mirrors
+    // `knomosis_indexer::balance::BALANCE_KEY_PREFIX`; the length
+    // filter keeps the rewrite to cells still at the retired width.
+    widen_rows(
+        conn,
+        "SELECT key, value FROM kv \
+         WHERE substr(key, 1, 2) = CAST('b/' AS BLOB) AND length(value) = ?1",
+        "UPDATE kv SET value = ?2 WHERE key = ?1",
+    )?;
+
+    // The five budget / pool tables, all keyed by `actor`.
+    for table in [
+        "actor_budgets",
+        "actor_budgets_current_epoch_grants",
+        "actor_budgets_current_epoch_consumed",
+        "pool_balances_eth",
+        "pool_balances_bold",
+    ] {
+        widen_rows(
+            conn,
+            // SAFETY: `table` comes from the literal array above, not
+            // from user input -- no SQL injection risk.
+            &format!("SELECT actor, value FROM {table} WHERE length(value) = ?1"),
+            &format!("UPDATE {table} SET value = ?2 WHERE actor = ?1"),
+        )?;
+    }
+    Ok(())
+}
+
+/// Read every `(key, value)` the `select_sql` returns and rewrite the
+/// value zero-extended to [`knomosis_amount::AMOUNT_BYTES`].
+///
+/// The rows are collected BEFORE any update is issued: holding a
+/// prepared-statement cursor open across writes to the same table is
+/// exactly the pattern SQLite's documentation warns produces
+/// undefined iteration behaviour.
+fn widen_rows(
+    conn: &Connection,
+    select_sql: &str,
+    update_sql: &str,
+) -> Result<(), rusqlite::Error> {
+    let rows: Vec<(Vec<u8>, Vec<u8>)> = {
+        let mut stmt = conn.prepare(select_sql)?;
+        let mapped = stmt.query_map(params![RETIRED_AMOUNT_VALUE_LEN as i64], |row| {
+            Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?))
+        })?;
+        mapped.collect::<Result<Vec<_>, _>>()?
+    };
+
+    for (key, narrow) in rows {
+        // Zero-extend into the high bytes -- big-endian, so the
+        // retired value keeps its place at the LOW end.
+        let mut wide = [0u8; knomosis_amount::AMOUNT_BYTES];
+        let start = knomosis_amount::AMOUNT_BYTES - narrow.len();
+        wide[start..].copy_from_slice(&narrow);
+        conn.execute(update_sql, params![&key as &[u8], &wide as &[u8]])?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{apply_migrations, current_schema_version, target_schema_version, MIGRATIONS};
+    use super::{
+        apply_migrations, current_schema_version, migration_001_initial_kv_table,
+        migration_002_budget_views, migration_003_widen_amount_cells, target_schema_version,
+        MIGRATIONS,
+    };
+    use rusqlite::params;
     use rusqlite::Connection;
 
     /// `MIGRATIONS` table is non-empty.  Adding the first migration
@@ -599,5 +723,198 @@ mod tests {
             }
             other => panic!("expected Backend error, got {other:?}"),
         }
+    }
+
+    // ------------------------------------------------------------------
+    // migration_003_widen_amount_cells
+    // ------------------------------------------------------------------
+
+    /// A database written at the retired 16-byte width is widened
+    /// LOSSLESSLY: every value keeps its number, only its spelling
+    /// changes.
+    ///
+    /// The check is arithmetic, not byte-comparative: each seeded
+    /// `u128` must read back as the same integer from the 32-byte
+    /// cell.  A byte-comparative assertion would pass for a migration
+    /// that zero-extended on the WRONG end (which would multiply every
+    /// balance by `2^128`), so the values are re-derived instead.
+    #[test]
+    fn widening_preserves_every_value() {
+        let conn = Connection::open_in_memory().unwrap();
+        // Bring the schema to v2, the last version before the widening.
+        migration_001_initial_kv_table(&conn).unwrap();
+        migration_002_budget_views(&conn).unwrap();
+
+        // Values spanning the retired range, including both ends.
+        let probes: [u128; 5] = [0, 1, 1_000_000, u128::MAX - 1, u128::MAX];
+
+        for (i, v) in probes.iter().enumerate() {
+            let mut key = b"b/".to_vec();
+            key.extend_from_slice(&(i as u64).to_be_bytes());
+            key.extend_from_slice(&0u64.to_be_bytes());
+            conn.execute(
+                "INSERT INTO kv(key, value) VALUES (?1, ?2)",
+                params![&key as &[u8], &v.to_be_bytes() as &[u8]],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO actor_budgets(actor, value) VALUES (?1, ?2)",
+                params![
+                    &(i as u64).to_be_bytes() as &[u8],
+                    &v.to_be_bytes() as &[u8]
+                ],
+            )
+            .unwrap();
+        }
+
+        migration_003_widen_amount_cells(&conn).unwrap();
+
+        for (i, v) in probes.iter().enumerate() {
+            let mut key = b"b/".to_vec();
+            key.extend_from_slice(&(i as u64).to_be_bytes());
+            key.extend_from_slice(&0u64.to_be_bytes());
+            let got: Vec<u8> = conn
+                .query_row(
+                    "SELECT value FROM kv WHERE key = ?1",
+                    params![&key as &[u8]],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                got.len(),
+                knomosis_amount::AMOUNT_BYTES,
+                "kv cell must be widened"
+            );
+            assert_eq!(
+                knomosis_amount::Amount::from_be_slice(&got).unwrap(),
+                knomosis_amount::Amount::from_u128(*v),
+                "kv value changed under the widening"
+            );
+
+            let got: Vec<u8> = conn
+                .query_row(
+                    "SELECT value FROM actor_budgets WHERE actor = ?1",
+                    params![&(i as u64).to_be_bytes() as &[u8]],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(got.len(), knomosis_amount::AMOUNT_BYTES);
+            assert_eq!(
+                knomosis_amount::Amount::from_be_slice(&got).unwrap(),
+                knomosis_amount::Amount::from_u128(*v),
+                "budget value changed under the widening"
+            );
+        }
+    }
+
+    /// The widening touches ONLY `b/`-prefixed `kv` cells.
+    ///
+    /// The `kv` table is a shared keyspace — the indexer's cursor
+    /// lives there too — so a migration that matched on value length
+    /// alone would rewrite a neighbour's 16-byte value into something
+    /// that neighbour cannot parse.
+    #[test]
+    fn widening_leaves_other_kv_keyspaces_alone() {
+        let conn = Connection::open_in_memory().unwrap();
+        migration_001_initial_kv_table(&conn).unwrap();
+        migration_002_budget_views(&conn).unwrap();
+
+        // A non-balance key carrying a 16-byte value: the exact shape
+        // a length-only filter would catch by mistake.
+        let bystander = b"c/some-control-cell".to_vec();
+        let payload = [0xabu8; 16];
+        conn.execute(
+            "INSERT INTO kv(key, value) VALUES (?1, ?2)",
+            params![&bystander as &[u8], &payload as &[u8]],
+        )
+        .unwrap();
+
+        migration_003_widen_amount_cells(&conn).unwrap();
+
+        let got: Vec<u8> = conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = ?1",
+                params![&bystander as &[u8]],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            got,
+            payload.to_vec(),
+            "a non-balance cell must be untouched"
+        );
+    }
+
+    /// Re-running the widening is a no-op, so a partially-applied or
+    /// already-current database survives it.
+    #[test]
+    fn widening_is_idempotent() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        apply_migrations(&mut conn).unwrap();
+
+        let mut key = b"b/".to_vec();
+        key.extend_from_slice(&7u64.to_be_bytes());
+        key.extend_from_slice(&0u64.to_be_bytes());
+        let wide = knomosis_amount::Amount::from_u64(1_234).to_be_bytes();
+        conn.execute(
+            "INSERT INTO kv(key, value) VALUES (?1, ?2)",
+            params![&key as &[u8], &wide as &[u8]],
+        )
+        .unwrap();
+
+        for _ in 0..3 {
+            migration_003_widen_amount_cells(&conn).unwrap();
+        }
+
+        let got: Vec<u8> = conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = ?1",
+                params![&key as &[u8]],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            got,
+            wide.to_vec(),
+            "an already-wide cell must not be re-extended"
+        );
+    }
+
+    /// A value at the retired ceiling widens to the same number, not
+    /// to a value shifted into the high half.
+    ///
+    /// The negative control for `widening_preserves_every_value`: if
+    /// the zero-extension went to the wrong end, `u128::MAX` would come
+    /// back as `u128::MAX * 2^128`, which this pins against.
+    #[test]
+    fn widening_extends_the_high_bytes_not_the_low_ones() {
+        let conn = Connection::open_in_memory().unwrap();
+        migration_001_initial_kv_table(&conn).unwrap();
+        migration_002_budget_views(&conn).unwrap();
+
+        let mut key = b"b/".to_vec();
+        key.extend_from_slice(&1u64.to_be_bytes());
+        key.extend_from_slice(&0u64.to_be_bytes());
+        conn.execute(
+            "INSERT INTO kv(key, value) VALUES (?1, ?2)",
+            params![&key as &[u8], &u128::MAX.to_be_bytes() as &[u8]],
+        )
+        .unwrap();
+
+        migration_003_widen_amount_cells(&conn).unwrap();
+
+        let got: Vec<u8> = conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = ?1",
+                params![&key as &[u8]],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(&got[..16], &[0u8; 16], "the ADDED bytes are the high ones");
+        assert_eq!(
+            &got[16..],
+            &u128::MAX.to_be_bytes()[..],
+            "the original bytes stay low"
+        );
     }
 }

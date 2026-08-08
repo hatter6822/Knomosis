@@ -34,13 +34,17 @@
 //!
 //! ## Signing
 //!
-//! `BridgeActorKey::sign` takes a *pre-hashed* 32-byte message
-//! (the keccak256 of the signing-input bytes) and produces a
-//! 64-byte `(r || s)` low-s ECDSA signature.  The output format
-//! matches `knomosis-verify-secp256k1`'s expected input.
+//! `BridgeActorKey::sign_prehash` takes a *pre-hashed* 32-byte
+//! message (the keccak256 of the signing-input bytes) and produces
+//! the 65-byte Ethereum WIRE signature `(r ‖ s ‖ v)`: low-s
+//! `(r, s)` plus the recovery byte `v ∈ {27, 28}`.  The output is
+//! exactly what `knomosis-verify-secp256k1`'s wire path
+//! (`verify_signed_message`, the production semantics of Lean's
+//! `Verify` opaque) consumes, what the batch actions-root leaf
+//! binds (Workstream SB ruling R7), and what L1 `ecrecover`
+//! adjudicates at the fault-proof game's terminal step.
 
-use k256::ecdsa::signature::hazmat::PrehashSigner;
-use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
+use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use sha3::{Digest, Keccak256};
 use zeroize::Zeroizing;
 
@@ -50,8 +54,12 @@ pub const PRIVATE_KEY_LEN: usize = 32;
 /// Length of a SEC1-compressed secp256k1 public key, in bytes.
 pub const COMPRESSED_PUBKEY_LEN: usize = 33;
 
-/// Length of an Ethereum-style raw `(r || s)` ECDSA signature.
-pub const SIGNATURE_LEN: usize = 64;
+/// Length of the Ethereum-style WIRE ECDSA signature
+/// `(r ‖ s ‖ v)`: 32 + 32 + 1 bytes.  The recovery byte `v` rides
+/// the wire so both the off-chain verifier (which validates it by
+/// recovery) and L1 `ecrecover` (which consumes it directly) agree
+/// on the signature's meaning.
+pub const SIGNATURE_LEN: usize = 65;
 
 /// Length of a pre-hashed message (always 32 bytes).
 pub const PREHASH_LEN: usize = 32;
@@ -295,15 +303,20 @@ impl BridgeActorKey {
         self.public_key
     }
 
-    /// Sign a *pre-hashed* 32-byte message and return a 64-byte
-    /// `(r || s)` low-s signature.  The pre-hashing is the
-    /// caller's responsibility — typically `keccak256(signing_input(...))`.
+    /// Sign a *pre-hashed* 32-byte message and return the 65-byte
+    /// WIRE signature `(r ‖ s ‖ v)`, low-s, `v ∈ {27, 28}`.  The
+    /// pre-hashing is the caller's responsibility — typically
+    /// `keccak256(signing_input(...))`.
     ///
     /// Low-s canonicalisation matches the cross-stack contract
     /// with `knomosis-verify-secp256k1` (RH-A.1): signatures with
     /// `s > n/2` are rejected by the verifier, so this signer
-    /// emits the low-s form to begin with.  `k256`'s `sign_prehash`
-    /// produces low-s by default since v0.13.
+    /// emits the low-s form to begin with.  When normalising a
+    /// high-s signature to its low-s mate, the recovery id's
+    /// y-parity FLIPS, so the two are adjusted together — a `v`
+    /// naming the wrong candidate point would verify nowhere (the
+    /// off-chain verifier checks it by recovery, and L1
+    /// `ecrecover` would recover a different address).
     ///
     /// # Errors
     ///
@@ -321,24 +334,34 @@ impl BridgeActorKey {
         }
         let signing_key = SigningKey::from_slice(self.private_bytes.as_ref())
             .map_err(|_| KeyError::InvalidScalar)?;
-        // `k256` >= 0.13 normalises to low-s in sign_prehash by
-        // default — see the docs at `k256::ecdsa::signature::
-        // hazmat::PrehashSigner`.  We rely on this contract.
-        let sig: Signature = signing_key
-            .sign_prehash(prehash)
+        let (sig, recid): (Signature, RecoveryId) = signing_key
+            .sign_prehash_recoverable(prehash)
             .map_err(|_| KeyError::InvalidScalar)?;
         // Belt-and-suspenders: explicitly normalise to low-s.
-        // `k256::ecdsa::Signature::normalize_s` returns `Some`
-        // iff the input was high-s; we always normalise to
-        // ensure determinism even on `k256` revs that drop the
-        // sign-time normalisation.
-        let normalised = sig.normalize_s().unwrap_or(sig);
+        // `k256::ecdsa::Signature::normalize_s` returns `Some` iff
+        // the input was high-s; negating `s` flips the recovered
+        // point's y-parity, so the recovery id is flipped in
+        // lockstep.
+        let (normalised, recid) = match sig.normalize_s() {
+            Some(low_s) => (
+                low_s,
+                RecoveryId::new(!recid.is_y_odd(), recid.is_x_reduced()),
+            ),
+            None => (sig, recid),
+        };
         let bytes = normalised.to_bytes();
-        if bytes.len() != SIGNATURE_LEN {
+        if bytes.len() != SIGNATURE_LEN - 1 {
             return Err(KeyError::InvalidScalar);
         }
         let mut out = [0u8; SIGNATURE_LEN];
-        out.copy_from_slice(&bytes);
+        out[..SIGNATURE_LEN - 1].copy_from_slice(&bytes);
+        // Ethereum v convention: 27 + recovery id (0 or 1).  The
+        // x-reduced ids 2/3 are astronomically improbable (r ≥ n)
+        // and the wire refuses them, so fail closed here too.
+        if recid.is_x_reduced() {
+            return Err(KeyError::InvalidScalar);
+        }
+        out[SIGNATURE_LEN - 1] = 27 + recid.to_byte();
         Ok(out)
     }
 
@@ -372,7 +395,7 @@ mod tests {
     fn constants_stable() {
         assert_eq!(PRIVATE_KEY_LEN, 32);
         assert_eq!(COMPRESSED_PUBKEY_LEN, 33);
-        assert_eq!(SIGNATURE_LEN, 64);
+        assert_eq!(SIGNATURE_LEN, 65);
         assert_eq!(PREHASH_LEN, 32);
     }
 
@@ -425,7 +448,7 @@ mod tests {
         ));
     }
 
-    /// `sign_prehash` produces a 64-byte signature.
+    /// `sign_prehash` produces a 65-byte wire signature.
     #[test]
     fn sign_prehash_length() {
         let mut scalar = [0u8; PRIVATE_KEY_LEN];
@@ -496,6 +519,49 @@ mod tests {
             let is_low_s = s <= &HALF_ORDER[..];
             assert!(is_low_s, "signature {} is not low-s", hex::encode(sig));
         }
+    }
+
+    /// `sign_prehash` emits an Ethereum recovery byte: the 65th
+    /// byte is 27 or 28.
+    #[test]
+    fn sign_prehash_emits_eth_v() {
+        let mut scalar = [0u8; PRIVATE_KEY_LEN];
+        scalar[31] = 13;
+        let key = BridgeActorKey::from_private_bytes(&scalar).unwrap();
+        for nonce in 0..16u8 {
+            let mut prehash = [0u8; 32];
+            prehash[31] = nonce;
+            let sig = key.sign_prehash(&prehash).unwrap();
+            let v = sig[SIGNATURE_LEN - 1];
+            assert!(v == 27 || v == 28, "v byte {v} must be 27 or 28");
+        }
+    }
+
+    /// Cross-crate round trip: a signature produced here verifies
+    /// under `knomosis-verify-secp256k1`'s WIRE path — the exact
+    /// production semantics of the Lean `Verify` opaque.  This is
+    /// the contract the whole admission pipeline rests on: signer
+    /// and verifier agree on the digest recipe (keccak256 of the
+    /// raw signing-input bytes), the wire width (65) and the
+    /// recovery byte.
+    #[test]
+    fn sign_verifies_under_the_production_wire_verifier() {
+        let mut scalar = [0u8; PRIVATE_KEY_LEN];
+        scalar[31] = 21;
+        let key = BridgeActorKey::from_private_bytes(&scalar).unwrap();
+        let msg = b"end-to-end signer/verifier agreement";
+        let sig = key.sign_keccak256(msg).unwrap();
+        let pk = key.public_key_compressed();
+        assert!(
+            knomosis_verify_secp256k1::verify_signed_message(&pk, msg, &sig),
+            "wire signature must verify under the production adaptor"
+        );
+        // Negative control: a tampered message must not verify.
+        assert!(!knomosis_verify_secp256k1::verify_signed_message(
+            &pk,
+            b"tampered",
+            &sig
+        ));
     }
 
     /// `sign_keccak256` produces a deterministic signature for a

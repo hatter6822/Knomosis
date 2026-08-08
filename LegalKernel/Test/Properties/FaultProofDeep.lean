@@ -73,7 +73,8 @@ def genMultiRoundInput : Gen MultiRoundInput := fun st =>
       sequencerBond   := 1_000_000,
       challengerBond  := 50_000,
       status          := .inProgress,
-      deploymentId    := ByteArray.empty }
+      deploymentId    := ByteArray.empty
+      actionsRoot     := ByteArray.empty }
   ({ gs := gs, numRounds := rounds.min 8 }, st₃)
 
 /-- Simulate one round of bisection: the sequencer submits a
@@ -160,7 +161,8 @@ def genBondConservationInput : Gen BondConservationInput := fun st =>
       sequencerBond   := sb,
       challengerBond  := cb,
       status          := .inProgress,
-      deploymentId    := ByteArray.empty }
+      deploymentId    := ByteArray.empty
+      actionsRoot     := ByteArray.empty }
   ({ gs := gs, numRounds := rounds.min 8 }, st₃)
 
 /-- Property: across N simulated rounds, the total bond pool is
@@ -213,7 +215,8 @@ def roundCountWithinLinearBound (input : PerfInput) : Bool :=
       sequencerBond   := 1_000_000,
       challengerBond  := 50_000,
       status          := .inProgress,
-      deploymentId    := ByteArray.empty }
+      deploymentId    := ByteArray.empty
+      actionsRoot     := ByteArray.empty }
   -- Try simulating up to `width` rounds.  Either the trace
   -- terminates earlier (range too narrow) or all rounds succeed.
   match simulateNRounds gs input.width with

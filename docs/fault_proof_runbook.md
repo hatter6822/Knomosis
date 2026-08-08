@@ -93,11 +93,33 @@ them before verifying any opening.
 `SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
 the 37 theorems pinning their per-variant arms were deleted once
 nothing referenced them.  What survives from that surface is the L1
-FIELD LAYOUT — `actionKindByte`, `actionFieldsForL1`, the big-endian
-encoders and the log-entry chain's `l1ActionCommit` — which the
-root-computing step VM reads unchanged.  The Lean MODEL of the
-terminal step (`Step.kernelStepApply`) routes through the verifier, so
-it computes what the contract computes.
+FIELD LAYOUT — `actionKindByte`, `actionFieldsForL1` and the
+big-endian encoders — which the root-computing step VM reads
+unchanged.  The Lean MODEL of the terminal step
+(`Step.kernelStepApply`) routes through the verifier, so it computes
+what the contract computes.
+
+**Batching (Workstream SB) changed how the terminal action is
+authenticated.**  The registry's chain link folds one `actionsRoot`
+per BATCH (ruling R8) instead of one `actionCommit` per action, and
+`terminateOnSingleStep` authenticates the `(actionKind, actionFields,
+signer, 65-byte signature)` tuple it is handed by INCLUSION PROOF
+against the disputed batch's submitted root (ruling R7; the batch is
+read from the game's immutable `disputedLogIndex`, never from the
+caller).  The signature is BOUND in the leaf and VERIFIED at
+terminate (Workstream F-A): the signer's registered key is resolved
+by a single-cell opening of its registry cell against the disputed
+range's pre-state root, the canonical §8.8.5 digest is recomputed
+on-chain from the packed action fields, and `ecrecover` must land on
+that key's address.  An entry whose signature does not verify is
+INADMISSIBLE, so its truthful post-state is the pre-state — the
+terminal step adjudicates against `g.low.commit` rather than
+reverting, and a sequencer defending an unauthorised entry loses.
+The operator-visible consequence: a terminate needs the registry
+opening in its bundle (`registry_value_hex` / `registry_proof_hex`,
+emitted by `knomosis export-terminate-bundle`); the observer fails
+closed with `MissingRegistryOpening` rather than broadcasting
+calldata that would revert.
 
 ---
 
@@ -172,25 +194,30 @@ All five must succeed (no revert).
 
 ### 3.1 State-root submission monitoring
 
-**Sequencer obligation: bind the action.**
-`submitStateRoot(logIndex, stateCommit, prevLogEntryHash, actionCommit)`
-takes a fourth argument, and getting it wrong is a *liveness* failure
-for the sequencer rather than a submission-time error — the contract
-folds the value into the chain without interpreting it, so a wrong
-`actionCommit` is accepted at publish time and surfaces only when the
-root is challenged, at which point every honest
-`terminateOnSingleStep` reverts `ActionNotInLogChain` and the sequencer
+**Sequencer obligation: bind the batch's actions.**
+`submitStateRoot(endIndex, prevEndIndex, stateCommit, actionsRoot)`
+publishes ONE record covering log entries `[prevEndIndex, endIndex)`
+(Workstream SB); the previous chain hash is read STRUCTURALLY from
+the parent record (ruling R5 — there is no caller-supplied
+`prevLogEntryHash` to get wrong), and the fourth argument is the
+batch's `actionsRoot`: the cell-SMT root over the batch's per-action
+SIGNATURE-BOUND leaf commitments
+(`keccak256(actionKind ‖ uint64BE signer ‖ actionFields ‖ 65-byte
+sig)` at key `keccak256("knomosis.actionsRoot" ‖ uint64BE n)` for
+absolute index `n` — ruling R7).  Getting it wrong is a *liveness*
+failure rather than a submission-time error — the contract folds the
+root into the chain link without interpreting it, so a wrong
+`actionsRoot` is accepted at publish time and surfaces only when the
+batch is challenged, at which point every honest
+`terminateOnSingleStep` reverts `ActionNotInBatch` and the sequencer
 loses by timeout.
 
-Compute it as
-`keccak256(abi.encodePacked(uint8 actionKind, uint64 signer, bytes actionFields))`
-over the action that carried `logIndex - 1` to `logIndex` — the same
-triple the terminate call passes. Lean's
-`LegalKernel.FaultProof.StepVMCoherence.l1ActionCommit` is the
-reference implementation, and `step_vm.json`'s
-`expectedActionCommitHex` pins the two stacks byte-for-byte, so an
-integration can check its own encoder against the corpus before it
-publishes anything.
+Compute it with `knomosis export-batch` (the Lean
+`LegalKernel.FaultProof.ActionsRoot` builder is the reference
+implementation); the cross-stack corpora (`actions_root.json`,
+`batch_chain.json`) pin the leaf recipe, the root, and the chain fold
+byte-for-byte, so an integration can check its own encoder against
+the corpus before it publishes anything.
 
 Track the following events from `KnomosisStateRootSubmission`:
 
@@ -219,7 +246,7 @@ Track the following events from `KnomosisFaultProofGame`:
 | `FaultProofGameOpened` | New challenge filed.  Verify the disputed log range and the challenger's bond. |
 | `BisectionMidpointSubmitted` | One bisection round.  Verify the midpoint index is in-range. |
 | `BisectionResponseSubmitted` | One bisection response.  Track turn alternation. |
-| `FaultProofGameSettled` | Game ended.  Check the winner; if challenger, expect `revertStateRootsFrom` on the bridge. |
+| `FaultProofGameSettled` | Game ended.  Check the winner; if challenger, expect `revertStateRootsFrom` on the registry AND the R6 forwarding (game → V2 verifier → `bridge.revertToPriorRoot`) to land on the bridge's own reverted range. |
 
 Per-game state:
 
@@ -248,42 +275,94 @@ challenge using `KnomosisFaultProofGame.initiateChallenge`.
 
 ## 4. Incident response
 
-### 4.1 Sequencer publishes wrong state root
+### 4.1 Sequencer publishes an invalid batch
 
-**Symptom**: A state root at log index N differs from the
-operator's L2 replay.
+**Symptom**: A submitted BATCH record (Workstream SB: one record at
+key `end` covers log entries `[prevEnd, end)`) commits a state root
+that differs from the operator's L2 replay of the batch.
 
 **Response**:
   1. Verify the divergence locally: re-replay the L2 log from
-     genesis to index N; compare `commitExtendedState` against
-     the on-chain `roots[N].stateCommit`.
-  2. If divergence confirmed, file a challenge:
+     genesis through entry `end − 1`; compare `commitExtendedState`
+     against the on-chain `roots[end].stateCommit` (and the batch's
+     `actionsRoot` against `knomosis export-batch`'s).
+  2. If divergence confirmed, file a challenge anchored at the
+     BATCH START (ruling R2 — `lowLogIndex` must equal the record's
+     `prevEndIndex`):
      ```solidity
      game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-         N,                          // disputed log index
-         challengerCommit,           // your computed commit
-         lowCommit,                  // commit at last agreed idx
-         lowLogIndex,                // last agreed idx
-         disputedStateRoot,          // sequencer's commit
-         deploymentId,
-         sequencer);
+         end,                        // the disputed record's key
+         challengerCommit,           // your computed post-batch commit
+         lowCommit,                  // the commit at the batch start
+         prevEnd);                   // the batch start (= prevEndIndex)
      ```
   3. Watch for `BisectionMidpointSubmitted` events.  Respond
-     using `submitMidpoint` or `respondToMidpoint` per turn.
-  4. Run the off-chain observer to compute honest moves.
+     using `submitMidpoint` or `respondToMidpoint` per turn — the
+     game bisects INSIDE the batch, so convergence takes
+     `⌈log₂ B⌉` rounds for a batch of `B` actions.
+  4. Run the off-chain observer to compute honest moves.  At the
+     terminal step the responsible party supplies the disputed
+     action plus its INCLUSION PROOF against the batch's submitted
+     `actionsRoot` (ruling R7); the observer's
+     `export-terminate-bundle LOG IDX PREV_END END` emits the whole
+     bundle, batch binding included, and its submitter fails closed
+     (`MissingBatchBinding`) rather than broadcast a terminate that
+     would revert `ActionNotInBatch`.
   5. Game settles in challenger's favour ⇒
-     `FaultProofGameSettled(ChallengerWon)` emitted ⇒ bridge's
-     `revertStateRootsFrom` triggered ⇒ user funds protected.
+     `FaultProofGameSettled(ChallengerWon)` emitted ⇒ the settlement
+     is forwarded game → `KnomosisDisputeVerifierV2.
+     finaliseFromFaultProof` → `bridge.revertToPriorRoot` (the R6
+     wiring — the verifier is the bridge's
+     `faultProofRollbackAuthority`), so BOTH reverted ranges — the
+     registry's and the bridge's own, the one its fund-safety gates
+     consult — cover the invalid batch.  User funds protected.
+
+### 4.1.1 Recovery: resubmitting a reverted batch
+
+A challenger win used to be a dead end (reverted indices could never
+be resubmitted); rulings R1/R3/R4 make the range recoverable:
+
+  1. The revert lowered `canonicalTip` to the disputed record's
+     `prevEndIndex`, so the chain re-extends from the last good
+     record.
+  2. The slashed record's key is re-submittable once its bond is
+     out (ruling R3; a successful challenge already slashed it to
+     zero).  The sequencer submits the CORRECTED batch at the same
+     key — `submitStateRoot(end, prevEnd, correctedCommit,
+     correctedActionsRoot)` — and it reads canonical, because
+     records submitted after the revert stamp are not misread as
+     reverted (ruling R1: `reverted(idx)` also requires
+     `submittedAtBlock ≤ lastRevertAtBlock`).
+  3. If a reverted-but-undisputed record in the range still holds a
+     bond (the revert covered more than the disputed record), its
+     sequencer reclaims it via `reclaimRevertedBond(end)` (ruling
+     R4) before the key can be overwritten.
 
 ### 4.2 Sequencer abandoned game (no response within window)
 
 **Symptom**: `turnDeadline` exceeded with no response.
 
 **Response**:
-  1. Anyone may call `claimTimeout(gameId)` — typically the
-     challenger does this to avoid paying gas in vain.
-  2. Game settles as `TimedOutSequencer` ⇒ bridge revert ⇒
+  1. A running observer does this for you.  Each iteration it
+     re-derives the games where the OPPONENT is on the clock and
+     the deadline looks lapsed, confirms with one `eth_call`
+     against `games(gameId)`, and submits `claimTimeout(gameId)`
+     only if the fresh read still shows the game in progress, the
+     turn still the opponent's, and the deadline genuinely past.
+     No operator action is required.
+  2. Failing that, anyone may call `claimTimeout(gameId)` by hand.
+  3. Game settles as `TimedOutSequencer` ⇒ the same R6 forwarding as
+     §4.1 step 5 lands the revert on the registry AND the bridge ⇒
      bond redistributed per 95/5 split.
+
+**Why the confirming read.**  `claimTimeout` settles against
+WHOEVER's turn it is, so calling it on your OWN lapsed turn hands
+the opponent the win and both bonds.  The observer's cached
+deadline is a trigger only: the contract resets `turnDeadline` by
+`BISECTION_RESPONSE_TIMEOUT`, a per-deployment `immutable` the
+observer cannot compute, so any cached value is stale-early after a
+move.  Operators calling `claimTimeout` manually should apply the
+same discipline — read `games(gameId)` first and check `turn`.
 
 ### 4.3 Bug discovered in deployed contracts
 
@@ -514,6 +593,36 @@ The observer logs detected divergences and (when configured with
 `--chain-id` + a keystore) automatically files challenges.
 Operators should run at least 2 observers per deployment to
 satisfy the "1-of-anyone honest" trust assumption.
+
+### 7.5 Liveness: what the observer does on its own
+
+Each iteration, after processing the L1 events it just read, the
+observer sweeps its own game map for two things nothing else will
+prompt:
+
+  * **Moves it owes.**  A move is not always a reply.  A
+    sequencer-side observer opens the bisection with nothing
+    preceding it, and any move deferred for a transient reason (an
+    un-hydrated game, a truth oracle that has not caught up, an
+    absent terminate bundle, a signing failure) has no later event
+    to retry it — it is our turn until we move or time out.  The
+    sweep replays both.  It is idempotent: a pivot already
+    submitted is skipped.
+  * **Timeouts the opponent has forfeited** — see §4.2.
+
+Two failure modes an operator should watch the logs for:
+
+  * `pivot released for retry on the next iteration` (warn) — a
+    broadcast failed and will be re-signed.  Transient RPC trouble;
+    self-healing.  The attempt counter is in the log line.
+  * `broadcast failed N times; giving up on this move — OPERATOR
+    ACTION REQUIRED` (error) — the retry budget
+    (`--max-broadcast-attempts`, default 8) is exhausted.  The
+    observer will NOT retry and may lose the game by timeout.
+    Investigate the submitter: an unfunded wallet, a persistently
+    rejected gas price, an RPC that refuses the transaction.  Raise
+    the budget only after understanding why the broadcast fails —
+    the cap exists to surface a permanent fault, not to hide it.
 
 ---
 

@@ -64,8 +64,6 @@ open LegalKernel.Bridge
     map entries are live. -/
 def singletonCellTags : List CellTag :=
   [ .bridgeNextWdId
-  , .bridgeAmmReserveEth
-  , .bridgeAmmReserveBold
   , .bridgeBoldCircuitClosed
   , .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue

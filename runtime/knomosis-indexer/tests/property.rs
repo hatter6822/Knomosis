@@ -17,6 +17,7 @@
 //!   * **Cursor monotonicity**: across an arbitrary event stream,
 //!     the indexer's cursor is strictly increasing.
 
+use knomosis_amount::Amount;
 use knomosis_indexer::balance::BalanceView;
 use knomosis_indexer::decoder::{decode_event, encode_event};
 use knomosis_indexer::event::Event;
@@ -34,8 +35,8 @@ fn event_strategy() -> impl Strategy<Value = Event> {
             Event::BalanceChanged {
                 resource: u64::from(r),
                 actor: u64::from(a),
-                old_value: u128::from(old_v),
-                new_value: u128::from(new_v),
+                old_value: Amount::from(old_v),
+                new_value: Amount::from(new_v),
             }
         }),
         (any::<u8>(), 0u64..=1_000, 1u64..=1_001).prop_map(|(a, old_n, new_n)| {
@@ -65,7 +66,7 @@ fn event_strategy() -> impl Strategy<Value = Event> {
         (any::<u8>(), any::<u8>(), 0u64..=1_000).prop_map(|(r, a, amt)| Event::RewardIssued {
             resource: u64::from(r),
             recipient: u64::from(a),
-            amount: u128::from(amt),
+            amount: Amount::from(amt),
         }),
         (
             any::<u8>(),
@@ -77,7 +78,7 @@ fn event_strategy() -> impl Strategy<Value = Event> {
             .prop_map(|(r, s, amt, addr, wid)| Event::WithdrawalRequested {
                 resource: u64::from(r),
                 sender: u64::from(s),
-                amount: u128::from(amt),
+                amount: Amount::from(amt),
                 recipient_l1: addr,
                 withdrawal_id: wid,
             }),
@@ -85,7 +86,7 @@ fn event_strategy() -> impl Strategy<Value = Event> {
             Event::DepositCredited {
                 resource: u64::from(r),
                 recipient: u64::from(rec),
-                amount: u128::from(amt),
+                amount: Amount::from(amt),
                 deposit_id: did,
             }
         }),
@@ -112,22 +113,22 @@ fn balance_event_strategy() -> impl Strategy<Value = Event> {
             .prop_map(|(r, a, v)| Event::BalanceChanged {
                 resource: r,
                 actor: a,
-                old_value: 0, // ignored by dispatch
-                new_value: v,
+                old_value: Amount::from_u64(0), // ignored by dispatch
+                new_value: Amount::from(v),
             }),
         // Credit: RewardIssued (capped at 100 so credits don't
         // pile up close to u128::MAX in long event streams)
         (0u64..=10, 0u64..=10, 0u128..=100).prop_map(|(r, a, amt)| Event::RewardIssued {
             resource: r,
             recipient: a,
-            amount: amt,
+            amount: Amount::from(amt),
         }),
         // Credit: DepositCredited
         (0u64..=10, 0u64..=10, 0u128..=100, any::<u64>()).prop_map(|(r, a, amt, did)| {
             Event::DepositCredited {
                 resource: r,
                 recipient: a,
-                amount: amt,
+                amount: Amount::from(amt),
                 deposit_id: did,
             }
         }),
@@ -138,7 +139,7 @@ fn balance_event_strategy() -> impl Strategy<Value = Event> {
 /// `HashMap<(actor, resource), Amount>`.  The indexer's balance
 /// view must equal this after running the same event stream.
 fn apply_to_reference(
-    reference: &mut HashMap<(u64, u64), u128>,
+    reference: &mut HashMap<(u64, u64), Amount>,
     event: &Event,
 ) -> Result<(), String> {
     match event {
@@ -162,7 +163,7 @@ fn apply_to_reference(
             ..
         } => {
             let key = (*recipient, *resource);
-            let current = reference.get(&key).copied().unwrap_or(0);
+            let current = reference.get(&key).copied().unwrap_or(Amount::ZERO);
             let new = current.saturating_add(*amount);
             reference.insert(key, new);
         }
@@ -173,7 +174,7 @@ fn apply_to_reference(
             ..
         } => {
             let key = (*sender, *resource);
-            let current = reference.get(&key).copied().unwrap_or(0);
+            let current = reference.get(&key).copied().unwrap_or(Amount::ZERO);
             let new = current
                 .checked_sub(*amount)
                 .ok_or_else(|| format!("underflow on debit: {current} < {amount}"))?;
@@ -195,19 +196,19 @@ fn adversarial_balance_event_strategy() -> impl Strategy<Value = Event> {
         (0u64..=4, 0u64..=4, any::<u128>()).prop_map(|(r, a, v)| Event::BalanceChanged {
             resource: r,
             actor: a,
-            old_value: 0,
-            new_value: v,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from(v),
         }),
         (0u64..=4, 0u64..=4, any::<u128>()).prop_map(|(r, a, amt)| Event::RewardIssued {
             resource: r,
             recipient: a,
-            amount: amt,
+            amount: Amount::from(amt),
         }),
         (0u64..=4, 0u64..=4, any::<u128>(), any::<u64>()).prop_map(|(r, a, amt, did)| {
             Event::DepositCredited {
                 resource: r,
                 recipient: a,
-                amount: amt,
+                amount: Amount::from(amt),
                 deposit_id: did,
             }
         }),
@@ -221,7 +222,7 @@ fn adversarial_balance_event_strategy() -> impl Strategy<Value = Event> {
             .prop_map(|(r, s, amt, addr, wid)| Event::WithdrawalRequested {
                 resource: r,
                 sender: s,
-                amount: amt,
+                amount: Amount::from(amt),
                 recipient_l1: addr,
                 withdrawal_id: wid,
             }),
@@ -260,7 +261,7 @@ proptest! {
     ) {
         let storage = SqliteStorage::open_in_memory().unwrap();
         let mut indexer = Indexer::open(&storage).unwrap();
-        let mut reference: HashMap<(u64, u64), u128> = HashMap::new();
+        let mut reference: HashMap<(u64, u64), Amount> = HashMap::new();
 
         for (i, event) in events.iter().enumerate() {
             let seq = (i + 1) as u64;

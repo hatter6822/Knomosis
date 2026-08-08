@@ -404,13 +404,6 @@ def Action.doesNotDebitPoolAt (rLeg : ResourceId) (signer : ActorId) : Action �
   -- by the free-tier-excluding budget consume — so the two outflow
   -- paths have independent bounds rather than a shared cap.
   | .claimBudgetRefund gr _ _ pa    => gr ≠ rLeg ∨ pa ≠ gasPoolActor
-  -- GP.11.4: an ammSwap debits `ammReserveActor` at `toResource`.  It
-  -- misses the pool's `rLeg` slot exactly when the to-resource differs
-  -- OR the reserve actor is not `gasPoolActor`.  In practice
-  -- `ammReserveActor ≠ gasPoolActor` (the AMM reserve is a distinct
-  -- actor), but the proof obligation requires the structural guard.
-  | .ammSwap _ toResource _ _ ammReserveActor =>
-      toResource ≠ rLeg ∨ ammReserveActor ≠ gasPoolActor
   -- GP.11.10: a reclaim debits its `reserveActor` field at `r` (the
   -- exact sweep).  It misses the pool's `rLeg` slot exactly when the
   -- resource differs OR the named reserve actor is not `gasPoolActor`.
@@ -420,6 +413,16 @@ def Action.doesNotDebitPoolAt (rLeg : ResourceId) (signer : ActorId) : Action �
   -- structural guard.
   | .reclaimAmmReserves r _ reserveActor _ =>
       r ≠ rLeg ∨ reserveActor ≠ gasPoolActor
+  -- Workstream SB: a reserveSwap debits TWO cells — the user at
+  -- `fromResource` and the reserve actor at `toResource` — so the
+  -- guard is the conjunction of both misses.  In practice the
+  -- deployment policy pins `reserveActor = ammReserveActor ≠
+  -- gasPoolActor` and the pool's own deny-list bars it from signing
+  -- tag 25 at all, but the proof obligation requires the structural
+  -- guard over the raw fields.
+  | .reserveSwap fromResource toResource user _ _ reserveActor =>
+      (fromResource ≠ rLeg ∨ user ≠ gasPoolActor) ∧
+      (toResource ≠ rLeg ∨ reserveActor ≠ gasPoolActor)
   | _                               => True
 
 /-- `Action.doesNotDebitPoolAt` is decidable (each branch is a decidable
@@ -435,12 +438,12 @@ instance Action.doesNotDebitPoolAt_decidable
     `gasPoolActor`'s balance at leg `rLeg` non-decreasing.
 
     Proven by reducing the precondition-gated step to its `apply_impl`
-    (`step_impl_nondecreasing_of_apply_nondecreasing`) and exhausting the
-    23 `Action` constructors: credit-only laws use
+    (`step_impl_nondecreasing_of_apply_nondecreasing`) and exhausting
+    every `Action` constructor: credit-only laws use
     `getBalance_credit_nondecreasing`, the fold-of-credit laws use
     `getBalance_foldl_credit_nondecreasing`, the no-op laws are the
-    identity, and the five debit-bearing laws use the
-    `doesNotDebitPoolAt` hypothesis to show their debit misses the pool's
+    identity, and the debit-bearing laws use the
+    `doesNotDebitPoolAt` hypothesis to show each debit misses the pool's
     leg-`rLeg` cell. -/
 theorem pool_nondecreasing_of_does_not_debit
     (verify : PublicKey → ByteArray → Signature → Bool)
@@ -480,15 +483,23 @@ theorem pool_nondecreasing_of_does_not_debit
         getBalance ((Laws.deposit r recipient amount depositId).apply_impl es.base)
           rLeg gasPoolActor
       exact getBalance_credit_nondecreasing es.base r rLeg recipient gasPoolActor amount
-  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant
+      depositId seedAmount =>
+      -- Workstream SB: three credit legs (recipient, pool NET, seed);
+      -- credits never lower the pool's cell.
       intro _
       show getBalance es.base rLeg gasPoolActor ≤
         getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
-          budgetGrant depositId).apply_impl es.base) rLeg gasPoolActor
+          budgetGrant depositId seedAmount
+          Bridge.ammReserveActor).apply_impl es.base) rLeg gasPoolActor
       simp only [Laws.depositWithFee]
       refine Nat.le_trans
         (getBalance_credit_nondecreasing es.base r rLeg recipient gasPoolActor userAmount) ?_
-      exact getBalance_credit_nondecreasing _ r rLeg poolActor gasPoolActor poolAmount
+      refine Nat.le_trans
+        (getBalance_credit_nondecreasing _ r rLeg poolActor gasPoolActor
+          (poolAmount - seedAmount)) ?_
+      exact getBalance_credit_nondecreasing _ r rLeg Bridge.ammReserveActor
+        gasPoolActor seedAmount
   | distributeOthers r excluded amount =>
       intro _
       show getBalance es.base rLeg gasPoolActor ≤
@@ -554,21 +565,6 @@ theorem pool_nondecreasing_of_does_not_debit
           (budgetUnits * weiPerBudgetUnit))
       exact (getBalance_setBalance_other es.base gasResource rLeg poolActor gasPoolActor _
         hsafe).symm
-  | ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      -- GP.11.4: an AMM swap credits `ammReserveActor` at `fromResource`
-      -- (inner; non-decreasing for pool) then debits `ammReserveActor` at
-      -- `toResource` (outer; misses pool's `rLeg` cell under `hsafe`).
-      intro hsafe; simp only [Action.doesNotDebitPoolAt] at hsafe
-      show getBalance es.base rLeg gasPoolActor ≤
-        getBalance ((Laws.ammSwap fromResource toResource amountIn amountOut
-          ammReserveActor).apply_impl es.base) rLeg gasPoolActor
-      simp only [Laws.ammSwap]
-      refine Nat.le_trans
-        (getBalance_credit_nondecreasing es.base fromResource rLeg ammReserveActor
-          gasPoolActor amountIn)
-        (Nat.le_of_eq ?_)
-      exact (getBalance_setBalance_other _ toResource rLeg ammReserveActor gasPoolActor _
-        hsafe).symm
   | reclaimAmmReserves r amount reserveActor poolActor =>
       -- GP.11.10: a reclaim debits `reserveActor` at `r` (inner; misses
       -- the pool's `rLeg` cell under `hsafe`) then credits `poolActor`
@@ -582,6 +578,61 @@ theorem pool_nondecreasing_of_does_not_debit
         (getBalance_credit_nondecreasing _ r rLeg poolActor gasPoolActor amount)
       exact (getBalance_setBalance_other es.base r rLeg reserveActor gasPoolActor _
         hsafe).symm
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      -- Workstream SB: four writes — the user's debit at
+      -- `fromResource` (misses the pool's cell under `hsafe.1`), the
+      -- reserve's credit at `fromResource` (non-decreasing), the
+      -- reserve's debit at `toResource` (misses under `hsafe.2`), the
+      -- user's credit at `toResource` (non-decreasing).
+      intro hsafe; simp only [Action.doesNotDebitPoolAt] at hsafe
+      show getBalance es.base rLeg gasPoolActor ≤
+        getBalance ((Laws.reserveSwap fromResource toResource user amountIn
+          minAmountOut reserveActor).apply_impl es.base) rLeg gasPoolActor
+      simp only [Laws.reserveSwap]
+      calc getBalance es.base rLeg gasPoolActor
+          = getBalance (setBalance es.base fromResource user
+              (getBalance es.base fromResource user - amountIn)) rLeg
+              gasPoolActor :=
+            (getBalance_setBalance_other es.base fromResource rLeg user
+              gasPoolActor _ hsafe.1).symm
+        _ ≤ getBalance (setBalance
+              (setBalance es.base fromResource user
+                (getBalance es.base fromResource user - amountIn))
+              fromResource reserveActor
+              (getBalance
+                (setBalance es.base fromResource user
+                  (getBalance es.base fromResource user - amountIn))
+                fromResource reserveActor + amountIn)) rLeg gasPoolActor :=
+            getBalance_credit_nondecreasing _ fromResource rLeg reserveActor
+              gasPoolActor amountIn
+        _ = getBalance (setBalance
+              (setBalance
+                (setBalance es.base fromResource user
+                  (getBalance es.base fromResource user - amountIn))
+                fromResource reserveActor
+                (getBalance
+                  (setBalance es.base fromResource user
+                    (getBalance es.base fromResource user - amountIn))
+                  fromResource reserveActor + amountIn))
+              toResource reserveActor
+              (getBalance
+                (setBalance
+                  (setBalance es.base fromResource user
+                    (getBalance es.base fromResource user - amountIn))
+                  fromResource reserveActor
+                  (getBalance
+                    (setBalance es.base fromResource user
+                      (getBalance es.base fromResource user - amountIn))
+                    fromResource reserveActor + amountIn))
+                toResource reserveActor
+                - Laws.reserveQuote es.base fromResource toResource reserveActor
+                    amountIn)) rLeg gasPoolActor :=
+            (getBalance_setBalance_other _ toResource rLeg reserveActor
+              gasPoolActor _ hsafe.2).symm
+        _ ≤ _ :=
+            getBalance_credit_nondecreasing _ toResource rLeg user gasPoolActor
+              (Laws.reserveQuote es.base fromResource toResource reserveActor
+                amountIn)
   | freezeResource r            => intro _; exact Nat.le_refl _
   | replaceKey actor key        => intro _; exact Nat.le_refl _
   | dispute disp                => intro _; exact Nat.le_refl _

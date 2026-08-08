@@ -199,6 +199,35 @@ impl EventRing {
         self.watermark
     }
 
+    /// Record that upstream history was TRUNCATED and ingestion will
+    /// resume at `oldest_available_seq`.
+    ///
+    /// A gap is not something `push` can notice: the ring is filled by one
+    /// live-tail subscription, so the mux resubscribes past the missing
+    /// range and the next record simply arrives with a higher seq.  The
+    /// retained pre-gap records then sit below a HOLE, and `position` —
+    /// which reasons from eviction history and the ring's floor — read a
+    /// cursor below that hole as `InWindow`.  Such a client was streamed
+    /// the post-gap suffix with no `Behind` signal, silently losing every
+    /// record inside the gap: for an event-sourced consumer, balance
+    /// changes it never learns it has to backfill.
+    ///
+    /// Pre-gap records are DROPPED rather than kept, because they cannot
+    /// serve anyone: streaming is continuous, so any client they could
+    /// satisfy would run straight into the hole behind them.  Clearing
+    /// makes the ring's floor the post-gap resume point, which is exactly
+    /// the condition `position` already reports correctly.
+    ///
+    /// `last_evicted` becomes the gap's edge, so a client that had already
+    /// reached it stays contiguous while anything earlier is
+    /// `Behind { oldest_seq }`.
+    pub fn note_gap(&mut self, oldest_available_seq: u64) {
+        self.buf.clear();
+        self.watermark = None;
+        self.last = None;
+        self.last_evicted = Some(Cursor::new(oldest_available_seq, 0));
+    }
+
     /// Ingest a record.  Returns `true` if inserted, `false` if it is not
     /// strictly after the last inserted cursor (a resubscribe-replay
     /// duplicate or an out-of-order frame — dropped, fail-safe).
@@ -406,6 +435,43 @@ mod tests {
             CursorPosition::InWindow
         );
         assert_eq!(ring.position(Cursor::new(5002, 0)), CursorPosition::AtTail);
+    }
+
+    #[test]
+    fn a_gap_makes_a_spanning_cursor_behind_not_in_window() {
+        // THE REGRESSION.  Upstream truncates: the mux resubscribes past
+        // the missing range and keeps pushing into the SAME ring, so the
+        // retained pre-gap records sit below a hole.  Nothing evicted and
+        // the floor did not move, so `position` read a cursor below the
+        // hole as `InWindow` — and that client was streamed the post-gap
+        // suffix with no `Behind` signal, silently losing the gap.
+        let mut ring = EventRing::new(8);
+        for (s, i) in [(5, 0), (6, 0), (7, 0)] {
+            ring.push(rec(s, i));
+        }
+        // A client that has seen up to seq 6 is contiguous so far.
+        assert_eq!(ring.position(Cursor::new(6, 0)), CursorPosition::InWindow);
+
+        // History truncated; ingestion resumes at 50.
+        ring.note_gap(50);
+        for (s, i) in [(50, 0), (51, 0)] {
+            ring.push(rec(s, i));
+        }
+
+        // The spanning client must now be steered to the backfill.
+        assert_eq!(
+            ring.position(Cursor::new(6, 0)),
+            CursorPosition::Behind { oldest_seq: 50 },
+            "a cursor below the gap must be Behind, not InWindow"
+        );
+        // ...and one at the gap's edge is still contiguous, so the fix is
+        // not a blanket downgrade of everyone.
+        assert_eq!(ring.position(Cursor::new(50, 0)), CursorPosition::InWindow);
+        // A post-gap client is unaffected.
+        assert_eq!(ring.position(Cursor::new(51, 0)), CursorPosition::AtTail);
+        // The stale pre-gap records are gone: they could serve nobody,
+        // since any client they satisfied would hit the hole next.
+        assert_eq!(ring.oldest_seq(), Some(50));
     }
 
     #[test]

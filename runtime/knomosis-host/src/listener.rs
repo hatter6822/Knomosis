@@ -586,12 +586,31 @@ where
     // the reader promptly (it stops submitting otherwise-discarded work).
     let dead = Arc::new(AtomicBool::new(false));
     let writer_dead = Arc::clone(&dead);
-    let writer = std::thread::Builder::new()
+    // Spawn failure is HANDLED, not asserted.  The release profile sets
+    // `panic = "abort"`, so an `.expect()` here would take the whole host
+    // down rather than the one connection — and `spawn` fails on a
+    // resource limit (`EAGAIN` under thread or memory exhaustion), which
+    // is exactly the condition many concurrent connections produce.  The
+    // three sibling spawn sites on the accept paths already log-and-close;
+    // this one was the outlier.
+    let writer = match std::thread::Builder::new()
         .name("knomosis-host-persist-writer".into())
         .spawn(move || {
             persistent_writer_loop(write_half, resp_rx, kernel_reply_timeout, &writer_dead);
-        })
-        .expect("spawn persistent writer thread");
+        }) {
+        Ok(handle) => handle,
+        Err(e) => {
+            tracing::warn!(
+                conn_id = conn_id,
+                error = %e,
+                "failed to spawn the persistent writer thread; closing the connection"
+            );
+            // `resp_rx` is dropped with the failed closure and `write_half`
+            // went into it, so the socket closes here.  No frame was read,
+            // hence none was served.
+            return HandleOutcome::PersistentClosed { served: 0 };
+        }
+    };
 
     let mut reader = ConnReader::new();
     let mut served: u64 = 0;

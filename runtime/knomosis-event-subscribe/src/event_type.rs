@@ -86,16 +86,20 @@ pub const CBE_TAG_UINT: u8 = 0x00;
 /// `HEAD_LEN`.
 pub const EVENT_TAG_HEAD_LEN: usize = 9;
 
-/// The number of frozen `Event` constructor tags currently defined
-/// on the Lean side (`LegalKernel/Events/Types.lean::Event.tag`,
-/// indices `0..=22`).  Bumped by amendment when the Lean inductive
-/// grows; GP.11.4 widened it from 21 → 22 (adding `AmmSwapExecuted`
-/// at tag 21) and GP.11.10 from 22 → 23 (adding
-/// `AmmReservesReclaimed` at tag 22).  The streaming path treats any
-/// tag `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and
-/// forwards it verbatim (additive-extension policy, `docs/abi.md`
-/// §11).
-pub const KNOWN_EVENT_TAG_COUNT: u64 = 23;
+/// The exclusive upper bound of the ASSIGNED `Event` tag range on
+/// the Lean side (`LegalKernel/Events/Types.lean::Event.tag`,
+/// indices `0..=24`) — NOT the live-constructor count.  Bumped by
+/// amendment when the Lean inductive grows; GP.11.10 widened it
+/// from 22 → 23 (adding `AmmReservesReclaimed` at tag 22), and
+/// Workstream SB from 23 → 25 (adding `ReserveSwapExecuted` at tag
+/// 23 and `ReserveSeeded` at tag 24).  Tag 21 (the retired
+/// `ammSwapExecuted`, the excised L1-AMM mirror's event) is a
+/// permanent hole INSIDE the range: the count stays 25 and a
+/// tag-21 payload classifies as [`EventClass::Unknown`], exactly
+/// like a never-assigned tag.  The streaming path treats any
+/// unrecognised tag as [`EventClass::Unknown`] and forwards it
+/// verbatim (additive-extension policy, `docs/abi.md` §11).
+pub const KNOWN_EVENT_TAG_COUNT: u64 = 25;
 
 /// A canonical `Events.Event` constructor, identified by its frozen
 /// wire tag.
@@ -164,22 +168,34 @@ pub enum EventType {
     /// Indexers consume this event to compute current-epoch
     /// budget remaining.  Tag 20.
     BudgetConsumed,
-    /// An AMM swap was executed (ETH↔BOLD exchange against the
-    /// gas-pool reserves; Workstream GP / GP.11.4).  Tag 21.
-    AmmSwapExecuted,
+    // Tag 21 (the retired `ammSwapExecuted`, the excised L1-AMM
+    // mirror's event) is a permanent hole: no variant carries it,
+    // a wire payload with it classifies as `Unknown`, and no
+    // constructor may ever be seated here.
     /// The disabled AMM's frozen L2 reserve balance was swept into
     /// the gas-pool actor (the GP.11.10 post-disable reclamation —
     /// emitted by `Action.reclaimAmmReserves`, the bridge-attested
     /// exact sweep that fires only after the L1 kill switch is
     /// mirrored on L2).  Tag 22.
     AmmReservesReclaimed,
+    /// A USER-signed L2 AMM swap was executed against the reserve
+    /// actor's live balances (Workstream SB; `Laws.reserveSwap`).
+    /// Unlike the bridge-attested tag 21, this event carries a user
+    /// party and a kernel-computed quote.  Tag 23.
+    ReserveSwapExecuted,
+    /// The AMM reserve was seeded from a deposit's fee split — the
+    /// `depositWithFee` seed leg's attribution event (Workstream
+    /// SB).  Tag 24.
+    ReserveSeeded,
 }
 
-/// Every [`EventType`] in frozen tag order.  `ALL[i].tag() == i`
-/// for every index, so iterating this array enumerates the tag
-/// space `0..KNOWN_EVENT_TAG_COUNT`.  Used by exhaustive coverage
-/// tests and by tooling that needs to walk the registry.
-pub const ALL_EVENT_TYPES: [EventType; 23] = [
+/// Every LIVE [`EventType`] in ascending frozen tag order.  The
+/// retired tag 21 is a permanent hole, so `ALL[i].tag() == i` holds
+/// only below it (`ALL[i].tag() == i + 1` above); iterating this
+/// array enumerates exactly the live tags of
+/// `0..KNOWN_EVENT_TAG_COUNT`.  Used by exhaustive coverage tests
+/// and by tooling that needs to walk the registry.
+pub const ALL_EVENT_TYPES: [EventType; 24] = [
     EventType::BalanceChanged,
     EventType::NonceAdvanced,
     EventType::IdentityRegistered,
@@ -201,8 +217,10 @@ pub const ALL_EVENT_TYPES: [EventType; 23] = [
     EventType::GasPoolClaim,
     EventType::DelegatedActionBudgetTopUp,
     EventType::BudgetConsumed,
-    EventType::AmmSwapExecuted,
+    // The retired tag 21 is a hole — no entry.
     EventType::AmmReservesReclaimed,
+    EventType::ReserveSwapExecuted,
+    EventType::ReserveSeeded,
 ];
 
 impl EventType {
@@ -232,8 +250,10 @@ impl EventType {
             Self::GasPoolClaim => 18,
             Self::DelegatedActionBudgetTopUp => 19,
             Self::BudgetConsumed => 20,
-            Self::AmmSwapExecuted => 21,
+            // 21 is the retired ammSwapExecuted's permanent hole.
             Self::AmmReservesReclaimed => 22,
+            Self::ReserveSwapExecuted => 23,
+            Self::ReserveSeeded => 24,
         }
     }
 
@@ -265,8 +285,9 @@ impl EventType {
             Self::GasPoolClaim => "gasPoolClaim",
             Self::DelegatedActionBudgetTopUp => "delegatedActionBudgetTopUp",
             Self::BudgetConsumed => "budgetConsumed",
-            Self::AmmSwapExecuted => "ammSwapExecuted",
             Self::AmmReservesReclaimed => "ammReservesReclaimed",
+            Self::ReserveSwapExecuted => "reserveSwapExecuted",
+            Self::ReserveSeeded => "reserveSeeded",
         }
     }
 
@@ -585,19 +606,26 @@ mod tests {
     fn constants_pinned() {
         assert_eq!(CBE_TAG_UINT, 0x00);
         assert_eq!(EVENT_TAG_HEAD_LEN, 9);
-        // GP.11.4 widened 21 → 22 (`AmmSwapExecuted`); GP.11.10
-        // widened 22 → 23 (`AmmReservesReclaimed`).
-        assert_eq!(KNOWN_EVENT_TAG_COUNT, 23);
+        // GP.11.10 widened 22 → 23 (`AmmReservesReclaimed`);
+        // Workstream SB widened 23 → 25 (`ReserveSwapExecuted` +
+        // `ReserveSeeded`).  Tag 21 (the retired ammSwapExecuted)
+        // is a permanent hole INSIDE the range — the bound stays 25.
+        assert_eq!(KNOWN_EVENT_TAG_COUNT, 25);
     }
 
-    /// `ALL_EVENT_TYPES[i].tag() == i` — the array is in frozen tag
-    /// order, and its length matches `KNOWN_EVENT_TAG_COUNT`.
+    /// `ALL_EVENT_TYPES` is in ascending frozen tag order and
+    /// enumerates exactly the LIVE tags of
+    /// `0..KNOWN_EVENT_TAG_COUNT` — every assigned tag except the
+    /// retired tag-21 hole, which must never re-appear.
     #[test]
     fn all_array_is_in_tag_order() {
-        assert_eq!(ALL_EVENT_TYPES.len() as u64, KNOWN_EVENT_TAG_COUNT);
-        for (i, ty) in ALL_EVENT_TYPES.iter().enumerate() {
-            assert_eq!(ty.tag(), i as u64, "tag mismatch at index {i}");
-        }
+        assert_eq!(ALL_EVENT_TYPES.len() as u64, KNOWN_EVENT_TAG_COUNT - 1);
+        let tags: Vec<u64> = ALL_EVENT_TYPES.iter().map(|t| t.tag()).collect();
+        let expected: Vec<u64> = (0..KNOWN_EVENT_TAG_COUNT).filter(|t| *t != 21).collect();
+        assert_eq!(
+            tags, expected,
+            "live tags must be 0..{KNOWN_EVENT_TAG_COUNT} minus the retired 21, in order"
+        );
     }
 
     /// `from_tag` round-trips every known tag back to the same
@@ -611,11 +639,13 @@ mod tests {
 
     /// `from_tag` returns `None` for tags beyond the known set
     /// (forward-compatibility: future tags are not errors here).
-    /// GP.11.4 widened known tags 0..=20 → 0..=21, and GP.11.10
-    /// 0..=21 → 0..=22, so the first unknown tag is 23.
+    /// Workstream SB widened known tags 0..=22 → 0..=24, so the
+    /// first unknown tag past the range is 25 — and the retired
+    /// tag 21 INSIDE the range resolves identically to `None`,
+    /// like a never-assigned tag.
     #[test]
     fn from_tag_unknown_returns_none() {
-        for tag in [23u64, 24, 99, 1_000, u64::MAX] {
+        for tag in [21u64, 25, 26, 99, 1_000, u64::MAX] {
             assert_eq!(
                 EventType::from_tag(tag),
                 None,

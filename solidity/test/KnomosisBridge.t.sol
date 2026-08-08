@@ -317,6 +317,45 @@ contract KnomosisBridgeTest is Test {
         assertEq(bridge.totalLockedValue(), 1 ether);
     }
 
+    function test_breaker_AttestationStale_is_self_clearing() public {
+        // THE REGRESSION.  `latestStateRootSubmittedAtBlock` is written by
+        // `submitStateRoot` and nowhere else, so gating that call on
+        // attestation freshness made the breaker ABSORBING: one missed
+        // window and no fresh root could be submitted, no later call could
+        // refresh the timestamp, and the bridge was bricked permanently.
+        bridge.submitStateRoot(keccak256("r"), 1, _signStateRoot(keccak256("r"), 1));
+        vm.roll(uint64(block.number) + MAX_ATTESTATION_STALE + 1);
+
+        // Stale: the guarded surface is closed, as intended.
+        vm.expectRevert(KnomosisBridge.AttestationStale.selector);
+        vm.prank(alice);
+        bridge.depositETH{value: 1 ether}();
+
+        // ...but the RECOVERY action is reachable.  This reverted before.
+        bridge.submitStateRoot(keccak256("r2"), 2, _signStateRoot(keccak256("r2"), 2));
+
+        // ...and it cleared the breaker with no governance action.
+        vm.prank(alice);
+        bridge.depositETH{value: 1 ether}();
+        assertEq(bridge.totalLockedValue(), 1 ether, "deposits resume automatically");
+    }
+
+    function test_submitStateRoot_still_carries_the_other_breakers() public {
+        // The exemption is ONE arm, not the modifier.  An upheld dispute's
+        // cooldown is a reason not to accept a new root, and accepting one
+        // does not clear it — so it must still bite.
+        vm.prank(address(verifier));
+        bridge.revertToPriorRoot(0);
+        vm.roll(uint64(block.number) + COOLDOWN_BLOCKS - 1);
+
+        // Sign BEFORE arming the cheatcode: `_signStateRoot` reads
+        // `bridge.deploymentId()`, and `expectRevert` binds to the next call
+        // of any kind, so inlining it would arm against the staticcall.
+        bytes memory sig = _signStateRoot(keccak256("r3"), 3);
+        vm.expectRevert(KnomosisBridge.DisputeCooldown.selector);
+        bridge.submitStateRoot(keccak256("r3"), 3, sig);
+    }
+
     function test_breaker_DisputeCooldown_blocks_deposit() public {
         // Trigger a rollback (sets `lastUpheldDisputeBlock`).
         vm.prank(address(verifier));
@@ -632,6 +671,7 @@ contract KnomosisBridgeTest is Test {
             enableLiquityAutoCircuitTrigger: false,
             ammSeedRatioBps: 0,
             ammDisasterRecovery: address(0),
+            faultProofRollbackAuthority: address(0),
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });
@@ -712,6 +752,7 @@ contract KnomosisBridgeTest is Test {
             enableLiquityAutoCircuitTrigger: false,
             ammSeedRatioBps: 0,
             ammDisasterRecovery: address(0),
+            faultProofRollbackAuthority: address(0),
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });

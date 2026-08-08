@@ -85,8 +85,8 @@ import LegalKernel.Laws.DepositWithFee
 import LegalKernel.Laws.TopUpActionBudget
 import LegalKernel.Laws.TopUpActionBudgetFor
 import LegalKernel.Laws.ClaimBudgetRefund
-import LegalKernel.Laws.AmmSwap
 import LegalKernel.Laws.ReclaimAmmReserves
+import LegalKernel.Laws.ReserveSwap
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.AddressBook
@@ -336,10 +336,22 @@ inductive Action
                               `recipient`'s epoch budget slot.
         * `depositId`      — the L1 deposit-receipt id (frozen by
                               the bridge to defend against replay).
+        * `seedAmount`     — the AMM seed leg (Workstream SB;
+                              APPENDED, so every pre-SB field offset
+                              survives): the portion of `poolAmount`
+                              the L1 fee split committed to AMM
+                              liquidity (`ammSeedAmount`), credited
+                              to the canonical reserve actor.  The
+                              pool receives the NET
+                              `poolAmount - seedAmount`; the total
+                              supply delta stays
+                              `userAmount + poolAmount`.
 
-      Kernel-level effect: `Laws.depositWithFee`-shaped balance
-      increment of both `recipient` (`+userAmount`) and `poolActor`
-      (`+poolAmount`) at `resource`.  Bridge-level effect:
+      Kernel-level effect: `Laws.depositWithFee`-shaped THREE-leg
+      credit at `resource` — `recipient` (`+userAmount`), `poolActor`
+      (`+poolAmount - seedAmount`), and the canonical
+      `Bridge.ammReserveActor` (`+seedAmount`; a LAW parameter pinned
+      by the compiler, never an action field).  Bridge-level effect:
       `BridgeState.consumed` is updated via
       `applyActionToBridgeState`'s bridge tag (mirroring
       `Action.deposit` semantics in v1.0; GP.4 widens to track the
@@ -360,6 +372,7 @@ inductive Action
                     (userAmount : Amount) (poolAmount : Amount)
                     (budgetGrant : Nat)
                     (depositId : Bridge.DepositId)
+                    (seedAmount : Amount)
   /-- Workstream GP §15E (v1.0) — L2 user self-topup of the
       action-budget (frozen index 20).  A user signs this action
       to convert a gas-resource balance into action-budget units,
@@ -475,16 +488,12 @@ inductive Action
       units), leaving the signer at or above the free tier. -/
   | claimBudgetRefund (gasResource : ResourceId) (budgetUnits : Nat)
                       (weiPerBudgetUnit : Nat) (poolActor : ActorId)
-  /-- Workstream GP (GP.11.4): L2 AMM swap action.  A bridge-attested
-      constant-product ETH↔BOLD exchange mirroring the L1
-      `KnomosisBridge.ammSwap`.  The kernel-level effect credits
-      `ammReserveActor` at `fromResource` by `amountIn` and debits
-      `ammReserveActor` at `toResource` by `amountOut`.  The swap-math
-      (`getAmountOut`, k-monotonicity, no-drain) is authoritative at L1;
-      the L2 action records the already-computed amounts attested by the
-      bridge actor.  Frozen action index 23. -/
-  | ammSwap (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
-            (ammReserveActor : ActorId)
+  -- Index 23 (`ammSwap`) is RETIRED.  It was the bridge-attested L2
+  -- mirror of the L1 embedded AMM's swaps; the L1 embedded AMM was
+  -- excised under the one-AMM L2-primary topology (the user-facing
+  -- swap is `reserveSwap`, index 25), so the mirror vocabulary has
+  -- nothing left to mirror.  The index stays reserved — the decoder
+  -- refuses tag 23 and nothing may ever reuse it.
   /-- Workstream GP (GP.11.10): post-disable AMM reserve reclamation.
       A bridge-attested EXACT SWEEP of the disabled AMM's frozen L2
       reserve balance at one resource into the gas-pool actor: the
@@ -498,6 +507,33 @@ inductive Action
       action index 24. -/
   | reclaimAmmReserves (r : ResourceId) (amount : Amount)
                        (reserveActor poolActor : ActorId)
+  /-- Workstream SB: the USER-facing L2 constant-product swap.  A user
+      exchanges `amountIn` of `fromResource` for `toResource` against
+      the AMM-reserve actor's live balances, priced IN THE KERNEL by
+      `Bridge.AmmMath.getAmountOut` at the fixed `AmmMath.swapFeeBps`
+      (see `Laws.reserveSwap` — the action has a user party, computes
+      its own price, and conserves BOTH resources).
+
+      Fields:
+        * `fromResource` / `toResource` — the swap pair.
+        * `user`         — the swapping actor.  The deployment
+                            `AuthorityPolicy` binds `user = signer`
+                            (`Bridge.reserveSwapUserBinding`), so a
+                            third party cannot name someone else.
+        * `amountIn`     — the user's input, debited at `fromResource`.
+        * `minAmountOut` — the user's slippage floor; the law refuses
+                            a quote below `max 1 minAmountOut`.
+        * `reserveActor` — the counterparty reserve.  Carried as a
+                            field (the `reclaimAmmReserves` pattern)
+                            and pinned to the canonical
+                            `Bridge.ammReserveActor` by the same
+                            `reserveSwapUserBinding` policy — an
+                            unpinned field would let a signer name an
+                            arbitrary VICTIM as the swap counterparty.
+
+      Frozen action index 25. -/
+  | reserveSwap (fromResource toResource : ResourceId) (user : ActorId)
+                (amountIn minAmountOut : Amount) (reserveActor : ActorId)
   -- Workstream-LX (LX.17): codegen-managed Lex constructors land
   -- between the fence markers below.  M1's example law (frozen
   -- index 17) deliberately does not extend `Action` — it lives
@@ -507,8 +543,10 @@ inductive Action
   -- Workstream H reserves indices 17 and 18; Workstream GP reserves
   -- indices 19 (`depositWithFee`), 20 (`topUpActionBudget`),
   -- 21 (`topUpActionBudgetFor`), 22 (`claimBudgetRefund`),
-  -- 23 (`ammSwap`), and 24 (`reclaimAmmReserves`).
-  -- Future Lex-generated ctors (M2+) will append at index 25+.
+  -- 23 (RETIRED — the excised `ammSwap` L1-mirror; never reuse), and
+  -- 24 (`reclaimAmmReserves`); Workstream SB reserves index 25
+  -- (`reserveSwap`).
+  -- Future Lex-generated ctors (M2+) will append at index 26+.
   -- BEGIN LEX-GENERATED (do not edit by hand)
   -- END LEX-GENERATED
   deriving Repr, DecidableEq
@@ -575,17 +613,23 @@ def Action.compileTransition : Action → Transition
   -- for fault-proof game outcomes; the L2 actions are advisory.
   | .faultProofChallenge _ _ _ _    => Laws.freezeResource 0
   | .faultProofResolution _ _ _ _   => Laws.freezeResource 0
-  -- Workstream GP (v1.0): bridge deposit with fee split.  Compiles
-  -- to the signer-independent `Laws.depositWithFee` law, which
-  -- directly produces the kernel-level effect (credit recipient
-  -- by `userAmount`, credit poolActor by `poolAmount`).  The
-  -- budget-level effect (granting `budgetGrant` to `recipient`)
-  -- is applied separately by the admission layer's per-action
-  -- budget-grant arm (GP.3.2.d in `apply_admissible_with_budget`).
+  -- Workstream GP (v1.0) + SB: bridge deposit with fee split.
+  -- Compiles to the signer-independent `Laws.depositWithFee` law,
+  -- which directly produces the kernel-level THREE-leg effect
+  -- (credit recipient by `userAmount`, poolActor by the NET
+  -- `poolAmount - seedAmount`, and the canonical reserve by
+  -- `seedAmount`).  The reserve target is pinned HERE, at compile —
+  -- `Bridge.ammReserveActor` is a constant, not an action field, so
+  -- no admissibility conjunct is needed to stop a forged seed
+  -- target.  The budget-level effect (granting `budgetGrant` to
+  -- `recipient`) is applied separately by the admission layer's
+  -- per-action budget-grant arm (GP.3.2.d in
+  -- `apply_admissible_with_budget`).
   | .depositWithFee r recipient poolActor userAmount poolAmount
-                     budgetGrant depositId =>
+                     budgetGrant depositId seedAmount =>
       Laws.depositWithFee r recipient poolActor userAmount poolAmount
-                            budgetGrant depositId
+                            budgetGrant depositId seedAmount
+                            Bridge.ammReserveActor
   -- Workstream GP (v1.0): L2 user self-topup.  Compiles to the
   -- kernel-level no-op `Laws.freezeResource 0`.  The signer-aware
   -- kernel effect (debit signer's gas balance, credit poolActor)
@@ -617,15 +661,18 @@ def Action.compileTransition : Action → Transition
   -- `Action.toTransition` / `kernelOnlyApply` /
   -- `apply_admissible_with`, all of which have the signer in scope.
   | .claimBudgetRefund _ _ _ _      => Laws.freezeResource 0
-  -- Workstream GP (GP.11.4): L2 AMM swap.  The swap is NOT
-  -- signer-aware (both amounts are bridge-attested), so it compiles
-  -- directly to the kernel law.
-  | .ammSwap fr tr ai ao ra         => Laws.ammSwap fr tr ai ao ra
-  -- Workstream GP (GP.11.10): post-disable reserve reclamation.  Like
-  -- ammSwap, the sweep is NOT signer-aware (the amount and both actors
-  -- are bridge-attested action fields), so it compiles directly to the
+  -- Workstream GP (GP.11.10): post-disable reserve reclamation.  The
+  -- sweep is NOT signer-aware (the amount and both actors are
+  -- bridge-attested action fields), so it compiles directly to the
   -- kernel law.
   | .reclaimAmmReserves r amt ra pa => Laws.reclaimAmmReserves r amt ra pa
+  -- Workstream SB: the user-facing L2 swap.  The kernel-level effect
+  -- (four chained balance writes, priced in-kernel off the pre-state)
+  -- is fully determined by the action's fields — the signer enters
+  -- only through the AuthorityPolicy's `user = signer` binding
+  -- (`Bridge.reserveSwapUserBinding`), never through the law's
+  -- parameters — so it compiles directly to the kernel law.
+  | .reserveSwap fr tr user ai mao ra => Laws.reserveSwap fr tr user ai mao ra
   -- Workstream-LX (LX.17): codegen-managed Lex `compileTransition`
   -- arms land between the fence markers below.  Empty in M1;
   -- populated in M2 once the kernel-built-in laws are re-expressed
@@ -749,9 +796,9 @@ theorem Action.toTransition_eq_compileTransition_of_ne_topUp
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | depositWithFee _ _ _ _ _ _ _  => rfl
-  | ammSwap _ _ _ _ _             => rfl
+  | depositWithFee _ _ _ _ _ _ _ _ => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-- For `topUpActionBudget` specifically, `toTransition` produces
     the signer-bound `Laws.topUpActionBudget` form. -/
@@ -932,9 +979,9 @@ example (bh : ByteArray) (gid : Nat) (w : ActorId) (rfi : Disputes.LogIndex) :
       .faultProofResolution bh gid w rfi := rfl
 
 example (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) :
-    (Action.compile (.depositWithFee r recipient poolActor ua pa bg d)).source =
-      .depositWithFee r recipient poolActor ua pa bg d := rfl
+    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) (sa : Amount) :
+    (Action.compile (.depositWithFee r recipient poolActor ua pa bg d sa)).source =
+      .depositWithFee r recipient poolActor ua pa bg d sa := rfl
 
 example (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
     (Action.compile (.topUpActionBudget gr ga bi pa)).source =
@@ -951,6 +998,10 @@ example (gr : ResourceId) (bu : Nat) (w : Nat) (pa : ActorId) :
 example (r : ResourceId) (amt : Amount) (ra pa : ActorId) :
     (Action.compile (.reclaimAmmReserves r amt ra pa)).source =
       .reclaimAmmReserves r amt ra pa := rfl
+
+example (fr tr : ResourceId) (user : ActorId) (ai mao : Amount) (ra : ActorId) :
+    (Action.compile (.reserveSwap fr tr user ai mao ra)).source =
+      .reserveSwap fr tr user ai mao ra := rfl
 
 end Authority
 end LegalKernel

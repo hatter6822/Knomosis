@@ -229,18 +229,25 @@ Encoded as the concatenation of:
   3. **nonce** (CBE uint, 9 bytes): the nonce as
      `0x00 :: <8 LE bytes>`.
   4. **sig** (CBE bytestring): the deployment-specific signature
-     bytes.  For Ed25519, this is 64 bytes (length prefix + 64
-     bytes of payload).
+     bytes.  For the production ECDSA secp256k1 scheme this is the
+     65-byte Ethereum WIRE signature `(r ‖ s ‖ v)` — low-s `(r, s)`
+     plus the recovery byte `v ∈ {27, 28}` (§7.1).  The CBE layer
+     itself is length-agnostic (a deployment supplying a different
+     `Verify` adaptor may carry a different width), but the batch
+     actions-root leaf (§15) and the L1 fault-proof game bind the
+     65-byte width, so an EVM-adjudicated deployment uses exactly
+     this form.
 
 ## 5. The `Action` CBE Encoding
 
-The `Action` type has 25 constructors, encoded by their inductive
+The `Action` type has 26 constructors, encoded by their inductive
 index (frozen — no phase will renumber existing constructors).
 Phase 5 ships indices 0..7; Phase 6 appends 8..11; Workstream B
 appends 12; Workstream C appends 13..14; Workstream LP (actor-
 scoped policies) appends 15..16; Workstream H (fault-proof
 migration) appends 17..18; Workstream GP (unified gas pool /
-budgets / AMM) appends 19..24.
+budgets / AMM) appends 19..24; Workstream SB (batched submission +
+the user-facing L2 AMM) appends 25.
 
 ```
 Action.transfer            := 0
@@ -266,8 +273,10 @@ Action.depositWithFee       := 19 -- Workstream GP (fee-split deposit; GP.2.1)
 Action.topUpActionBudget    := 20 -- Workstream GP (self-funded top-up; GP.2.2)
 Action.topUpActionBudgetFor := 21 -- Workstream GP (delegated top-up; GP.3.4)
 Action.claimBudgetRefund    := 22 -- Workstream GP (budget refund; GP.9.1)
-Action.ammSwap              := 23 -- Workstream GP (constant-product swap; GP.11.4)
+-- 23 is RETIRED (the excised L1-AMM ammSwap mirror) — a permanent
+-- hole the decoder refuses like a never-assigned tag; never reuse.
 Action.reclaimAmmReserves   := 24 -- Workstream GP (post-disable sweep; GP.11.10)
+Action.reserveSwap          := 25 -- Workstream SB (user-signed L2 AMM swap)
 ```
 
 Each Action is encoded as `<constructor uint> :: <fields>`.  For
@@ -308,11 +317,11 @@ Action.registerIdentity actor pk  →
 
 Action.deposit r recipient amount depositId  →
   CBE-uint(13) ++ CBE-uint(r) ++ CBE-uint(recipient) ++
-  CBE-uint(amount) ++ CBE-uint(depositId)
+  CBE-amount(amount) ++ CBE-uint(depositId)
 
 Action.withdraw r sender amount recipientL1  →
   CBE-uint(14) ++ CBE-uint(r) ++ CBE-uint(sender) ++
-  CBE-uint(amount) ++ CBE-bstr(recipientL1)
+  CBE-amount(amount) ++ CBE-bstr(recipientL1)
 
 Action.declareLocalPolicy policy  →
   CBE-uint(15) ++ CBE-encode(policy : LocalPolicy)
@@ -328,31 +337,44 @@ Action.faultProofResolution bindingHash gameId winner revertFromIdx  →
   CBE-uint(18) ++ CBE-bstr(bindingHash) ++ CBE-uint(gameId) ++
   CBE-uint(winner) ++ CBE-uint(revertFromIdx)
 
-Action.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId  →
+Action.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount  →
   CBE-uint(19) ++ CBE-uint(r) ++ CBE-uint(recipient) ++
-  CBE-uint(poolActor) ++ CBE-uint(userAmount) ++
-  CBE-uint(poolAmount) ++ CBE-uint(budgetGrant) ++ CBE-uint(depositId)
+  CBE-uint(poolActor) ++ CBE-amount(userAmount) ++
+  CBE-amount(poolAmount) ++ CBE-uint(budgetGrant) ++
+  CBE-uint(depositId) ++ CBE-amount(seedAmount)
 
 Action.topUpActionBudget gasResource gasAmount budgetIncrement poolActor  →
-  CBE-uint(20) ++ CBE-uint(gasResource) ++ CBE-uint(gasAmount) ++
+  CBE-uint(20) ++ CBE-uint(gasResource) ++ CBE-amount(gasAmount) ++
   CBE-uint(budgetIncrement) ++ CBE-uint(poolActor)
 
 Action.topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor  →
   CBE-uint(21) ++ CBE-uint(recipient) ++ CBE-uint(gasResource) ++
-  CBE-uint(gasAmount) ++ CBE-uint(budgetIncrement) ++ CBE-uint(poolActor)
+  CBE-amount(gasAmount) ++ CBE-uint(budgetIncrement) ++ CBE-uint(poolActor)
 
 Action.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor  →
   CBE-uint(22) ++ CBE-uint(gasResource) ++ CBE-uint(budgetUnits) ++
-  CBE-uint(weiPerBudgetUnit) ++ CBE-uint(poolActor)
-
-Action.ammSwap fromResource toResource amountIn amountOut ammReserveActor  →
-  CBE-uint(23) ++ CBE-uint(fromResource) ++ CBE-uint(toResource) ++
-  CBE-uint(amountIn) ++ CBE-uint(amountOut) ++ CBE-uint(ammReserveActor)
+  CBE-amount(weiPerBudgetUnit) ++ CBE-uint(poolActor)
 
 Action.reclaimAmmReserves r amount reserveActor poolActor  →
   CBE-uint(24) ++ CBE-uint(r) ++ CBE-amount(amount) ++
   CBE-uint(reserveActor) ++ CBE-uint(poolActor)
+
+Action.reserveSwap fromResource toResource user amountIn minAmountOut reserveActor  →
+  CBE-uint(25) ++ CBE-uint(fromResource) ++ CBE-uint(toResource) ++
+  CBE-uint(user) ++ CBE-amount(amountIn) ++ CBE-amount(minAmountOut) ++
+  CBE-uint(reserveActor)
 ```
+
+`Action.depositWithFee`'s `seedAmount` (Workstream SB) is the
+APPENDED bridge-attested slice of the pool leg the L2 law credits to
+the AMM reserve actor (the deposit fee-split's seed leg); every
+pre-existing field keeps its offset.  `Action.reserveSwap` (25,
+Workstream SB) is the USER-signed L2 swap: the kernel law computes
+`amountOut = AmmMath.getAmountOut amountIn rFrom rTo swapFeeBps`
+over the reserve actor's live balances and requires
+`amountOut ≥ max 1 minAmountOut`; the deployment's `AuthorityPolicy`
+binds `user = signer` (`reserveSwapUserBinding`), and both deny
+lists keep the pool/reserve keys unable to SIGN tag 25.
 
 The `Action.withdraw` `recipientL1` field is encoded as a
 **lossless 20-byte CBE bytestring** (the big-endian byte form of
@@ -472,8 +494,11 @@ Event.actionBudgetTopUp          := 17 -- GP §15E v1.0 (self-funded top-up)
 Event.gasPoolClaim               := 18 -- GP §15E v1.0 (pool drain; GP.7)
 Event.delegatedActionBudgetTopUp := 19 -- GP.3.4 (delegated top-up)
 Event.budgetConsumed             := 20 -- GP.6.4 (per-action budget debit)
-Event.ammSwapExecuted            := 21 -- GP.11.4 (constant-product swap)
+-- 21 is RETIRED (the excised L1-AMM mirror's ammSwapExecuted) — a
+-- permanent hole the decoder refuses like a never-assigned tag.
 Event.ammReservesReclaimed       := 22 -- GP.11.10 (post-disable sweep)
+Event.reserveSwapExecuted        := 23 -- Workstream SB (user L2 swap)
+Event.reserveSeeded              := 24 -- Workstream SB (deposit seed leg)
 ```
 
 Field layouts (mirrored from `LegalKernel/Events/Types.lean`, each
@@ -486,8 +511,10 @@ field a CBE uint head):
 | 18  | `gasPoolClaim`               | `resource, sequencer, amount`                                                |
 | 19  | `delegatedActionBudgetTopUp` | `recipient, signer, gasResource, gasAmount, budgetIncrement, poolActor`      |
 | 20  | `budgetConsumed`             | `actor, amount`                                                              |
-| 21  | `ammSwapExecuted`            | `fromResource, toResource, amountIn, amountOut, ammReserveActor`             |
+| 21  | RETIRED (`ammSwapExecuted`)  | the excised L1-AMM mirror's event — a permanent hole; never reuse            |
 | 22  | `ammReservesReclaimed`       | `resource, amount, reserveActor, poolActor`                                  |
+| 23  | `reserveSwapExecuted`        | `fromResource, toResource, user, amountIn, amountOut, reserveActor`          |
+| 24  | `reserveSeeded`              | `resource, amount, reserveActor, depositId`                                  |
 
 `depositWithFeeCredited` (16) is emitted IN ADDITION to the
 kernel-level `balanceChanged` (0) on a fee-split deposit, so an
@@ -508,11 +535,10 @@ much).  Indexers consume tag 20 to maintain a per-epoch "budget
 consumed" counter and compute "N actions remaining this epoch"
 (see §11A).
 
-`ammSwapExecuted` (21, GP.11.4) is emitted IN ADDITION to the two
-kernel-level `balanceChanged` events on every admitted
-`Action.ammSwap`, carrying the swap's intent (direction + both leg
-amounts + the reserve actor) so indexers can maintain AMM-volume
-views without re-deriving the action.  `ammReservesReclaimed`
+Tag 21 belonged to the bridge-attested L1-AMM swap mirror and was
+RETIRED with the embedded L1 AMM: the decoders on every stack refuse
+it like a never-assigned tag, and it must never be reused.  AMM-volume
+views ride `reserveSwapExecuted` (23).  `ammReservesReclaimed`
 (22, GP.11.10) is emitted on every admitted
 `Action.reclaimAmmReserves` — the post-kill-switch sweep of the
 frozen L2 AMM reserve into the gas pool.  Under the law's
@@ -725,10 +751,42 @@ bytes; its CBE-bytestring form is `0x02 :: <0x1B 0x00 0x00 0x00
 is the genesis state hash (32 bytes after Audit-3.1's fixed-width
 hash unification).
 
-Production deployments hash the resulting bytes with BLAKE3-256
-(or whatever hash the `Verify` adaptor expects) and pass the
-digest to `Verify`.  The Phase-5 stub passes the bytes themselves
-(since `Verify` is opaque at the Lean level).
+The admission gate passes the RAW sign-input bytes to `Verify`
+(the conjunct is literally `Verify pk (signingInput …) st.sig`);
+the deployment-supplied adaptor owns the digest recipe.  Under the
+production adaptor that recipe is §7.1's.
+
+### 7.1 The production signature convention (ECDSA secp256k1, v2)
+
+One convention across every stack — the L2 signer, the admission
+gate, the batch actions-root leaf and L1 adjudication:
+
+```
+digest := keccak256(signInput(action, signer, nonce, deploymentId))
+sig    := (r ‖ s ‖ v)          -- 65 bytes: 32 + 32 + 1
+```
+
+  * `(r, s)` is low-s (EIP-2 / BIP-62); the signer normalises and
+    the verifier rejects high-s.
+  * `v ∈ {27, 28}` is the Ethereum recovery byte (`27 + recovery
+    id`).  It is VALIDATED, not decorative: the off-chain adaptor
+    (`knomosis-verify-secp256k1`'s `verify_signed_message`, the
+    production semantics of the Lean `Verify` opaque) verifies by
+    RECOVERY — `recover(digest, r, s, v)` must equal the presented
+    33-byte SEC1-compressed key — so a signature whose `v` names
+    the wrong candidate point is refused off-chain exactly as L1
+    `ecrecover` would refuse it at the fault-proof game's terminal
+    step.  A signer whose low-s normalisation negates `s` flips the
+    recovery parity in lockstep (`knomosis-l1-ingest`'s
+    `BridgeActorKey::sign_prehash`).
+  * The adaptor hashes the raw sign-input bytes ITSELF (no
+    length-based raw-vs-prehash branching), so the Lean conjunct
+    composes with the signer with no convention seam.  (The v1
+    adaptor demanded a 32-byte pre-hashed message and a 64-byte
+    `(r ‖ s)` — shapes the admission conjunct never produces — so
+    a production-linked deployment rejected every signed action;
+    the v2 identifier `ecdsa-secp256k1-low-s/EVM-compatible/v2`
+    marks the corrected contract.)
 
 ## 8. The Runtime CLI (`knomosis`) ABI
 
@@ -1721,8 +1779,9 @@ head `knomosis-indexer::decoder` reads).  The set of tags is
 constructor — e.g. the Workstream-GP gas-pool family at tags 16/17/18
 (`depositWithFeeCredited`, `actionBudgetTopUp`, `gasPoolClaim`), the
 GP.3.4 `delegatedActionBudgetTopUp` at 19, the GP.6.4
-`budgetConsumed` at 20, the GP.11.4 `ammSwapExecuted` at 21, and the
-GP.11.10 `ammReservesReclaimed` at 22 — emits at the SAME 9-byte
+`budgetConsumed` at 20, and the GP.11.10 `ammReservesReclaimed` at
+22 (21 is the retired `ammSwapExecuted`'s permanent hole) — emits
+at the SAME 9-byte
 head with no new fields in the *frame*.  The frame layout is
 therefore unchanged, and no `PROTOCOL_VERSION` bump is required.  The
 streamer (`knomosis-event-subscribe`) forwards every event payload
@@ -1731,8 +1790,9 @@ tag set keeps working against a newer server (forward
 compatibility).  The Rust-side tag catalogue lives in
 `runtime/knomosis-event-subscribe/src/event_type.rs`
 (`EventType` / `peek_event_tag` / `EventClass::classify`), which
-mirrors the frozen `Event.tag` indices `0..=22` (the
-GP.11.10 `ammReservesReclaimed` at tag 22 included).
+mirrors the frozen `Event.tag` indices `0..=24` (the
+Workstream-SB `reserveSwapExecuted` / `reserveSeeded` at tags
+23/24 included).
 
 ### 11.2 Frame kind table
 
@@ -1965,8 +2025,9 @@ graceful drain.
   * Engineering plan:
     `docs/planning/rust_host_runtime_plan.md` §RH-D; gas-pool
     event variants: `docs/planning/unified_gas_pool_plan.md` §GP.6.3.
-  * Event constructor table (frozen indices 0..22, including the
-    Workstream-GP gas-pool family 16..22):
+  * Event constructor table (frozen indices 0..24, including the
+    Workstream-GP gas-pool family 16..22 and the Workstream-SB
+    pair 23/24):
     `LegalKernel/Events/Types.lean` + §5.3.
   * Event-extraction reference function:
     `LegalKernel/Events/Extract.lean::extractEvents`.
@@ -2062,14 +2123,15 @@ The layout is byte-for-byte the format `knomosis-indexer::decoder`
 decodes — notably tag 11 (`localPolicyDeclared`) encodes its `policy`
 as a CBE byte string (opaque bytes wrapping the structured policy),
 matching the indexer's `read_byte_string`.  The Lean↔indexer
-byte-equivalence is mechanically pinned for all 23 tags
-(0..=22) by `knomosis-indexer/tests/cross_stack_lean_event.rs`
+byte-equivalence is mechanically pinned for all 25 tags
+(0..=24) by `knomosis-indexer/tests/cross_stack_lean_event.rs`
 (a Lean→`decode_event`→`encode_event` round-trip against the
 real `event_subscribe_cbe.json` bytes).  GP.6.4 widened the
 indexer's `Event` mirror to cover the Workstream-GP gas-pool
-family (tags 16..=19); GP.11.4 and GP.11.10 widened it again
-for `ammSwapExecuted` (21) and `ammReservesReclaimed` (22).
-Previously unknown tags decode to a typed `UnknownTag`.
+family (tags 16..=19); GP.11.10 widened it again for
+`ammReservesReclaimed` (22).  Tag 21 (the retired
+`ammSwapExecuted`) is a permanent hole decoding to the same typed
+`UnknownTag` as any unassigned tag.
 
 ## 11A. Indexer Storage Layout (Workstream RH-E)
 
@@ -2212,7 +2274,7 @@ budget balance — see the `remaining_this_epoch` docstring in
 
 ### 11A.5 Event dispatch table
 
-For each `Event` (frozen tags 0..22 per §5.3–5.4), the indexer
+For each `Event` (frozen tags 0..24 per §5.3–5.4), the indexer
 applies the following balance-view and budget-table operations,
 ALL inside ONE `SqliteCombinedTransaction` (§11A.6).
 
@@ -2235,7 +2297,7 @@ ALL inside ONE `SqliteCombinedTransaction` (§11A.6).
 | 18  | `gasPoolClaim`                 | no-op                                           | if `--gas-pool-actor` set AND `r ∈ {0,1}`: `[gasPoolActor]` −= `amount` (halt on underflow); else no-op |
 | 19  | `delegatedActionBudgetTopUp`   | both `[recipient]` += `budgetIncrement` (NOT signer) | if `gr ∈ {0,1}`: `[poolActor]` += `gasAmount` |
 | 20  | `budgetConsumed`               | `…_current_epoch_consumed[actor]` += `amount`   | no-op                                          |
-| 21  | `ammSwapExecuted`              | no-op (typed decode only — the paired `balanceChanged` events are authoritative) | no-op |
+| 21  | RETIRED (`ammSwapExecuted`)    | (a permanent hole — decodes as an unknown tag)  | no-op |
 | 22  | `ammReservesReclaimed`         | no-op (typed decode only — the paired `balanceChanged` events are authoritative) | no-op |
 | other tags                         | no-op                                       | no-op                                          |
 
@@ -2581,8 +2643,17 @@ bytes proofBlob, bytes leafBlob)` function expects:
       bytes  recipientL1  (CBE: 1 tag + 8 length + 20 payload = 29 bytes)
       amount amount       (CBE: 1 tag + 32 LE = 33 bytes)
       uint   l2LogIndex   (9 bytes)
-      → total: 80 bytes (the audit-2 lossless 20-byte address
-        encoding, plus the amount on the 33-byte head).
+      uint   wdId         (9 bytes)
+      → total: 89 bytes (the audit-2 lossless 20-byte address
+        encoding, the amount on the 33-byte head, and the
+        withdrawal id).
+    `wdId` is the leaf's key in `BridgeState.pending`, hence its
+    POSITION in the withdrawal SMT, and the field `proofBlob`'s
+    `index` is checked against.  The check previously bound the
+    index to `l2LogIndex`, which is a different counter — it
+    advances on every action, `wdId` only on withdrawals — so the
+    two diverge after the first non-withdraw action and every
+    honest proof was rejected.
   * `proofBlob` — CBE encoding of the `WithdrawalProof`
     (post-audit-2; mirrors Lean's `WithdrawalProof` shape
     with variable-size leaf and siblings):
@@ -2816,23 +2887,40 @@ contract `docs/api/gateway.openapi.yaml` and
 
 ### 15.1 New Solidity contracts
 
-The five immutable contracts shipped by Workstream H:
+The five immutable contracts shipped by Workstream H, as re-cut by
+Workstream SB (batched submission):
 
   * `solidity/src/contracts/KnomosisStateRootSubmission.sol` —
-    Sequencer state-root submission registry.
-  * `solidity/src/contracts/KnomosisStepVM.sol` — L1 step VM.
+    Sequencer BATCH submission registry: one record per batch
+    `[prevEndIndex, endIndex)`, keyed by `endIndex`, with revert
+    recovery (SB rulings R1/R3/R4) and a constructor-written genesis
+    anchor at key 0 (ruling R5).
+  * `solidity/src/contracts/KnomosisStepVMRoot.sol` — L1 step VM
+    (root-computing; the bespoke-hash `KnomosisStepVM` is retired).
   * `solidity/src/contracts/KnomosisFaultProofGame.sol` —
-    Bisection game state machine.
+    Bisection game state machine; bisects INSIDE one batch and
+    authenticates the disputed action by inclusion proof (rulings
+    R2/R7).
   * `solidity/src/contracts/KnomosisDisputeVerifierV2.sol` —
     Dual-path dispute verifier (fault-proof + adjudicator
     quorum).
   * `solidity/src/contracts/KnomosisFaultProofMigration.sol` —
     V1 → V2 migration handoff.
 
-Plus the cross-cutting library:
+Plus the cross-cutting libraries:
 
   * `solidity/src/lib/StepVMMerkle.sol` — Per-cell Merkle
     proof verification for the L1 step VM.
+  * `solidity/src/lib/ActionsRoot.sol` — The per-batch actions-root
+    tree (the cell-SMT family instantiated at `K = V = bytes32`):
+    key derivation, the signature-bound leaf commit, the inclusion
+    verifier, and the genesis chain seed.  Lean mirror:
+    `LegalKernel.FaultProof.ActionsRoot`; corpus:
+    `actions_root.json`.
+  * `solidity/src/lib/LogChain.sol` — The batched submission hash
+    chain (`nextEntryHash`) and the unsigned action-triple commit
+    (`actionCommit`, the prefix construction the batch leaf
+    extends).  Corpus: `batch_chain.json`.
 
 All contracts immutable per Workstream-E §20 discipline.
 
@@ -2850,52 +2938,115 @@ All contracts immutable per Workstream-E §20 discipline.
 | `MIN_BISECTION_STEP_INTERVAL_BLOCKS` | `uint64` | 5 (recommended) | `KnomosisFaultProofGame` constructor |
 | `MIN_GRACE_WINDOW_BLOCKS` | `uint64` | 216_000 (~30 days) | `KnomosisFaultProofMigration.sol` |
 | `MAX_RECIPIENTS_PER_BULK_ACTION` | (Lean) | 256 | `LegalKernel.FaultProof.SubStep` |
+| `MAX_ACTIONS_PER_BATCH` | `uint64` | 65_536 (default) | `KnomosisStateRootSubmission` constructor (SB ruling R10 — operational sanity, not a correctness bound: the game bisects any range) |
+| `ACTION_KEY_DOMAIN` | `bytes` | `"knomosis.actionsRoot"` | `ActionsRoot.sol`; Lean `ActionsRoot.actionKeyDomain` |
+| `SIG_BYTES` | `uint256` | 65 | `ActionsRoot.sol` — the fixed signature width the batch leaf binds (`r ‖ s ‖ v`); any other width reverts `ActionSigWrongLength` |
 
 ### 15.3 New L1 entry points
 
-`KnomosisStateRootSubmission`:
+`KnomosisStateRootSubmission` (batched — Workstream SB):
 
-  * `submitStateRoot(uint64 logIndex, bytes32 stateCommit, bytes32 prevLogEntryHash, bytes32 actionCommit)` payable
-    — `actionCommit` is `LogChain.actionCommit(actionKind, signer,
-    actionFields)`, i.e.
-    `keccak256(abi.encodePacked(uint8 actionKind, uint64 signer, bytes actionFields))`,
-    over the action that carried `logIndex - 1` to `logIndex`.  The
-    stored chain value becomes
-    `keccak256(abi.encode(prevLogEntryHash, stateCommit, actionCommit))`.
-    Binding the action here is what lets
-    `terminateOnSingleStep` authenticate the step it is asked to
-    adjudicate; the state-roots-only chain it replaced recorded no
-    action at all, so the terminal step executed whatever the
-    responding party supplied.  Lean mirror:
-    `LegalKernel.FaultProof.StepVMCoherence.l1ActionCommit` /
-    `l1NextEntryHash`; pinned per-entry by `step_vm.json`'s
-    `expectedActionCommitHex`.
-  * `finaliseStateRoot(uint64 logIndex)`
-  * `revertStateRootsFrom(uint64 fromIdx)` (called by game)
-  * `isStateRootReverted(uint64 logIndex) view returns (bool)`
+  * `submitStateRoot(uint64 endIndex, uint64 prevEndIndex, bytes32 stateCommit, bytes32 actionsRoot)` payable
+    — one record per BATCH, keyed by `endIndex`, covering L2 log
+    entries `[prevEndIndex, endIndex)` under the entry-count
+    convention (`stateCommit` is the state root after `endIndex`
+    entries).  `prevEndIndex` must equal `canonicalTip`
+    (`NotCanonicalTip`), the batch must be non-empty (`EmptyBatch`)
+    and within `MAX_ACTIONS_PER_BATCH` (`BatchTooLarge`).
+
+    The chain link is STRUCTURAL (ruling R5): `prevLogEntryHash` is
+    READ from the parent record's stored `expectedNextHash`, never
+    accepted from calldata, and the stored chain value becomes
+    `keccak256(abi.encode(prevLogEntryHash, stateCommit, actionsRoot))`
+    — ONE fold per batch (ruling R8), with the batch's `actionsRoot`
+    in the word the retired per-action registry spent on a single
+    action's commitment.  The genesis anchor at key 0 is written by
+    the constructor (born finalised, bondless, chain value
+    `keccak256(abi.encode(bytes32(0), genesisStateCommit, bytes32(0)))`
+    = `ActionsRoot.genesisChainSeed`).
+
+    `actionsRoot` is the SMT root over the batch's per-action
+    SIGNATURE-BOUND commitments (the cell-SMT family verbatim, depth
+    256): entry `n`'s key is
+    `keccak256("knomosis.actionsRoot" ‖ uint64BE n)` and its leaf
+    value is `keccak256(uint8 kind ‖ uint64BE signer ‖ fields ‖ sig)`
+    with the FIXED 65-byte signature suffix (ruling R7).  Lean
+    mirror: `LegalKernel.FaultProof.ActionsRoot`; the fold is Lean
+    `l1NextEntryHash`; pinned by `actions_root.json` (keys, leaves,
+    inclusion proofs, negative rows) and `batch_chain.json` (the
+    genesis seed and the running fold).
+
+    Overwriting is allowed at exactly one kind of key: a REVERTED
+    record whose bond has been emptied (ruling R3 — else
+    `AlreadyClaimed` / `BondNotReclaimed`); that is the recovery path
+    the retired registry lacked.
+  * `finaliseStateRoot(uint64 logIndex)` — refuses reverted records
+    (`RootReverted`); their bonds exit via `reclaimRevertedBond`.
+  * `revertStateRootsFrom(uint64 fromIdx)` (called by game) — stamps
+    `lastRevertAtBlock` and lowers `canonicalTip` to the disputed
+    record's own `prevEndIndex` (monotone-down), so the sequencer
+    re-extends from the last good record (ruling R1).
+  * `reclaimRevertedBond(uint64 logIndex)` — permissionless; returns
+    a reverted, undisputed, unfinalised record's bond to its OWN
+    sequencer (ruling R4).
+  * `isStateRootReverted(uint64 logIndex) view returns (bool)` —
+    record-level (ruling R1): in the reverted key range AND submitted
+    at or before the last revert stamp, so post-revert corrected
+    resubmissions read canonical.
+  * `roots(uint64) view` returns the 10-tuple
+    `(sequencer, stateCommit, prevLogEntryHash, expectedNextHash,
+    bond, submittedAtBlock, finalised, disputed, prevEndIndex,
+    actionsRoot)` — the two batch fields APPENDED last so every
+    pre-existing positional destructuring keeps its slots.
 
 `KnomosisFaultProofGame`:
 
-  * `initiateChallenge(...) payable returns (uint256 gameId)`
-  * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)`
+  * `initiateChallenge(uint64 disputedLogIndex, bytes32 challengerCommit, bytes32 lowCommit, uint64 lowLogIndex) payable returns (uint256 gameId)`
+    — the game bisects INSIDE one batch (ruling R2): `lowLogIndex`
+    must equal the disputed record's `prevEndIndex`
+    (`LowNotBatchStart`), `lowCommit` must match the parent record's
+    committed root (`LowCommitMismatch`), and a reverted disputed
+    record is refused (`DisputedRootReverted`).
+  * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)` — now
+    carries the depth PRE-check (`DepthCapExceeded` on the midpoint
+    that would exceed `MAX_BISECTION_DEPTH`, matching the Lean and
+    Rust mirrors, instead of charging the responder for a move the
+    game could never absorb).
   * `respondToMidpoint(uint256 gameId, bool agree)`
-  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, OpenedCell[] opened, bytes gapMask, bytes siblings)`
+  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, bytes actionSig, bytes actionProof, OpenedCell[] opened, bytes gapMask, bytes siblings)`
     — no `claimedPostCommit` argument: the contract computes the
     post-state ROOT from the step and compares it against the on-chain
     `g.high.commit`, so the claim is not the caller's to make.  It
     also takes no `l2LogIndex`: the contract reads `g.high.idx`, which
-    is the index the disputed action produced.  (An
-    earlier draft of this line documented a third, non-existent form;
-    the Rust observer had been built against it and its calldata could
-    not be dispatched.)  The `(actionKind, actionFields, signer)`
-    triple is authenticated against the log-entry chain at
-    `g.high.idx` before dispatch — reverts `ActionNotInLogChain` if it
-    is not the action the sequencer bound when it published that root.
+    is the index the disputed action produced.  The signed action is
+    authenticated by INCLUSION PROOF before dispatch (ruling R7): its
+    leaf commit
+    `keccak256(actionKind ‖ uint64BE signer ‖ actionFields ‖ actionSig)`
+    (the 65-byte signature is HASHED, not verified — on-chain
+    verification happens at terminate (Workstream F-A: the signer's
+    registered key is resolved by a registry-cell opening against the
+    pre-root)) must open at absolute index `g.low.idx` — the
+    disputed step's own index under the entry-count convention —
+    under the DISPUTED batch record's `actionsRoot`, read via the
+    game's immutable `g.disputedLogIndex`, never a caller-supplied
+    batch id.  `actionProof` is the standard SMT wire
+    (`bitmask(32) ‖ siblings(N×32)`).  Reverts `ActionNotInBatch` if
+    the action is not the one the sequencer committed when it
+    published the batch.
   * `claimTimeout(uint256 gameId)`
+
+  **Turn parity.**  An in-progress game is always in one of exactly
+  two shapes — (sequencer's turn, no pending midpoint) or
+  (challenger's turn, pending midpoint) — so the single-step
+  terminate obligation ALWAYS falls on the sequencer; a challenger is
+  never terminate-obligated.  Lean: `turnAlignedWithPending` /
+  `turn_aligned_preserved` / `terminate_owner_is_sequencer`; pinned
+  on the deployed bytecode by the game suite's fuzzed move-sequence
+  test.
 
 `KnomosisStepVMRoot`:
 
-  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
+  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..25`, excluding the retired 23 — `isAdjudicable` refuses it like a never-assigned kind; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
   * `widestFrontier(bytes probeFields) pure returns (uint256)` — the
     largest frontier any adjudicable action produces, derived from
     `StepWrites.deriveWriteSet` rather than restated.  `assertConsistent`
@@ -2971,7 +3122,15 @@ All contracts immutable per Workstream-E §20 discipline.
 `KnomosisDisputeVerifierV2`:
 
   * `fileDispute(bytes32 disputeHash) returns (uint256)`
-  * `finaliseFromFaultProof(uint256 disputeId, uint256 gameId, uint64 revertFromIdx)`
+  * `finaliseFromFaultProof(uint256 gameId, uint64 revertFromIdx)` —
+    gated to the fault-proof game; drives a challenger win's revert
+    through to the BRIDGE (`revertToPriorRoot`), for which this
+    contract is the bridge's `faultProofRollbackAuthority` (SB
+    ruling R6).  Keyed by the game, not a dispute record — no V2
+    dispute is filed for a fault-proof settlement.  (The previous
+    `(disputeId, gameId, revertFromIdx)` form only marked a dispute
+    record nobody ever filed, so a challenger win never reached the
+    bridge's fund-safety gates.)
   * `finaliseFromQuorum(uint256 disputeId, address[] signers)`
 
 `KnomosisFaultProofMigration`:
@@ -2981,9 +3140,15 @@ All contracts immutable per Workstream-E §20 discipline.
 ### 15.4 New events
 
 `KnomosisStateRootSubmission`:
-  * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer)`
+  * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer, uint64 prevEndIndex, bytes32 actionsRoot)`
+    — the two batch fields APPENDED after the retired event's data
+    layout (SB ruling R9): the observer reads a batch's bounds and
+    actions root from this event alone.
   * `StateRootFinalised(uint64 indexed logIndex, address indexed sequencer)`
   * `StateRootRangeReverted(uint64 indexed floor, uint64 indexed ceiling)`
+  * `StateRootBondReclaimed(uint64 indexed logIndex, address indexed sequencer, uint128 amount)` (SB ruling R4)
+  * `StateRootDisputed(uint64 indexed logIndex, address indexed sequencer)`
+  * `SequencerBondSlashed(uint64 indexed logIndex, address indexed sequencer, address indexed recipient, uint128 amount)`
 
 `KnomosisFaultProofGame`:
   * `FaultProofGameOpened(uint256 indexed gameId, address indexed challenger, bytes32 disputedStateRoot, bytes32 challengerStateRoot)`
@@ -3034,8 +3199,10 @@ silently re-grouping these indices.
 
 Workstream GP appends `Action` indices 19..24 (`depositWithFee`,
 `topUpActionBudget`, `topUpActionBudgetFor`, `claimBudgetRefund`,
-`ammSwap`, `reclaimAmmReserves`); their field layouts live in §5 /
-§5.1 and the L1-side `actionFieldsForL1` byte layouts in §15.3.
+`reclaimAmmReserves`; 23 is the retired `ammSwap`'s permanent hole)
+and Workstream SB appends 25 (`reserveSwap`); their field layouts
+live in §5 / §5.1 and the L1-side `actionFieldsForL1` byte layouts
+in §15.3.
 
 ### 16.2 Event constructor encodings (Workstream E indices)
 
@@ -3052,23 +3219,27 @@ by AR.6 regression tests and the `Event.tag` projection
 (`LegalKernel/Events/Types.lean`).
 
 Workstream GP appends `Event` indices 16..22 (through
-`ammSwapExecuted` at 21 and `ammReservesReclaimed` at 22); their
-field layouts live in the §5.4 Workstream-GP subsection.
+`ammReservesReclaimed` at 22; 21 is the retired `ammSwapExecuted`'s
+permanent hole) and Workstream SB appends 23/24; their field
+layouts live in the §5.4 Workstream-GP subsection.
 
 ### 16.3 BridgeState CBE encoding
 
 `Bridge.BridgeState.encode` (defined in
-`LegalKernel/Encoding/State.lean`) concatenates nine segments — the
-v1.2 ledger triple, the five GP.11.8 AMM/BOLD L1-mirror fields, and
-the GP.11.10 `ammDisabled` kill-switch mirror:
+`LegalKernel/Encoding/State.lean`) concatenates seven segments — the
+v1.2 ledger triple, the three GP.11.8 BOLD L1-mirror fields, and the
+GP.11.10 `ammDisabled` kill-switch mirror.  (The two GP.11.8
+`ammReserve*` book segments were EXCISED with the embedded L1 AMM —
+under the one-AMM L2-primary topology the pool's reserves are the
+reserve actor's ordinary balances, already committed through the
+balances segment of the extended state, so mirroring L1 books here
+would commit a venue that no longer exists.)
 
 ```
 BridgeState.encode bs =
   encodeConsumed bs ++       -- consumed: TreeMap DepositId DepositRecord
   encodePending  bs ++       -- pending:  TreeMap WithdrawalId PendingWithdrawal
   CBE-uint(bs.nextWdId) ++
-  CBE-uint(bs.ammReserveEth) ++              -- GP.11.8
-  CBE-uint(bs.ammReserveBold) ++             -- GP.11.8
   CBE-uint(bs.boldCircuitClosed ? 1 : 0) ++  -- GP.11.8 (canonical 0/1)
   CBE-uint(bs.boldTvlCap) ++                 -- GP.11.8
   CBE-uint(bs.boldTotalLockedValue) ++       -- GP.11.8
@@ -3088,7 +3259,7 @@ Where:
      `CBE-uint(resource.toNat) ++ CBE-uint(amount)`).
   * Each `PendingWithdrawal` encodes as
     `CBE-uint(resource.toNat) ++ CBE-bstr(EthAddress.toBytes recipient) ++
-     CBE-uint(amount) ++ CBE-uint(l2LogIndex)`.
+     CBE-amount(amount) ++ CBE-uint(l2LogIndex) ++ CBE-uint(wdId)`.
   * The two Bool mirrors (`boldCircuitClosed`, `ammDisabled`) encode
     as canonical `0`/`1` CBE uints; the decoder rejects any other
     value (`nonCanonical`).
@@ -3102,17 +3273,18 @@ EI.7 extended by GP.11.8 / GP.11.10, in
 `LegalKernel/Encoding/BridgeInjective.lean`) ship under
 `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 
-**Wire-format note.**  GP.11.8 and GP.11.10 are append-only
+**Wire-format note.**  The BOLD/kill-switch segments are append-only
 extensions of the v1.2 three-segment form: the encoding factorises as
-`bridgeStateEncodeBase ++ bridgeStateEncodeAmmSuffix`
-(`bridgeState_encode_factored`), and at genesis AMM defaults the
-suffix is a fixed constant, which is what makes the v1.2 → v1.4
-migration deterministic (`bridgeState_commit_extends_v1_2` /
-`bridgeState_commit_extends_v1_3` in
-`LegalKernel/FaultProof/Commit.lean`).  Snapshots and state
-commitments produced before a field addition are not byte-compatible
-with the extended encoder; re-snapshot from genesis (or replay the
-log) when upgrading a persisted deployment.
+`bridgeStateEncodeBase ++ bridgeStateEncodeMirrorSuffix`
+(`bridgeState_encode_factored`), and at genesis mirror defaults the
+suffix is a fixed constant, which is what makes the v1.2 migration
+deterministic (`bridgeState_commit_extends_v1_2` in
+`LegalKernel/FaultProof/Commit.lean`).  The `ammReserve*` excision
+is a BREAKING wire change riding the pre-deployment 0.14.0 — no
+persisted deployment existed to migrate.  Snapshots and state
+commitments produced under a different segment set are not
+byte-compatible with this encoder; re-snapshot from genesis (or
+replay the log).
 
 ### 16.4 WithdrawalProof CBE encoding (on-wire)
 
@@ -3184,21 +3356,43 @@ gate).
 ### 16.7 Contract event ABIs (L1 ↔ off-chain ingestor)
 
 The off-chain L1 ingestor (`runtime/knomosis-l1-ingest`, RH-B) decodes
-four event signatures from L1 logs and translates them to Knomosis
-`SignedAction`s:
+the Knomosis event signatures from L1 logs and translates them to
+Knomosis `SignedAction`s:
 
-**`KnomosisBridge`:**
+**`KnomosisBridge`** (deposit translation is opt-in via
+`--materialise-deposits`, Workstream SB.9; absent the flag both
+deposit events translate to no action, per the Lean-mirror default):
 
-  * `Deposited(address indexed depositor, address indexed token, uint256 amount, bytes32 indexed receiptHash)`
+  * `DepositInitiated(address indexed depositor, uint64 indexed resourceId, address token, uint256 amount, uint64 depositorNonce, bytes32 receiptHash)`
     → `Action.deposit r recipient amount depositId` where:
-      - `r` is derived from the `token` address via the deployment's
-        resource registry;
+      - `r` is the event's `resourceId` (carried directly; no
+        token-address derivation);
       - `recipient` is the `AddressBook`-resolved `ActorId` for
-        `depositor`;
-      - `amount` is the deposit amount;
-      - `depositId` is `receiptHash` interpreted as a big-endian
-        `Nat` (the canonical injective conversion at the bridge
-        boundary).
+        `depositor` (a fresh id is assigned — committed only after
+        submission succeeds — when the depositor has no book entry,
+        so no deposit is dropped; the owner's later L1 registration
+        lands as `replaceKey`, whose authority-layer effect is the
+        same registry insert);
+      - `amount` is the deposit amount, range-checked into the
+        runtime's `Amount` representation (an over-range value is
+        refused with a typed error, never truncated);
+      - `depositId` is the first 8 bytes of `receiptHash`,
+        big-endian.  The 8-byte width is forced by the frozen
+        encoding bound (`Action.fieldsBounded` pins
+        `depositId < 2^64`; the step-VM L1 wire carries it as
+        `uint64BE`).  Content-derived, so a restart or re-org
+        re-delivery re-derives the same id and the kernel's
+        `consumed`-set conjunct refuses the replay; a prefix
+        collision (~`N²/2⁶⁵`) fails closed — the second deposit is
+        refused admission, never double-credited.
+  * `DepositWithFeeInitiated(address indexed sender, uint64 indexed resourceId, address indexed token, uint256 userAmount, uint256 poolAmount, uint256 ammSeedAmount, uint64 budgetGrant, uint64 depositorNonce, bytes32 receiptHash)`
+    → `Action.depositWithFee r recipient poolActor userAmount
+    poolAmount budgetGrant depositId seedAmount` with the same
+    recipient/depositId/range-check rules, `poolActor` the canonical
+    gas-pool actor (id 1), and `seedAmount` lifted verbatim from the
+    event's `ammSeedAmount` (the L2 law splits the pool credit as
+    `poolAmount − seedAmount` to the pool actor and `seedAmount` to
+    the AMM reserve actor, matching the L1 event exactly).
 
 **`KnomosisIdentityRegistry`:**
 

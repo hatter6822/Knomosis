@@ -4,6 +4,7 @@
 //  Copyright (C) 2026  Adam Hall
 pragma solidity 0.8.36;
 
+import {AmmMath} from "./AmmMath.sol";
 import {CBEEncode} from "./CBEEncode.sol";
 
 /// @title StepWrites
@@ -61,6 +62,13 @@ library StepWrites {
     /// @notice The bridge actor, exempt from the budget consume.
     ///         Mirrors `LegalKernel.Bridge.bridgeActor`.
     uint64 internal constant BRIDGE_ACTOR = 0;
+
+    /// @notice The canonical AMM reserve actor — the seed leg's target
+    ///         (Workstream SB).  Mirrors `LegalKernel.Bridge.ammReserveActor`,
+    ///         which the compiled `Laws.depositWithFee` pins as its
+    ///         reserve parameter, so the verifier hard-codes the same
+    ///         identity rather than reading one from calldata.
+    uint64 internal constant AMM_RESERVE_ACTOR = 3;
 
     /// @notice CBE uint head width: tag + 8 little-endian bytes.
     uint256 internal constant CBE_UINT_LEN = 9;
@@ -287,19 +295,37 @@ library StepWrites {
     ///         recipient — which is why this cannot collapse into "top
     ///         up the signer".
     ///
+    ///         **A zero grant is not "no grant".**  `_topUp`
+    ///         normalises before it adds, so on a stale cell
+    ///         `topUp(.., 0)` still refreshes the balance to the free
+    ///         tier and moves `lastSeenEpoch`.  Lean's authority
+    ///         (`VerifierWrites.applyGrantAt`) has no zero-amount case
+    ///         and neither does the sequencer
+    ///         (`ProductionApply.budgetGrant`), so a verifier that
+    ///         short-circuits on `grantAmount == 0` computes a
+    ///         different post-root than the one the honest sequencer
+    ///         published — reachable whenever a deposit's
+    ///         `poolAmount / weiPerBudgetUnit` floors to zero.  Which
+    ///         variants grant is therefore carried explicitly by
+    ///         `grants` rather than inferred from the amount, and that
+    ///         also retires the `grantRecipient == 0` sentinel, which
+    ///         collided with the real actor id `0`.
+    ///
+    /// @param  grants         whether this variant grants budget at all.
     /// @param  grantRecipient the actor the action grants to; ignored
-    ///         when `grantAmount` is zero.
-    /// @param  grantAmount    the granted units, or zero for the
-    ///         twenty-two variants that grant nothing.
+    ///         when `grants` is false.
+    /// @param  grantAmount    the granted units; may be zero on a
+    ///         granting variant.
     function applyGrantAt(
         uint64 target,
+        bool grants,
         uint64 grantRecipient,
         uint256 grantAmount,
         uint256 freeTier,
         uint256 currentEpoch,
         ActorBudget memory pre
     ) internal pure returns (ActorBudget memory) {
-        if (grantAmount == 0 || target != grantRecipient) return pre;
+        if (!grants || target != grantRecipient) return pre;
         return _topUp(pre, currentEpoch, freeTier, grantAmount);
     }
 
@@ -331,13 +357,14 @@ library StepWrites {
         ActorBudget memory targetPre,
         uint64 signer,
         uint64 target,
+        bool grants,
         uint64 grantRecipient,
         uint256 grantAmount,
         uint256 refundExtra
     ) internal pure returns (ActorBudget memory) {
         if (signer == BRIDGE_ACTOR) {
             return applyGrantAt(
-                target, grantRecipient, grantAmount,
+                target, grants, grantRecipient, grantAmount,
                 policy.freeTier, policy.currentEpoch, targetPre
             );
         }
@@ -348,7 +375,7 @@ library StepWrites {
         if (!ok) return targetPre;
         ActorBudget memory afterConsume = target == signer ? consumed : targetPre;
         return applyGrantAt(
-            target, grantRecipient, grantAmount,
+            target, grants, grantRecipient, grantAmount,
             policy.freeTier, policy.currentEpoch, afterConsume
         );
     }
@@ -512,56 +539,69 @@ library StepWrites {
         return deriveChainPair(payerBal, poolBal, payer, poolActor, gasAmount, gasAmount);
     }
 
-    /// @notice `depositWithFee`: credit the recipient, then the pool.
-    /// @dev    Mirrors `VerifierWrites.deriveDepositWithFeeBalances`.
-    ///         The chained pair with TWO credits rather than a
-    ///         debit/credit, so it cannot route through
-    ///         `deriveChainPair` (whose `x` leg subtracts).
-    ///         `Laws.depositWithFee.pre` carries no positivity clause,
-    ///         like `deposit`'s — a bridge deposit's admissibility is
-    ///         settled by the bridge gate — so the only branch is the
-    ///         C-3 ceiling, and the `x == y` case (a recipient who IS
-    ///         the pool actor) still has to net both credits onto one
-    ///         cell.  Both legs are bounded, the second against the
-    ///         state the first already wrote: bounding them
-    ///         independently would miss their SUM when the two actors
-    ///         coincide.
+    /// @notice `depositWithFee` (Workstream SB three-leg): credit the
+    ///         recipient, then the pool's NET share
+    ///         `poolAmount − seedAmount`, then the reserve's
+    ///         `seedAmount`, each leg reading the already-written
+    ///         state.
+    /// @dev    Mirrors `VerifierWrites.deriveDepositWithFeeBalances` /
+    ///         `deriveChainTriple`.  The evaluated precondition is the
+    ///         law's four conjuncts — the C-3 ceiling per leg plus
+    ///         `seedAmount ≤ poolAmount` — and a failing conjunct
+    ///         returns all three pre-values (the no-op branch), never
+    ///         a truncated split.
+    ///
+    ///         **The seed bound is checked before the subtraction.**
+    ///         Lean's conjunct 2 reads the pool leg through `Nat`'s
+    ///         truncated `poolAmount - seedAmount`; checked `uint256`
+    ///         subtraction would REVERT on an over-seed split, and a
+    ///         revert is not a no-op verdict.  Evaluating the
+    ///         `seedAmount ≤ poolAmount` conjunct first is
+    ///         semantics-preserving — the CONJUNCTION is false either
+    ///         way — and keeps the arithmetic wrap-free (the
+    ///         `_planRefundBalances` idiom).
+    ///
+    ///         Every pairwise actor coincidence is a chain branch, not
+    ///         an assumption: a recipient who IS the pool, a pool that
+    ///         IS the reserve, and a recipient who IS the reserve each
+    ///         read the earlier write, and the published value for an
+    ///         earlier cell is the LAST write landing on it.
     function deriveDepositWithFeeBalances(
         uint256 recipientBal,
         uint256 poolBal,
+        uint256 reserveBal,
         uint64 recipient,
         uint64 poolActor,
+        uint64 reserveActor,
         uint256 userAmount,
-        uint256 poolAmount
-    ) internal pure returns (uint256 newRecipient, uint256 newPool) {
-        if (!creditFits(recipientBal, userAmount)) return (recipientBal, poolBal);
-        uint256 nx = recipientBal + userAmount;
-        uint256 creditPre = recipient == poolActor ? nx : poolBal;
-        if (!creditFits(creditPre, poolAmount)) return (recipientBal, poolBal);
-        uint256 ny = creditPre + poolAmount;
-        return (recipient == poolActor ? ny : nx, ny);
-    }
-
-    /// @notice `ammSwap`: credit the reserve at `fromResource`, debit
-    ///         it at `toResource`.
-    /// @dev    The one variant touching two DIFFERENT resources, so the
-    ///         cells are independent and `deriveChainPair` does not
-    ///         apply.  That is sound only because
-    ///         `fromResource != toResource` is a precondition conjunct
-    ///         rather than an assumption — it is checked here.
-    function deriveAmmSwapBalances(
-        uint256 fromBal,
-        uint256 toBal,
-        uint64 fromResource,
-        uint64 toResource,
-        uint256 amountIn,
-        uint256 amountOut
-    ) internal pure returns (uint256 newFrom, uint256 newTo) {
-        if (toBal >= amountOut && fromResource != toResource && amountIn > 0
-                && creditFits(fromBal, amountIn)) {
-            return (fromBal + amountIn, toBal - amountOut);
+        uint256 poolAmount,
+        uint256 seedAmount
+    )
+        internal
+        pure
+        returns (uint256 newRecipient, uint256 newPool, uint256 newReserve)
+    {
+        if (!creditFits(recipientBal, userAmount)
+                || seedAmount > poolAmount) {
+            return (recipientBal, poolBal, reserveBal);
         }
-        return (fromBal, toBal);
+        uint256 net = poolAmount - seedAmount;
+        uint256 nx = recipientBal + userAmount;
+        uint256 r2 = recipient == poolActor ? nx : poolBal;
+        if (!creditFits(r2, net)) return (recipientBal, poolBal, reserveBal);
+        uint256 ny = r2 + net;
+        uint256 r3 = poolActor == reserveActor
+            ? ny
+            : (recipient == reserveActor ? nx : reserveBal);
+        if (!creditFits(r3, seedAmount)) {
+            return (recipientBal, poolBal, reserveBal);
+        }
+        uint256 nz = r3 + seedAmount;
+        return (
+            reserveActor == recipient ? nz : (poolActor == recipient ? ny : nx),
+            reserveActor == poolActor ? nz : ny,
+            nz
+        );
     }
 
     /// @notice `reclaimAmmReserves`: the post-disable exact sweep.
@@ -586,6 +626,118 @@ library StepWrites {
                 reserveBal, poolBal, reserveActor, poolActor, amount, amount);
         }
         return (reserveBal, poolBal);
+    }
+
+    /// @notice `reserveSwap` (Workstream SB): the user-facing L2
+    ///         constant-product swap — the four-cell variant.  The
+    ///         quote is RE-DERIVED from the two proven reserve
+    ///         pre-values at the fixed `AmmMath.SWAP_FEE_BPS`, exactly
+    ///         the computation Lean's `Laws.reserveQuote` performs
+    ///         over the pre-state.
+    ///
+    /// @dev    Mirrors `FaultProof.deriveReserveSwapBalances`.  Every
+    ///         conjunct of the law's precondition is EVALUATED, never
+    ///         asserted — a failing one leaves all four cells at their
+    ///         pre-values, because a revert is not a verdict.  That
+    ///         includes the quote's own uint256 DOMAIN: Lean computes
+    ///         in `Nat`, so its law carries the
+    ///         `reserveQuoteDomainBounded` conjunct bounding the
+    ///         constant-product numerator and denominator below
+    ///         `2^256`; this mirror evaluates those bounds wrap-free
+    ///         (the `_planRefundBalances` idiom) BEFORE touching
+    ///         checked arithmetic, so an out-of-domain swap is the
+    ///         same no-op on both stacks.
+    ///
+    /// @param  preUserFrom the user's pre-value at `fromResource`.
+    /// @param  preResFrom  the reserve's pre-value at `fromResource`.
+    /// @param  preResTo    the reserve's pre-value at `toResource`.
+    /// @param  preUserTo   the user's pre-value at `toResource`.
+    function deriveReserveSwapBalances(
+        uint256 preUserFrom,
+        uint256 preResFrom,
+        uint256 preResTo,
+        uint256 preUserTo,
+        uint64 fromResource,
+        uint64 toResource,
+        uint64 user,
+        uint64 reserveActor,
+        uint256 amountIn,
+        uint256 minAmountOut
+    )
+        internal
+        pure
+        returns (
+            uint256 newUserFrom,
+            uint256 newResFrom,
+            uint256 newResTo,
+            uint256 newUserTo
+        )
+    {
+        // The q-free conjuncts, including the two domain bounds —
+        // checked first so the quote below cannot revert.
+        bool ok = amountIn > 0 && fromResource != toResource
+            && user != reserveActor && preUserFrom >= amountIn
+            // The minimum-liquidity floor's two ENTRY legs.  The
+            // post-swap leg needs the quote and so is checked below.
+            && preResFrom >= AmmMath.MINIMUM_LIQUIDITY
+            && preResTo >= AmmMath.MINIMUM_LIQUIDITY
+            && creditFits(preResFrom, amountIn)
+            && _reserveSwapDomainOk(amountIn, preResFrom, preResTo);
+        if (!ok) return (preUserFrom, preResFrom, preResTo, preUserTo);
+        // In-domain: every intermediate below fits uint256, so checked
+        // arithmetic cannot revert (and `getAmountOut`'s own guards —
+        // positive input, live reserves, fee < 100% — are established).
+        uint256 q = AmmMath.getAmountOut(
+            amountIn, preResFrom, preResTo, AmmMath.SWAP_FEE_BPS);
+        // The slippage floor (`max 1 minAmountOut <= q` — never a
+        // zero output) and the user-credit ceiling.
+        if ((minAmountOut > 1 ? minAmountOut : 1) > q
+                || !creditFits(preUserTo, q)
+                // The floor's POST-swap leg: the output reserve must
+                // still clear it once the quote is deducted.  `q <
+                // preResTo` strictly, so the subtraction is safe here.
+                || preResTo - q < AmmMath.MINIMUM_LIQUIDITY) {
+            return (preUserFrom, preResFrom, preResTo, preUserTo);
+        }
+        // The four writes, in the law's order.  `q < preResTo`
+        // strictly (the no-drain guarantee of `getAmountOut`), so the
+        // reserve debit cannot underflow.
+        return (
+            preUserFrom - amountIn,
+            preResFrom + amountIn,
+            preResTo - q,
+            preUserTo + q
+        );
+    }
+
+    /// @dev The `reserveQuoteDomainBounded` mirror: the constant-
+    ///      product numerator `amountIn × (10⁴ − fee) × reserveOut`
+    ///      and denominator `reserveIn × 10⁴ + amountIn × (10⁴ − fee)`
+    ///      both fit a uint256, evaluated wrap-free.
+    ///
+    ///      Exactly equivalent to the Lean conjunct WITHIN the law's
+    ///      conjunction: the divide-back checks are blind to a zero
+    ///      operand, but `amountIn > 0`, `reserveIn > 0` and
+    ///      `reserveOut > 0` are conjuncts of the same precondition,
+    ///      so the two evaluations cannot disagree on any input the
+    ///      rest of the conjunction admits.
+    function _reserveSwapDomainOk(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) private pure returns (bool ok) {
+        unchecked {
+            uint256 w = AmmMath.BPS_DENOMINATOR - AmmMath.SWAP_FEE_BPS;
+            uint256 aiw = amountIn * w;
+            bool aiwFits = amountIn == 0 || aiw / amountIn == w;
+            uint256 num = aiw * reserveOut;
+            bool numFits = aiwFits && (aiw == 0 || num / aiw == reserveOut);
+            uint256 ri = reserveIn * AmmMath.BPS_DENOMINATOR;
+            bool riFits =
+                reserveIn == 0 || ri / reserveIn == AmmMath.BPS_DENOMINATOR;
+            uint256 den = ri + aiw;
+            ok = numFits && riFits && den >= ri;
+        }
     }
 
     /* ---------------------------------------------------------- */
@@ -694,19 +846,33 @@ library StepWrites {
     /// @notice `withdraw`'s pending-withdrawal write.
     /// @dev    Mirrors `Encoding.Bridge.PendingWithdrawal.encode`:
     ///         `uint resource || bytes recipient || amount amount ||
-    ///         uint l2LogIndex`.  The recipient rides the byte-string
-    ///         encoder, not a raw 20-byte splat.
+    ///         uint l2LogIndex || uint wdId`.  The recipient rides the
+    ///         byte-string encoder, not a raw 20-byte splat.
+    ///
+    ///         `wdId` is the leaf's own claim about which key it
+    ///         occupies, and `KnomosisBridge.withdrawWithProof` binds a
+    ///         submitted proof's index to it.  It is APPENDED rather
+    ///         than prepended so every preceding field keeps its
+    ///         offset — the decoders read sequentially, so position
+    ///         costs nothing, and a layout change that moved existing
+    ///         fields would be a second consensus change riding along
+    ///         with this one.
+    ///
+    /// @param  wdId the withdrawal id, which is also the cell key the
+    ///         verifier derived this write for.
     function derivePendingCellValue(
         uint256 resource,
         bytes memory recipientL1,
         uint256 amount,
-        uint256 l2LogIndex
+        uint256 l2LogIndex,
+        uint256 wdId
     ) internal pure returns (bytes memory) {
         return bytes.concat(
             CBEEncode.uintValue(resource),
             CBEEncode.bytesValue(recipientL1),
             CBEEncode.amountValue(amount),
-            CBEEncode.uintValue(l2LogIndex)
+            CBEEncode.uintValue(l2LogIndex),
+            CBEEncode.uintValue(wdId)
         );
     }
 
@@ -755,9 +921,13 @@ library StepWrites {
     ///
     ///         False on exactly the two bulk variants — whose write set
     ///         is the actor set at a resource, which an L1 holding only
-    ///         the pre-root cannot enumerate — and on unknown kinds.
+    ///         the pre-root cannot enumerate — on the retired kind 23
+    ///         (the L1-AMM `ammSwap` mirror, a permanent hole the L2
+    ///         decoder refuses like a never-assigned tag), and on
+    ///         unknown kinds.
     function isAdjudicable(uint8 actionKind) internal pure returns (bool) {
-        return actionKind <= 24 && actionKind != 6 && actionKind != 7;
+        return actionKind <= 25 && actionKind != 6 && actionKind != 7
+            && actionKind != 23;
     }
 
     /// @notice The action fields are shorter than the variant's layout.
@@ -780,12 +950,17 @@ library StepWrites {
     /// @dev The nonce + epoch-budget pair every action writes, appended
     ///      after the variant's own cells.  `CellKind.Nonce = 1`,
     ///      `CellKind.EpochBudget = 13`.
-    function _appendUniform(Cell[] memory out, uint256 at, uint64 signer)
+    ///
+    ///      `slot` is the index of the FIRST of the two; the pair
+    ///      occupies `slot` and `slot + 1`.  Named `slot` rather than
+    ///      `at` because solc reserves `at` as a future keyword and
+    ///      warns on it as an identifier.
+    function _appendUniform(Cell[] memory out, uint256 slot, uint64 signer)
         private
         pure
     {
-        out[at] = Cell({kind: 1, keyA: signer, keyB: 0});
-        out[at + 1] = Cell({kind: 13, keyA: signer, keyB: 0});
+        out[slot] = Cell({kind: 1, keyA: signer, keyB: 0});
+        out[slot + 1] = Cell({kind: 13, keyA: signer, keyB: 0});
     }
 
     /// @notice **The cells an action writes**, mirroring
@@ -858,16 +1033,22 @@ library StepWrites {
             // which is why `Action.stateWriteCells` exists.
             out[4] = Cell({kind: 5, keyA: nextWdIdPre, keyB: 0});
         } else if (actionKind == 19) {                  // depositWithFee
-            _need(actionKind, fields, 104);
-            out = new Cell[](6);
+            // Workstream SB three-leg: the balance cells LEAD the set
+            // (recipient, pool, then the canonical AMM reserve — the
+            // seed target the compiled law pins), so the plan's slots
+            // 0..2 are this variant's three chained credits.  The
+            // appended seedAmount widened the fields 104 → 136 bytes.
+            _need(actionKind, fields, 136);
+            out = new Cell[](7);
             uint64 r = _fieldUint64(fields, 0);
             uint64 recipient = _fieldUint64(fields, 8);
             out[0] = Cell({kind: 0, keyA: r, keyB: recipient});
             out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 16)});
+            out[2] = Cell({kind: 0, keyA: r, keyB: AMM_RESERVE_ACTOR});
             // depositId sits after BOTH 32-byte amounts and budgetGrant.
-            out[2] = Cell({kind: 4, keyA: _fieldUint64(fields, 96), keyB: 0});
-            _appendUniform(out, 3, signer);
-            out[5] = Cell({kind: 13, keyA: recipient, keyB: 0});
+            out[3] = Cell({kind: 4, keyA: _fieldUint64(fields, 96), keyB: 0});
+            _appendUniform(out, 4, signer);
+            out[6] = Cell({kind: 13, keyA: recipient, keyB: 0});
         } else if (actionKind == 20 || actionKind == 22) {
             // topUpActionBudget / claimBudgetRefund: `gr || _ || _ || pa`.
             // The middle pair straddles a 32-byte amount, so `pa` is
@@ -886,14 +1067,6 @@ library StepWrites {
             out[1] = Cell({kind: 0, keyA: gr, keyB: _fieldUint64(fields, 56)});
             _appendUniform(out, 2, signer);
             out[4] = Cell({kind: 13, keyA: _fieldUint64(fields, 0), keyB: 0});
-        } else if (actionKind == 23) {                  // ammSwap
-            // The reserve actor follows BOTH 32-byte amounts.
-            _need(actionKind, fields, 88);
-            out = new Cell[](4);
-            uint64 reserveActor = _fieldUint64(fields, 80);
-            out[0] = Cell({kind: 0, keyA: _fieldUint64(fields, 0), keyB: reserveActor});
-            out[1] = Cell({kind: 0, keyA: _fieldUint64(fields, 8), keyB: reserveActor});
-            _appendUniform(out, 2, signer);
         } else if (actionKind == 24) {                  // reclaimAmmReserves
             // Both actors follow the 32-byte amount at offset 8.
             _need(actionKind, fields, 56);
@@ -902,6 +1075,24 @@ library StepWrites {
             out[0] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 40)});
             out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 48)});
             _appendUniform(out, 2, signer);
+        } else if (actionKind == 25) {                  // reserveSwap
+            // fromResource @0, toResource @8, user @16, then the two
+            // 32-byte amounts; the reserve actor follows BOTH at @88.
+            // FOUR balance cells, in the law's write order (user debit
+            // at from, reserve credit at from, reserve debit at to,
+            // user credit at to) — the first variant whose plan is a
+            // quad rather than a pair.
+            _need(actionKind, fields, 96);
+            out = new Cell[](6);
+            uint64 fromResource = _fieldUint64(fields, 0);
+            uint64 toResource = _fieldUint64(fields, 8);
+            uint64 user = _fieldUint64(fields, 16);
+            uint64 reserveActor = _fieldUint64(fields, 88);
+            out[0] = Cell({kind: 0, keyA: fromResource, keyB: user});
+            out[1] = Cell({kind: 0, keyA: fromResource, keyB: reserveActor});
+            out[2] = Cell({kind: 0, keyA: toResource, keyB: reserveActor});
+            out[3] = Cell({kind: 0, keyA: toResource, keyB: user});
+            _appendUniform(out, 4, signer);
         } else {
             // The kernel-identity family (3, 8, 9, 10, 11, 17, 18):
             // nothing but the uniform pair.  Enumerated by exclusion
@@ -1005,6 +1196,7 @@ library StepWrites {
         bytes memory targetValue,
         uint64 signer,
         uint64 target,
+        bool grants,
         uint64 grantRecipient,
         uint256 grantAmount,
         uint256 refundExtra
@@ -1013,7 +1205,7 @@ library StepWrites {
             decodeBudgetPolicy(policyValue),
             decodeActorBudget(signerValue),
             decodeActorBudget(targetValue),
-            signer, target, grantRecipient, grantAmount, refundExtra
+            signer, target, grants, grantRecipient, grantAmount, refundExtra
         );
         return CBEEncode.epochBudgetValue(out.lastSeenEpoch, out.budgetBalance);
     }

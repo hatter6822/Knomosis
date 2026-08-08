@@ -29,6 +29,7 @@ and a thread-per-connection model) over `rustls 0.23`.  Its only new
 |-------|------|------|---------------|
 | `rustls` | normal | Native in-process HTTPS / mTLS (G4.2, `src/http/tls.rs`) **and** the gateway's whole HTTP stack (after the `tiny_http` retirement). | The **workspace-pinned `rustls 0.23`** (TLS 1.3, the `ring` backend) — the SAME audited stack `knomosis-host` already uses.  Adds **no new crate** to the graph (rustls 0.23 + its transitive deps were already present via `knomosis-host`).  PEM cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders, and the `--mtls-crl` CRL parsing goes through rustls's re-exported `pki_types::pem::PemObject` — the maintained parser that replaced the retired `rustls-pemfile` (RUSTSEC-2025-0134). |
 | `tracing-subscriber` (feature `json`) | normal | The gateway installs its own structured-log subscriber (`src/logging.rs`, `--log-format json\|text`); cli-common is text-only and the gateway is the first WU needing JSON. | The same workspace-pinned crate the sibling crates use, with the additive `json` feature.  That feature pulls two new transitive crates — `tracing-serde` and `valuable`, both MIT (on the allow-list, §below). |
+| `ring` | normal | The SHA-256 the G2.4 idempotency cache fingerprints request bodies with (`src/submit/idempotency.rs::fingerprint`). | Adds **no new crate and no new code**: `ring 0.17` is already compiled into this binary as rustls 0.23's crypto backend (see the `rustls` row), so the direct edge only names what is already linked.  The fingerprint has to be cryptographic — a collision there is not a cache miss but one action receiving another's verdict while never being submitted, so the 64-bit `DefaultHasher` that namespaces credentials (where a collision is harmless) is not adequate.  `default-features = false` + `alloc`: the digest API only, no `std` file/rand surface. |
 | `subtle` | normal | Constant-time bearer-token comparison (G1.4 auth gate). | The same audited, `no_std`, constant-time crate the secp256k1 verifier already uses workspace-wide; eliminates an early-return timing oracle on the secret token. |
 | `signal-hook` | normal | SIGTERM/SIGINT graceful-shutdown trigger (G4.4). | A safe `sigaction` wrapper — the crate's `unsafe = forbid` rules out a hand-rolled handler.  `default-features = false` pulls only the atomic-flag registration (`flag::register`), not the channel/iterator helpers. |
 
@@ -43,6 +44,34 @@ Both dev deps were already present at the workspace level (used by sibling
 crates), so they add **no new crate** to the dependency graph — only a new
 *edge* from the gateway.  (`tracing-subscriber` moved from a dev-only to a
 *production* dependency when the gateway took over its own log subscriber.)
+
+## Workspace-level addition: `crypto-bigint` (Workstream AM)
+
+Recorded here because `runtime/deny.toml` is workspace-wide and this is the
+repo's dependency-audit document; the crate is not a gateway dependency in
+particular.
+
+| Crate | Kind | Role | Justification |
+|-------|------|------|---------------|
+| `crypto-bigint` | normal, workspace-pinned `0.5` | The const-generic `U256` behind `knomosis-amount`'s 256-bit accounting scalar. | **Adds no new crate and no new code to any binary**: `crypto-bigint 0.5.5` was already in `Cargo.lock` transitively as `k256`'s arithmetic backend, so it was already compiled in and already evaluated by `cargo-deny`, which walks the whole graph rather than the direct edges.  The promotion to a DIRECT dependency exists so the version is a reviewed workspace decision rather than whatever `k256`'s resolver happens to select — the same minor-pin discipline the plan §7 risk register applies to the other audited crypto crates.  `default-features = false` drops the default `rand` feature (and with it `rand_core/std`); the `serde` feature is deliberately left OFF, because `Amount` serialises as a decimal string rather than in the engine's own representation, so `serdect` never enters the graph. |
+
+Policy check, all four clauses:
+
+  * **licence** — `Apache-2.0 OR MIT`, satisfied by the existing allow-list
+    (§below); no new entry needed;
+  * **source** — crates.io, satisfying `[sources] unknown-registry = "deny"`;
+  * **wildcards** — pinned `"0.5"`, not `*`;
+  * **multiple-versions** — the lock resolves exactly ONE `crypto-bigint`, so
+    the `warn`-level duplicate rule is not tripped.
+
+The newtype wrapping it is deliberate rather than cosmetic.  `crypto-bigint` is
+a constant-time crate: its `checked_*` return `CtOption` and its comparisons
+return `Choice`, which is the wrong ergonomics for a non-secret accounting value
+and needlessly slow for one.  Its `Display` is also HEXADECIMAL, while the
+gateway §6.2 envelope renders every bigint as a decimal string — so decimal
+formatting is hand-written in `knomosis-amount` either way.  Wrapping the engine
+keeps the workspace's public surface accounting-shaped and stops a crypto
+crate's release cadence from driving an accounting type's API.
 
 ## Licence policy (verified)
 

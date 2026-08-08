@@ -123,6 +123,7 @@ contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness, BoldTestSupport 
                 enableLiquityAutoCircuitTrigger: enableAuto,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1230,7 +1231,8 @@ contract BoldCircuitBreakerTest is Test, WithdrawalFlowHarness, BoldTestSupport 
         uint64 logIdx
     ) internal {
         uint64 leafIdx = 0;
-        bytes memory leaf = _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, leafIdx);
+        bytes memory leaf = _encodeWithdrawalLeaf(
+            RESOURCE_BOLD, recipient, wAmount, leafIdx + 7, leafIdx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
         bridge.submitStateRoot(root, logIdx, _signStateRoot(bridge, root, logIdx));
@@ -1322,6 +1324,7 @@ contract BridgeSelfRoleProbe is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1449,6 +1452,7 @@ contract BoldCircuitBreakerInvariantTest is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

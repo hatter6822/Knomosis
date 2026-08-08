@@ -1456,9 +1456,11 @@ def test_pendingWithdrawal_encode_injective_api : TestCase := {
         wd₁.resource.toNat < 256 ^ 8 →
         wd₁.amount < 256 ^ 32 →
         wd₁.l2LogIndex < 256 ^ 8 →
+        wd₁.wdId < 256 ^ 8 →
         wd₂.resource.toNat < 256 ^ 8 →
         wd₂.amount < 256 ^ 32 →
         wd₂.l2LogIndex < 256 ^ 8 →
+        wd₂.wdId < 256 ^ 8 →
         Bridge.PendingWithdrawal.encode wd₁ = Bridge.PendingWithdrawal.encode wd₂ →
         wd₁ = wd₂ :=
       Bridge.PendingWithdrawal.encode_injective
@@ -1488,9 +1490,11 @@ def test_pendingWithdrawal_encodeAsBytes_injective_api : TestCase := {
         wd₁.resource.toNat < 256 ^ 8 →
         wd₁.amount < 256 ^ 32 →
         wd₁.l2LogIndex < 256 ^ 8 →
+        wd₁.wdId < 256 ^ 8 →
         wd₂.resource.toNat < 256 ^ 8 →
         wd₂.amount < 256 ^ 32 →
         wd₂.l2LogIndex < 256 ^ 8 →
+        wd₂.wdId < 256 ^ 8 →
         Bridge.PendingWithdrawal.encodeAsBytes wd₁ = Bridge.PendingWithdrawal.encodeAsBytes wd₂ →
         wd₁ = wd₂ :=
       Bridge.PendingWithdrawal.encodeAsBytes_injective
@@ -1510,9 +1514,11 @@ def test_bridgeState_encodePending_injective_api : TestCase := {
         (∀ p ∈ bs₁.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₁.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧
+            p.2.l2LogIndex < 256 ^ 8 ∧ p.2.wdId < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧
+            p.2.l2LogIndex < 256 ^ 8 ∧ p.2.wdId < 256 ^ 8) →
         Bridge.BridgeState.encodePending bs₁ = Bridge.BridgeState.encodePending bs₂ →
         bs₁.pending.Equiv bs₂.pending :=
       Bridge.BridgeState.encodePending_injective
@@ -1541,19 +1547,17 @@ def test_bridgeState_encode_injective_api : TestCase := {
         (∀ p ∈ bs₁.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₁.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧
+            p.2.l2LogIndex < 256 ^ 8 ∧ p.2.wdId < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 32 ∧
+            p.2.l2LogIndex < 256 ^ 8 ∧ p.2.wdId < 256 ^ 8) →
         bs₁.nextWdId < 256 ^ 8 → bs₂.nextWdId < 256 ^ 8 →
-        bs₁.ammReserveEth < 256 ^ 32 → bs₂.ammReserveEth < 256 ^ 32 →
-        bs₁.ammReserveBold < 256 ^ 32 → bs₂.ammReserveBold < 256 ^ 32 →
         bs₁.boldTvlCap < 256 ^ 32 → bs₂.boldTvlCap < 256 ^ 32 →
         bs₁.boldTotalLockedValue < 256 ^ 32 → bs₂.boldTotalLockedValue < 256 ^ 32 →
         Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂ →
         bs₁.consumed.Equiv bs₂.consumed ∧ bs₁.pending.Equiv bs₂.pending ∧
         bs₁.nextWdId = bs₂.nextWdId ∧
-        bs₁.ammReserveEth = bs₂.ammReserveEth ∧
-        bs₁.ammReserveBold = bs₂.ammReserveBold ∧
         bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
         bs₁.boldTvlCap = bs₂.boldTvlCap ∧
         bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue ∧
@@ -1599,8 +1603,6 @@ def test_extendedState_extEq_api : TestCase := {
           es₁.bridge.consumed.Equiv es₂.bridge.consumed ∧
           es₁.bridge.pending.Equiv es₂.bridge.pending ∧
           es₁.bridge.nextWdId = es₂.bridge.nextWdId ∧
-          es₁.bridge.ammReserveEth = es₂.bridge.ammReserveEth ∧
-          es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold ∧
           es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed ∧
           es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap ∧
           es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue ∧

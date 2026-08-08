@@ -171,23 +171,31 @@ def verifySelfTestPk : ByteArray :=
   ⟨#[0x03,0x1b,0x84,0xc5,0x56,0x7b,0x12,0x64,0x40,0x99,0x5d,0x3e,0xd5,0xaa,0xba,0x05,
      0x65,0xd7,0x1e,0x18,0x34,0x60,0x48,0x19,0xff,0x9c,0x17,0xf5,0xe9,0xd5,0xdd,0x07,0x8f]⟩
 
-/-- The 32-byte pre-hashed message of the self-test vector (`0x00…01`). -/
+/-- The RAW message bytes of the self-test vector (`0x00…01`).  Under
+    the v2 wire semantics the adaptor keccak256-hashes the raw bytes
+    itself — this constant is the pre-image, not a digest. -/
 def verifySelfTestMsg : ByteArray := ⟨(Array.replicate 31 (0 : UInt8)).push 1⟩
 
 /-- A tampered message (`0x00…02`) — the self-test's negative control:
     the good signature must NOT verify against it. -/
 def verifySelfTestMsgTampered : ByteArray := ⟨(Array.replicate 31 (0 : UInt8)).push 2⟩
 
-/-- The 64-byte low-s `(r, s)` signature of the self-test vector: signing
-    `verifySelfTestMsg` with secret key `0x01…01` (RFC 6979, low-s).  The
-    production `knomosis_verify_ecdsa` adaptor ACCEPTS `(pk, msg, sig)`;
-    the fail-closed fallback REJECTS it.  Hardcoded (not hex-decoded)
-    because `decodeHexString` is defined later in this module. -/
+/-- The 65-byte wire signature `(r ‖ s ‖ v)` of the self-test vector:
+    signing `keccak256 verifySelfTestMsg` with secret key `0x01…01`
+    (RFC 6979, low-s, `v = 27 + recovery id`).  The production
+    `knomosis_verify_ecdsa` adaptor (v2 wire semantics —
+    `verify_signed_message`) ACCEPTS `(pk, msg, sig)`; the fail-closed
+    fallback REJECTS it.  Hardcoded (not hex-decoded) because
+    `decodeHexString` is defined later in this module; the Rust side
+    re-derives and pins these exact bytes
+    (`knomosis-verify-secp256k1`'s `lean_vector_bytes_pinned`), so a
+    drift on either side breaks that build. -/
 def verifySelfTestSig : ByteArray :=
-  ⟨#[0xe2,0x5f,0x09,0xcf,0xcb,0x29,0xfb,0x4c,0x54,0xc2,0xb5,0xce,0xb4,0x82,0x99,0x9f,
-     0xe9,0x82,0x97,0x9a,0x13,0xb9,0x7d,0xd2,0xfc,0x26,0xba,0x45,0x2d,0x06,0x71,0xef,
-     0x2b,0x0a,0x5e,0x55,0x82,0x98,0x24,0xf7,0xe1,0xbb,0xa9,0x3e,0x70,0xad,0x7b,0x3d,
-     0x3a,0x0f,0xd2,0x2e,0xce,0x02,0xc0,0x28,0x54,0x08,0x88,0x6e,0x30,0xa6,0xcb,0x99]⟩
+  ⟨#[0x39,0x72,0xb8,0x89,0xbe,0x2c,0x40,0x55,0x50,0x46,0xbd,0x8c,0x23,0xe5,0x45,0x4c,
+     0x04,0xa8,0xb8,0xcb,0xea,0x3f,0xa5,0xb6,0xe5,0xb3,0xc2,0x82,0x37,0x5c,0x6e,0xd7,
+     0x25,0xdc,0x29,0xde,0x12,0xbc,0x83,0xdf,0xdc,0x12,0x0b,0x20,0x84,0x50,0xf1,0x87,
+     0x26,0x68,0xba,0x69,0xc2,0x44,0xe9,0xec,0x9a,0x6a,0xe6,0x13,0x27,0x6a,0x98,0xee,
+     0x1c]⟩
 
 /-- Subcommand: `knomosis verify-check`.  The signature-verifier
     counterpart of `hash-check` (security-review F-2).  Exits `0` iff a
@@ -633,12 +641,21 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
             IO.println "]"
             pure 0
 
-/-- Subcommand: `knomosis export-terminate-bundle LOG IDX`.
+/-- Subcommand: `knomosis export-terminate-bundle LOG IDX
+    [PREV_END END]`.
 
     Replays the log prefix `entries[0..idx]` to obtain the
     pre-state for the action at log index `idx`, decodes that
     action (via `entries[idx]`), and emits the canonical
     terminate-on-single-step bundle as a single line of JSON.
+
+    Workstream SB: with the optional `PREV_END END` batch bounds,
+    the JSON additionally carries the action's batch-inclusion
+    binding — the bounds, the SMT key, the leaf commit, the
+    signature the leaf binds, and the inclusion wire against the
+    batch's actions root — everything the batched
+    `terminateOnSingleStep` needs to authenticate the disputed
+    action against the submitted record.
 
     The off-chain observer (`knomosis-faultproof-observer`) consumes
     this JSON to construct calldata for the L1 contract's
@@ -659,7 +676,8 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
 def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (batchArgs? : Option (String × String) := none) : IO UInt32 := do
   let _ := deploymentId
   -- GP.7.4: the terminate bundle's `expectedPostCommit` +
   -- `cellProofs` are computed against `commitExtendedState preState`,
@@ -679,6 +697,22 @@ def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
     IO.eprintln s!"knomosis export-terminate-bundle: idx '{idxStr}' is not a Nat"
     pure 2
   | some idx =>
+    -- Workstream SB: optional batch bounds.  When supplied, the bundle
+    -- additionally carries the action's inclusion proof against the
+    -- batch's actionsRoot (the R7 leaf binds the signature, so the
+    -- signature rides along).  Parse both or neither.
+    let batchBounds? : Option (Nat × Nat) ← do
+      match batchArgs? with
+      | none => pure none
+      | some (prevEndStr, endStr) =>
+        match prevEndStr.toNat?, endStr.toNat? with
+        | some p, some e => pure (some (p, e))
+        | _, _ =>
+          IO.eprintln s!"knomosis export-terminate-bundle: batch bounds \
+                        '{prevEndStr}' '{endStr}' are not Nats"
+          pure none
+    if batchArgs?.isSome && batchBounds?.isNone then
+      return 2
     let (entries, _, frameErr?) ← readAllEntries logPath
     if let some err := frameErr? then
       IO.eprintln s!"warning: log has partial tail ({repr err})"
@@ -694,13 +728,136 @@ def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
         IO.eprintln "knomosis export-terminate-bundle: internal error (idx within bounds but list access failed)"
         pure 1
       | some entry =>
+        -- The bundle is built AT the disputed index: `withdraw`'s
+        -- pending record carries the l2LogIndex, so the fold must
+        -- know which index it adjudicates.  (Previously defaulted to
+        -- 0, deriving the wrong pending-cell value — and hence the
+        -- wrong expected post root — for any withdraw past index 0.)
         let bundle :=
-          LegalKernel.FaultProof.TerminateBundle.buildTerminateBundle preState entry
+          LegalKernel.FaultProof.TerminateBundle.buildTerminateBundle
+            preState entry idx
+        -- The batch binding, when bounds were supplied.
+        let batch? ← do
+          match batchBounds? with
+          | none => pure (none : Option
+              LegalKernel.FaultProof.TerminateBundle.BatchBinding)
+          | some (prevEnd, endIdx) =>
+            match LegalKernel.FaultProof.TerminateBundle.buildBatchBinding
+                entries prevEnd endIdx idx with
+            | some b => pure (some b)
+            | none =>
+              IO.eprintln s!"knomosis export-terminate-bundle: idx {idx} is \
+                            not inside batch [{prevEnd}, {endIdx}) of a \
+                            {entries.length}-entry log"
+              pure none
+        if batchBounds?.isSome && batch?.isNone then
+          return 2
         let fixtureId := s!"log[{idx}]"
         IO.println
           (LegalKernel.FaultProof.TerminateBundle.formatTerminateBundleJson
-            fixtureId bundle)
+            fixtureId bundle batch?)
         pure 0
+
+/-- Subcommand: `knomosis export-batch LOG PREV_END END`
+    (Workstream SB).
+
+    Emits the two values a batched `submitStateRoot` consumes for the
+    batch covering log indices `[PREV_END, END)` — the post-state
+    commit after the batch's last entry (`commitExtendedState` of the
+    replayed state) and the batch's actions root
+    (`FaultProof.actionsRoot`) — plus the bounds, as one JSON line.
+
+    One log read, one prefix replay, one root fold: O(N + B·depth)
+    for an N-entry log and a B-entry batch — never a per-index
+    subprocess loop.
+
+    Exit codes:
+    * 0 — success.
+    * 1 — log parse error.
+    * 2 — malformed / out-of-range bounds, or a gas-pool-config
+      mismatch. -/
+def cmdExportBatch (logPath : System.FilePath)
+    (prevEndStr endStr : String)
+    (genesis : ExtendedState := demoGenesis)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+  -- The state commit includes `commitLocalPolicies`, so the gas-pool
+  -- genesis declaration affects it — same cross-check as
+  -- export-terminate-bundle (and the budget config is likewise
+  -- irrelevant: `commitExtendedState` excludes it).
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
+  match prevEndStr.toNat?, endStr.toNat? with
+  | some prevEnd, some endIdx =>
+    if prevEnd ≥ endIdx then
+      IO.eprintln s!"knomosis export-batch: empty batch \
+                    [{prevEnd}, {endIdx}) — END must exceed PREV_END"
+      return 2
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some err := frameErr? then
+      IO.eprintln s!"warning: log has partial tail ({repr err})"
+    if endIdx > entries.length then
+      IO.eprintln
+        s!"knomosis export-batch: end {endIdx} > log length {entries.length}"
+      return 2
+    let postState := LegalKernel.Disputes.kernelOnlyReplay genesis
+      (entries.take endIdx)
+    let stateCommit := LegalKernel.FaultProof.commitExtendedState postState
+    let batch := (entries.take endIdx).drop prevEnd
+    let root := LegalKernel.FaultProof.actionsRoot prevEnd batch
+    IO.println
+      (LegalKernel.FaultProof.TerminateBundle.formatBatchExportJson
+        prevEnd endIdx stateCommit root)
+    pure 0
+  | _, _ =>
+    IO.eprintln s!"knomosis export-batch: bounds '{prevEndStr}' \
+                  '{endStr}' are not Nats"
+    pure 2
+
+/-- Subcommand: `knomosis export-action-proof LOG PREV_END END IDX`
+    (Workstream SB).
+
+    Emits the standalone batch-inclusion proof for the action at log
+    index `IDX` within the batch `[PREV_END, END)`: the action's own
+    wire data (kind, fields, signer, signature — the leaf binds all
+    four) plus the compressed inclusion wire against the batch's
+    actions root.
+
+    NO replay and NO gas-pool check: the actions root is a function
+    of the log entries alone (actions + signatures), never of the
+    state, so this command is state-config-independent.
+
+    Exit codes:
+    * 0 — success.
+    * 1 — log parse error.
+    * 2 — malformed bounds, or `IDX` outside the batch. -/
+def cmdExportActionProof (logPath : System.FilePath)
+    (prevEndStr endStr idxStr : String) : IO UInt32 := do
+  match prevEndStr.toNat?, endStr.toNat?, idxStr.toNat? with
+  | some prevEnd, some endIdx, some idx =>
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some err := frameErr? then
+      IO.eprintln s!"warning: log has partial tail ({repr err})"
+    match LegalKernel.FaultProof.TerminateBundle.buildBatchBinding
+        entries prevEnd endIdx idx with
+    | none =>
+      IO.eprintln s!"knomosis export-action-proof: idx {idx} is not inside \
+                    batch [{prevEnd}, {endIdx}) of a {entries.length}-entry log"
+      pure 2
+    | some binding =>
+      match entries[idx]? with
+      | none =>
+        IO.eprintln "knomosis export-action-proof: internal error (binding built but list access failed)"
+        pure 1
+      | some entry =>
+        IO.println
+          (LegalKernel.FaultProof.TerminateBundle.formatActionProofExportJson
+            binding entry)
+        pure 0
+  | _, _, _ =>
+    IO.eprintln s!"knomosis export-action-proof: arguments '{prevEndStr}' \
+                  '{endStr}' '{idxStr}' are not Nats"
+    pure 2
 
 /-- Format a `WithdrawalProof` as a hex-encoded summary string —
     leaf bytes + index + 64 sibling hashes.  Suitable for piping to
@@ -761,7 +918,9 @@ def cmdHelp : IO UInt32 := do
   IO.println "  knomosis [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID"
   IO.println "  knomosis [GLOBAL_FLAGS] replay-up-to      LOG IDX"
   IO.println "  knomosis [GLOBAL_FLAGS] export-cell-proofs LOG IDX SIGNER"
-  IO.println "  knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX"
+  IO.println "  knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX [PREV_END END]"
+  IO.println "  knomosis [GLOBAL_FLAGS] export-batch      LOG PREV_END END"
+  IO.println "  knomosis [GLOBAL_FLAGS] export-action-proof LOG PREV_END END IDX"
   IO.println "  knomosis [GLOBAL_FLAGS] extract-events    --log LOG"
   IO.println "  knomosis gas-pool-demo"
   IO.println "  knomosis help"
@@ -830,6 +989,16 @@ def cmdHelp : IO UInt32 := do
   IO.println "        log replays correctly only under the producing rate), so a"
   IO.println "        forgotten/changed flag fails with a clear `refund-rate"
   IO.println "        error` rather than a silently-rejected refund."
+  IO.println "  --amm-reserve"
+  IO.println "        Enable the Workstream-SB AMM-reserve genesis wiring:"
+  IO.println "        declares ammReservePolicy for ammReserveActor (ActorId 3)"
+  IO.println "        at genesis AND intersects ammReserveAuthorityPolicy plus"
+  IO.println "        reserveSwapBindingPolicy into the deployment policy, so"
+  IO.println "        the reserve key can sign NOTHING (it is a pure"
+  IO.println "        counterparty) and a user-signed reserveSwap (25) must"
+  IO.println "        name its own"
+  IO.println "        signer as `user` and the canonical reserve as its"
+  IO.println "        counterparty.  Off by default (genesis unchanged)."
   IO.println ""
   IO.println "Where:"
   IO.println "  LOG       path to the append-only transition log."
@@ -839,6 +1008,11 @@ def cmdHelp : IO UInt32 := do
   IO.println "  ID        a `WithdrawalId` (Nat) to look up in the snapshot."
   IO.println "  IDX       a `LogIndex` (Nat) for the replay-up-to subcommand."
   IO.println "  SIGNER    an `ActorId` (Nat) for the export-cell-proofs subcommand."
+  IO.println "  PREV_END  a batch's exclusive lower bound: the entry count already"
+  IO.println "            covered by earlier submissions (Workstream SB).  The"
+  IO.println "            batch covers log indices [PREV_END, END)."
+  IO.println "  END       the batch's exclusive upper bound (= its covered entry"
+  IO.println "            count, and the L1 record's index)."
   IO.println ""
   IO.println "See docs/abi.md for the on-disk and on-wire byte layouts."
   pure 0
@@ -1051,6 +1225,13 @@ structure GlobalFlags where
   /-- `--wei-per-budget-unit-bold <n>` value (GP.9.1): the BOLD-leg
       (resource 1) refund exchange rate.  See `refundRateEth`. -/
   refundRateBold : Option Nat := none
+  /-- `--amm-reserve` presence (Workstream SB / GP.11.6): opt the
+      deployment into the AMM-reserve genesis wiring — declare
+      `ammReservePolicy` for `ammReserveActor`, intersect
+      `ammReserveAuthorityPolicy` AND `reserveSwapBindingPolicy` into
+      the deployment policy.  Off by default (the genesis stays
+      byte-identical to the pre-SB one). -/
+  ammReserveEnabled : Bool := false
   /-- First malformed numeric budget flag encountered, if any (e.g.
       `--free-tier ten`).  Recorded rather than silently dropped so
       `main` can FAIL loudly instead of running under a different
@@ -1095,25 +1276,47 @@ def gasPoolConfig? (g : GlobalFlags) : Option Bridge.GasPoolConfig :=
     some { maxDrainPerActionEth := g.gasPoolEthCap.getD 0
          , maxDrainPerActionBold := g.gasPoolBoldCap.getD 0 }
 
+/-- The deployment's opt-in AMM-reserve config implied by the flags
+    (Workstream SB / GP.11.6): `some {}` when `--amm-reserve` is
+    supplied (the config carries no parameters today), `none`
+    otherwise (the AMM-reserve wiring is disabled, preserving the
+    pre-SB genesis byte-for-byte). -/
+def ammReserveConfig? (g : GlobalFlags) : Option Bridge.AmmReserveConfig :=
+  if g.ammReserveEnabled then some {} else none
+
 /-- The genesis `ExtendedState` to bootstrap / replay against: the demo
-    genesis with the parsed budget policy stamped in, and — when the
-    deployment opts into the gas pool (GP.7.4) — `gasPoolPolicy` declared
-    for `gasPoolActor` in `localPolicies`.  Both wirings are no-ops when
-    their flags are absent, so the default is the unchanged demo
-    genesis. -/
+    genesis with the parsed budget policy stamped in; — when the
+    deployment opts into the gas pool (GP.7.4) — `gasPoolPolicy`
+    declared for `gasPoolActor` in `localPolicies`; and — when it opts
+    into the AMM reserve (`--amm-reserve`, Workstream SB / GP.11.6) —
+    `ammReservePolicy` declared for `ammReserveActor`.  Every wiring is
+    a no-op when its flag is absent, so the default is the unchanged
+    demo genesis. -/
 def genesis (g : GlobalFlags) : ExtendedState :=
   let budgetGenesis :=
     match g.budgetPolicy? with
     | some bp => { demoGenesis with budgetPolicy := bp }
     | none => demoGenesis
-  Bridge.gasPoolGenesisStateOfConfig budgetGenesis g.gasPoolConfig?
+  Bridge.ammReserveGenesisStateOfConfig
+    (Bridge.gasPoolGenesisStateOfConfig budgetGenesis g.gasPoolConfig?)
+    g.ammReserveConfig?
 
 /-- The deployment `AuthorityPolicy` to admit against: the demo
     (`unrestricted`) policy, narrowed by `gasPoolAuthorityPolicy` when
-    the deployment opts into the gas pool (GP.7.4).  A no-op when the
-    gas-pool flags are absent (the plain `demoPolicy`). -/
+    the deployment opts into the gas pool (GP.7.4), and — when it opts
+    into the AMM reserve (Workstream SB / GP.11.6) — further narrowed
+    by `ammReserveAuthorityPolicy` (the reserve key may sign only
+    self-targeted `ammSwap`s) AND `reserveSwapBindingPolicy` (a
+    `reserveSwap` must name its SIGNER as the user and the canonical
+    `ammReserveActor` as the counterparty).  A no-op when the flags are
+    absent (the plain `demoPolicy`). -/
 def policy (g : GlobalFlags) : AuthorityPolicy :=
-  Bridge.gasPoolGenesisPolicyOfConfig demoPolicy g.gasPoolConfig?
+  let base := Bridge.gasPoolGenesisPolicyOfConfig demoPolicy g.gasPoolConfig?
+  match g.ammReserveConfig? with
+  | none => base
+  | some cfg =>
+    (Bridge.ammReserveGenesisPolicyOfConfig base (some cfg)).intersect
+      Bridge.reserveSwapBindingPolicy
 
 /-- `true` iff a `--budget-policy` value other than `"bounded"` was
     supplied (used to emit an operator warning). -/
@@ -1179,6 +1382,7 @@ def parseGlobalFlags (args : List String) : GlobalFlags :=
     | "--gas-pool-bold-cap" :: n :: rest => recordNatFlag (go rest) "--gas-pool-bold-cap" n (fun g v => { g with gasPoolBoldCap := some v })
     | "--wei-per-budget-unit-eth" :: n :: rest => recordNatFlag (go rest) "--wei-per-budget-unit-eth" n (fun g v => { g with refundRateEth := some v })
     | "--wei-per-budget-unit-bold" :: n :: rest => recordNatFlag (go rest) "--wei-per-budget-unit-bold" n (fun g v => { g with refundRateBold := some v })
+    | "--amm-reserve" :: rest => { go rest with ammReserveEnabled := true }
     | x :: rest =>
       let g := go rest
       { g with rest := x :: g.rest }
@@ -1278,6 +1482,18 @@ def main (args : List String) : IO UInt32 := do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
     cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId genesis gasPoolCfg
+  | ["export-terminate-bundle", log, idxStr, prevEndStr, endStr] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId genesis
+      gasPoolCfg (some (prevEndStr, endStr))
+  | ["export-batch", log, prevEndStr, endStr] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdExportBatch (System.FilePath.mk log) prevEndStr endStr genesis gasPoolCfg
+  | ["export-action-proof", log, prevEndStr, endStr, idxStr] => do
+    warnIfFallbackHash allowFallbackHash
+    cmdExportActionProof (System.FilePath.mk log) prevEndStr endStr idxStr
   | ["extract-events", "--log", log] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?

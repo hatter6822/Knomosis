@@ -148,9 +148,9 @@ def plannedBalances (read : BalanceReader)
       deriveDepositBalance read r recipient amount
   | .withdraw r sender amount _ =>
       deriveWithdrawBalance read r sender amount
-  | .depositWithFee r recipient poolActor userAmount poolAmount _ _ =>
+  | .depositWithFee r recipient poolActor userAmount poolAmount _ _ seedAmount =>
       deriveDepositWithFeeBalances read r recipient poolActor
-        userAmount poolAmount
+        userAmount poolAmount seedAmount Bridge.ammReserveActor
   | .topUpActionBudget gr gasAmount _ pa =>
       deriveTopUpBalances read gr signer pa gasAmount
   | .topUpActionBudgetFor recipient gr gasAmount _ pa =>
@@ -158,11 +158,11 @@ def plannedBalances (read : BalanceReader)
   | .claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa =>
       deriveRefundBalances read gr pa signer
         (budgetUnits * weiPerBudgetUnit)
-  | .ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      deriveAmmSwapBalances read fromResource toResource
-        amountIn amountOut reserveActor
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       deriveReclaimBalances read r reserveActor poolActor amount
+  | .reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      deriveReserveSwapBalances read fromResource toResource user amountIn
+        minAmountOut reserveActor
   -- The thirteen variants that write no balance cell at all.
   | _ => some []
 
@@ -236,17 +236,22 @@ def derivedCellValue (read : CellValueReader) (policyValue : ByteArray)
       some (deriveConsumedCellValue
         { resource := r, userAmount := amount
         , poolAmount := 0, budgetGrant := 0 })
-    | .depositWithFee r _ _ userAmount poolAmount bg _ =>
+    | .depositWithFee r _ _ userAmount poolAmount bg _ _ =>
       some (deriveConsumedCellValue
         { resource := r, userAmount := userAmount
         , poolAmount := poolAmount, budgetGrant := bg })
     | _ => none
-  | .bridgePending _ =>
+  | .bridgePending wid =>
     match a with
     | .withdraw r _ amount rcp =>
+      -- `wid` is the verifier's OWN cell key, re-derived from the
+      -- proven `.bridgeNextWdId` cell by `Action.writeCellsAt` — not
+      -- something the responder supplies — so taking the leaf's
+      -- claimed id from it makes "the leaf sits where it says it
+      -- does" true by construction on this side too.
       some (derivePendingCellValue
         { resource := r, recipient := rcp, amount := amount
-        , l2LogIndex := l2LogIndex })
+        , l2LogIndex := l2LogIndex, wdId := wid })
     | _ => none
   | .bridgeNextWdId =>
     match read t with
@@ -279,9 +284,9 @@ theorem plannedBalances_alias_consistent (read : BalanceReader) (a : Action)
       exact deriveDepositBalance_alias_consistent read r recipient amount plan h
   | withdraw r sender amount _ =>
       exact deriveWithdrawBalance_alias_consistent read r sender amount plan h
-  | depositWithFee r recipient poolActor userAmount poolAmount _ _ =>
+  | depositWithFee r recipient poolActor userAmount poolAmount _ _ seedAmount =>
       exact deriveDepositWithFeeBalances_alias_consistent read r recipient poolActor
-        userAmount poolAmount plan h
+        userAmount poolAmount seedAmount Bridge.ammReserveActor plan h
   | topUpActionBudget gr gasAmount _ pa =>
       exact deriveTopUpBalances_alias_consistent read gr signer pa gasAmount plan h
   | topUpActionBudgetFor recipient gr gasAmount _ pa =>
@@ -290,12 +295,12 @@ theorem plannedBalances_alias_consistent (read : BalanceReader) (a : Action)
   | claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa =>
       exact deriveRefundBalances_alias_consistent read gr pa signer
         (budgetUnits * weiPerBudgetUnit) plan h
-  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      exact deriveAmmSwapBalances_alias_consistent read fromResource toResource
-        amountIn amountOut reserveActor plan h
   | reclaimAmmReserves r amount reserveActor poolActor =>
       exact deriveReclaimBalances_alias_consistent read r reserveActor poolActor
         amount plan h
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      exact deriveReserveSwapBalances_alias_consistent read fromResource toResource
+        user amountIn minAmountOut reserveActor plan h
   -- The thirteen variants that write no balance cell at all.
   | _ => simp only [Option.some.injEq] at h; subst h; exact aliasConsistent_nil
 
@@ -552,7 +557,7 @@ Two hypotheses run through the section and neither is decoration:
     Without it the frontier may collapse two genuinely different cells,
     and a write to the collapsed one becomes invisible to the bundle.
   * `CanonicalBounds` — the state's balances fit the amount head.
-    Without it a balance past `2^128` encodes to bytes that decode to
+    Without it a balance past `2^256` encodes to bytes that decode to
     something else, so the reader would disagree with the state at a
     cell the bundle opened honestly.
 
@@ -584,7 +589,7 @@ theorem budgetPolicy_mem_multiFrontierOf (es : ExtendedState) (st : SignedAction
 
     The decode is where `CanonicalBounds` enters: `getCellValue` writes
     the balance through the 33-byte amount head, and that round-trips
-    only inside `2^128`.  Off the frontier the two readers genuinely
+    only inside `2^256`.  Off the frontier the two readers genuinely
     differ — the bundle's is `none` — which is the partiality the
     derivations rely on, so the membership hypothesis is not
     removable. -/
@@ -650,11 +655,12 @@ theorem plannedBalances_stepMultiBundle (es : ExtendedState) (st : SignedAction)
   | withdraw r sender amount rcp =>
       exact deriveWithdrawBalance_congr _ _ r sender amount
         (key r sender (by rw [h_act]; simp [Action.writeCells]))
-  | depositWithFee r recipient poolActor userAmount poolAmount bg d =>
+  | depositWithFee r recipient poolActor userAmount poolAmount bg d seedAmount =>
       exact deriveDepositWithFeeBalances_congr _ _ r recipient poolActor
-        userAmount poolAmount
+        userAmount poolAmount seedAmount Bridge.ammReserveActor
         (key r recipient (by rw [h_act]; simp [Action.writeCells]))
         (key r poolActor (by rw [h_act]; simp [Action.writeCells]))
+        (key r Bridge.ammReserveActor (by rw [h_act]; simp [Action.writeCells]))
   | topUpActionBudget gr gasAmount bi pa =>
       exact deriveTopUpBalances_congr _ _ gr st.signer pa gasAmount
         (key gr st.signer (by rw [h_act]; simp [Action.writeCells]))
@@ -668,15 +674,17 @@ theorem plannedBalances_stepMultiBundle (es : ExtendedState) (st : SignedAction)
         (budgetUnits * weiPerBudgetUnit)
         (key gr pa (by rw [h_act]; simp [Action.writeCells]))
         (key gr st.signer (by rw [h_act]; simp [Action.writeCells]))
-  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      exact deriveAmmSwapBalances_congr _ _ fromResource toResource
-        amountIn amountOut reserveActor
-        (key fromResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
-        (key toResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
   | reclaimAmmReserves r amount reserveActor poolActor =>
       exact deriveReclaimBalances_congr _ _ r reserveActor poolActor amount
         (key r reserveActor (by rw [h_act]; simp [Action.writeCells]))
         (key r poolActor (by rw [h_act]; simp [Action.writeCells]))
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      exact deriveReserveSwapBalances_congr _ _ fromResource toResource user
+        amountIn minAmountOut reserveActor
+        (key fromResource user (by rw [h_act]; simp [Action.writeCells]))
+        (key fromResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
+        (key toResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
+        (key toResource user (by rw [h_act]; simp [Action.writeCells]))
   -- The thirteen variants that write no balance cell at all.
   | _ => rfl
 
@@ -803,18 +811,21 @@ theorem plannedBalanceAt_correct (es : ExtendedState) (st : SignedAction) (idx :
         CellTag.balance.injEq, reduceCtorEq] at h_mem
       obtain ⟨rfl, rfl⟩ := h_mem
       exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
-  | depositWithFee r' recipient poolActor userAmount poolAmount bg d =>
+  | depositWithFee r' recipient poolActor userAmount poolAmount bg d seedAmount =>
       rw [h_act] at h_plan h_mem
       dsimp only [plannedBalances] at h_plan
       rw [deriveDepositWithFeeBalances_correct es st idx r' recipient poolActor
-        userAmount poolAmount bg d h_act] at h_plan
+        userAmount poolAmount bg d seedAmount h_act] at h_plan
       simp only [Option.some.injEq] at h_plan; subst h_plan
       simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
         CellTag.balance.injEq, reduceCtorEq] at h_mem
-      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
       · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
       · exact plannedBalanceAt?_of_mem _ _ _ _
           (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self))
+          h_cons
   | topUpActionBudget gr gasAmount bi pa =>
       rw [h_act] at h_plan h_mem
       dsimp only [plannedBalances] at h_plan
@@ -852,18 +863,6 @@ theorem plannedBalanceAt_correct (es : ExtendedState) (st : SignedAction) (idx :
       · exact plannedBalanceAt?_of_mem _ _ _ _
           (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
       · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
-  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      rw [h_act] at h_plan h_mem
-      dsimp only [plannedBalances] at h_plan
-      rw [deriveAmmSwapBalances_correct es st idx fromResource toResource
-        amountIn amountOut reserveActor h_act] at h_plan
-      simp only [Option.some.injEq] at h_plan; subst h_plan
-      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
-        CellTag.balance.injEq, reduceCtorEq] at h_mem
-      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
-      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
-      · exact plannedBalanceAt?_of_mem _ _ _ _
-          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
   | reclaimAmmReserves r' amount reserveActor poolActor =>
       rw [h_act] at h_plan h_mem
       dsimp only [plannedBalances] at h_plan
@@ -876,6 +875,26 @@ theorem plannedBalanceAt_correct (es : ExtendedState) (st : SignedAction) (idx :
       · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
       · exact plannedBalanceAt?_of_mem _ _ _ _
           (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      -- Workstream SB: the four-cell plan, in the write set's own
+      -- order (user@from, reserve@from, reserve@to, user@to).
+      rw [h_act] at h_plan h_mem
+      dsimp only [plannedBalances] at h_plan
+      rw [deriveReserveSwapBalances_correct es st idx fromResource toResource
+        user amountIn minAmountOut reserveActor h_act] at h_plan
+      simp only [Option.some.injEq] at h_plan; subst h_plan
+      simp only [Action.writeCells, List.mem_cons, List.not_mem_nil, or_false,
+        CellTag.balance.injEq, reduceCtorEq] at h_mem
+      rcases h_mem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact plannedBalanceAt?_of_mem _ _ _ _ List.mem_cons_self h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ List.mem_cons_self) h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self))
+          h_cons
+      · exact plannedBalanceAt?_of_mem _ _ _ _
+          (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+            (List.mem_cons_of_mem _ List.mem_cons_self))) h_cons
   -- The thirteen variants that write no balance cell at all: the
   -- membership hypothesis is false.
   | _ => rw [h_act] at h_mem; simp [Action.writeCells] at h_mem
@@ -989,13 +1008,13 @@ theorem derivedCellValue_correct (es : ExtendedState) (st : SignedAction) (idx :
   | bridgeConsumed d =>
       rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, _⟩
       · rcases bridgeConsumed_cases _ _ _ h with ⟨r, rcp, amt, h_act⟩ |
-          ⟨r, rcp, pa, ua, pam, bg, h_act⟩
+          ⟨r, rcp, pa, ua, pam, bg, sa, h_act⟩
         · show (match st.action with
                 | .deposit r' _ amount _ =>
                   some (deriveConsumedCellValue
                     { resource := r', userAmount := amount
                     , poolAmount := 0, budgetGrant := 0 })
-                | .depositWithFee r' _ _ ua' pa' bg' _ =>
+                | .depositWithFee r' _ _ ua' pa' bg' _ _ =>
                   some (deriveConsumedCellValue
                     { resource := r', userAmount := ua'
                     , poolAmount := pa', budgetGrant := bg' })
@@ -1008,7 +1027,7 @@ theorem derivedCellValue_correct (es : ExtendedState) (st : SignedAction) (idx :
                   some (deriveConsumedCellValue
                     { resource := r', userAmount := amount
                     , poolAmount := 0, budgetGrant := 0 })
-                | .depositWithFee r' _ _ ua' pa' bg' _ =>
+                | .depositWithFee r' _ _ ua' pa' bg' _ _ =>
                   some (deriveConsumedCellValue
                     { resource := r', userAmount := ua'
                     , poolAmount := pa', budgetGrant := bg' })
@@ -1016,7 +1035,7 @@ theorem derivedCellValue_correct (es : ExtendedState) (st : SignedAction) (idx :
           rw [h_act]
           exact congrArg some
             (deriveConsumedCellValue_correct_depositWithFee es st idx r rcp pa ua pam
-              bg d h_act)
+              bg d sa h_act)
       · exact absurd h_eq (by simp)
   | bridgePending w =>
       rcases mem_vwc_of_mem_frontier _ _ _ _ h_mem h_ne with h | ⟨h_eq, r, s, amt, rcp, h_act⟩
@@ -1027,7 +1046,7 @@ theorem derivedCellValue_correct (es : ExtendedState) (st : SignedAction) (idx :
               | .withdraw r' _ amount rcp' =>
                 some (derivePendingCellValue
                   { resource := r', recipient := rcp', amount := amount
-                  , l2LogIndex := idx })
+                  , l2LogIndex := idx, wdId := es.bridge.nextWdId })
               | _ => none) = _
         rw [h_act]
         exact congrArg some (derivePendingCellValue_correct es st idx r s amt rcp h_act)
@@ -1067,12 +1086,28 @@ honest bundle reads back the state and plans what the state plans
 theorem plannedBalances_stateBalanceReader_isSome (es : ExtendedState)
     (a : Action) (signer : ActorId) :
     ∃ plan, plannedBalances (stateBalanceReader es) a signer = some plan := by
-  cases a <;>
+  cases a
+  -- The three-leg chained triple's guard is too wide for the sweep's
+  -- `repeat' split` (its branch count is combinatorial in the alias
+  -- conditions), so the `depositWithFee` arm splits ONCE on the guard
+  -- and closes each side definitionally.
+  case depositWithFee r recipient poolActor userAmount poolAmount bg d sa =>
+    show ∃ plan, deriveDepositWithFeeBalances (stateBalanceReader es) r recipient
+        poolActor userAmount poolAmount sa Bridge.ammReserveActor = some plan
+    unfold deriveDepositWithFeeBalances
+    dsimp only [stateBalanceReader]
+    -- Split the guard (and the alias branches nested in its
+    -- condition); every leaf is a literal `some`, chained-triple or
+    -- refusal alike.
+    repeat' split
+    all_goals exact ⟨_, rfl⟩
+  all_goals
     simp [plannedBalances, stateBalanceReader, deriveTransferBalances,
       deriveCreditBalance, deriveBurnBalance, deriveDepositBalance,
-      deriveWithdrawBalance, deriveDepositWithFeeBalances, deriveChainPair,
-      deriveTopUpBalances, deriveDelegatedTopUpBalances, deriveRefundBalances,
-      deriveAmmSwapBalances, deriveReclaimBalances] <;>
+      deriveWithdrawBalance, deriveChainPair, deriveTopUpBalances,
+      deriveDelegatedTopUpBalances, deriveRefundBalances,
+      deriveReclaimBalances,
+      deriveReserveSwapBalances] <;>
     (repeat' split) <;> simp_all
 
 /-- **The verifier's post-side leaves are the post-state's own.**

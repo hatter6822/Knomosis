@@ -26,7 +26,7 @@ use crate::http::RouteOutcome;
 use crate::problem::Problem;
 use crate::state::AppState;
 
-use super::{base64, verdict_map};
+use super::{base64, idempotency, verdict_map};
 
 /// The `application/json` submit body (the OpenAPI `ActionSubmission`).
 #[derive(Deserialize)]
@@ -51,9 +51,28 @@ pub fn handle(state: &AppState, request: &RequestPayload) -> RouteOutcome {
     // The lookup is namespaced by the presenting credential, so a key another
     // client chose can never replay ITS verdict here (which would also mean
     // this action was silently never submitted).
-    if let Some(key) = request.idempotency_key {
-        if let Some(cached) = state.idempotency.get(request.credential, key) {
-            return cached;
+    //
+    // A key hit is only a retry if the BYTES match.  The fingerprint is
+    // over the raw request body rather than the decoded action, so it
+    // also separates the same action sent as octet-stream from the same
+    // action sent as base64 JSON — two different requests, and the
+    // gateway has no business deciding they are interchangeable.
+    let fingerprint = request
+        .idempotency_key
+        .map(|_| idempotency::fingerprint(request.body));
+    if let (Some(key), Some(fp)) = (request.idempotency_key, fingerprint.as_ref()) {
+        match state.idempotency.get(request.credential, key, fp) {
+            idempotency::Lookup::Hit(cached) => return cached,
+            idempotency::Lookup::Conflict => {
+                return Problem::new("idempotency-key-reuse", "Idempotency-Key Reused", 422)
+                    .with_detail(
+                        "this Idempotency-Key was already used for a different request body; \
+                     replaying the earlier verdict would mean this action is never submitted. \
+                     Retry with the identical body, or use a fresh key",
+                    )
+                    .into_outcome();
+            }
+            idempotency::Lookup::Miss => {}
         }
     }
 
@@ -78,8 +97,8 @@ pub fn handle(state: &AppState, request: &RequestPayload) -> RouteOutcome {
     // Cache a *definitive* outcome under the idempotency key (a no-op when
     // the cache is disabled, the key is absent, or the outcome is a
     // transient 5xx — see `idempotency::is_cacheable`).
-    if let Some(key) = request.idempotency_key {
-        state.idempotency.put(request.credential, key, &outcome);
+    if let (Some(key), Some(fp)) = (request.idempotency_key, fingerprint) {
+        state.idempotency.put(request.credential, key, fp, &outcome);
     }
     outcome
 }

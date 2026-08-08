@@ -1206,6 +1206,18 @@ bypasses `ingest` entirely.
 **Impact:** Documented but worth knowing; reviewers
 looking at the `ingest` function might be surprised.
 
+**SB.9 update — the operational gap is closed.**  The Lean
+`ingest` observation stands (it remains the Lean-mirror default),
+but the production pipeline now materialises deposits: the Rust
+translator's opt-in `preview_ingest_materialising`
+(`knomosis-l1-ingest`, `--materialise-deposits`) constructs the
+bridge-signed `Deposit` / `DepositWithFee` actions from the two L1
+deposit events, with a content-derived deposit id (the receipt
+hash's first 8 bytes, so re-orgs/restarts re-derive the same id and
+the kernel's `consumed`-set conjuncts refuse replays), a
+reject-never-truncate amount range-check, and fresh-id assignment
+for unregistered depositors.  See `docs/abi.md` §16.7.
+
 ### m-16 — §7.6.4 / §7.6.5 chain-level accounting theorems deferred to runtime cross-stack verification
 
 **Where:** `LegalKernel/Bridge/Accounting.lean` (Bridge
@@ -1439,9 +1451,18 @@ snapshot-bootstrap guarantees.
 states: balances ≥ 2^64 collide, so two distinct states share one
 L1 state root
 
-**Status:** OPEN.  Found by a later audit pass; not covered by the
-original review, whose closing note ("No critical findings") is
-superseded by this entry.
+**Status:** CLOSED — see the disposition table at the head of this
+document.  The entry below is the original write-up, preserved for the
+audit trail; its "Remaining: the migration itself" section describes
+work that has since landed.  The head is now `2^256`
+(`cbeTagAmount = 0x06`, a 32-byte body), the ceiling is enforced as a
+precondition conjunct on every crediting law (`Laws.AmountBounded`,
+`Laws.maxAmount = 256 ^ 32`), and it is proved unreachable rather than
+assumed (`FaultProof.canonicalBounds_base_amt_of_reachable`).  C-3
+below records why widening alone would have left the defect open.
+
+Found by a later audit pass; not covered by the original review, whose
+closing note ("No critical findings") is superseded by this entry.
 
 **Where.**  `LegalKernel/Encoding/Encodable.lean` (`instEncodableNat`
 → `cborHeadEncode`, a fixed 8-byte little-endian body) and
@@ -1796,4 +1817,76 @@ the machinery that carried it has changed.  The current statements are:
 See `docs/planning/state_root_merkleisation_plan.md` M9e for the
 retirement's scope and the two declarations reclassified against the
 original list.
+
+## Close-out: Workstream SB (batched submission + user L2 AMM)
+
+Workstream SB rebuilt the submission pipeline around batches (one L1
+record per batch `[prevEnd, end)`, a per-batch actions-root SMT, the
+bisection game anchored inside one batch, the terminal step
+authenticated by inclusion proof) and landed the user-signed L2 swap
+(`Laws.reserveSwap`, Action 25) funded by the deposit fee-split's
+seed leg.  Three audit-relevant records:
+
+**Two pre-existing defects were found during the workstream's
+research and FIXED in scope**, each with a regression test that
+fails on the old code (`solidity/test/CrossCheck/BatchGame.t.sol`):
+
+  1. **The revert path was a dead end.**  Reverted indices were
+     permanently unresubmittable (the chain extended straight
+     through reverted entries, and the contract docstring described
+     a recovery that was impossible).  Closed by rulings R1/R3/R4:
+     the `lastRevertAtBlock` stamp makes post-revert resubmissions
+     readable as canonical, an overwrite of a reverted key requires
+     its bond out, and `reclaimRevertedBond` returns a reverted
+     undisputed record's bond.
+  2. **A challenger win never reached the bridge.**  The registry's
+     revert marking had zero on-chain readers — the runbook's "user
+     funds protected" claim was untrue of the shipped wiring.
+     Closed by ruling R6: game → `KnomosisDisputeVerifierV2.
+     finaliseFromFaultProof` → `bridge.revertToPriorRoot` (the
+     verifier is the bridge's second immutable
+     `faultProofRollbackAuthority`), end-to-end-tested on the real
+     contract quadruple.
+
+**Recorded follow-ups (not built in SB):**
+
+  * **On-chain signature verification at terminate** — **BUILT**
+    (Workstream F-A).  The batch leaf BINDS the 65-byte signature
+    (`hash(kind ‖ uint64BE signer ‖ fields ‖ sig)`, ruling R7) and
+    the terminal step now VERIFIES it: `SignInput.sol` rebuilds the
+    canonical §8.8.5 digest on-chain from the packed action fields,
+    the signer's registered key is resolved by a single-cell opening
+    of its registry cell against the disputed range's pre-root
+    (`Secp256k1.sol` decompresses the SEC1 form to an address), and
+    `ecrecover` must land on it — low-s and `v ∈ {27,28}` mirrored
+    from the L2 adaptor so the L1 never defends a signature the L2
+    would have refused.  An invalid signature makes the entry
+    INADMISSIBLE, so the adjudicated root is the PRE-root: the full
+    no-op, and a sequencer defending an unauthorised entry loses.
+    The L1 actorId→key surface the original note called missing is
+    the registry cell itself, opened against the state root the game
+    already anchors.  Phase FA.0 additionally corrected a latent
+    production defect found while scoping this: the Lean admission
+    conjunct, the L2 wire and the linked verify adaptor did not share
+    a signature convention, so a production-linked deployment
+    rejected every signed action (`docs/abi.md` §7.1).
+  * **The Lean game-model chain binding** (the standing audit-22
+    MAJOR): **closed at the model level** in the follow-up pass.
+    `GameState.actionsRoot` anchors the disputed batch's actions
+    root in the model, `.terminateOnSingleStep` takes the
+    responder's `actionProof` and refuses an unauthenticated step
+    (`.error .actionNotInBatch`, mirroring the L1 revert),
+    `terminate_ok_requires_authentication` inverts the arm, and the
+    upgraded composite `anchored_challenger_wins`
+    (`FaultProof/Settlement.lean`) states kernel-truthfulness over
+    the batch-COMMITTED `(kind, signer, fields, sig)` spelling via
+    `actionProof_binds_action` — the substitution attack is now
+    unprovable rather than unmodelled.  The residual interface (the
+    truthfulness hypothesis quantifies over the responder's bundle;
+    discharged per-variant by `VerifierWrites.*_correct`) is noted
+    in the `22-full-codebase-sweep.md` annotation.
+  * **The L1→L2 swap-mirror ingest is deliberately unbuilt** under
+    the L2-primary pool topology (deposits stopped accruing the L1
+    `ammReserve*` books; the two AMM venues price independently and
+    arbitrage closes divergence — `gas_pool_runbook.md` §9.6).
 

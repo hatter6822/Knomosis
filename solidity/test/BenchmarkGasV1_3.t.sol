@@ -2,14 +2,20 @@
 pragma solidity ^0.8.36;
 
 import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
-import {Test} from "forge-std/Test.sol";
+import {stdStorage, StdStorage, Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisAmmDisasterRecoveryMultisig} from
     "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
+import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
+import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
+import {ActionsRoot} from "src/lib/ActionsRoot.sol";
+import {CBEEncode} from "src/lib/CBEEncode.sol";
+import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
+import {SignedActionProbe} from "test/utils/SignedActionProbe.sol";
 import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 import {MockBoldOz} from "test/utils/MockBoldOz.sol";
@@ -19,7 +25,7 @@ import {MockLiquityV2TroveManager} from "test/utils/MockLiquityV2.sol";
 /// @notice Minimal stand-in for a deployed-but-not-yet-activated
 ///         `KnomosisMigration` successor.  The bridge consults exactly one
 ///         selector on its `migration` immutable (`activated()`, from the
-///         `circuitOpen` modifier and the `ammSwap` migration arm), so the
+///         `circuitOpen` modifier), so the
 ///         stand-in implements exactly that.  Lets the benchmark suite
 ///         measure the per-operation cost of the external `activated()`
 ///         read that every migration-wired deployment pays.
@@ -33,7 +39,7 @@ contract InactiveMigration {
 /// @title BenchmarkGasV1_3Base
 /// @notice Workstream GP.11.9 — gas-cost benchmarks for the v1.3 L1
 ///         operations (`depositETHWithFee`, `depositBoldWithFee`, the BOLD
-///         `approve` prerequisite, `ammSwap` in both directions and both
+///         `approve` prerequisite, and both
 ///         approval shapes, the BOLD circuit-breaker surface, the AMM kill
 ///         switch, the Liquity auto-trigger paths, and the
 ///         `withdrawWithProof` exit legs) plus the fault proof's
@@ -68,8 +74,8 @@ contract InactiveMigration {
 ///            Test-harness overhead (pranks, asserts, calldata
 ///            abi-encoding) is excluded by construction.  Empirically
 ///            verified: isolated-vs-unisolated deltas decode to the gas
-///            as `21 000 + calldata − refunds` on all 21 benchmarks
-///            (e.g. `closeBoldCircuit` +21 064 = 21 000 + 64;
+///            as `21 000 + calldata − refunds` on all 21 GP.11.9
+///            benchmarks (e.g. `closeBoldCircuit` +21 064 = 21 000 + 64;
 ///            `depositBoldWithFee` +13 816 = 21 000 + 416 − 2 800
 ///            reentrancy-guard reset − 4 800 allowance-clear refund).
 ///         2. Alongside every gas entry the helper records
@@ -102,6 +108,8 @@ contract InactiveMigration {
 ///         from the mocks (larger dispatch tables, recipient checks) —
 ///         a few hundred gas, not thousands.
 abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
+    using stdStorage for StdStorage;
+
     /// @dev The snapshot group: all benchmarks across all scenario
     ///      contracts aggregate into `snapshots/BenchmarkGasV1_3.json`
     ///      (forge scratch output; the committed copy is the baseline).
@@ -223,7 +231,7 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
     /// @param  migration_ The migration immutable: `address(0)` for the
     ///         initial-deployment shape (no successor planned), or a
     ///         not-yet-activated successor for the migration-wired shape
-    ///         (every `circuitOpen` operation and every `ammSwap` then
+    ///         (every `circuitOpen` operation then
     ///         pays an external `activated()` read).
     function _deployBridge(address migration_) internal returns (KnomosisBridge) {
         return _deployBridgeWithRecovery(migration_, AMM_DR);
@@ -261,6 +269,7 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: true,
                 ammSeedRatioBps: SEED_RATIO_BPS,
                 ammDisasterRecovery: recovery_,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -279,11 +288,12 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
     }
 
     /// @notice Pre-warm `b` to its steady-state shape: the LP's two
-    ///         max-fee deposits make `totalLockedValue`,
-    ///         `boldTotalLockedValue`, `ammReserveEth`, and
-    ///         `ammReserveBold` all non-zero, so the benchmarked deposits
-    ///         and swaps measure the recurring (non-first-write) storage
-    ///         costs of a live deployment.
+    ///         max-fee deposits make `totalLockedValue` and
+    ///         `boldTotalLockedValue` non-zero, so every benchmarked
+    ///         call runs against warm (non-zero) accounting slots.
+    ///         (The excised L1 AMM's book staging is gone with the
+    ///         books; the LIVE pool is L2 state no L1 benchmark
+    ///         touches.)
     function _seedPool(KnomosisBridge b) internal {
         vm.deal(lp, LP_ETH_DEPOSIT);
         vm.prank(lp);
@@ -291,11 +301,6 @@ abstract contract BenchmarkGasV1_3Base is Test, BoldTestSupport {
         _mintApprove(b, lp, LP_BOLD_DEPOSIT);
         vm.prank(lp);
         b.depositBoldWithFee(LP_BOLD_DEPOSIT, LP_FEE_BPS);
-    }
-
-    /// @notice A deadline comfortably in the future for the swap benchmarks.
-    function _farDeadline() internal view returns (uint256) {
-        return block.timestamp + 1 hours;
     }
 }
 
@@ -420,7 +425,7 @@ contract BenchmarkGasV1_3DepositsTest is BenchmarkGasV1_3Base {
 
     /// @notice The BOLD `approve` prerequisite transaction (fresh
     ///         allowance slot, 0 → non-zero): every `depositBoldWithFee`
-    ///         / BOLD→ETH `ammSwap` flow pays this once beforehand.
+    ///         flow pays this once beforehand.
     function test_gas_boldApprove_fresh() public {
         _bench(
             "boldApprove_fresh",
@@ -440,8 +445,6 @@ contract BenchmarkGasV1_3DepositsTest is BenchmarkGasV1_3Base {
         assertEq(bridge.depositNonce(bob), 2, "bob has deposited twice");
         assertGt(bridge.totalLockedValue(), 0, "pool pre-warmed");
         assertGt(bridge.boldTotalLockedValue(), 0, "BOLD pool pre-warmed");
-        assertGt(bridge.ammReserveEth(), 0, "ETH reserve seeded");
-        assertGt(bridge.ammReserveBold(), 0, "BOLD reserve seeded");
         assertEq(
             MockBoldOz(BOLD).allowance(alice, address(bridge)),
             BENCH_BOLD_AMOUNT,
@@ -503,193 +506,18 @@ contract BenchmarkGasV1_3DepositsTest is BenchmarkGasV1_3Base {
     }
 }
 
-/// @title BenchmarkGasV1_3SwapsTest
-/// @notice GP.11.9 `ammSwap` benchmarks over reserves seeded to a
-///         realistic 15 ETH : 45 000 BOLD depth.  ETH→BOLD is measured in
-///         both recurring shapes — the swapper's FIRST BOLD (the output
-///         credits a fresh ERC-20 balance slot, 0 → non-zero) and a REPEAT
-///         swap (non-zero → non-zero) — and BOLD→ETH in BOTH approval
-///         shapes: exact approval (`transferFrom` writes the allowance to
-///         zero) and infinite approval (production BOLD's OZ
-///         `_spendAllowance` skips the allowance write entirely —
-///         reproduced faithfully by the OZ-based `MockBoldOz`).
-contract BenchmarkGasV1_3SwapsTest is BenchmarkGasV1_3Base {
-    /// @dev ETH→BOLD swapper holding no BOLD yet.
-    address internal ethSwapperFresh = address(0x5A1);
-    /// @dev ETH→BOLD swapper already holding BOLD.
-    address internal ethSwapperRepeat = address(0x5A2);
-    /// @dev BOLD→ETH swapper with a staged EXACT approval.
-    address internal boldSwapperExact = address(0x5A3);
-    /// @dev BOLD→ETH swapper with a staged INFINITE approval.
-    address internal boldSwapperInfinite = address(0x5A4);
-
-    function setUp() public {
-        _etchMocks();
-        bridge = _deployBridge(address(0));
-        _seedPool(bridge);
-
-        vm.deal(ethSwapperFresh, 1000 ether);
-        vm.deal(ethSwapperRepeat, 1000 ether);
-        vm.deal(boldSwapperExact, 1000 ether);
-        vm.deal(boldSwapperInfinite, 1000 ether);
-
-        // The repeat swapper already holds BOLD, so the swap output lands
-        // in a non-zero balance slot.
-        MockBoldOz(BOLD).mint(ethSwapperRepeat, 100 ether);
-
-        // Both BOLD->ETH swappers hold more BOLD than the swap input
-        // (typical residual); one approves exactly the input, the other
-        // grants the infinite-approval wallet pattern.
-        MockBoldOz(BOLD).mint(boldSwapperExact, 10_000 ether);
-        vm.prank(boldSwapperExact);
-        MockBoldOz(BOLD).approve(address(bridge), BENCH_BOLD_AMOUNT);
-        MockBoldOz(BOLD).mint(boldSwapperInfinite, 10_000 ether);
-        vm.prank(boldSwapperInfinite);
-        MockBoldOz(BOLD).approve(address(bridge), type(uint256).max);
-    }
-
-    /// @dev The canonical swap calldata for this suite's swaps.
-    function _swapData(uint64 fromResource, uint256 amountIn) internal view returns (bytes memory) {
-        return abi.encodeCall(bridge.ammSwap, (fromResource, amountIn, 1, _farDeadline()));
-    }
-
-    /// @notice `ammSwap` ETH→BOLD where the output credits the swapper's
-    ///         first-ever BOLD (fresh balance-slot SSTORE).
-    function test_gas_ammSwap_ethToBold_firstBoldRecipient() public {
-        _bench(
-            "ammSwap_ethToBold_firstBoldRecipient",
-            ethSwapperFresh,
-            address(bridge),
-            BENCH_ETH_AMOUNT,
-            _swapData(NATIVE_ETH, BENCH_ETH_AMOUNT),
-            true
-        );
-    }
-
-    /// @notice `ammSwap` ETH→BOLD where the swapper already holds BOLD
-    ///         (steady-state shape).
-    function test_gas_ammSwap_ethToBold_repeatRecipient() public {
-        _bench(
-            "ammSwap_ethToBold_repeatRecipient",
-            ethSwapperRepeat,
-            address(bridge),
-            BENCH_ETH_AMOUNT,
-            _swapData(NATIVE_ETH, BENCH_ETH_AMOUNT),
-            true
-        );
-    }
-
-    /// @notice `ammSwap` BOLD→ETH in the exact-approval shape (the
-    ///         `transferFrom` writes the allowance down to zero).
-    function test_gas_ammSwap_boldToEth_exactApproval() public {
-        _bench(
-            "ammSwap_boldToEth_exactApproval",
-            boldSwapperExact,
-            address(bridge),
-            0,
-            _swapData(BOLD_RID, BENCH_BOLD_AMOUNT),
-            true
-        );
-    }
-
-    /// @notice `ammSwap` BOLD→ETH in the infinite-approval shape (OZ
-    ///         `_spendAllowance` skips the allowance write — the cheaper
-    ///         recurring path for wallets holding a standing approval).
-    function test_gas_ammSwap_boldToEth_infiniteApproval() public {
-        _bench(
-            "ammSwap_boldToEth_infiniteApproval",
-            boldSwapperInfinite,
-            address(bridge),
-            0,
-            _swapData(BOLD_RID, BENCH_BOLD_AMOUNT),
-            true
-        );
-    }
-
-    /// @notice Pins the seeded reserve depths and the swapper staging the
-    ///         swap benchmarks depend on.
-    function test_sanity_swapScenarioAssumptions() public view {
-        // 100 ETH * 50% fee * 30% seed = 15 ETH; 300k BOLD * 50% * 30% = 45k.
-        assertEq(bridge.ammReserveEth(), 15 ether, "ETH reserve == 15");
-        assertEq(bridge.ammReserveBold(), 45_000 ether, "BOLD reserve == 45 000");
-        assertEq(MockBoldOz(BOLD).balanceOf(ethSwapperFresh), 0, "fresh swapper holds no BOLD");
-        assertGt(MockBoldOz(BOLD).balanceOf(ethSwapperRepeat), 0, "repeat swapper holds BOLD");
-        assertEq(
-            MockBoldOz(BOLD).allowance(boldSwapperExact, address(bridge)),
-            BENCH_BOLD_AMOUNT,
-            "exact approval staged"
-        );
-        assertEq(
-            MockBoldOz(BOLD).allowance(boldSwapperInfinite, address(bridge)),
-            type(uint256).max,
-            "infinite approval staged"
-        );
-        assertGt(
-            MockBoldOz(BOLD).balanceOf(boldSwapperExact),
-            BENCH_BOLD_AMOUNT,
-            "exact-approval swapper keeps a residual balance"
-        );
-        assertGt(
-            MockBoldOz(BOLD).balanceOf(boldSwapperInfinite),
-            BENCH_BOLD_AMOUNT,
-            "infinite-approval swapper keeps a residual balance"
-        );
-    }
-
-    /// @notice The benchmarked swaps produce real output in both
-    ///         directions, the swap value is paid by the pranked swapper
-    ///         (pinning the harness's value-accounting assumption), and
-    ///         the infinite approval is NOT decremented (the OZ
-    ///         `_spendAllowance` skip the infinite-approval benchmark
-    ///         exists to measure).
-    function test_sanity_swapEffects() public {
-        uint256 ethBeforeIn = ethSwapperFresh.balance;
-        vm.prank(ethSwapperFresh);
-        uint256 boldOut = bridge.ammSwap{value: BENCH_ETH_AMOUNT}(
-            NATIVE_ETH, BENCH_ETH_AMOUNT, 1, _farDeadline()
-        );
-        assertGt(boldOut, 0, "ETH->BOLD output non-zero");
-        assertEq(MockBoldOz(BOLD).balanceOf(ethSwapperFresh), boldOut, "BOLD credited");
-        assertEq(
-            ethSwapperFresh.balance, ethBeforeIn - BENCH_ETH_AMOUNT, "swap input paid by swapper"
-        );
-
-        uint256 ethBefore = boldSwapperExact.balance;
-        vm.prank(boldSwapperExact);
-        uint256 ethOut = bridge.ammSwap(BOLD_RID, BENCH_BOLD_AMOUNT, 1, _farDeadline());
-        assertGt(ethOut, 0, "BOLD->ETH output non-zero");
-        assertEq(boldSwapperExact.balance, ethBefore + ethOut, "ETH paid out");
-        assertEq(
-            MockBoldOz(BOLD).allowance(boldSwapperExact, address(bridge)),
-            0,
-            "exact approval consumed"
-        );
-
-        vm.prank(boldSwapperInfinite);
-        uint256 ethOut2 = bridge.ammSwap(BOLD_RID, BENCH_BOLD_AMOUNT, 1, _farDeadline());
-        assertGt(ethOut2, 0, "infinite-approval swap output non-zero");
-        assertEq(
-            MockBoldOz(BOLD).allowance(boldSwapperInfinite, address(bridge)),
-            type(uint256).max,
-            "infinite approval NOT decremented (OZ skip)"
-        );
-    }
-}
-
 /// @title BenchmarkGasV1_3MigrationWiredTest
 /// @notice GP.11.9 — the migration-wired deployment shape.  Production
 ///         deployments are encouraged to pre-wire a predicted
 ///         `KnomosisMigration` successor address (solidity/README,
 ///         "Production deployment notes"); every `circuitOpen` operation
-///         (deposits, state-root submission) and every `ammSwap` then
+///         (deposits, state-root submission) then
 ///         pays an external `activated()` read on the successor.  These
 ///         rows measure that recurring premium against the unwired rows
 ///         of the same shape in the deposit / swap suites.
 contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
     /// @dev Repeat depositor on the migration-wired bridge.
     address internal bob = address(0xB0B);
-    /// @dev ETH→BOLD swapper already holding BOLD (repeat shape).
-    address internal ethSwapperRepeat = address(0x5A2);
 
     InactiveMigration internal successor;
 
@@ -700,15 +528,12 @@ contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
         _seedPool(bridge);
 
         vm.deal(bob, 1000 ether);
-        vm.deal(ethSwapperRepeat, 1000 ether);
 
-        // Stage bob as a repeat depositor (one prior deposit) and the
-        // swapper as a repeat BOLD recipient, mirroring the unwired
-        // repeat-shape scenarios so the wired-vs-unwired delta is the
-        // ONLY difference.
+        // Stage bob as a repeat depositor (one prior deposit),
+        // mirroring the unwired repeat-shape scenario so the
+        // wired-vs-unwired delta is the ONLY difference.
         vm.prank(bob);
         bridge.depositETHWithFee{value: BENCH_ETH_AMOUNT}(BENCH_FEE_BPS);
-        MockBoldOz(BOLD).mint(ethSwapperRepeat, 100 ether);
     }
 
     /// @notice `depositETHWithFee`, repeat shape, on a migration-wired
@@ -725,31 +550,12 @@ contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
         );
     }
 
-    /// @notice `ammSwap` ETH→BOLD, repeat shape, on a migration-wired
-    ///         bridge (the swap body's migration arm performs the
-    ///         `activated()` read; delta against
-    ///         `ammSwap_ethToBold_repeatRecipient`).
-    function test_gas_ammSwap_ethToBold_repeat_migrationWired() public {
-        _bench(
-            "ammSwap_ethToBold_repeat_migrationWired",
-            ethSwapperRepeat,
-            address(bridge),
-            BENCH_ETH_AMOUNT,
-            abi.encodeCall(bridge.ammSwap, (NATIVE_ETH, BENCH_ETH_AMOUNT, 1, _farDeadline())),
-            true
-        );
-    }
 
-    /// @notice Pins the migration wiring + the staged repeat shapes.
+    /// @notice Pins the migration wiring + the staged repeat shape.
     function test_sanity_migrationWiredAssumptions() public view {
         assertEq(bridge.migration(), address(successor), "migration wired");
         assertFalse(successor.activated(), "successor not activated");
         assertEq(bridge.depositNonce(bob), 1, "bob is a repeat depositor");
-        assertGt(MockBoldOz(BOLD).balanceOf(ethSwapperRepeat), 0, "repeat swapper holds BOLD");
-        // LP seed (15 ETH) + bob's staging deposit's seed
-        // (1 ETH x 1% fee x 30% seed = 0.003 ETH).
-        assertEq(bridge.ammReserveEth(), 15.003 ether, "ETH reserve == 15.003");
-        assertEq(bridge.ammReserveBold(), 45_000 ether, "BOLD reserve == 45 000");
     }
 
     /// @notice The wired bridge's operations still succeed (the breaker
@@ -758,11 +564,6 @@ contract BenchmarkGasV1_3MigrationWiredTest is BenchmarkGasV1_3Base {
         vm.prank(bob);
         bridge.depositETHWithFee{value: BENCH_ETH_AMOUNT}(BENCH_FEE_BPS);
         assertEq(bridge.depositNonce(bob), 2, "wired deposit succeeded");
-        vm.prank(ethSwapperRepeat);
-        uint256 out = bridge.ammSwap{value: BENCH_ETH_AMOUNT}(
-            NATIVE_ETH, BENCH_ETH_AMOUNT, 1, _farDeadline()
-        );
-        assertGt(out, 0, "wired swap succeeded");
     }
 }
 
@@ -1041,7 +842,7 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
 
         // forge-lint: disable-next-line(unsafe-typecast)
-        ethLeaf = _encodeWithdrawalLeaf(NATIVE_ETH, alice, uint64(ETH_WITHDRAW_AMOUNT), 0);
+        ethLeaf = _encodeWithdrawalLeaf(NATIVE_ETH, alice, uint64(ETH_WITHDRAW_AMOUNT), 7, 0);
         bytes32 ethRoot = SmtVerifier.recomputeRoot(0, ethLeaf, siblings);
         bridge.submitStateRoot(
             ethRoot, ETH_ROOT_LOG_INDEX, _signStateRoot(ethRoot, ETH_ROOT_LOG_INDEX)
@@ -1049,7 +850,7 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         ethProof = _encodeWithdrawalProof(ethLeaf, 0, siblings);
 
         // forge-lint: disable-next-line(unsafe-typecast)
-        boldLeaf = _encodeWithdrawalLeaf(BOLD_RID, alice, uint64(BOLD_WITHDRAW_AMOUNT), 0);
+        boldLeaf = _encodeWithdrawalLeaf(BOLD_RID, alice, uint64(BOLD_WITHDRAW_AMOUNT), 7, 0);
         bytes32 boldRoot = SmtVerifier.recomputeRoot(0, boldLeaf, siblings);
         bridge.submitStateRoot(
             boldRoot, BOLD_ROOT_LOG_INDEX, _signStateRoot(boldRoot, BOLD_ROOT_LOG_INDEX)
@@ -1093,16 +894,18 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlow
         assertTrue(bridge.isStateRootFinalised(BOLD_ROOT_LOG_INDEX), "BOLD root finalised");
         assertFalse(bridge.withdrawalLeafRedeemed(keccak256(ethLeaf)), "ETH leaf unredeemed");
         assertFalse(bridge.withdrawalLeafRedeemed(keccak256(boldLeaf)), "BOLD leaf unredeemed");
-        // Canonical proof-blob size: cbeBytes(80-byte leaf) = 89, cbeUint
+        // Canonical proof-blob size: cbeBytes(89-byte leaf) = 98, cbeUint
         // index = 9, array head = 9, 64 x cbeBytes(32-byte sibling) = 64
-        // x 41 = 2624; total 2731 bytes.  Pins the proof shape the
+        // x 41 = 2624; total 2740 bytes.  Pins the proof shape the
         // benchmark's ~2.7 kB calldata figure rests on.  The leaf has
-        // grown twice with the amount head: 56 -> 64 with C-1 (uint
-        // head -> 17-byte amount head), then 64 -> 80 closing C-3
-        // (17 -> 33 bytes, the EVM word).
-        assertEq(ethProof.length, 2731, "canonical proof blob is 2731 bytes");
-        assertEq(boldProof.length, 2731, "canonical proof blob is 2731 bytes");
-        assertEq(ethLeaf.length, 80, "canonical leaf blob is 80 bytes");
+        // grown three times: 56 -> 64 with C-1 (uint head -> 17-byte
+        // amount head), 64 -> 80 closing C-3 (17 -> 33 bytes, the EVM
+        // word), and 80 -> 89 adding `wdId` — the id the L1 binds the
+        // proof index to, without which the tree position was checked
+        // against `l2LogIndex` and no honest proof verified.
+        assertEq(ethProof.length, 2740, "canonical proof blob is 2740 bytes");
+        assertEq(boldProof.length, 2740, "canonical proof blob is 2740 bytes");
+        assertEq(ethLeaf.length, 89, "canonical leaf blob is 89 bytes");
         assertGt(alice.balance, 0, "recipient already funded with ETH");
         assertGt(MockBoldOz(BOLD).balanceOf(alice), 0, "recipient holds residual BOLD");
     }
@@ -1233,7 +1036,6 @@ contract BenchmarkGasV1_3DisasterRecoveryTest is BenchmarkGasV1_3Base {
         assertEq(multisig.confirmationCount(), 1, "one staged confirmation");
         assertFalse(multisig.executed(), "not executed in the staged state");
         assertFalse(bridge.ammDisabled(), "AMM live in the staged state");
-        assertGt(bridge.ammReserveEth(), 0, "pool seeded");
     }
 }
 
@@ -1392,4 +1194,322 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
         root = abi.decode(out, (bytes32));
     }
 
+}
+
+/// @title BenchmarkGasV1_3BatchSubmissionTest
+/// @notice Workstream SB — the batched `submitStateRoot`: ONE L1
+///         record covering `[prevEnd, end)` L2 actions, its chain
+///         link folded from the batch's actions root.  The measured
+///         gas is BATCH-SIZE-INDEPENDENT (one record, one fold, a
+///         fixed 4-word calldata), which is the whole economic point:
+///         the amortised L1 cost per L2 action is this number divided
+///         by the batch size — the `docs/gas_pool_runbook.md` §9
+///         amortisation table is derived from exactly this benchmark.
+contract BenchmarkGasV1_3BatchSubmissionTest is BenchmarkGasV1_3Base {
+    KnomosisStateRootSubmission internal registry;
+
+    uint128 internal constant ROOT_BOND = 1 ether;
+    /// @dev The batch size the runbook's headline amortisation quotes.
+    ///      The measured gas does not depend on it (the record is one
+    ///      fixed-size store either way); it parameterises the sanity
+    ///      pin that ONE record really covers this many entries.
+    uint64 internal constant BATCH_SIZE = 1000;
+    address internal constant SEQUENCER = address(0xACE);
+
+    bytes32 internal batchCommit;
+    bytes32 internal batchActionsRoot;
+
+    function setUp() public {
+        registry = new KnomosisStateRootSubmission(
+            ROOT_BOND,
+            100, // dispute window
+            1, // min submission interval
+            10, // max outstanding roots
+            SEQUENCER,
+            address(this), // fault-proof game (unused by the benchmark)
+            bytes32(uint256(0xBA7C4)),
+            100, // withdrawal finalisation window
+            keccak256("knomosis.bench.genesis"),
+            65_536, // max actions per batch (the operational default)
+            BREAKER);
+        batchCommit = keccak256("knomosis.bench.batch.commit");
+        batchActionsRoot = keccak256("knomosis.bench.batch.actionsRoot");
+        vm.deal(SEQUENCER, 10 ether);
+    }
+
+    /// @notice One batched submission: entries `[0, 1000)` under one
+    ///         record, one bond, one chain-link fold.
+    function test_gas_submitStateRoot_batch() public {
+        _bench(
+            "submitStateRoot_batch",
+            SEQUENCER,
+            address(registry),
+            ROOT_BOND,
+            abi.encodeCall(
+                KnomosisStateRootSubmission.submitStateRoot,
+                (BATCH_SIZE, 0, batchCommit, batchActionsRoot)
+            ),
+            true
+        );
+    }
+
+    /// @notice Pins what the benchmark measures: the single submission
+    ///         extends the canonical tip across the WHOLE batch, and
+    ///         the one record carries the batch bounds, the commit,
+    ///         the actions root, and the bond.
+    function test_sanity_batchSubmissionEffects() public {
+        vm.prank(SEQUENCER);
+        registry.submitStateRoot{value: ROOT_BOND}(
+            BATCH_SIZE, 0, batchCommit, batchActionsRoot
+        );
+        assertEq(
+            registry.canonicalTip(),
+            BATCH_SIZE,
+            "one record extends the tip across the whole batch"
+        );
+        (
+            address seq,
+            bytes32 commit,
+            ,
+            ,
+            uint128 bond,
+            ,
+            bool finalised,
+            bool disputed,
+            uint64 prevEnd,
+            bytes32 ar
+        ) = registry.roots(BATCH_SIZE);
+        assertEq(seq, SEQUENCER, "record keyed to the sequencer");
+        assertEq(commit, batchCommit, "record carries the batch commit");
+        assertEq(bond, ROOT_BOND, "record holds the one batch bond");
+        assertEq(prevEnd, 0, "batch covers [0, BATCH_SIZE)");
+        assertEq(ar, batchActionsRoot, "record carries the actions root");
+        assertFalse(finalised, "not yet finalised");
+        assertFalse(disputed, "not disputed");
+    }
+}
+
+/// @title BenchmarkGasV1_3TerminateInclusionTest
+/// @notice Workstream SB — the batched game's terminal step with its
+///         action INCLUSION PROOF: `terminateOnSingleStep` re-derives
+///         the disputed action's signature-bound leaf, verifies it
+///         against the batch's submitted actions root (ruling R7),
+///         and adjudicates the step on `KnomosisStepVMRoot`.  The
+///         scenario stages the full dispute — a 4-entry batch
+///         submitted on the REAL registry, challenged, and bisected
+///         down to its first step — in `setUp`, so the benchmark
+///         measures exactly the terminal transaction an honest
+///         sequencer pays to defend a batch.  Driven by the corpus's
+///         `transfer` probe (a real pre-root/action/wire/post-root
+///         quintuple); the batch tree is the single-leaf cell SMT,
+///         so the inclusion wire is its minimal shape (a 32-byte
+///         zero bitmask, no siblings).
+contract BenchmarkGasV1_3TerminateInclusionTest is
+    BenchmarkGasV1_3Base,
+    StepVMRootProbeHarness,
+    SignedActionProbe
+{
+    KnomosisStepVMRoot internal vmRoot;
+    KnomosisStateRootSubmission internal registry;
+    KnomosisFaultProofGame internal game;
+
+    address internal constant TREASURY = address(0xBEEF);
+    address internal constant SEQUENCER = address(0xACE);
+    address internal constant CHALLENGER = address(0xCAFE);
+    uint128 internal constant ROOT_BOND = 1 ether;
+    uint128 internal constant CHALLENGE_BOND = 0.05 ether;
+    uint64 internal constant STEP_INTERVAL = 1;
+    /// @dev The deployment id the registry publishes and the game
+    ///      copies into each game — the §8.8.5 signing domain the
+    ///      F-A gate recomputes the digest under.
+    bytes32 internal constant DEPLOYMENT_ID = bytes32(uint256(0xBA7C4));
+
+    string internal raw;
+    string internal probeBase;
+    uint256 internal gameId;
+
+    function setUp() public {
+        vmRoot = new KnomosisStepVMRoot();
+        raw = readFixture(STEP_VM_FIXTURE);
+        _requireKeccakLinked(raw, ".isKeccak256Linked");
+        probeBase = findMultiProbeBase(raw, "transfer");
+        ProbeInput memory probe = loadProbeInput(raw, probeBase);
+
+        uint64 n = vm.getNonce(address(this));
+        address predictedGame = vm.computeCreateAddress(address(this), n + 1);
+        registry = new KnomosisStateRootSubmission(
+            ROOT_BOND,
+            100,
+            STEP_INTERVAL,
+            10,
+            SEQUENCER,
+            predictedGame,
+            DEPLOYMENT_ID,
+            100,
+            probe.preRoot, // genesis = the probe's pre-root
+            65_536,
+            BREAKER);
+        game = new KnomosisFaultProofGame(
+            100, // bisection response timeout
+            CHALLENGE_BOND,
+            STEP_INTERVAL,
+            TREASURY,
+            address(vmRoot),
+            address(registry),
+            address(0) // dispute-verifier forwarding disabled
+        );
+        assertEq(address(game), predictedGame, "game address prediction holds");
+        vm.deal(SEQUENCER, 10 ether);
+        vm.deal(CHALLENGER, 10 ether);
+
+        // A 4-entry batch whose first step is the probe; the later
+        // commits are bisection scaffolding no step VM ever runs on.
+        bytes32[5] memory commits;
+        commits[0] = probe.preRoot;
+        commits[1] = probePostRoot(raw, probeBase);
+        for (uint8 i = 2; i < 5; i++) {
+            commits[i] = keccak256(abi.encodePacked(commits[i - 1], i));
+        }
+        vm.prank(SEQUENCER);
+        registry.submitStateRoot{value: ROOT_BOND}(
+            4, 0, commits[4], _probeActionsRoot(probe)
+        );
+
+        // Challenge + bisect INSIDE the batch: [0,4] → [0,2] → [0,1].
+        vm.prank(CHALLENGER);
+        gameId = game.initiateChallenge{value: CHALLENGE_BOND}(
+            4, bytes32(uint256(0xC1)), probe.preRoot, 0
+        );
+        _rollPastInterval();
+        vm.prank(SEQUENCER);
+        game.submitMidpoint(gameId, commits[2]);
+        _rollPastInterval();
+        vm.prank(CHALLENGER);
+        game.respondToMidpoint(gameId, false);
+        _rollPastInterval();
+        vm.prank(SEQUENCER);
+        game.submitMidpoint(gameId, commits[1]);
+        _rollPastInterval();
+        vm.prank(CHALLENGER);
+        game.respondToMidpoint(gameId, false);
+        _rollPastInterval();
+    }
+
+    /// @notice The terminal step: leaf re-derivation + single-leaf
+    ///         inclusion verification + the step VM's multiproof fold.
+    function test_gas_terminateOnSingleStep_withInclusion() public {
+        ProbeInput memory probe = loadProbeInput(raw, probeBase);
+        _bench(
+            "terminateOnSingleStep_withInclusion",
+            SEQUENCER,
+            address(game),
+            0,
+            abi.encodeCall(
+                KnomosisFaultProofGame.terminateOnSingleStep,
+                (
+                    gameId,
+                    probe.actionKind,
+                    probe.actionFields,
+                    probe.signer,
+                    _testSig(),
+                    _singleEntryProof(),
+                    probe.cells,
+                    probe.gapMask,
+                    probe.siblings,
+                    probe.registryValue,
+                    probe.registryProof
+                )
+            ),
+            true
+        );
+    }
+
+    /// @notice Pins the staged scenario and the benchmarked call's
+    ///         effects: the terminate settles `SequencerWon` on the
+    ///         REAL registry — record cleared, tip unmoved, nothing
+    ///         reverted — so the measured transaction is the honest
+    ///         defence, not a revert path.
+    function test_sanity_terminateInclusionEffects() public {
+        ProbeInput memory probe = loadProbeInput(raw, probeBase);
+        vm.prank(SEQUENCER);
+        game.terminateOnSingleStep(
+            gameId,
+            probe.actionKind,
+            probe.actionFields,
+            probe.signer,
+            _testSig(),
+            _singleEntryProof(),
+            probe.cells,
+            probe.gapMask,
+            probe.siblings,
+            probe.registryValue,
+            probe.registryProof
+        );
+        (, , , , uint128 bond, , bool finalised, bool disputed, ,) =
+            registry.roots(4);
+        assertEq(bond, ROOT_BOND, "bond stays until finalisation");
+        assertFalse(disputed, "sequencer win clears the disputed flag");
+        assertFalse(finalised, "not yet finalised");
+        assertFalse(registry.isStateRootReverted(4), "nothing reverted");
+        assertEq(registry.canonicalTip(), 4, "tip unmoved");
+        assertGt(
+            game.pendingWithdrawals(SEQUENCER),
+            0,
+            "winner credited the forfeited challenger bond share"
+        );
+    }
+
+    /// @dev The probe action's REAL 65-byte wire signature
+    ///      `(r ‖ s ‖ v)` — hashed into the leaf per ruling R7 and
+    ///      VERIFIED by the F-A gate, so the benchmarked transaction
+    ///      measures the honest defence including the signature check
+    ///      (registry opening + decompression + ecrecover).
+    function _testSig() private view returns (bytes memory) {
+        ProbeInput memory probe = loadProbeInput(raw, probeBase);
+        return signAction(
+            probe.actionKind, probe.actionFields, probe.signer,
+            probe.signerNonce, DEPLOYMENT_ID);
+    }
+
+    /// @dev The single-leaf batch tree's inclusion proof: an all-zero
+    ///      32-byte bitmask and no siblings.
+    function _singleEntryProof() private pure returns (bytes memory) {
+        return new bytes(32);
+    }
+
+    /// @dev The actions root of a batch holding ONE action at absolute
+    ///      index 0 — the cell SMT with a single leaf, every path
+    ///      sibling the canonical empty sub-tree (the same spelling
+    ///      the batch-game cross-check suite pins against
+    ///      `ActionsRoot.verifyActionInclusion`).
+    function _probeActionsRoot(ProbeInput memory probe)
+        private
+        view
+        returns (bytes32 root)
+    {
+        bytes32 leafCommit = keccak256(
+            abi.encodePacked(
+                probe.actionKind, probe.signer, probe.actionFields, _testSig()
+            )
+        );
+        bytes memory keyBytes = abi.encodePacked(ActionsRoot.actionKey(0));
+        root = keccak256(
+            bytes.concat(
+                CBEEncode.bytesValue(keyBytes),
+                CBEEncode.bytesValue(abi.encodePacked(leafCommit))
+            )
+        );
+        bytes32[256] memory empties =
+            SmtCellVerifier.precomputeEmptySubtreeHashes();
+        for (uint256 d = 0; d < 256; d++) {
+            root = SmtCellVerifier.readKeyBitMSBFirst(keyBytes, d) == 1
+                ? keccak256(abi.encodePacked(empties[d], root))
+                : keccak256(abi.encodePacked(root, empties[d]));
+        }
+    }
+
+    /// @dev Roll past the per-move step interval.
+    function _rollPastInterval() private {
+        vm.roll(vm.getBlockNumber() + STEP_INTERVAL + 1);
+    }
 }

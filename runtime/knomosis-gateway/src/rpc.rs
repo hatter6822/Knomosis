@@ -60,6 +60,27 @@ const METHOD_NOT_FOUND: i64 = -32_601;
 /// additionally bounded by `--max-frame-size`).
 const MAX_BATCH: usize = 100;
 
+/// Maximum `/rpc` request-body size, in bytes.
+///
+/// `MAX_BATCH` bounds the RESPONSE fan-out but not the parse that
+/// precedes it: `serde_json::from_slice` materialises the whole body
+/// into an owned `Value` tree before the batch length can be looked
+/// at, so a body of `[0,0,0,…]` at the `--max-frame-size` ceiling
+/// (1 MiB default, 16 MiB max) becomes on the order of half a million
+/// `Value`s — tens of megabytes of transient heap per request, from a
+/// caller holding no credential, multiplied by `--max-connections`.
+/// The crate builds with `panic = "abort"`, so an allocation failure
+/// takes the process down rather than the request.
+///
+/// This endpoint exists for a browser wallet's Add-Network probe:
+/// `eth_chainId`, `net_version`, `eth_blockNumber`.  A full
+/// `MAX_BATCH` of those is a few kilobytes, so 64 KiB is generous by
+/// two orders of magnitude while removing the amplification.  It is
+/// deliberately NOT tied to `--max-frame-size`: that bound sizes the
+/// authenticated submit path, where the caller is known and the body
+/// is a signed action.
+const MAX_RPC_BODY_BYTES: usize = 64 * 1024;
+
 /// Dispatch a `POST /rpc` request.  Reads the request body (the JSON-RPC
 /// envelope) and — only for `eth_blockNumber` — the indexer cursor from
 /// [`AppState`].  A request is answered HTTP `200` with the JSON-RPC response
@@ -71,6 +92,16 @@ const MAX_BATCH: usize = 100;
 #[must_use]
 pub fn handle(state: &AppState, payload: &RequestPayload) -> RouteOutcome {
     let l2_chain_id = state.config.l2_chain_id;
+
+    // Bound the body BEFORE parsing.  Checked on the slice length, so
+    // an over-cap request costs a comparison rather than a parse.
+    if payload.body.len() > MAX_RPC_BODY_BYTES {
+        return json_response(&error_response(
+            Value::Null,
+            INVALID_REQUEST,
+            &format!("request body too large (max {MAX_RPC_BODY_BYTES} bytes)"),
+        ));
+    }
 
     let parsed: Value = match serde_json::from_slice(payload.body) {
         Ok(v) => v,
@@ -400,6 +431,44 @@ mod tests {
         assert_eq!(v["error"]["code"], -32600);
         // A single error object, not an array of MAX_BATCH+1 responses.
         assert!(v.is_object());
+    }
+
+    #[test]
+    fn oversized_body_is_rejected_before_it_is_parsed() {
+        // `MAX_BATCH` bounds the RESPONSE fan-out; it cannot bound the
+        // PARSE, because `from_slice` has to build the whole `Value`
+        // tree before the batch length exists to be checked.  A body
+        // of bare integers is the cheap shape for the caller and the
+        // expensive one for the server: no strings, no objects, just
+        // half a million `Value`s.  Uncredentialed, since `/rpc` is
+        // auth- and rate-limit-exempt.
+        //
+        // Sized just past the cap rather than at the `--max-frame-size`
+        // ceiling: the assertion is that the LENGTH check fires, and a
+        // 16 MiB literal in a unit test would be slow for no extra
+        // signal.
+        let body = format!("[{}]", vec!["0"; super::MAX_RPC_BODY_BYTES].join(","));
+        assert!(body.len() > super::MAX_RPC_BODY_BYTES);
+        let v = call(&state_with_chain_id(8357), &body);
+        assert_eq!(v["error"]["code"], -32600);
+        assert!(
+            v["error"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("too large"),
+            "expected the body-size refusal, got {v}"
+        );
+    }
+
+    #[test]
+    fn a_body_at_the_cap_is_still_served() {
+        // The other side of the bound: the guard must not refuse the
+        // traffic the endpoint exists for.  A wallet's Add-Network
+        // probe is a single small request, far under the cap.
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}"#;
+        assert!(body.len() <= super::MAX_RPC_BODY_BYTES);
+        let v = call(&state_with_chain_id(8357), body);
+        assert_eq!(v["result"], "0x20a5");
     }
 
     #[test]

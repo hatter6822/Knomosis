@@ -100,7 +100,7 @@ Coverage map:
     one-constructor-at-a-time `bridgePolicy_*` family with a single
     source of truth: `bridgeAuthorizedAction_eq_true_iff` (the bridge
     actor signs EXACTLY `replaceKey` / `registerIdentity` / `deposit`
-    / `depositWithFee` / `ammSwap` / `reclaimAmmReserves`), the
+    / `depositWithFee` / `reclaimAmmReserves`), the
     positive `bridgePolicy_authorizes_all_bridge_actions`
     (no-regression), and the negative `bridgePolicy_rejects_non_bridgeable`
     (every other action is rejected).  Because the iff is proven by
@@ -117,101 +117,17 @@ namespace Bridge
 
 open LegalKernel.Authority
 
-/-! ## The bridge actor
+/-! ## The reserved actors
 
-`ActorId 0` is reserved for the bridge actor — the deployment
-authority that signs every L1-derived Knomosis action.
-
-The reservation is operational: `AddressBook.empty.nextActorId = 4`
-(post-GP.11.5), so addresses assigned via `assign` get `id ≥ 4`,
-leaving ids `0` / `1` / `2` / `3` exclusively for the bridge / gas-pool /
-sequencer / AMM-reserve actors.  No structural enforcement is needed; the
-convention plus the runtime adaptor's discipline suffice. -/
-
-/-- The bridge actor's `ActorId`.  Fixed at `0` so that the
-    `AddressBook`'s assigned ids (starting from `4` post-GP.11.5)
-    never collide with the bridge actor's slot. -/
-def bridgeActor : ActorId := 0
-
-/-! ## Reserved gas-pool actors (GP.7.1)
-
-Workstream GP.7.1 reserves two `ActorId` slots immediately after the
-bridge actor:
-
-  * `gasPoolActor` (`ActorId 1`) accumulates the deposit fee-split
-    revenue and the per-actor budget top-up payments at both
-    `ResourceId 0` (ETH) and `ResourceId 1` (BOLD).  Its outflow is
-    bounded by the canonical `gasPoolPolicy` (GP.7.2): it may only
-    `transfer` to `sequencerActor`, capped per action; the per-epoch
-    drain bound is the inductive GP.7.3 theorem.
-
-  * `sequencerActor` (`ActorId 2`) is the deployment's sequencer key:
-    the sole authorised recipient of `gasPoolActor` outflow, and the
-    actor that submits L2 state roots to L1.
-
-Like the bridge actor, the reservation is operational — the genesis
-`AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
-`AddressBook.addressBook_empty_nextActorId`), so an `empty` + `assign`
-chain never issues a reserved slot to a user-registered identity.  The
-reserved actors are pairwise distinct (the disjointness theorems
-below), which the GP.7.2 `gasPoolPolicy` relies on: the pool's
-recipient restriction is only meaningful when `sequencerActor` is a
-*different* actor than `gasPoolActor`. -/
-
-/-- The reserved `ActorId` of the gas-pool actor (Workstream GP.7.1).
-    Holds the deposit fee-split skim and the per-actor budget top-up
-    payments; its outflow is bounded by the canonical `gasPoolPolicy`
-    (GP.7.2), which permits only capped `transfer`s to
-    `sequencerActor`.
-
-    Fixed at `1`, the first slot after the bridge actor.  The genesis
-    `AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
-    `AddressBook.addressBook_empty_nextActorId`) so this slot is never
-    issued to a user-registered identity. -/
-def gasPoolActor : ActorId := 1
-
-/-- The reserved `ActorId` of the sequencer actor (Workstream GP.7.1).
-    The only authorised recipient of `gasPoolActor` outflow under the
-    canonical `gasPoolPolicy` (GP.7.2): the sequencer claims accrued
-    gas-pool revenue (L1-gas reimbursement) and submits L2 state roots
-    to L1.
-
-    Fixed at `2`, the second reserved slot after the bridge actor. -/
-def sequencerActor : ActorId := 2
-
-/-! ## Reserved AMM-reserve actor (GP.11.5)
-
-Workstream GP.11.5 reserves a third deployment slot after the bridge
-actor — the L2-side counterpart of the L1 `KnomosisBridge`'s
-`ammReserveEth` / `ammReserveBold` storage slots (GP.11.1 / GP.11.2 /
-GP.11.3):
-
-  * `ammReserveActor` (`ActorId 3`) holds the L2 reflection of the L1
-    bridge's embedded ETH↔BOLD AMM liquidity at both `ResourceId 0`
-    (ETH) and `ResourceId 1` (BOLD).  Its balances are mutated only by
-    bridge-attested `ammSwap` actions (frozen `Action` index 23): an
-    `ammSwap` credits this actor at the swap's `fromResource` and debits
-    it at the `toResource`, mirroring the on-chain reserve update.
-
-Like the GP.7.1 slots, the reservation is operational: the genesis
-`AddressBook.empty.nextActorId` advances a further step (`3 → 4`;
-`AddressBook.addressBook_empty_nextActorId`), so an `empty` + `assign`
-chain never issues `ActorId 3` to a user-registered identity.  The slot
-is provably distinct from the three GP.7.1 reserved actors (the
-disjointness theorems below). -/
-
-/-- The reserved `ActorId` of the AMM-reserve actor (Workstream GP.11.5).
-    Holds the L2 reflection of the L1 bridge's embedded ETH↔BOLD AMM
-    liquidity (`ammReserveEth` / `ammReserveBold`) at both `ResourceId 0`
-    (ETH) and `ResourceId 1` (BOLD).  Its balances are mutated only by
-    bridge-attested `ammSwap` actions (frozen `Action` index 23); no
-    other action targets this actor.
-
-    Fixed at `3`, the third reserved slot after the bridge actor.  The
-    genesis `AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
-    `AddressBook.addressBook_empty_nextActorId`) so this slot is never
-    issued to a user-registered identity. -/
-def ammReserveActor : ActorId := 3
+The four reserved `ActorId` constants (`bridgeActor`, `gasPoolActor`,
+`sequencerActor`, `ammReserveActor`) are DEFINED in
+`Bridge/AddressBook.lean` — the module that owns the reservation
+narrative (`AddressBook.empty.nextActorId = 4` is what keeps the
+slots un-issuable) and that sits BELOW `Authority.Action` in the
+import graph, so the action compiler can name the canonical slots
+(the Workstream-SB seed leg pins its reserve target that way).  This
+module keeps the pairwise-disjointness theorems, which the policy
+layers consume. -/
 
 /-! ### Reserved-actor disjointness (GP.7.1 + GP.11.5)
 
@@ -223,8 +139,8 @@ foundation the GP.7.2 `gasPoolPolicy` and the GP.7.3 drain bound rest on
 be drained, and a bridge actor whose L1-attestation authority overlapped
 the pool slot would conflate two distinct trust domains.  The
 `ammReserveActor` disjointness additionally guarantees the AMM-reserve
-ledger is a distinct accounting domain: an `ammSwap` reshuffles only the
-`ammReserveActor` slot, never the gas-pool or sequencer balances. -/
+ledger is a distinct accounting domain: a `reserveSwap` trades against
+the `ammReserveActor` slot, never the gas-pool or sequencer balances. -/
 
 /-- GP.7.1 — the gas-pool actor and the bridge actor occupy distinct
     `ActorId` slots (`1 ≠ 0`). -/
@@ -245,8 +161,8 @@ theorem sequencerActor_ne_gasPoolActor : sequencerActor ≠ gasPoolActor := by d
 theorem ammReserveActor_ne_bridgeActor : ammReserveActor ≠ bridgeActor := by decide
 
 /-- GP.11.5 — the AMM-reserve actor and the gas-pool actor occupy distinct
-    `ActorId` slots (`3 ≠ 1`).  Guarantees an `ammSwap` mutates a ledger
-    domain disjoint from the gas pool: the AMM reshuffle never touches
+    `ActorId` slots (`3 ≠ 1`).  Guarantees a `reserveSwap` mutates a ledger
+    domain disjoint from the gas pool: the swap never touches
     `gasPoolActor`'s balances. -/
 theorem ammReserveActor_ne_gasPoolActor : ammReserveActor ≠ gasPoolActor := by decide
 
@@ -427,7 +343,7 @@ def bridgeAuthorizedAction : Action → Bool
   -- `bridgeAuthorizedAction_of_isBridgeOnly` consistency theorem
   -- (`Bridge/Admissible.lean`) pins exactly this `isBridgeOnly ⊆
   -- bridgeAuthorizedAction` invariant.
-  | .depositWithFee _ _ _ _ _ _ _ => true
+  | .depositWithFee _ _ _ _ _ _ _ _ => true
   -- ## The eighteen non-bridge-signable variants (explicit, no
   -- wildcard).  Balance / supply movement, the positive-incentive
   -- trio, the dispute + fault-proof pipeline, identity-policy
@@ -473,11 +389,8 @@ def bridgeAuthorizedAction : Action → Bool
   -- consume-exempt, so a refund signed by it would have no budget to
   -- retire).
   | .claimBudgetRefund _ _ _ _    => false
-  -- GP.11.4: `ammSwap` (index 23) is bridge-attested — the L1 AMM
-  -- swap executes on-chain and the bridge actor signs the L2 mirror
-  -- action recording the resulting `amountOut`.  Like `depositWithFee`,
-  -- the bridge is the sole authority on the swap result.
-  | .ammSwap _ _ _ _ _            => true
+  -- Index 23 (`ammSwap`) is RETIRED with the excised L1 embedded AMM;
+  -- the constructor no longer exists, so no arm is needed.
   -- GP.11.10: `reclaimAmmReserves` (index 24) is bridge-attested —
   -- the L1 `emergencyDisableAmm()` kill switch fires on-chain, and
   -- the bridge actor signs the L2 sweep that re-tags the frozen
@@ -486,6 +399,14 @@ def bridgeAuthorizedAction : Action → Bool
   -- threaded actors to the canonical reserved slots and requires the
   -- L2 `ammDisabled` state-root mirror to be set.
   | .reclaimAmmReserves _ _ _ _   => true
+  -- Workstream SB: `reserveSwap` (index 25) is USER-initiated — a
+  -- user trades their own balance against the AMM reserve, priced
+  -- in-kernel, under the deployment `AuthorityPolicy`'s
+  -- `user = signer` binding (`reserveSwapUserBinding`).  It is never
+  -- a bridge attestation: the bridge has no role in an L2-native
+  -- swap, and authorising it here would let a compromised bridge
+  -- key trade against the reserve in an arbitrary user's name.
+  | .reserveSwap _ _ _ _ _ _      => false
 
 /-- The bridge actor's authorisation policy.  Authorises an action
     iff:
@@ -637,10 +558,10 @@ theorem bridgePolicy_authorizes_deposit
 theorem bridgePolicy_authorizes_depositWithFee
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : Bridge.DepositId) :
+    (depositId : Bridge.DepositId) (seedAmount : Amount) :
     bridgePolicy.authorized bridgeActor
       (.depositWithFee r recipient poolActor userAmount poolAmount
-                        budgetGrant depositId) := by
+                        budgetGrant depositId seedAmount) := by
   unfold bridgePolicy bridgeAuthorizedAction
   exact ⟨rfl, rfl⟩
 
@@ -799,20 +720,20 @@ it is worth being precise about which mechanism catches which change:**
     updating the iff's disjunction leaves a `True ↔ False` (or
     `False ↔ True`) goal that `simp` cannot close.
 
-When Workstream GP.11 introduces `ammSwap` (the constant-product
-ETH↔BOLD swap), the *first* mechanism fires immediately — `ammSwap`
-makes `bridgeAuthorizedAction` non-exhaustive, forcing a `true`/`false`
-classification.  If a deployment wants the bridge actor to sign it
-(`=> true`), the *second* mechanism then forces a matching disjunct in
-`bridgeAuthorizedAction_eq_true_iff`.  The build will not compile until
-both are done — which is precisely the safety net this section
-provides. -/
+Both mechanisms fire on every change to the `Action` inductive: a new
+constructor makes `bridgeAuthorizedAction` non-exhaustive, forcing a
+`true`/`false` classification, and classifying it `true` then forces a
+matching disjunct in `bridgeAuthorizedAction_eq_true_iff`.  Retiring a
+constructor exercises the same net in reverse — when the `ammSwap`
+L1-mirror (index 23) was excised, its arm and its disjunct had to come
+out together or the build would not compile.  That is precisely the
+safety net this section provides. -/
 
 /-- **Complete characterisation (GP.7.0).**  `bridgeAuthorizedAction`
-    returns `true` for EXACTLY the four L1-attested action shapes the
+    returns `true` for EXACTLY the five L1-attested action shapes the
     bridge actor is permitted to sign — `replaceKey`,
-    `registerIdentity`, `deposit`, and `depositWithFee` — and `false`
-    for every other constructor.
+    `registerIdentity`, `deposit`, `depositWithFee`, and
+    `reclaimAmmReserves` — and `false` for every other constructor.
 
     This single iff subsumes the per-constructor
     `bridgePolicy_authorizes_*` / `bridgePolicy_rejects_*` family: the
@@ -831,10 +752,9 @@ theorem bridgeAuthorizedAction_eq_true_iff (action : Action) :
       (∃ actor newKey, action = .replaceKey actor newKey) ∨
       (∃ actor pk, action = .registerIdentity actor pk) ∨
       (∃ r recipient amount d, action = .deposit r recipient amount d) ∨
-      (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
+      (∃ r recipient poolActor userAmount poolAmount budgetGrant d seedAmount,
         action = .depositWithFee r recipient poolActor userAmount
-                                  poolAmount budgetGrant d) ∨
-      (∃ fr tr ai ao ra, action = .ammSwap fr tr ai ao ra) ∨
+                                  poolAmount budgetGrant d seedAmount) ∨
       (∃ r amount reserveActor poolActor,
         action = .reclaimAmmReserves r amount reserveActor poolActor) := by
   cases action <;> simp [bridgeAuthorizedAction]
@@ -842,11 +762,10 @@ theorem bridgeAuthorizedAction_eq_true_iff (action : Action) :
 /-- **No-regression / positive half (GP.7.0).**  Every action variant
     the bridge actor is permitted to sign passes `bridgePolicy`: the
     three pre-GP variants (`replaceKey`, `registerIdentity`,
-    `deposit`) plus the Workstream-GP `depositWithFee` and `ammSwap`.
-    Bundles the individual `bridgePolicy_authorizes_*` theorems so a
-    single term witnesses that the bridge-signable set is preserved
-    across extensions — the bridge can still do everything it could
-    before, and now also the AMM swap mirror. -/
+    `deposit`) plus the Workstream-GP `depositWithFee` and the
+    GP.11.10 `reclaimAmmReserves`.  Bundles the individual
+    `bridgePolicy_authorizes_*` theorems so a single term witnesses
+    that the bridge-signable set is preserved across extensions. -/
 theorem bridgePolicy_authorizes_all_bridge_actions :
     (∀ actor newKey,
         bridgePolicy.authorized bridgeActor (.replaceKey actor newKey)) ∧
@@ -854,12 +773,10 @@ theorem bridgePolicy_authorizes_all_bridge_actions :
         bridgePolicy.authorized bridgeActor (.registerIdentity actor pk)) ∧
     (∀ r recipient amount d,
         bridgePolicy.authorized bridgeActor (.deposit r recipient amount d)) ∧
-    (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
+    (∀ r recipient poolActor userAmount poolAmount budgetGrant d seedAmount,
         bridgePolicy.authorized bridgeActor
           (.depositWithFee r recipient poolActor userAmount poolAmount
-                            budgetGrant d)) ∧
-    (∀ fr tr ai ao ra,
-        bridgePolicy.authorized bridgeActor (.ammSwap fr tr ai ao ra)) ∧
+                            budgetGrant d seedAmount)) ∧
     (∀ r amount reserveActor poolActor,
         bridgePolicy.authorized bridgeActor
           (.reclaimAmmReserves r amount reserveActor poolActor)) :=
@@ -867,7 +784,6 @@ theorem bridgePolicy_authorizes_all_bridge_actions :
    bridgePolicy_authorizes_registerIdentity,
    bridgePolicy_authorizes_deposit,
    bridgePolicy_authorizes_depositWithFee,
-   fun _ _ _ _ _ => ⟨rfl, rfl⟩,
    fun _ _ _ _ => ⟨rfl, rfl⟩⟩
 
 /-- **Exhaustive rejection / negative half (GP.7.0).**  If an action is
@@ -887,10 +803,10 @@ theorem bridgePolicy_rejects_non_bridgeable
     (h_rk  : ∀ actor newKey, action ≠ .replaceKey actor newKey)
     (h_ri  : ∀ actor pk, action ≠ .registerIdentity actor pk)
     (h_dep : ∀ r recipient amount d, action ≠ .deposit r recipient amount d)
-    (h_dwf : ∀ r recipient poolActor userAmount poolAmount budgetGrant d,
+    (h_dwf : ∀ r recipient poolActor userAmount poolAmount budgetGrant d
+               seedAmount,
                action ≠ .depositWithFee r recipient poolActor userAmount
-                                        poolAmount budgetGrant d)
-    (h_amm : ∀ fr tr ai ao ra, action ≠ .ammSwap fr tr ai ao ra)
+                                        poolAmount budgetGrant d seedAmount)
     (h_rec : ∀ r amount reserveActor poolActor,
                action ≠ .reclaimAmmReserves r amount reserveActor poolActor) :
     ¬ bridgePolicy.authorized bridgeActor action := by
@@ -898,13 +814,12 @@ theorem bridgePolicy_rejects_non_bridgeable
   intro ⟨_, hauth⟩
   rcases (bridgeAuthorizedAction_eq_true_iff action).mp hauth with
     ⟨a, nk, rfl⟩ | ⟨a, pk, rfl⟩ | ⟨r, rcp, amt, d, rfl⟩
-    | ⟨r, rcp, pa, ua, pamt, bg, d, rfl⟩ | ⟨fr, tr, ai, ao, ra, rfl⟩
+    | ⟨r, rcp, pa, ua, pamt, bg, d, sa, rfl⟩
     | ⟨r, amt, ra, pa, rfl⟩
   · exact h_rk a nk rfl
   · exact h_ri a pk rfl
   · exact h_dep r rcp amt d rfl
-  · exact h_dwf r rcp pa ua pamt bg d rfl
-  · exact h_amm fr tr ai ao ra rfl
+  · exact h_dwf r rcp pa ua pamt bg d sa rfl
   · exact h_rec r amt ra pa rfl
 
 /-! ## Sanity smoke checks -/

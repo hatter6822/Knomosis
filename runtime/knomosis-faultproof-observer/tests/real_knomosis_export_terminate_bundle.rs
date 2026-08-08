@@ -38,6 +38,7 @@
 //! contract end-to-end.
 
 use knomosis_faultproof_observer::strategy::parse_terminate_bundle_json;
+use knomosis_l1_ingest::action::Amount;
 use knomosis_l1_ingest::action::{Action, EthAddress};
 use knomosis_l1_ingest::encoding::encode_signed_action;
 use std::path::PathBuf;
@@ -140,7 +141,7 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
         r: 1,
         sender: 1,
         receiver: 2,
-        amount: 100,
+        amount: Amount::from_u64(100),
     };
     let log_bytes = build_log_with_action(&action, 1);
     std::fs::write(&log_path, &log_bytes).unwrap();
@@ -219,7 +220,7 @@ fn real_knomosis_export_terminate_bundle_deterministic() {
     let action = Action::Mint {
         r: 5,
         to: 7,
-        amount: 50,
+        amount: Amount::from_u64(50),
     };
     let log_bytes = build_log_with_action(&action, 7);
     std::fs::write(&log_path, &log_bytes).unwrap();
@@ -248,7 +249,7 @@ fn real_knomosis_export_terminate_bundle_mint_variant() {
     let action = Action::Mint {
         r: 3,
         to: 11,
-        amount: 42,
+        amount: Amount::from_u64(42),
     };
     let log_bytes = build_log_with_action(&action, 11);
     std::fs::write(&log_path, &log_bytes).unwrap();
@@ -294,7 +295,7 @@ fn real_knomosis_export_terminate_bundle_withdraw_variant() {
     let action = Action::Withdraw {
         r: 2,
         sender: 3,
-        amount: 50,
+        amount: Amount::from_u64(50),
         recipient_l1,
     };
     let log_bytes = build_log_with_action(&action, 3);
@@ -428,7 +429,7 @@ fn real_knomosis_export_terminate_bundle_json_is_single_line_object() {
         r: 1,
         sender: 1,
         receiver: 2,
-        amount: 100,
+        amount: Amount::from_u64(100),
     };
     let log_bytes = build_log_with_action(&action, 1);
     std::fs::write(&log_path, &log_bytes).unwrap();

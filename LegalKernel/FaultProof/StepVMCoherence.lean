@@ -241,6 +241,53 @@ theorem uint64BE_size (n : Nat) : (uint64BE n).size = 8 := by
   unfold uint64BE
   rfl
 
+set_option maxHeartbeats 1000000 in
+/-- `uint64BE` is injective below `2 ^ 64`.
+
+    Proof strategy: byte-equality of the two encodings yields the
+    eight big-endian byte equations; rewriting shifts as division and
+    the `0xFF` mask as `% 256` turns them into linear div/mod facts
+    `omega` can combine with the width bounds to conclude `n₁ = n₂`.
+
+    The bound is not decorative — `uint64BE` truncates above it
+    (`uint64BE (2 ^ 64) = uint64BE 0`), which is exactly why every
+    consumer either carries a `< 2 ^ 64` hypothesis or reads the
+    value out of a `UInt64`. -/
+theorem uint64BE_inj {n₁ n₂ : Nat} (h₁ : n₁ < 2 ^ 64) (h₂ : n₂ < 2 ^ 64)
+    (h : uint64BE n₁ = uint64BE n₂) : n₁ = n₂ := by
+  -- ByteArray → Array → List → per-byte equations.
+  unfold uint64BE at h
+  injection h with harr
+  have hlist := congrArg Array.toList harr
+  simp only [List.cons.injEq, and_true] at hlist
+  obtain ⟨e7, e6, e5, e4, e3, e2, e1, e0⟩ := hlist
+  -- UInt8 equality → Nat-mod equality per byte.
+  have toNat8 : ∀ {a b : Nat}, a.toUInt8 = b.toUInt8 → a % 256 = b % 256 := by
+    intro a b hab
+    have := congrArg UInt8.toNat hab
+    simpa [Nat.toUInt8, UInt8.toNat_ofNat] using this
+  have m7 := toNat8 e7
+  have m6 := toNat8 e6
+  have m5 := toNat8 e5
+  have m4 := toNat8 e4
+  have m3 := toNat8 e3
+  have m2 := toNat8 e2
+  have m1 := toNat8 e1
+  have m0 := toNat8 e0
+  -- Stage 1: shifts → division; mask → mod (`0xFF = 2 ^ 8 - 1`).
+  -- Kept SEPARATE from the pow-reduction stage: in one pass the
+  -- `Nat.reducePow` simproc rewrites `2 ^ 8 - 1` straight back to a
+  -- numeral before the mask lemma can see the `&&& (2 ^ 8 - 1)`
+  -- shape, the `&&&`s survive, and `omega` silently drops every
+  -- hypothesis containing one.
+  simp only [Nat.shiftRight_eq_div_pow,
+             show (0xFF : Nat) = 2 ^ 8 - 1 from rfl,
+             Nat.and_two_pow_sub_one_eq_mod] at m7 m6 m5 m4 m3 m2 m1 m0
+  -- Stage 2: pows → numerals so `omega` sees plain div/mod facts.
+  simp only [Nat.reducePow] at m7 m6 m5 m4 m3 m2 m1 m0 h₁ h₂
+  -- Eight base-256 digit equations + the width bounds pin the value.
+  omega
+
 /-- Size of `uint256BE` is exactly 32. -/
 theorem uint256BE_size (n : Nat) : (uint256BE n).size = 32 := by
   unfold uint256BE
@@ -249,8 +296,7 @@ theorem uint256BE_size (n : Nat) : (uint256BE n).size = 32 := by
 /-- The constructor-index dispatcher byte for an `Action`.  Mirrors
     the Solidity `ActionKind` enum and `Encoding.Action.encode`'s
     leading-tag emission.  Frozen, append-only: a new variant takes
-    the next index (currently `0..21`; `21` =
-    `topUpActionBudgetFor`). -/
+    the next index (currently `0..25`; `25` = `reserveSwap`). -/
 def actionKindByte : Action → UInt8
   | .transfer _ _ _ _              => 0
   | .mint _ _ _                    => 1
@@ -272,7 +318,7 @@ def actionKindByte : Action → UInt8
   | .faultProofChallenge _ _ _ _   => 17
   | .faultProofResolution _ _ _ _  => 18
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
-  | .depositWithFee _ _ _ _ _ _ _  => 19
+  | .depositWithFee _ _ _ _ _ _ _ _  => 19
   | .topUpActionBudget _ _ _ _     => 20
   -- Workstream GP (GP.3.4): delegated top-up.  Dispatcher index 21.
   -- GP.5.3 wired the L1 step-VM execution arm + Solidity `_step21`
@@ -288,35 +334,20 @@ def actionKindByte : Action → UInt8
   -- now returns the empty-hash sentinel only for kinds `≥ 23` (see
   -- `stepVMHash_unknown_kind_empty`).
   | .claimBudgetRefund _ _ _ _      => 22
-  -- Workstream GP (GP.11.4): L2 AMM swap.  Dispatcher index 23.
-  -- The `stepVMHash` execution arm (kind 23, `stepCommitAmmSwap`), the
-  -- Solidity `_stepAmmSwap` decoder, and the cross-stack fixtures ship
-  -- alongside, so kind 23 is L1-fault-proof-*executable*.
-  | .ammSwap _ _ _ _ _              => 23
+  -- Index 23 (`ammSwap`) is RETIRED with the excised L1 embedded AMM;
+  -- the dispatcher slot stays reserved and no kind may reuse it.
   -- Workstream GP (GP.11.10): post-disable reserve sweep.  Dispatcher
   -- index 24.  The `stepVMHash` execution arm (kind 24,
   -- `stepCommitReclaimAmmReserves`), the Solidity
   -- `_stepReclaimAmmReserves` decoder, and the cross-stack fixtures
   -- ship alongside, so kind 24 is L1-fault-proof-*executable*.
   | .reclaimAmmReserves _ _ _ _     => 24
-
-/-- The `stepVMHash`-*dispatched* kind range, `0..24` — the 25
-    variants for which the L1 step-VM has a real execution arm with a
-    cross-stack Solidity counterpart.  Used by the coverage regression
-    test (`for kind in actionKindByteCases`) to assert each dispatched
-    kind yields a non-empty hash.
-
-    Note (GP.11.10): index `24` (`reclaimAmmReserves`) joined this
-    list once its `stepVMHash` execution arm
-    (`stepCommitReclaimAmmReserves`) and the Solidity
-    `_stepReclaimAmmReserves` decoder + cross-stack fixtures landed;
-    `stepVMHash` now returns the empty-hash sentinel only for kinds
-    `≥ 25` (see `stepVMHash_unknown_kind_empty`).  This list
-    enumerates the kinds that are currently
-    L1-fault-proof-*executable*, which is the property the coverage
-    test needs. -/
-def actionKindByteCases : List UInt8 :=
-  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+  -- Workstream SB: the user-facing L2 swap.  Dispatcher index 25.
+  -- The verifier-side derivation (`VerifierWrites`) and the Solidity
+  -- root-computing kind-25 arm re-derive the constant-product quote
+  -- from the opened pre-value cells at the shared
+  -- `AmmMath.swapFeeBps`.
+  | .reserveSwap _ _ _ _ _ _        => 25
 
 /-! ## `actionFieldsForL1` — canonical byte layout per variant
 
@@ -410,13 +441,17 @@ def actionFieldsForL1 : Action → ByteArray
   -- Workstream GP (v1.0): depositWithFee is a structured variant:
   -- `uint64BE resource || uint64BE recipient || uint64BE poolActor ||
   -- uint256BE userAmount || uint256BE poolAmount || uint64BE budgetGrant
-  -- || uint64BE depositId`.  Mirrors the Solidity `_step19` decoder's
-  -- byte-for-byte field reads.  `budgetGrant` is a budget UNIT count
-  -- and `depositId` an identifier, so both stay 8 bytes.
-  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  -- || uint64BE depositId || uint256BE seedAmount`.  Mirrors the
+  -- Solidity `_step19` decoder's byte-for-byte field reads.
+  -- `budgetGrant` is a budget UNIT count and `depositId` an
+  -- identifier, so both stay 8 bytes.  Workstream SB APPENDS the
+  -- wei-denominated `seedAmount` (104 → 136 bytes), so every
+  -- pre-existing field offset survives.
+  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId
+                     seedAmount =>
       uint64BE r.toNat ++ uint64BE recipient.toNat ++ uint64BE poolActor.toNat ++
       uint256BE userAmount ++ uint256BE poolAmount ++ uint64BE budgetGrant ++
-      uint64BE depositId
+      uint64BE depositId ++ uint256BE seedAmount
   -- topUpActionBudget is a structured variant:
   -- `uint64BE gasResource || uint256BE gasAmount || uint64BE budgetIncrement ||
   -- uint64BE poolActor`.  `gasAmount` is wei-denominated and so rides the
@@ -458,15 +493,6 @@ def actionFieldsForL1 : Action → ByteArray
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       uint64BE gasResource.toNat ++ uint64BE budgetUnits ++
       uint256BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
-  -- Workstream GP (GP.11.4): ammSwap is a structured variant:
-  -- `uint64BE fromResource || uint64BE toResource || uint256BE amountIn
-  -- || uint256BE amountOut || uint64BE ammReserveActor`.  The kernel-
-  -- state effect (credit ammReserveActor at fromResource by amountIn,
-  -- debit ammReserveActor at toResource by amountOut) is mirrored
-  -- byte-for-byte by the Solidity `_stepAmmSwap`.
-  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      uint64BE fromResource.toNat ++ uint64BE toResource.toNat ++
-      uint256BE amountIn ++ uint256BE amountOut ++ uint64BE ammReserveActor.toNat
   -- Workstream GP (GP.11.10): reclaimAmmReserves is a structured
   -- variant: `uint64BE r || uint256BE amount || uint64BE reserveActor
   -- || uint64BE poolActor`.  The kernel-state effect (debit
@@ -477,6 +503,21 @@ def actionFieldsForL1 : Action → ByteArray
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       uint64BE r.toNat ++ uint256BE amount ++
       uint64BE reserveActor.toNat ++ uint64BE poolActor.toNat
+  -- Workstream SB: reserveSwap is a structured variant:
+  -- `uint64BE fromResource || uint64BE toResource || uint64BE user ||
+  -- uint256BE amountIn || uint256BE minAmountOut || uint64BE
+  -- reserveActor` (96 bytes: fromResource@0, toResource@8, user@16,
+  -- amountIn@24, minAmountOut@56, reserveActor@88).  The kernel-state
+  -- effect (the four chained balance writes priced by the
+  -- constant-product quote over the reserve's opened pre-values) is
+  -- re-derived — not read from the fields — by both stacks'
+  -- verifier-side write derivations; `minAmountOut` is decoded so the
+  -- evaluated precondition can check the slippage floor exactly as
+  -- the law does.
+  | .reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      uint64BE fromResource.toNat ++ uint64BE toResource.toNat ++
+      uint64BE user.toNat ++ uint256BE amountIn ++ uint256BE minAmountOut ++
+      uint64BE reserveActor.toNat
 
 /-! ## The L1 log-entry chain
 

@@ -26,6 +26,12 @@ remain: the Lean `knomosis extract-events` subcommand (needed by RH-D's
 `SubprocessExtractor`) and `knomosis-indexer`'s `--verify-against-knomosis`
 wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
 
+  * **`knomosis-amount`** — the workspace's 256-bit unsigned
+    accounting scalar.  Sits below every other crate (it depends only
+    on the arithmetic engine), because both the read side and the
+    write side carry balances.  The width is not a safety margin: the
+    kernel's `Laws.maxAmount` is exactly `2^256`, so `Amount` holds
+    precisely what the kernel admits.
   * **`knomosis-cli-common`** — shared logging / exit-code / paths
     helpers.  Fully implemented (small surface, stable from day
     one).
@@ -34,8 +40,11 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     assertions against the Lean reference.
   * **`knomosis-verify-secp256k1`** — RH-A.1 ECDSA secp256k1
     verifier.  Production cdylib exposing the `knomosis_verify_ecdsa`
-    C ABI symbol.  Strict input validation, EIP-2 / BIP-62 low-s
-    canonicalisation, k256 v0.13 backend.
+    C ABI symbol — the v2 WIRE semantics: raw signing-input bytes
+    keccak256-hashed in-adaptor, 65-byte `(r ‖ s ‖ v)` signatures
+    validated by recovery (mirroring L1 `ecrecover`).  Strict input
+    validation, EIP-2 / BIP-62 low-s canonicalisation, k256 v0.13
+    backend.
   * **`knomosis-hash-keccak256`** — RH-A.2 Keccak-256 hash adaptor.
     Production cdylib exposing the `knomosis_hash_bytes` /
     `knomosis_hash_stream` / `knomosis_hash_identifier` C ABI symbols.
@@ -44,10 +53,14 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     daemon.  Library + binary.  Watches `KnomosisBridge` /
     `KnomosisIdentityRegistry` event logs via Ethereum JSON-RPC,
     translates events to Knomosis `Action`s via the Rust mirror of
-    `Bridge.Ingest.ingest`, signs with a zeroize-protected
-    bridge-actor key, and forwards CBE-encoded `SignedAction`s
-    to `knomosis-host` via length-prefixed HTTP.  Idempotent
-    re-org-tolerant up to a configurable window depth.
+    `Bridge.Ingest.ingest` — plus, with the opt-in
+    `--materialise-deposits` flag (Workstream SB.9), the two
+    deposit events into bridge-signed `Deposit` / `DepositWithFee`
+    actions (content-derived deposit ids, range-checked amounts,
+    fresh-id assignment for unregistered depositors) — signs with
+    a zeroize-protected bridge-actor key, and forwards CBE-encoded
+    `SignedAction`s to `knomosis-host` via length-prefixed HTTP.
+    Idempotent re-org-tolerant up to a configurable window depth.
     Cross-stack equivalence enforced by 12-record
     `l1_ingest.cxsf` corpus.
   * **`knomosis-host`** — RH-C network adaptor.  Library + binary.
@@ -126,9 +139,13 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     `applyTransition` byte-for-byte; chaos suite
     (`tests/chaos.rs`) covers re-org / kill-restart /
     dropped-conn / adversarial-opponent scenarios.  The Lean
-    `knomosis export-cell-proofs LOG IDX SIGNER` subcommand
-    emits the cell-proof bundle JSON the Rust submitter
-    consumes for `terminateOnSingleStep` calldata.  The Lean
+    `knomosis export-terminate-bundle LOG IDX [PREV_END END]`
+    subcommand emits the terminate-bundle JSON the Rust
+    submitter consumes for `terminateOnSingleStep` calldata —
+    with the batch bounds supplied, it additionally carries the
+    disputed action's batch binding (Workstream SB): the
+    signature the leaf commit hashes and the inclusion wire
+    against the submitted batch's actions root.  The Lean
     `knomosis replay-up-to LOG IDX` subcommand provides the
     in-production truth function the `SubprocessTruthOracle`
     shells out to.
@@ -158,6 +175,11 @@ runtime/
 ├── knomosis-hash-fallback.c            — pre-existing AR.10 fallback
 │                                       (lake-built static library; not
 │                                       part of the Cargo workspace)
+│
+├── knomosis-amount/                    — shared library  (implemented)
+│   ├── Cargo.toml
+│   ├── src/lib.rs                   — `Amount`: 256-bit accounting scalar
+│   └── tests/property.rs            — `u128`-oracle + full-width properties
 │
 ├── knomosis-cli-common/                — shared library  (implemented)
 │   ├── Cargo.toml

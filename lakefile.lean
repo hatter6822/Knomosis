@@ -24,7 +24,7 @@ package knomosis where
   -- Lockstep with the Rust workspace version
   -- (`runtime/Cargo.toml`'s `[workspace.package] version`).  Bumped
   -- on every PR per the patch-version-bump policy in `CLAUDE.md`.
-  version := v!"0.13.0"
+  version := v!"0.14.0"
   -- Per-package Lean options.  Phase 0's hygiene gate:
   --
   -- * `autoImplicit := false` — every universe / type variable must
@@ -125,7 +125,7 @@ extern_lib knomosisHashFallback (pkg : NPackage __name__) := do
     `libknomosis_verify_secp256k1.a` built with
     `cargo build -p knomosis-verify-secp256k1 --features lean-ffi`
     (which exports a real `knomosis_verify_identifier` returning the
-    production identifier `"ecdsa-secp256k1-low-s/EVM-compatible/v1"`, so
+    production identifier `"ecdsa-secp256k1-low-s/EVM-compatible/v2"`, so
     `verify-check` exits 0).
 
     Like the hash fallback above this is a SINGLE-archive swap — exactly

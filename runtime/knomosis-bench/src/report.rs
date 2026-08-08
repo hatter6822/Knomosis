@@ -66,6 +66,7 @@
 
 use crate::fixture::FixtureConfig;
 use crate::histogram::LatencySummary;
+use knomosis_amount::Amount;
 
 /// A complete benchmark report.  Serialises to versioned JSON.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -145,7 +146,7 @@ pub struct ReportFixtureConfig {
     /// Resource id used for transfers.
     pub resource_id: u64,
     /// Per-transfer amount.
-    pub transfer_amount: u128,
+    pub transfer_amount: Amount,
     /// Hex-encoded deployment id.  Hex-encoded (not raw bytes) so
     /// the JSON stays human-readable.
     pub deployment_id_hex: String,
@@ -701,6 +702,7 @@ mod tests {
     };
     use crate::fixture::FixtureConfig;
     use crate::histogram::LatencySummary;
+    use knomosis_l1_ingest::action::Amount;
     use std::path::PathBuf;
 
     /// Construct a baseline report with fixed values.
@@ -714,7 +716,7 @@ mod tests {
                 actor_count: 10,
                 transfer_count: 100,
                 resource_id: 0,
-                transfer_amount: 1,
+                transfer_amount: Amount::ONE,
                 deployment_id_hex: "00".repeat(16),
             },
             worker_count: 64,

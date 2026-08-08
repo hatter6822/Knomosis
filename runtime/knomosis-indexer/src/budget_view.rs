@@ -69,6 +69,7 @@
 //! via `?` propagation; the combined transaction rolls back the
 //! entire batch atomically.
 
+use knomosis_storage::budget_storage::CounterValue;
 use knomosis_storage::combined_transaction::{CombinedTransactionError, CombinedTransactionOps};
 use knomosis_storage::sqlite::SqliteStorage;
 
@@ -253,8 +254,11 @@ pub fn dispatch_event(
             ..
         } => {
             // Lifetime + current-epoch grant to recipient.
-            tx.credit_actor_budget(*recipient, *budget_grant)?;
-            tx.credit_actor_budget_current_epoch_grants(*recipient, *budget_grant)?;
+            tx.credit_actor_budget(*recipient, CounterValue::from(*budget_grant))?;
+            tx.credit_actor_budget_current_epoch_grants(
+                *recipient,
+                CounterValue::from(*budget_grant),
+            )?;
             credit_pool_inflow(tx, *resource, *pool_actor, *pool_amount)?;
         }
         Event::ActionBudgetTopUp {
@@ -265,8 +269,11 @@ pub fn dispatch_event(
             pool_actor,
         } => {
             // Lifetime + current-epoch grant to signer.
-            tx.credit_actor_budget(*signer, *budget_increment)?;
-            tx.credit_actor_budget_current_epoch_grants(*signer, *budget_increment)?;
+            tx.credit_actor_budget(*signer, CounterValue::from(*budget_increment))?;
+            tx.credit_actor_budget_current_epoch_grants(
+                *signer,
+                CounterValue::from(*budget_increment),
+            )?;
             credit_pool_inflow(tx, *gas_resource, *pool_actor, *gas_amount)?;
         }
         Event::DelegatedActionBudgetTopUp {
@@ -279,8 +286,11 @@ pub fn dispatch_event(
         } => {
             // Lifetime + current-epoch grant to RECIPIENT (NOT
             // signer — the load-bearing distinction from tag 17).
-            tx.credit_actor_budget(*recipient, *budget_increment)?;
-            tx.credit_actor_budget_current_epoch_grants(*recipient, *budget_increment)?;
+            tx.credit_actor_budget(*recipient, CounterValue::from(*budget_increment))?;
+            tx.credit_actor_budget_current_epoch_grants(
+                *recipient,
+                CounterValue::from(*budget_increment),
+            )?;
             credit_pool_inflow(tx, *gas_resource, *pool_actor, *gas_amount)?;
         }
         Event::GasPoolClaim {
@@ -296,7 +306,7 @@ pub fn dispatch_event(
                 tracing::debug!(
                     sequencer,
                     resource,
-                    amount,
+                    amount = %amount,
                     pool_actor,
                     "GP.6.4: drained pool actor on gasPoolClaim"
                 );
@@ -304,14 +314,14 @@ pub fn dispatch_event(
                 tracing::debug!(
                     sequencer,
                     resource,
-                    amount,
+                    amount = %amount,
                     "GP.6.4: gasPoolClaim received but --gas-pool-actor unset; pool view shows gross inflow"
                 );
             }
         }
         Event::BudgetConsumed { actor, amount } => {
             // GP.6.4: track current-epoch consumption.
-            tx.credit_actor_budget_current_epoch_consumed(*actor, *amount)?;
+            tx.credit_actor_budget_current_epoch_consumed(*actor, CounterValue::from(*amount))?;
         }
         // Non-GP events (tags 0..=15) are out of scope.
         _ => {}
@@ -339,7 +349,7 @@ fn credit_pool_inflow(
             tracing::warn!(
                 resource = other,
                 pool_actor,
-                amount,
+                amount = %amount,
                 "GP.6.4: pool inflow on unknown resource (not ETH=0 or BOLD=1); silently skipped"
             );
         }
@@ -353,7 +363,7 @@ fn drain_pool(
     tx: &mut dyn CombinedTransactionOps,
     resource: ResourceId,
     pool_actor: ActorId,
-    amount: BudgetUnits,
+    amount: Amount,
 ) -> Result<(), BudgetDispatchError> {
     match resource {
         RESOURCE_ID_ETH => {
@@ -366,7 +376,7 @@ fn drain_pool(
             tracing::warn!(
                 resource = other,
                 pool_actor,
-                amount,
+                amount = %amount,
                 "GP.6.4: drain on unknown resource (not ETH=0 or BOLD=1); silently skipped"
             );
         }
@@ -397,7 +407,7 @@ impl<'a> BudgetReadView<'a> {
     pub fn get_actor_budget(
         &self,
         actor: ActorId,
-    ) -> Result<BudgetUnits, knomosis_storage::budget_storage::BudgetStorageError> {
+    ) -> Result<CounterValue, knomosis_storage::budget_storage::BudgetStorageError> {
         use knomosis_storage::budget_storage::BudgetStorage;
         self.storage.get_actor_budget(actor)
     }
@@ -410,7 +420,7 @@ impl<'a> BudgetReadView<'a> {
     pub fn get_actor_budget_current_epoch_grants(
         &self,
         actor: ActorId,
-    ) -> Result<BudgetUnits, knomosis_storage::budget_storage::BudgetStorageError> {
+    ) -> Result<CounterValue, knomosis_storage::budget_storage::BudgetStorageError> {
         use knomosis_storage::budget_storage::BudgetStorage;
         self.storage.get_actor_budget_current_epoch_grants(actor)
     }
@@ -423,7 +433,7 @@ impl<'a> BudgetReadView<'a> {
     pub fn get_actor_budget_current_epoch_consumed(
         &self,
         actor: ActorId,
-    ) -> Result<BudgetUnits, knomosis_storage::budget_storage::BudgetStorageError> {
+    ) -> Result<CounterValue, knomosis_storage::budget_storage::BudgetStorageError> {
         use knomosis_storage::budget_storage::BudgetStorage;
         self.storage.get_actor_budget_current_epoch_consumed(actor)
     }
@@ -519,7 +529,7 @@ impl<'a> BudgetReadView<'a> {
         &self,
         actor: ActorId,
         free_tier: BudgetUnits,
-    ) -> Result<BudgetUnits, knomosis_storage::budget_storage::BudgetStorageError> {
+    ) -> Result<CounterValue, knomosis_storage::budget_storage::BudgetStorageError> {
         use knomosis_storage::combined_transaction::CombinedStorage;
         // DEFERRED read transaction (shared read lock only): a budget
         // read must not take the write lock, so this path also works
@@ -536,7 +546,7 @@ impl<'a> BudgetReadView<'a> {
             .map_err(combined_to_budget_err)?;
         // Read-only: roll back (no mutations were staged).
         tx.rollback().map_err(combined_to_budget_err)?;
-        let total = free_tier.saturating_add(grants);
+        let total = CounterValue::from(free_tier).saturating_add(grants);
         Ok(total.saturating_sub(consumed))
     }
 }
@@ -562,6 +572,7 @@ mod tests {
         write_current_epoch, BudgetReadView, CURRENT_EPOCH_KEY, CURRENT_EPOCH_VALUE_LEN,
     };
     use crate::event::{Event, RESOURCE_ID_BOLD, RESOURCE_ID_ETH};
+    use knomosis_amount::Amount;
     use knomosis_storage::combined_transaction::CombinedStorage;
     use knomosis_storage::sqlite::SqliteStorage;
 
@@ -660,10 +671,10 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
         write_current_epoch(&mut *tx, 5).unwrap();
-        tx.credit_actor_budget(42, 1000).unwrap();
-        tx.credit_actor_budget_current_epoch_grants(42, 100)
+        tx.credit_actor_budget(42, Amount::from_u64(1000)).unwrap();
+        tx.credit_actor_budget_current_epoch_grants(42, Amount::from_u64(100))
             .unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(42, 50)
+        tx.credit_actor_budget_current_epoch_consumed(42, Amount::from_u64(50))
             .unwrap();
         tx.commit().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
@@ -672,9 +683,15 @@ mod tests {
         assert!(crossed);
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_actor_budget(42).unwrap(), 1000);
-        assert_eq!(view.get_actor_budget_current_epoch_grants(42).unwrap(), 0);
-        assert_eq!(view.get_actor_budget_current_epoch_consumed(42).unwrap(), 0);
+        assert_eq!(view.get_actor_budget(42).unwrap(), Amount::from_u64(1000));
+        assert_eq!(
+            view.get_actor_budget_current_epoch_grants(42).unwrap(),
+            Amount::from_u64(0)
+        );
+        assert_eq!(
+            view.get_actor_budget_current_epoch_consumed(42).unwrap(),
+            Amount::from_u64(0)
+        );
     }
 
     /// dispatch_epoch_if_crossed with epoch_length=0 never crosses.
@@ -701,8 +718,8 @@ mod tests {
                 resource: RESOURCE_ID_ETH,
                 recipient: 42,
                 pool_actor: 1,
-                user_amount: 900,
-                pool_amount: 100,
+                user_amount: Amount::from_u64(900),
+                pool_amount: Amount::from_u64(100),
                 budget_grant: 50,
                 deposit_id: 7,
             },
@@ -711,9 +728,12 @@ mod tests {
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_actor_budget(42).unwrap(), 50);
-        assert_eq!(view.get_actor_budget_current_epoch_grants(42).unwrap(), 50);
-        assert_eq!(view.get_pool_eth(1).unwrap(), 100);
+        assert_eq!(view.get_actor_budget(42).unwrap(), Amount::from_u64(50));
+        assert_eq!(
+            view.get_actor_budget_current_epoch_grants(42).unwrap(),
+            Amount::from_u64(50)
+        );
+        assert_eq!(view.get_pool_eth(1).unwrap(), Amount::from_u64(100));
     }
 
     /// dispatch_event on ActionBudgetTopUp credits SIGNER's
@@ -727,7 +747,7 @@ mod tests {
             &Event::ActionBudgetTopUp {
                 signer: 99,
                 gas_resource: RESOURCE_ID_ETH,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             },
@@ -736,9 +756,12 @@ mod tests {
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_actor_budget(99).unwrap(), 100);
-        assert_eq!(view.get_actor_budget_current_epoch_grants(99).unwrap(), 100);
-        assert_eq!(view.get_pool_eth(1).unwrap(), 10);
+        assert_eq!(view.get_actor_budget(99).unwrap(), Amount::from_u64(100));
+        assert_eq!(
+            view.get_actor_budget_current_epoch_grants(99).unwrap(),
+            Amount::from_u64(100)
+        );
+        assert_eq!(view.get_pool_eth(1).unwrap(), Amount::from_u64(10));
     }
 
     /// dispatch_event on DelegatedActionBudgetTopUp credits
@@ -753,7 +776,7 @@ mod tests {
                 recipient: 55,
                 signer: 77,
                 gas_resource: RESOURCE_ID_ETH,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             },
@@ -762,9 +785,12 @@ mod tests {
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_actor_budget(55).unwrap(), 100);
-        assert_eq!(view.get_actor_budget_current_epoch_grants(55).unwrap(), 100);
-        assert_eq!(view.get_actor_budget(77).unwrap(), 0);
+        assert_eq!(view.get_actor_budget(55).unwrap(), Amount::from_u64(100));
+        assert_eq!(
+            view.get_actor_budget_current_epoch_grants(55).unwrap(),
+            Amount::from_u64(100)
+        );
+        assert_eq!(view.get_actor_budget(77).unwrap(), Amount::from_u64(0));
     }
 
     /// dispatch_event on BudgetConsumed (tag 20) credits
@@ -784,8 +810,11 @@ mod tests {
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_actor_budget(42).unwrap(), 0);
-        assert_eq!(view.get_actor_budget_current_epoch_consumed(42).unwrap(), 1);
+        assert_eq!(view.get_actor_budget(42).unwrap(), Amount::from_u64(0));
+        assert_eq!(
+            view.get_actor_budget_current_epoch_consumed(42).unwrap(),
+            Amount::from_u64(1)
+        );
     }
 
     /// GP.9.1 verification: a `claimBudgetRefund` emits NO new event
@@ -812,10 +841,10 @@ mod tests {
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(view.get_actor_budget(42).unwrap(), Amount::from_u64(0));
         assert_eq!(
             view.get_actor_budget_current_epoch_consumed(42).unwrap(),
-            90
+            Amount::from_u64(90)
         );
     }
 
@@ -824,7 +853,7 @@ mod tests {
     fn gas_pool_claim_no_actor_is_noop() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
-        tx.credit_pool_eth(1, 1000).unwrap();
+        tx.credit_pool_eth(1, Amount::from_u64(1000)).unwrap();
         tx.commit().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
         dispatch_event(
@@ -832,14 +861,14 @@ mod tests {
             &Event::GasPoolClaim {
                 resource: RESOURCE_ID_ETH,
                 sequencer: 2,
-                amount: 100,
+                amount: Amount::from_u64(100),
             },
             None,
         )
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_pool_eth(1).unwrap(), 1000);
+        assert_eq!(view.get_pool_eth(1).unwrap(), Amount::from_u64(1000));
     }
 
     /// GasPoolClaim WITH gas_pool_actor configured: drains.
@@ -847,7 +876,7 @@ mod tests {
     fn gas_pool_claim_with_actor_drains() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
-        tx.credit_pool_eth(1, 1000).unwrap();
+        tx.credit_pool_eth(1, Amount::from_u64(1000)).unwrap();
         tx.commit().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
         dispatch_event(
@@ -855,14 +884,14 @@ mod tests {
             &Event::GasPoolClaim {
                 resource: RESOURCE_ID_ETH,
                 sequencer: 2,
-                amount: 300,
+                amount: Amount::from_u64(300),
             },
             Some(1),
         )
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_pool_eth(1).unwrap(), 700);
+        assert_eq!(view.get_pool_eth(1).unwrap(), Amount::from_u64(700));
     }
 
     /// GasPoolClaim drain underflow halts.
@@ -870,7 +899,7 @@ mod tests {
     fn gas_pool_claim_drain_underflow_halts() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
-        tx.credit_pool_eth(1, 50).unwrap();
+        tx.credit_pool_eth(1, Amount::from_u64(50)).unwrap();
         tx.commit().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
         let result = dispatch_event(
@@ -878,14 +907,14 @@ mod tests {
             &Event::GasPoolClaim {
                 resource: RESOURCE_ID_ETH,
                 sequencer: 2,
-                amount: 500,
+                amount: Amount::from_u64(500),
             },
             Some(1),
         );
         assert!(result.is_err());
         tx.rollback().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_pool_eth(1).unwrap(), 50);
+        assert_eq!(view.get_pool_eth(1).unwrap(), Amount::from_u64(50));
     }
 
     /// Non-GP event: no-op.
@@ -898,15 +927,15 @@ mod tests {
             &Event::BalanceChanged {
                 resource: 0,
                 actor: 42,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             },
             None,
         )
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(view.get_actor_budget(42).unwrap(), Amount::from_u64(0));
     }
 
     /// BOLD-resource dispatch credits the BOLD pool table.
@@ -920,8 +949,8 @@ mod tests {
                 resource: RESOURCE_ID_BOLD,
                 recipient: 42,
                 pool_actor: 1,
-                user_amount: 900,
-                pool_amount: 200,
+                user_amount: Amount::from_u64(900),
+                pool_amount: Amount::from_u64(200),
                 budget_grant: 75,
                 deposit_id: 8,
             },
@@ -930,8 +959,8 @@ mod tests {
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_pool_bold(1).unwrap(), 200);
-        assert_eq!(view.get_pool_eth(1).unwrap(), 0);
+        assert_eq!(view.get_pool_bold(1).unwrap(), Amount::from_u64(200));
+        assert_eq!(view.get_pool_eth(1).unwrap(), Amount::from_u64(0));
     }
 
     /// Unknown resource pool inflow silently skipped (tracing
@@ -946,8 +975,8 @@ mod tests {
                 resource: 99,
                 recipient: 42,
                 pool_actor: 1,
-                user_amount: 900,
-                pool_amount: 100,
+                user_amount: Amount::from_u64(900),
+                pool_amount: Amount::from_u64(100),
                 budget_grant: 50,
                 deposit_id: 7,
             },
@@ -956,9 +985,9 @@ mod tests {
         .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.get_actor_budget(42).unwrap(), 50);
-        assert_eq!(view.get_pool_eth(1).unwrap(), 0);
-        assert_eq!(view.get_pool_bold(1).unwrap(), 0);
+        assert_eq!(view.get_actor_budget(42).unwrap(), Amount::from_u64(50));
+        assert_eq!(view.get_pool_eth(1).unwrap(), Amount::from_u64(0));
+        assert_eq!(view.get_pool_bold(1).unwrap(), Amount::from_u64(0));
     }
 
     /// `remaining_this_epoch` arithmetic.
@@ -966,13 +995,16 @@ mod tests {
     fn remaining_this_epoch_arithmetic() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
-        tx.credit_actor_budget_current_epoch_grants(42, 100)
+        tx.credit_actor_budget_current_epoch_grants(42, Amount::from_u64(100))
             .unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(42, 30)
+        tx.credit_actor_budget_current_epoch_consumed(42, Amount::from_u64(30))
             .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.remaining_this_epoch(42, 10).unwrap(), 80);
+        assert_eq!(
+            view.remaining_this_epoch(42, 10).unwrap(),
+            Amount::from_u64(80)
+        );
     }
 
     /// `remaining_this_epoch` saturates at 0 on consumed >
@@ -981,24 +1013,35 @@ mod tests {
     fn remaining_this_epoch_saturates_at_zero() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(42, 1000)
+        tx.credit_actor_budget_current_epoch_consumed(42, Amount::from_u64(1000))
             .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.remaining_this_epoch(42, 10).unwrap(), 0);
+        assert_eq!(
+            view.remaining_this_epoch(42, 10).unwrap(),
+            Amount::from_u64(0)
+        );
     }
 
-    /// `remaining_this_epoch` saturates at u128::MAX on
+    /// `remaining_this_epoch` saturates at the ceiling on
     /// freeTier+grants overflow.
+    ///
+    /// Saturation is correct HERE and not in the balance store: this
+    /// is a derived read-side aggregate computed for display, not a
+    /// stored quantity, so clamping loses nothing a caller could act
+    /// on.  See `knomosis_amount::Amount::saturating_add`.
     #[test]
     fn remaining_this_epoch_saturates_at_max_on_overflow() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
-        tx.credit_actor_budget_current_epoch_grants(42, u128::MAX - 5)
-            .unwrap();
+        tx.credit_actor_budget_current_epoch_grants(
+            42,
+            Amount::MAX.checked_sub(Amount::from_u64(5)).unwrap(),
+        )
+        .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
-        assert_eq!(view.remaining_this_epoch(42, 100).unwrap(), u128::MAX);
+        assert_eq!(view.remaining_this_epoch(42, 100).unwrap(), Amount::MAX);
     }
 
     /// **Exactness contract (freeTier = 0).**  With `freeTier = 0`
@@ -1011,14 +1054,17 @@ mod tests {
     fn remaining_this_epoch_exact_for_free_tier_zero() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
-        tx.credit_actor_budget_current_epoch_grants(42, 100)
+        tx.credit_actor_budget_current_epoch_grants(42, Amount::from_u64(100))
             .unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(42, 40)
+        tx.credit_actor_budget_current_epoch_consumed(42, Amount::from_u64(40))
             .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
         // freeTier 0: remaining = 0 + 100 − 40 = 60 = kernel budget.
-        assert_eq!(view.remaining_this_epoch(42, 0).unwrap(), 60);
+        assert_eq!(
+            view.remaining_this_epoch(42, 0).unwrap(),
+            Amount::from_u64(60)
+        );
     }
 
     /// **Lower-bound contract (freeTier > 0, carryover scenario).**
@@ -1037,8 +1083,9 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
         // grants_this_epoch = 30, consumed_this_epoch = 10.
-        tx.credit_actor_budget_current_epoch_grants(42, 30).unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(42, 10)
+        tx.credit_actor_budget_current_epoch_grants(42, Amount::from_u64(30))
+            .unwrap();
+        tx.credit_actor_budget_current_epoch_consumed(42, Amount::from_u64(10))
             .unwrap();
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
@@ -1047,12 +1094,12 @@ mod tests {
         // freeTier=5 only INCREASES it).  The formula is the exact
         // value when carryover ≤ 5.
         let formula = view.remaining_this_epoch(42, 5).unwrap();
-        assert_eq!(formula, 25);
+        assert_eq!(formula, Amount::from_u64(25));
         // The lower-bound property: for any non-negative carryover
         // `c`, kernel_budget = max(c, 5) + 30 − 10 ≥ 5 + 30 − 10 =
         // formula.  We assert the inequality direction holds for a
         // representative carryover c = 50 (max(50,5)=50):
-        let kernel_budget_with_carryover_50 = 50u128 + 30 - 10;
+        let kernel_budget_with_carryover_50 = Amount::from_u64(50 + 30 - 10);
         assert!(
             kernel_budget_with_carryover_50 >= formula,
             "remaining_this_epoch must be a lower bound on the kernel budget"
@@ -1068,8 +1115,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 0,
                 actor: 0,
-                old_value: 0,
-                new_value: 0,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(0),
             },
             Event::NonceAdvanced {
                 actor: 0,
@@ -1094,19 +1141,19 @@ mod tests {
             Event::RewardIssued {
                 resource: 0,
                 recipient: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
             },
             Event::WithdrawalRequested {
                 resource: 0,
                 sender: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 recipient_l1: [0; 20],
                 withdrawal_id: 0,
             },
             Event::DepositCredited {
                 resource: 0,
                 recipient: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 deposit_id: 0,
             },
             Event::LocalPolicyDeclared {
@@ -1132,34 +1179,34 @@ mod tests {
                 game_id: 0,
                 winner: 0,
                 loser: 0,
-                payout: 0,
+                payout: Amount::from_u64(0),
             },
             Event::DepositWithFeeCredited {
                 resource: 0,
                 recipient: 0,
                 pool_actor: 0,
-                user_amount: 0,
-                pool_amount: 0,
+                user_amount: Amount::from_u64(0),
+                pool_amount: Amount::from_u64(0),
                 budget_grant: 0,
                 deposit_id: 0,
             },
             Event::ActionBudgetTopUp {
                 signer: 0,
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             },
             Event::GasPoolClaim {
                 resource: 0,
                 sequencer: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
             },
             Event::DelegatedActionBudgetTopUp {
                 recipient: 0,
                 signer: 0,
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             },

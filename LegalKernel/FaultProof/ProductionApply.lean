@@ -162,7 +162,7 @@ over what the state became. -/
 def budgetGrant (signer : ActorId) (action : Action)
     (freeTier currentEpoch : Nat) (ebs : EpochBudgetState) : EpochBudgetState :=
   match action with
-  | .depositWithFee _ recipient _ _ _ g _ =>
+  | .depositWithFee _ recipient _ _ _ g _ _ =>
       ebs.topUp recipient currentEpoch freeTier g
   | .topUpActionBudget _ _ inc _ =>
       ebs.topUp signer currentEpoch freeTier inc
@@ -269,8 +269,8 @@ bridge-mutating ones. -/
 theorem productionApply_eq_kernelOnlyApply_of_non_bridge
     (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat)
     (hne_dep : ∀ r recipient amount d, st.action ≠ .deposit r recipient amount d)
-    (hne_dwf : ∀ r recipient poolActor ua pa bg d,
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d)
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d sa)
     (hne_wd : ∀ r sender amount rcp, st.action ≠ .withdraw r sender amount rcp) :
     productionApply es st l2LogIndex = kernelOnlyApply es (signedActionEntry st) := by
   unfold productionApply

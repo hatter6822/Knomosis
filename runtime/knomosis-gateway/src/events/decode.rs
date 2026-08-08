@@ -9,11 +9,11 @@
 //! §11A.5 `Event` contract shape.
 //!
 //! **Classification (additive-extension policy, §11.1).**
-//!   * A **known** tag (`0..=22`) is decoded (`knomosis_indexer::decoder`)
+//!   * A **known** tag (`0..=24`) is decoded (`knomosis_indexer::decoder`)
 //!     and rendered to typed JSON.  A decode *failure* on a known tag is a
 //!     corruption signal and **fails closed** ([`DecodeError::Corrupt`]) —
 //!     never silently skipped, never mislabelled (§2 principle 7).
-//!   * An **unknown** tag (`≥23`, a future constructor) is forwarded
+//!   * An **unknown** tag (`≥25`, a future constructor) is forwarded
 //!     verbatim as `type:"unknown"` + base64 `raw` — never rejected.
 //!   * An **unparseable** head fails closed ([`DecodeError::Unparseable`]).
 //!
@@ -393,23 +393,10 @@ fn render_known(event: &Event) -> Rendered {
             resource: None,
             payload: json!({ "actor": actor.to_string(), "amount": amount.to_string() }),
         },
-        Event::AmmSwapExecuted {
-            from_resource,
-            to_resource,
-            amount_in,
-            amount_out,
-            amm_reserve_actor,
-        } => Rendered {
-            actor: Some(amm_reserve_actor.to_string()),
-            resource: None,
-            payload: json!({
-                "fromResource": from_resource.to_string(),
-                "toResource": to_resource.to_string(),
-                "amountIn": amount_in.to_string(),
-                "amountOut": amount_out.to_string(),
-                "ammReserveActor": amm_reserve_actor.to_string(),
-            }),
-        },
+        // Tag 21 (the retired ammSwapExecuted, the excised L1-AMM
+        // mirror's event) is a permanent hole: the indexer decoder
+        // refuses the tag, so no `Event` variant reaches this
+        // renderer and none exists to render.
         Event::AmmReservesReclaimed {
             resource,
             amount,
@@ -425,12 +412,51 @@ fn render_known(event: &Event) -> Rendered {
                 "poolActor": pool_actor.to_string(),
             }),
         },
+        // Workstream SB tag 23: the subject actor is the swapping
+        // USER (per Lean's `Event.actor` — trade history is keyed on
+        // the user); no single subject resource (two are touched).
+        Event::ReserveSwapExecuted {
+            from_resource,
+            to_resource,
+            user,
+            amount_in,
+            amount_out,
+            reserve_actor,
+        } => Rendered {
+            actor: Some(user.to_string()),
+            resource: None,
+            payload: json!({
+                "fromResource": from_resource.to_string(),
+                "toResource": to_resource.to_string(),
+                "user": user.to_string(),
+                "amountIn": amount_in.to_string(),
+                "amountOut": amount_out.to_string(),
+                "reserveActor": reserve_actor.to_string(),
+            }),
+        },
+        // Workstream SB tag 24: the seed leg's attribution event.
+        Event::ReserveSeeded {
+            resource,
+            amount,
+            reserve_actor,
+            deposit_id,
+        } => Rendered {
+            actor: Some(reserve_actor.to_string()),
+            resource: Some(resource.to_string()),
+            payload: json!({
+                "resource": resource.to_string(),
+                "amount": amount.to_string(),
+                "reserveActor": reserve_actor.to_string(),
+                "depositId": deposit_id.to_string(),
+            }),
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{render_event, DecodeError, EventJson};
+    use knomosis_amount::Amount;
     use knomosis_event_subscribe::event_type::ALL_EVENT_TYPES;
     use knomosis_indexer::decoder::encode_event;
     use knomosis_indexer::event::Event;
@@ -447,8 +473,8 @@ mod tests {
         let json = render(&Event::BalanceChanged {
             resource: 0,
             actor: 161,
-            old_value: 1000,
-            new_value: 950,
+            old_value: Amount::from_u64(1000),
+            new_value: Amount::from_u64(950),
         });
         assert_eq!(json.seq, "104233");
         assert_eq!(json.index, 0);
@@ -474,7 +500,7 @@ mod tests {
         let json = render(&Event::RewardIssued {
             resource: 1,
             recipient: 7,
-            amount: big,
+            amount: Amount::from(big),
         });
         assert_eq!(json.payload["amount"], big.to_string());
         assert!(
@@ -496,7 +522,7 @@ mod tests {
         let json = render(&Event::WithdrawalRequested {
             resource: 0,
             sender: 9,
-            amount: 100,
+            amount: Amount::from_u64(100),
             recipient_l1: [0xAB; 20],
             withdrawal_id: 4,
         });
@@ -543,12 +569,10 @@ mod tests {
     /// here.  (The type name is cross-checked against the §11A.5 registry,
     /// so it need not be re-transcribed.)
     ///
-    /// NOTE: the bytes come from the Rust `encode_event` (the canonical CBE
-    /// format by convention — see `knomosis-indexer::decoder`).  The true
-    /// cross-stack pin against `knomosis extract-events` output (plan G3.2c)
-    /// remains blocked on the Lean side shipping an `Encodable Event`
-    /// instance, which is deferred (RH-D.2); this pin closes the
-    /// gateway-side §6.2 shape guarantee in the meantime.
+    /// NOTE: the bytes come from the Rust `encode_event` (byte-identical to
+    /// the Lean `Encodable Event` authority — the shipped G3.2c pin in
+    /// `tests/cross_stack_lean_event.rs` proves that equality per tag);
+    /// this test owns the gateway-side §6.2 SHAPE guarantee.
     #[test]
     fn every_tag_pins_the_full_v62_envelope() {
         let samples = sample_events();
@@ -579,7 +603,7 @@ mod tests {
     /// order — paired one-to-one with [`sample_events`].  Transcribed from
     /// the contract, *independent* of `render_known`, so the two cannot
     /// drift together.
-    #[allow(clippy::too_many_lines)] // a flat 23-entry golden table; splitting hurts the pin
+    #[allow(clippy::too_many_lines)] // a flat 24-entry golden table; splitting hurts the pin
     fn expected_envelopes() -> Vec<(Option<&'static str>, Option<&'static str>, Value)> {
         let l1 = format!("0x{}", "01".repeat(20));
         vec![
@@ -652,15 +676,21 @@ mod tests {
                 json!({"recipient":"1","signer":"2","gasResource":"0","gasAmount":"5","budgetIncrement":"3","poolActor":"4"}),
             ),
             (Some("1"), None, json!({"actor":"1","amount":"5"})),
-            (
-                Some("2"),
-                None,
-                json!({"fromResource":"0","toResource":"1","amountIn":"5","amountOut":"4","ammReserveActor":"2"}),
-            ),
+            // The retired tag 21 (ammSwapExecuted) is a hole — no row.
             (
                 Some("3"),
                 Some("0"),
                 json!({"resource":"0","amount":"5","reserveActor":"2","poolActor":"3"}),
+            ),
+            (
+                Some("7"),
+                None,
+                json!({"fromResource":"0","toResource":"1","user":"7","amountIn":"5","amountOut":"4","reserveActor":"3"}),
+            ),
+            (
+                Some("3"),
+                Some("0"),
+                json!({"resource":"0","amount":"5","reserveActor":"3","depositId":"42"}),
             ),
         ]
     }
@@ -668,7 +698,7 @@ mod tests {
     #[test]
     fn unknown_tag_is_forwarded_as_base64_raw() {
         // A well-formed 9-byte CBE uint head (the 0x00 marker byte + an
-        // 8-byte little-endian tag) carrying a future tag (99 ≥ 23)
+        // 8-byte little-endian tag) carrying a future tag (99 ≥ 25)
         // classifies Unknown → forwarded verbatim, never rejected.
         let mut payload = vec![0x00];
         payload.extend_from_slice(&99u64.to_le_bytes());
@@ -709,8 +739,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 0,
                 actor: 1,
-                old_value: 1,
-                new_value: 2,
+                old_value: Amount::from_u64(1),
+                new_value: Amount::from_u64(2),
             },
             Event::NonceAdvanced {
                 actor: 1,
@@ -735,19 +765,19 @@ mod tests {
             Event::RewardIssued {
                 resource: 0,
                 recipient: 1,
-                amount: 5,
+                amount: Amount::from_u64(5),
             },
             Event::WithdrawalRequested {
                 resource: 0,
                 sender: 1,
-                amount: 5,
+                amount: Amount::from_u64(5),
                 recipient_l1: [1; 20],
                 withdrawal_id: 1,
             },
             Event::DepositCredited {
                 resource: 0,
                 recipient: 1,
-                amount: 5,
+                amount: Amount::from_u64(5),
                 deposit_id: 1,
             },
             Event::LocalPolicyDeclared {
@@ -773,34 +803,34 @@ mod tests {
                 game_id: 1,
                 winner: 2,
                 loser: 3,
-                payout: 4,
+                payout: Amount::from_u64(4),
             },
             Event::DepositWithFeeCredited {
                 resource: 0,
                 recipient: 1,
                 pool_actor: 2,
-                user_amount: 5,
-                pool_amount: 1,
+                user_amount: Amount::from_u64(5),
+                pool_amount: Amount::from_u64(1),
                 budget_grant: 3,
                 deposit_id: 1,
             },
             Event::ActionBudgetTopUp {
                 signer: 1,
                 gas_resource: 0,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 3,
                 pool_actor: 2,
             },
             Event::GasPoolClaim {
                 resource: 0,
                 sequencer: 1,
-                amount: 5,
+                amount: Amount::from_u64(5),
             },
             Event::DelegatedActionBudgetTopUp {
                 recipient: 1,
                 signer: 2,
                 gas_resource: 0,
-                gas_amount: 5,
+                gas_amount: Amount::from_u64(5),
                 budget_increment: 3,
                 pool_actor: 4,
             },
@@ -808,18 +838,27 @@ mod tests {
                 actor: 1,
                 amount: 5,
             },
-            Event::AmmSwapExecuted {
-                from_resource: 0,
-                to_resource: 1,
-                amount_in: 5,
-                amount_out: 4,
-                amm_reserve_actor: 2,
-            },
+            // The retired tag 21 (ammSwapExecuted) is a hole — no
+            // sample, matching `ALL_EVENT_TYPES`.
             Event::AmmReservesReclaimed {
                 resource: 0,
-                amount: 5,
+                amount: Amount::from_u64(5),
                 reserve_actor: 2,
                 pool_actor: 3,
+            },
+            Event::ReserveSwapExecuted {
+                from_resource: 0,
+                to_resource: 1,
+                user: 7,
+                amount_in: Amount::from_u64(5),
+                amount_out: Amount::from_u64(4),
+                reserve_actor: 3,
+            },
+            Event::ReserveSeeded {
+                resource: 0,
+                amount: Amount::from_u64(5),
+                reserve_actor: 3,
+                deposit_id: 42,
             },
         ]
     }

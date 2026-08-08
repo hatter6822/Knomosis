@@ -12,6 +12,7 @@
 //! response carries an `X-Knomosis-Seq` header equal to the indexer
 //! cursor the values reflect.
 
+use knomosis_amount::{Amount, AMOUNT_BYTES};
 use knomosis_indexer::balance::{parse_balance_key, BalanceView, BALANCE_KEY_PREFIX};
 use knomosis_indexer::cursor::{read_cursor, CURSOR_KEY};
 use knomosis_storage::storage::Storage;
@@ -109,7 +110,9 @@ pub fn actor_balances(reads: &ReadState, actor: u64) -> RouteOutcome {
         let Some(amount) = decode_amount(value) else {
             return read_failed(
                 "corrupt balance cell",
-                &format!("actor {row_actor} resource {resource}: value is not 16 bytes"),
+                &format!(
+                    "actor {row_actor} resource {resource}: value is not {AMOUNT_BYTES} bytes"
+                ),
             );
         };
         balances.push(BalanceDto {
@@ -156,39 +159,49 @@ fn read_failed(title: &str, detail: &str) -> RouteOutcome {
         .into_outcome()
 }
 
-/// Decode a 16-byte BE `u128` balance value; `None` on the wrong length
-/// (corruption).
-fn decode_amount(value: &[u8]) -> Option<u128> {
-    let bytes: [u8; 16] = value.try_into().ok()?;
-    Some(u128::from_be_bytes(bytes))
+/// Decode a [`knomosis_amount::AMOUNT_BYTES`]-byte BE balance value;
+/// `None` on the wrong length (corruption).
+///
+/// A cell still at the retired 16-byte width reads as corrupt rather
+/// than being zero-extended in place: the widening is
+/// `knomosis_storage`'s `migration_003_widen_amount_cells` to perform,
+/// and a read path that quietly compensated for a skipped migration
+/// would hide the schema drift instead of surfacing it.
+fn decode_amount(value: &[u8]) -> Option<Amount> {
+    Amount::from_be_slice(value).ok()
 }
 
 #[cfg(test)]
 mod tests {
     use super::{actor_balance, actor_balances};
     use crate::state::ReadState;
+    use knomosis_amount::Amount;
     use knomosis_indexer::balance::balance_key;
     use knomosis_indexer::cursor::CURSOR_KEY;
     use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
     use knomosis_storage::storage::Storage;
 
-    /// Seed a schema-v2 on-disk DB with balance cells for actors 7 and
-    /// 9 and a cursor; return the tempdir, the LIVE writer (kept open so
-    /// the read-only reader can map the WAL sidecars), and a `ReadState`
+    /// Seed an on-disk DB with balance cells for actors 7 and 9 and a
+    /// cursor; return the tempdir, the LIVE writer (kept open so the
+    /// read-only reader can map the WAL sidecars), and a `ReadState`
     /// over the same path.
+    ///
+    /// Cells are written through `Amount::to_be_bytes` rather than as
+    /// raw integer bytes, so the fixture cannot drift from the width
+    /// the reader expects.
     fn seeded() -> (tempfile::TempDir, SqliteStorage, ReadState) {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("index.db");
         let writer = SqliteStorage::open(&path).unwrap();
         writer
-            .put(&balance_key(7, 0), &1_000u128.to_be_bytes())
+            .put(&balance_key(7, 0), &Amount::from_u64(1_000).to_be_bytes())
             .unwrap();
         writer
-            .put(&balance_key(7, 1), &250u128.to_be_bytes())
+            .put(&balance_key(7, 1), &Amount::from_u64(250).to_be_bytes())
             .unwrap();
         // A different actor's balance — must be excluded from actor 7's list.
         writer
-            .put(&balance_key(9, 0), &5u128.to_be_bytes())
+            .put(&balance_key(9, 0), &Amount::from_u64(5).to_be_bytes())
             .unwrap();
         writer.put(CURSOR_KEY, &42u64.to_be_bytes()).unwrap();
         let storage = SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()).unwrap();

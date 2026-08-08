@@ -27,11 +27,13 @@
 //!      non-Knomosis logs.
 //!      d. For each `IngestedEvent`, dedup via the forwarded
 //!      set.  If new, *peek* the translation via
-//!      `translation::preview_ingest` (does NOT mutate the
-//!      book), sign via the keystore, submit via the
-//!      submitter.  ON SUCCESS, persist one atomic
-//!      `Submitted` JSONL record and apply the in-memory
-//!      mutations (book + nonce + forwarded set).
+//!      `translation::preview_ingest` — or, with the opt-in
+//!      `materialise_deposits` flag, the deposit-materialising
+//!      `translation::preview_ingest_materialising` (SB.9) —
+//!      (neither mutates the book), sign via the keystore,
+//!      submit via the submitter.  ON SUCCESS, persist one
+//!      atomic `Submitted` JSONL record and apply the
+//!      in-memory mutations (book + nonce + forwarded set).
 //!      e. Append a `Confirmed` record to the state store.
 //!   4. Optionally sleep `poll_interval` before the next iteration.
 //!
@@ -86,7 +88,10 @@ use crate::state::{
     AddressAssignment, ForwardedKey, HexBytes, StateError, StateRecord, StateStore,
 };
 use crate::submitter::{SignedActionForSubmit, SubmitError, Submitter, Verdict};
-use crate::translation::{commit_assignment, preview_ingest, Translated, UnsignedAction};
+use crate::translation::{
+    commit_assignment, preview_ingest, preview_ingest_materialising, MaterialiseError, Translated,
+    UnsignedAction,
+};
 
 /// Errors surfaced by the watcher.
 #[derive(Debug, thiserror::Error)]
@@ -114,6 +119,12 @@ pub enum WatcherError {
     /// Submitter error.
     #[error(transparent)]
     Submit(#[from] SubmitError),
+    /// Deposit-materialisation refusal (Workstream SB.9) — an event
+    /// amount field does not fit the runtime representation.
+    /// Fail-closed: the watcher halts for operator intervention
+    /// rather than truncating value bits.
+    #[error(transparent)]
+    Materialise(#[from] MaterialiseError),
     /// Configuration error — surfaced from `Self::new`.
     #[error("configuration error: {0}")]
     Config(String),
@@ -147,6 +158,14 @@ pub struct WatcherConfig {
     /// iteration before yielding.  Prevents a long historical
     /// catch-up from starving the rest of the daemon.  Default 64.
     pub blocks_per_iteration: u32,
+    /// Opt-in deposit materialisation (Workstream SB.9;
+    /// `--materialise-deposits`).  When `true`, the two deposit
+    /// events translate to bridge-signed `Deposit` /
+    /// `DepositWithFee` actions via
+    /// [`preview_ingest_materialising`]; when `false` (the
+    /// default — fail-closed), they remain `NoAction` exactly as
+    /// the Lean-mirror `preview_ingest` specifies.
+    pub materialise_deposits: bool,
 }
 
 impl WatcherConfig {
@@ -166,6 +185,7 @@ impl WatcherConfig {
             poll_interval: Duration::from_secs(12),
             deployment_id,
             blocks_per_iteration: 64,
+            materialise_deposits: false,
         }
     }
 }
@@ -528,7 +548,14 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
             return Ok(());
         }
         // Peek-only translation: does NOT mutate the address book.
-        let translated = preview_ingest(&self.address_book, &event, self.next_nonce);
+        // With `materialise_deposits` on, the deposit events build
+        // bridge-signed deposit actions (SB.9); off (the default),
+        // they stay `NoAction` per the Lean-mirror contract.
+        let translated = if self.config.materialise_deposits {
+            preview_ingest_materialising(&self.address_book, &event, self.next_nonce)?
+        } else {
+            preview_ingest(&self.address_book, &event, self.next_nonce)
+        };
         let (unsigned, pending_assignment) = match translated {
             Translated::NoAction => {
                 // No Knomosis-side action: persist `Forwarded` for
@@ -693,6 +720,7 @@ impl Clone for ReorgError {
 
 #[cfg(test)]
 mod tests {
+    use crate::action::Amount;
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
@@ -1405,5 +1433,242 @@ mod tests {
             )) => {} // expected
             other => panic!("expected Submit(NotAdmissible), got {other:?}"),
         }
+    }
+
+    // ---- SB.9 deposit materialisation (watcher level) ----
+
+    /// Construct a synthesised `DepositInitiated` log emitted by the
+    /// bridge contract.  Topics: [sig, depositor, resourceId]; data:
+    /// token ‖ amount ‖ depositorNonce ‖ receiptHash (4 × 32 bytes).
+    fn build_deposit_initiated_log(
+        depositor: [u8; 20],
+        amount_wei: u128,
+        receipt_hash: [u8; 32],
+        block_number: u64,
+        log_index: u64,
+        tx_hash: [u8; 32],
+    ) -> RawLog {
+        let mut depositor_topic = [0u8; 32];
+        depositor_topic[12..32].copy_from_slice(&depositor);
+        let resource_topic = [0u8; 32]; // resourceId 0 = native ETH
+        let mut data = Vec::with_capacity(128);
+        data.extend_from_slice(&[0u8; 32]); // token = 0x0 (native)
+        let mut amount_slot = [0u8; 32];
+        amount_slot[16..32].copy_from_slice(&amount_wei.to_be_bytes());
+        data.extend_from_slice(&amount_slot);
+        data.extend_from_slice(&[0u8; 32]); // depositorNonce = 0
+        data.extend_from_slice(&receipt_hash);
+        RawLog {
+            address: bridge_addr(),
+            topics: vec![
+                EventTopic::DepositInitiated.hash(),
+                depositor_topic,
+                resource_topic,
+            ],
+            data,
+            block_number,
+            tx_hash,
+            log_index,
+        }
+    }
+
+    /// FLAG OFF (the default): a deposit log stays `NoAction` — no
+    /// submission, no nonce bump, forwarded recorded for idempotency.
+    #[test]
+    fn deposit_log_without_flag_stays_no_action() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_path = temp.path().join("state.jsonl");
+        let mut source = InMemoryL1Source::new();
+        let log = build_deposit_initiated_log([0x99; 20], 1_000, [0x44; 32], 0, 0, [0xcc; 32]);
+        for n in 0..=12u64 {
+            let mut logs_map = HashMap::new();
+            if n == 0 {
+                logs_map.insert(bridge_addr(), vec![log.clone()]);
+            }
+            source.push_block(
+                BlockHeader {
+                    number: n,
+                    hash: [n as u8; 32],
+                    parent_hash: if n == 0 { [0; 32] } else { [(n - 1) as u8; 32] },
+                },
+                logs_map,
+            );
+        }
+        let submitter = BufferingSubmitter::new();
+        let mut config = WatcherConfig::new(bridge_addr(), identity_addr(), vec![]);
+        config.confirmation_depth = 12;
+        assert!(!config.materialise_deposits, "flag defaults OFF");
+        let mut watcher =
+            WatcherLoop::new(config, source, submitter, test_key(), &state_path).unwrap();
+        watcher.run_iteration().unwrap();
+        assert!(
+            watcher.submitter.is_empty(),
+            "flag-off deposit emits no submission"
+        );
+        assert_eq!(watcher.forwarded_count(), 1);
+        assert_eq!(watcher.next_nonce(), 0);
+        assert!(watcher.address_book().is_empty());
+    }
+
+    /// FLAG ON: a deposit log from an UNREGISTERED depositor
+    /// materialises a bridge-signed `Action::Deposit` carrying a
+    /// fresh actor id and the receipt-derived deposit id; the book
+    /// commits the (address, id) assignment after the submit.
+    #[test]
+    fn deposit_log_with_flag_submits_materialised_deposit() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_path = temp.path().join("state.jsonl");
+        let mut source = InMemoryL1Source::new();
+        let mut receipt = [0u8; 32];
+        receipt[0..8].copy_from_slice(&7777u64.to_be_bytes());
+        let log = build_deposit_initiated_log([0x99; 20], 1_000, receipt, 0, 0, [0xcc; 32]);
+        for n in 0..=12u64 {
+            let mut logs_map = HashMap::new();
+            if n == 0 {
+                logs_map.insert(bridge_addr(), vec![log.clone()]);
+            }
+            source.push_block(
+                BlockHeader {
+                    number: n,
+                    hash: [n as u8; 32],
+                    parent_hash: if n == 0 { [0; 32] } else { [(n - 1) as u8; 32] },
+                },
+                logs_map,
+            );
+        }
+        let submitter = BufferingSubmitter::new();
+        let mut config = WatcherConfig::new(bridge_addr(), identity_addr(), vec![]);
+        config.confirmation_depth = 12;
+        config.materialise_deposits = true;
+        let mut watcher =
+            WatcherLoop::new(config, source, submitter, test_key(), &state_path).unwrap();
+        watcher.run_iteration().unwrap();
+        let recorded = watcher.submitter.recorded();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].unsigned.signer, 0, "bridge actor signs");
+        match &recorded[0].unsigned.action {
+            crate::action::Action::Deposit {
+                r,
+                recipient,
+                amount,
+                deposit_id,
+            } => {
+                assert_eq!(*r, 0);
+                assert_eq!(*recipient, 4, "fresh id 4 post-GP.11.5 genesis");
+                assert_eq!(*amount, Amount::from_u64(1_000));
+                assert_eq!(*deposit_id, 7777, "receipt-hash-prefix deposit id");
+            }
+            other => panic!("expected Deposit, got {other:?}"),
+        }
+        // The assignment was committed post-submit and the nonce
+        // bumped — the depositor's address now resolves.
+        let depositor = EthAddress::from_bytes(&[0x99; 20]).unwrap();
+        assert_eq!(watcher.address_book().lookup(&depositor), Some(4));
+        assert_eq!(watcher.next_nonce(), 1);
+    }
+
+    /// RE-ORG RE-DELIVERY: the same L1 deposit re-delivered under a
+    /// different tx hash / log index (its forwarded key differs, so
+    /// the local dedup does NOT catch it) is re-submitted with the
+    /// SAME content-derived deposit id — which is exactly what lets
+    /// the kernel's `consumed`-set conjunct refuse the replay.  The
+    /// local dedup is the optimisation; this test pins the backstop's
+    /// precondition (id determinism across re-deliveries).
+    #[test]
+    fn reorged_deposit_redelivery_reuses_content_derived_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_path = temp.path().join("state.jsonl");
+        let mut source = InMemoryL1Source::new();
+        let receipt = [0x5a; 32];
+        // Two deliveries of the same deposit content at distinct
+        // origins (models the post-re-org re-emission).
+        let first = build_deposit_initiated_log([0x99; 20], 500, receipt, 0, 0, [0x01; 32]);
+        let second = build_deposit_initiated_log([0x99; 20], 500, receipt, 0, 3, [0x02; 32]);
+        for n in 0..=12u64 {
+            let mut logs_map = HashMap::new();
+            if n == 0 {
+                logs_map.insert(bridge_addr(), vec![first.clone(), second.clone()]);
+            }
+            source.push_block(
+                BlockHeader {
+                    number: n,
+                    hash: [n as u8; 32],
+                    parent_hash: if n == 0 { [0; 32] } else { [(n - 1) as u8; 32] },
+                },
+                logs_map,
+            );
+        }
+        let submitter = BufferingSubmitter::new();
+        let mut config = WatcherConfig::new(bridge_addr(), identity_addr(), vec![]);
+        config.confirmation_depth = 12;
+        config.materialise_deposits = true;
+        let mut watcher =
+            WatcherLoop::new(config, source, submitter, test_key(), &state_path).unwrap();
+        watcher.run_iteration().unwrap();
+        let recorded = watcher.submitter.recorded();
+        assert_eq!(recorded.len(), 2, "distinct forwarded keys both submit");
+        let id_of = |i: usize| match &recorded[i].unsigned.action {
+            crate::action::Action::Deposit { deposit_id, .. } => *deposit_id,
+            other => panic!("expected Deposit, got {other:?}"),
+        };
+        assert_eq!(
+            id_of(0),
+            id_of(1),
+            "re-delivered deposit re-derives the SAME deposit id"
+        );
+        // And both deliveries resolved the SAME recipient (the
+        // first committed the assignment; the second looked it up).
+        let recipient_of = |i: usize| match &recorded[i].unsigned.action {
+            crate::action::Action::Deposit { recipient, .. } => *recipient,
+            other => panic!("expected Deposit, got {other:?}"),
+        };
+        assert_eq!(recipient_of(0), recipient_of(1));
+    }
+
+    /// OVERFLOW: a deposit whose amount exceeds `u128` halts the
+    /// watcher with the typed `Materialise` error — the value is
+    /// never truncated into a smaller credit.
+    #[test]
+    fn deposit_amount_overflow_halts_watcher() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_path = temp.path().join("state.jsonl");
+        let mut source = InMemoryL1Source::new();
+        let mut log = build_deposit_initiated_log([0x99; 20], 0, [0x11; 32], 0, 0, [0xdd; 32]);
+        // Corrupt the amount slot's HIGH half (data offset 32..64
+        // holds the amount; byte 32+15 is the highest low-half
+        // boundary — set byte 32 (the most significant) instead).
+        log.data[32] = 0x01;
+        for n in 0..=12u64 {
+            let mut logs_map = HashMap::new();
+            if n == 0 {
+                logs_map.insert(bridge_addr(), vec![log.clone()]);
+            }
+            source.push_block(
+                BlockHeader {
+                    number: n,
+                    hash: [n as u8; 32],
+                    parent_hash: if n == 0 { [0; 32] } else { [(n - 1) as u8; 32] },
+                },
+                logs_map,
+            );
+        }
+        let submitter = BufferingSubmitter::new();
+        let mut config = WatcherConfig::new(bridge_addr(), identity_addr(), vec![]);
+        config.confirmation_depth = 12;
+        config.materialise_deposits = true;
+        let mut watcher =
+            WatcherLoop::new(config, source, submitter, test_key(), &state_path).unwrap();
+        // The iteration used to HALT here, on
+        // `MaterialiseError::AmountOverflow`, because the amount sat
+        // above the retired `u128` ceiling.  It is representable now,
+        // so the watcher does its job instead of stopping: the
+        // deposit is materialised and submitted.
+        watcher
+            .run_iteration()
+            .expect("an amount past the retired ceiling no longer halts the watcher");
+        assert!(
+            !watcher.submitter.is_empty(),
+            "the deposit must be submitted rather than refused"
+        );
     }
 }

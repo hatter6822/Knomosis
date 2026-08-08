@@ -102,21 +102,31 @@ library CBEDecode {
         returns (uint64 value, uint256 nextOffset)
     {
         if (offset + 8 > buf.length) revert CBEUnexpectedEof();
-        // Accumulate directly into a uint64 to avoid an unsafe cast.
-        // Each shift is `<< (8*i)` for i < 8, so the maximum bit
-        // position is 56 (the high byte fills bits 56..63).  The
-        // accumulator stays within `[0, 2^64 - 1]` mathematically,
-        // and the `uint64` type makes that bound a type-level fact.
-        uint64 acc = 0;
-        unchecked {
-            // Loop counter scoped as uint64 from the outset to satisfy
-            // forge-lint's safe-cast discipline.  The loop runs exactly
-            // 8 times, so `8 * i < 64` always.
-            for (uint64 i = 0; i < 8; ++i) {
-                acc |= uint64(uint8(buf[offset + uint256(i)])) << (8 * i);
+        // One 32-byte `calldataload` covers the 8 bytes; the
+        // little-endian -> big-endian permutation then happens in
+        // registers.  The loop this replaces indexed `buf[offset + i]`,
+        // paying a calldata bounds check PER BYTE for a range the line
+        // above has already checked once.  See `readBytes` for what
+        // that per-byte tax cost on the withdrawal path.
+        //
+        // Reading a whole word past `offset` is safe at the very end of
+        // calldata too: the EVM zero-fills `calldataload` beyond
+        // `calldatasize`, and only the low 8 bytes -- which the bound
+        // above proved present -- are consumed.
+        assembly ("memory-safe") {
+            let word := calldataload(add(buf.offset, offset))
+            // `byte(k, word)` counts from the HIGH end, so
+            // `byte(i, word)` is wire byte `offset + i`; little-endian
+            // puts wire byte i at bit position 8*i.
+            let acc := 0
+            for { let i := 0 } lt(i, 8) { i := add(i, 1) } {
+                acc := or(acc, shl(mul(8, i), byte(i, word)))
             }
+            // The mask makes the 64-bit width STRUCTURAL rather than an
+            // argument about which bits the loop can reach -- the same
+            // bound the old `uint64` accumulator's type supplied.
+            value := and(acc, 0xFFFFFFFFFFFFFFFF)
         }
-        value = acc;
         nextOffset = offset + 8;
     }
 
@@ -138,12 +148,15 @@ library CBEDecode {
         returns (uint256 value, uint256 nextOffset)
     {
         if (offset + 32 > buf.length) revert CBEUnexpectedEof();
-        uint256 acc = 0;
-        unchecked {
-            // The loop runs exactly 32 times, so `8 * i < 256` always
-            // and the accumulator stays within `[0, 2^256 - 1]`.
-            for (uint256 i = 0; i < 32; ++i) {
-                acc |= uint256(uint8(buf[offset + i])) << (8 * i);
+        // One `calldataload` fetches the whole 32-byte field; the
+        // little-endian -> big-endian reversal is a byte permutation on
+        // that word.  See `readUint64LE` for why the per-byte calldata
+        // indexing this replaces was expensive.
+        uint256 acc;
+        assembly ("memory-safe") {
+            let word := calldataload(add(buf.offset, offset))
+            for { let i := 0 } lt(i, 32) { i := add(i, 1) } {
+                acc := or(acc, shl(mul(8, i), byte(i, word)))
             }
         }
         value = acc;
@@ -216,10 +229,22 @@ library CBEDecode {
         // reject lengths that would overflow the buffer.
         if (afterHead + length > buf.length) revert CBEInvalidLength();
         payload = new bytes(length);
-        unchecked {
-            for (uint256 i = 0; i < length; ++i) {
-                payload[i] = buf[afterHead + i];
-            }
+        // `calldatacopy` moves the payload in one opcode
+        // (`3 + 3*ceil(len/32)` gas) instead of a Solidity loop that
+        // paid, PER BYTE, a calldata bounds check, a memory bounds
+        // check, and the read-modify-write of a whole word to place one
+        // byte.
+        //
+        // This was the dominant cost of a withdrawal.  Its proof blob
+        // carries 64 siblings x 32 bytes plus an 89-byte leaf = 2 137
+        // bytes, and decoding them a byte at a time measured 696 831
+        // gas -- against 800 533 for the ENTIRE `withdrawWithProof`
+        // transaction.  The 64-level Merkle walk the gas was assumed to
+        // be paying for is under 3 000.  Neither bound is relaxed:
+        // `readHead` checked the head, the line above checks the
+        // payload, and both run before a single byte moves.
+        assembly ("memory-safe") {
+            calldatacopy(add(payload, 32), add(buf.offset, afterHead), length)
         }
         nextOffset = afterHead + length;
     }
@@ -246,13 +271,23 @@ library CBEDecode {
         pure
         returns (bytes32 value, uint256 nextOffset)
     {
-        bytes memory payload;
-        (payload, nextOffset) = readBytesExact(buf, offset, 32);
-        // Pack into a single bytes32 word (big-endian on the wire,
-        // matching Lean's `keccak256` output convention).
-        assembly {
-            value := mload(add(payload, 32))
+        // The same head + length validation `readBytesExact` performs,
+        // then one `calldataload` -- the value IS a word, so allocating
+        // a `bytes memory` only to `mload` it straight back was pure
+        // overhead.
+        uint64 length;
+        uint256 afterHead;
+        (length, afterHead) = readHead(buf, offset, TAG_BYTES);
+        // Bounds BEFORE size, matching the order `readBytes` +
+        // `readBytesExact` checked in: a declared length that overruns
+        // the buffer is `CBEInvalidLength`, whatever that length is.
+        if (afterHead + length > buf.length) revert CBEInvalidLength();
+        if (length != 32) revert CBESizeMismatch(32, length);
+        // Big-endian on the wire, matching Lean's keccak256 output.
+        assembly ("memory-safe") {
+            value := calldataload(add(buf.offset, afterHead))
         }
+        nextOffset = afterHead + 32;
     }
 
     /// @notice Decode a CBE byte string of size 20 and return as
@@ -263,16 +298,24 @@ library CBEDecode {
         pure
         returns (address value, uint256 nextOffset)
     {
-        bytes memory payload;
-        (payload, nextOffset) = readBytesExact(buf, offset, 20);
-        // Big-endian bytes20 → address.
-        uint160 acc;
-        unchecked {
-            for (uint256 i = 0; i < 20; ++i) {
-                acc = (acc << 8) | uint160(uint8(payload[i]));
-            }
+        // Same validation as `readBytesExact`, then the 20 bytes read
+        // straight out of calldata.  Going via `readBytes` allocated a
+        // 20-byte `bytes memory` only to walk it back out a byte at a
+        // time and discard it.
+        uint64 length;
+        uint256 afterHead;
+        (length, afterHead) = readHead(buf, offset, TAG_BYTES);
+        // Bounds before size -- see `readBytes32Exact`.
+        if (afterHead + length > buf.length) revert CBEInvalidLength();
+        if (length != 20) revert CBESizeMismatch(20, length);
+        // Big-endian bytes20 -> address: the 20 bytes are the HIGH
+        // bytes of the loaded word, so `shr(96, ...)` leaves exactly
+        // 160 bits.  Done in assembly so the width is structural --
+        // there is no narrowing cast to argue about.
+        assembly ("memory-safe") {
+            value := shr(96, calldataload(add(buf.offset, afterHead)))
         }
-        value = address(acc);
+        nextOffset = afterHead + 20;
     }
 
     /// @notice Decode a CBE array head; returns the element count

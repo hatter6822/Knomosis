@@ -50,6 +50,10 @@ tracing = { workspace = true }
 # compiles SQLite from source; see workspace Cargo.toml for the
 # rationale.
 rusqlite = { workspace = true }
+# `knomosis-amount` supplies the 256-bit accounting scalar every
+# amount-valued cell is encoded from.  See that crate's docs for why
+# the width is exactly 256 bits.
+knomosis-amount = { path = "../knomosis-amount" }
 
 [dev-dependencies]
 # `proptest` powers the random-KV-op property tests against the

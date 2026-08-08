@@ -35,7 +35,7 @@ contract AmmMathCrossCheck is CrossCheckFramework {
     /// @dev Fixture file name under `test/CrossCheck/fixtures/`.
     string internal constant FIXTURE_NAME = "amm_getamountout.json";
 
-    /// @dev Mirror of `KnomosisBridge.AMM_SWAP_FEE_BPS` (the production fee).
+    /// @dev Mirror of `AmmMath.SWAP_FEE_BPS` (the production fee).
     uint256 internal constant AMM_SWAP_FEE_BPS = 30;
 
     /// @dev Decoded fixture entry.  `amountIn` / `reserveIn` / `reserveOut` /

@@ -459,7 +459,9 @@ pub(crate) struct _TerminateBundleCellProofDocsAnchor;
 ///     `actionKind` parameter; widened from 0..18 by Workstream
 ///     GP — indices 19 (`DepositWithFee`), 20
 ///     (`TopUpActionBudget`), 21 (`TopUpActionBudgetFor`),
-///     22 (`ClaimBudgetRefund`), and 23 (`AmmSwap`)).
+///     22 (`ClaimBudgetRefund`), 24 (`ReclaimAmmReserves`) and 25
+///     (`ReserveSwap`); 23 is the retired `ammSwap`'s permanent
+///     hole).
 ///   * `action_fields` — canonical byte layout the L1 `_stepXX`
 ///     decoder consumes.
 ///   * `signer` — the action's signer's `ActorId` (`u64`).
@@ -468,7 +470,7 @@ pub(crate) struct _TerminateBundleCellProofDocsAnchor;
 ///     this byte-equals what `KnomosisStepVM.executeStep` returns.
 ///   * `cell_proofs` — cell-proof bundle for the action's
 ///     required cells, witnessed by the pre-state.
-#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct TerminateBundle {
     /// Operator-supplied identifier (e.g. `"log[7]"`).  Free-form;
     /// used for logging.
@@ -477,7 +479,9 @@ pub struct TerminateBundle {
     /// Solidity `actionKind` argument.  The range widened from
     /// 0..18 by Workstream GP — indices 19 (`DepositWithFee`),
     /// 20 (`TopUpActionBudget`), 21 (`TopUpActionBudgetFor`),
-    /// 22 (`ClaimBudgetRefund`), and 23 (`AmmSwap`).
+    /// 22 (`ClaimBudgetRefund`), 24 (`ReclaimAmmReserves`) and 25
+    /// (`ReserveSwap`); 23 is the retired `ammSwap`'s permanent
+    /// hole.
     pub action_kind: u8,
     /// Canonical byte layout the L1 `_stepXX` decoder consumes.
     ///
@@ -549,6 +553,137 @@ pub struct TerminateBundle {
         deserialize_with = "deserialize_bytes_hex_or_array"
     )]
     pub siblings: Vec<u8>,
+
+    // ---- The batch binding (Workstream SB ruling R7) ----------
+    //
+    // Emitted by `knomosis export-terminate-bundle LOG IDX
+    // PREV_END END`; absent from a bundle exported without batch
+    // bounds.  ALL-OR-NOTHING: `parse_terminate_bundle_json`
+    // refuses a bundle carrying some of these fields but not all,
+    // and `encode_calldata_with_bundle` refuses to build terminate
+    // calldata without them — the L1 authenticates the disputed
+    // action by inclusion proof, so calldata without the binding
+    // reverts `ActionNotInBatch`.
+    /// The batch's exclusive lower bound (the parent record's key).
+    #[serde(default, rename = "prev_end")]
+    pub prev_end: Option<u64>,
+    /// The batch's end index (the disputed L1 record's key).
+    #[serde(default, rename = "end")]
+    pub end_index: Option<u64>,
+    /// The disputed log index, in `[prev_end, end)`.  Cross-checked
+    /// against the requested index.
+    #[serde(default, rename = "batch_idx")]
+    pub batch_idx: Option<u64>,
+    /// The batch's actions root, as the L1 record committed it.
+    /// Not calldata — retained so the observer can cross-check the
+    /// inclusion wire against the on-chain record before
+    /// broadcasting.
+    #[serde(
+        default,
+        rename = "actions_root_hex",
+        serialize_with = "serialize_opt_bytes32_hex_lower",
+        deserialize_with = "deserialize_opt_bytes32_hex_or_array",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub actions_root: Option<[u8; 32]>,
+    /// The disputed action's SMT key (`actionKey idx`).  Not
+    /// calldata — the L1 re-derives the key from the step index.
+    #[serde(
+        default,
+        rename = "action_key_hex",
+        serialize_with = "serialize_opt_bytes32_hex_lower",
+        deserialize_with = "deserialize_opt_bytes32_hex_or_array",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub action_key: Option<[u8; 32]>,
+    /// The signature-bound leaf commit.  Not calldata — the L1
+    /// re-derives the leaf from the `(kind, fields, signer, sig)`
+    /// it is handed.
+    #[serde(
+        default,
+        rename = "leaf_commit_hex",
+        serialize_with = "serialize_opt_bytes32_hex_lower",
+        deserialize_with = "deserialize_opt_bytes32_hex_or_array",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub leaf_commit: Option<[u8; 32]>,
+    /// The action's signature, verbatim from the log entry —
+    /// CALLDATA (the leaf binds it, fixed 65-byte width).
+    #[serde(
+        default,
+        rename = "action_sig_hex",
+        serialize_with = "serialize_opt_bytes_hex_lower",
+        deserialize_with = "deserialize_opt_action_wire_hex",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub action_sig: Option<Vec<u8>>,
+    /// The inclusion wire's 32-byte bitmask — CALLDATA (the first
+    /// 32 bytes of the L1's single `actionProof` argument).
+    #[serde(
+        default,
+        rename = "action_gap_mask_hex",
+        serialize_with = "serialize_opt_bytes_hex_lower",
+        deserialize_with = "deserialize_opt_action_wire_hex",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub action_gap_mask: Option<Vec<u8>>,
+    /// The inclusion wire's packed siblings — CALLDATA (the
+    /// remainder of `actionProof`).
+    #[serde(
+        default,
+        rename = "action_siblings_hex",
+        serialize_with = "serialize_opt_bytes_hex_lower",
+        deserialize_with = "deserialize_opt_action_wire_hex",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub action_siblings: Option<Vec<u8>>,
+    /// F-A: the signer's registry cell PRE-VALUE at the disputed
+    /// range's pre-state — CALLDATA.  A CBE byte string wrapping the
+    /// 33-byte SEC1-compressed public key, or EMPTY when the signer
+    /// is unregistered (a real, adjudicable state: no key can have
+    /// authorised the entry, so the game treats the signature as
+    /// invalid).
+    #[serde(
+        default,
+        rename = "registry_value_hex",
+        serialize_with = "serialize_opt_bytes_hex_lower",
+        deserialize_with = "deserialize_opt_action_wire_hex",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub registry_value: Option<Vec<u8>>,
+    /// F-A: the registry cell's single-cell opening against the
+    /// pre-root — CALLDATA, on the standard `bitmask(32) ‖ siblings`
+    /// SMT wire.  Present for BOTH the registered and unregistered
+    /// cases (an absent cell opens from the canonical empty leaf),
+    /// so this is the field that decides whether the bundle carries
+    /// an F-A opening at all.
+    #[serde(
+        default,
+        rename = "registry_proof_hex",
+        serialize_with = "serialize_opt_bytes_hex_lower",
+        deserialize_with = "deserialize_opt_action_wire_hex",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub registry_proof: Option<Vec<u8>>,
+}
+
+impl TerminateBundle {
+    /// True iff the bundle carries the (validated, all-or-nothing)
+    /// batch binding.  A `true` from a bundle that passed
+    /// [`parse_terminate_bundle_json`] means every binding field is
+    /// present and well-formed.
+    #[must_use]
+    pub fn has_batch_binding(&self) -> bool {
+        self.action_sig.is_some()
+    }
+
+    /// True iff the bundle carries the F-A registry opening.  Keyed
+    /// on the PROOF: the value is legitimately empty for an
+    /// unregistered signer, so its absence proves nothing.
+    #[must_use]
+    pub fn has_registry_opening(&self) -> bool {
+        self.registry_proof.is_some()
+    }
 }
 
 /// Maximum total bytes the bundle parser will admit from a
@@ -588,6 +723,24 @@ pub const MAX_TERMINATE_BUNDLE_GAP_MASK_BYTES: usize = 32 * MAX_TERMINATE_BUNDLE
 /// Maximum sibling bytes: 32 per set mask bit, and at most every gap
 /// is set.
 pub const MAX_TERMINATE_BUNDLE_SIBLINGS_BYTES: usize = 8 * 32 * MAX_TERMINATE_BUNDLE_GAP_MASK_BYTES;
+
+/// The fixed action-signature width the batch leaf binds (SB ruling
+/// R7): `r ‖ s ‖ v`.  The L1 (`ActionsRoot.actionLeafCommit`)
+/// REVERTS on any other width — the fixed width is what keeps the
+/// leaf pre-image's `fields ‖ sig` split injective — so a bundle
+/// carrying a different width is refused before it can become
+/// calldata that loses the game.
+pub const TERMINATE_BUNDLE_ACTION_SIG_BYTES: usize = 65;
+
+/// Maximum bytes any single batch-binding wire field
+/// (`action_sig_hex` / `action_gap_mask_hex` /
+/// `action_siblings_hex`) may carry.  The inclusion wire is one
+/// 256-level SMT path: a 32-byte bitmask plus at most 256 32-byte
+/// siblings (8 KiB).  Deliberately its own bound rather than a
+/// reuse of the 4 KiB `action_fields` cap: a full-depth sibling
+/// list does not fit under that one, and its error text names the
+/// wrong field.
+pub const MAX_TERMINATE_BUNDLE_ACTION_WIRE_BYTES: usize = 256 * 32;
 
 /// Errors the [`TerminateBundleOracle`] surfaces.
 #[derive(Debug, thiserror::Error)]
@@ -715,6 +868,89 @@ fn deserialize_bytes32_hex_or_array<'de, D: serde::Deserializer<'de>>(
     Ok(arr)
 }
 
+/// Serialize an optional byte vector as a lowercase hex string.
+/// Paired with `skip_serializing_if = "Option::is_none"`, so the
+/// `None` arm is unreachable in practice but total anyway.
+///
+/// The `&Option<_>` parameter is serde's `serialize_with`
+/// calling convention (a reference to the FIELD type), not a
+/// style choice — hence the lint allowance.
+#[allow(clippy::ref_option)]
+fn serialize_opt_bytes_hex_lower<S: serde::Serializer>(
+    value: &Option<Vec<u8>>,
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    match value {
+        Some(v) => ser.serialize_str(&hex::encode(v)),
+        None => ser.serialize_none(),
+    }
+}
+
+/// Serialize an optional 32-byte word as a lowercase hex string.
+/// `&Option<_>` per serde's `serialize_with` calling convention.
+#[allow(clippy::ref_option)]
+fn serialize_opt_bytes32_hex_lower<S: serde::Serializer>(
+    value: &Option<[u8; 32]>,
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    match value {
+        Some(v) => ser.serialize_str(&hex::encode(v)),
+        None => ser.serialize_none(),
+    }
+}
+
+/// Deserialize an optional 32-byte word: absent keys take the serde
+/// default (`None`, this fn not called); a present key must be a
+/// well-formed 32-byte hex string or byte array.
+fn deserialize_opt_bytes32_hex_or_array<'de, D: serde::Deserializer<'de>>(
+    de: D,
+) -> Result<Option<[u8; 32]>, D::Error> {
+    deserialize_bytes32_hex_or_array(de).map(Some)
+}
+
+/// Deserialize an optional batch-binding wire field
+/// (`action_sig_hex` / `action_gap_mask_hex` /
+/// `action_siblings_hex`), capped at
+/// [`MAX_TERMINATE_BUNDLE_ACTION_WIRE_BYTES`].  Exact per-field
+/// widths (65-byte signature, 32-byte bitmask, whole 32-byte
+/// siblings) are enforced by [`parse_terminate_bundle_json`].
+fn deserialize_opt_action_wire_hex<'de, D: serde::Deserializer<'de>>(
+    de: D,
+) -> Result<Option<Vec<u8>>, D::Error> {
+    use serde::de::Error as _;
+    use serde::Deserialize as _;
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum HexOrArray {
+        Str(String),
+        Arr(Vec<u8>),
+    }
+    let value = HexOrArray::deserialize(de)?;
+    let bytes = match value {
+        HexOrArray::Str(s) => {
+            let trimmed = s.strip_prefix("0x").unwrap_or(&s);
+            if trimmed.len() > MAX_TERMINATE_BUNDLE_ACTION_WIRE_BYTES.saturating_mul(2) {
+                return Err(D::Error::custom(format!(
+                    "batch-binding wire hex string exceeds cap: {} > {}",
+                    trimmed.len(),
+                    MAX_TERMINATE_BUNDLE_ACTION_WIRE_BYTES.saturating_mul(2)
+                )));
+            }
+            hex::decode(trimmed)
+                .map_err(|e| D::Error::custom(format!("invalid batch-binding wire hex: {e}")))?
+        }
+        HexOrArray::Arr(v) => v,
+    };
+    if bytes.len() > MAX_TERMINATE_BUNDLE_ACTION_WIRE_BYTES {
+        return Err(D::Error::custom(format!(
+            "batch-binding wire bytes exceed cap: {} > {}",
+            bytes.len(),
+            MAX_TERMINATE_BUNDLE_ACTION_WIRE_BYTES
+        )));
+    }
+    Ok(Some(bytes))
+}
+
 /// Parse a JSON document into a [`TerminateBundle`].  Caps the
 /// declared JSON size at [`MAX_TERMINATE_BUNDLE_JSON_BYTES`], the
 /// frontier at [`MAX_TERMINATE_BUNDLE_OPENED_CELLS`], and both wire
@@ -790,7 +1026,95 @@ pub fn parse_terminate_bundle_json(
             ),
         });
     }
+    validate_batch_binding(idx, &bundle)?;
     Ok(bundle)
+}
+
+/// The batch-binding half of [`parse_terminate_bundle_json`]'s
+/// validation (Workstream SB).  The binding is ALL-OR-NOTHING: the
+/// CLI emits either every binding field or none, so a partial set
+/// means a truncated / hand-edited document, and silently treating
+/// it as unbound would turn a data error into an on-chain
+/// `ActionNotInBatch` loss.
+///
+/// # Errors
+///
+/// Returns [`TerminateBundleError::Malformed`] on a partial
+/// binding, a signature of any width but the fixed 65 bytes, a
+/// bitmask of any width but 32, a ragged sibling region, or batch
+/// bounds that exclude / contradict the requested index.
+fn validate_batch_binding(
+    idx: LogIndex,
+    bundle: &TerminateBundle,
+) -> Result<(), TerminateBundleError> {
+    let binding_present = [
+        bundle.prev_end.is_some(),
+        bundle.end_index.is_some(),
+        bundle.batch_idx.is_some(),
+        bundle.actions_root.is_some(),
+        bundle.action_key.is_some(),
+        bundle.leaf_commit.is_some(),
+        bundle.action_sig.is_some(),
+        bundle.action_gap_mask.is_some(),
+        bundle.action_siblings.is_some(),
+    ];
+    if binding_present.iter().any(|p| *p) && !binding_present.iter().all(|p| *p) {
+        return Err(TerminateBundleError::Malformed {
+            idx,
+            detail: "partial batch binding: some batch fields present but not all".to_string(),
+        });
+    }
+    if let Some(sig) = &bundle.action_sig {
+        if sig.len() != TERMINATE_BUNDLE_ACTION_SIG_BYTES {
+            return Err(TerminateBundleError::Malformed {
+                idx,
+                detail: format!(
+                    "action_sig is {} bytes; the leaf binds a fixed {}-byte signature",
+                    sig.len(),
+                    TERMINATE_BUNDLE_ACTION_SIG_BYTES
+                ),
+            });
+        }
+    }
+    if let Some(mask) = &bundle.action_gap_mask {
+        if mask.len() != 32 {
+            return Err(TerminateBundleError::Malformed {
+                idx,
+                detail: format!(
+                    "action_gap_mask is {} bytes; the inclusion wire's bitmask is exactly 32",
+                    mask.len()
+                ),
+            });
+        }
+    }
+    if let Some(sibs) = &bundle.action_siblings {
+        if !sibs.len().is_multiple_of(32) {
+            return Err(TerminateBundleError::Malformed {
+                idx,
+                detail: format!(
+                    "action_siblings region {} bytes is not whole 32-byte siblings",
+                    sibs.len()
+                ),
+            });
+        }
+    }
+    if let (Some(prev_end), Some(end), Some(batch_idx)) =
+        (bundle.prev_end, bundle.end_index, bundle.batch_idx)
+    {
+        if !(prev_end <= batch_idx && batch_idx < end) {
+            return Err(TerminateBundleError::Malformed {
+                idx,
+                detail: format!("batch_idx {batch_idx} outside batch [{prev_end}, {end})"),
+            });
+        }
+        if batch_idx != idx {
+            return Err(TerminateBundleError::Malformed {
+                idx,
+                detail: format!("batch_idx {batch_idx} does not match the requested index {idx}"),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// An oracle that returns the canonical terminate bundle for a
@@ -811,10 +1135,22 @@ pub trait TerminateBundleOracle {
     /// index.  Returns [`TerminateBundleError::Missed`] if the
     /// bundle is not yet known.
     ///
+    /// `batch` carries the disputed batch's `(prev_end, end)`
+    /// bounds (Workstream SB): when `Some`, the produced bundle
+    /// must additionally carry the action's batch binding — the
+    /// signature and the inclusion wire against the batch's
+    /// actions root — which the batched `terminateOnSingleStep`
+    /// requires.  `None` requests a bare (pre-batching) bundle;
+    /// the observer's production path always passes `Some`.
+    ///
     /// # Errors
     ///
     /// See [`TerminateBundleError`].
-    fn terminate_bundle_at(&self, idx: LogIndex) -> Result<TerminateBundle, TerminateBundleError>;
+    fn terminate_bundle_at(
+        &self,
+        idx: LogIndex,
+        batch: Option<(LogIndex, LogIndex)>,
+    ) -> Result<TerminateBundle, TerminateBundleError>;
 }
 
 /// Blanket impl: any [`Box`]ed [`TerminateBundleOracle`] is itself
@@ -823,8 +1159,12 @@ pub trait TerminateBundleOracle {
 /// `Box<dyn TerminateBundleOracle>` without monomorphisation
 /// pressure.
 impl<T: TerminateBundleOracle + ?Sized> TerminateBundleOracle for Box<T> {
-    fn terminate_bundle_at(&self, idx: LogIndex) -> Result<TerminateBundle, TerminateBundleError> {
-        (**self).terminate_bundle_at(idx)
+    fn terminate_bundle_at(
+        &self,
+        idx: LogIndex,
+        batch: Option<(LogIndex, LogIndex)>,
+    ) -> Result<TerminateBundle, TerminateBundleError> {
+        (**self).terminate_bundle_at(idx, batch)
     }
 }
 
@@ -864,7 +1204,14 @@ impl MemoryTerminateBundleOracle {
 }
 
 impl TerminateBundleOracle for MemoryTerminateBundleOracle {
-    fn terminate_bundle_at(&self, idx: LogIndex) -> Result<TerminateBundle, TerminateBundleError> {
+    /// The memory oracle keys by index alone: the operator
+    /// pre-stages exactly the bundle (batch-bound or not) the
+    /// observer should broadcast, so the bounds are advisory here.
+    fn terminate_bundle_at(
+        &self,
+        idx: LogIndex,
+        _batch: Option<(LogIndex, LogIndex)>,
+    ) -> Result<TerminateBundle, TerminateBundleError> {
         self.map
             .get(&idx)
             .cloned()
@@ -965,7 +1312,11 @@ impl SubprocessTruthOracle {
     /// `knomosis export-terminate-bundle LOG IDX` with the configured
     /// extra flags.  Extracted so the spawn step can be tested in
     /// isolation.
-    fn build_bundle_command(&self, idx: LogIndex) -> std::process::Command {
+    fn build_bundle_command(
+        &self,
+        idx: LogIndex,
+        batch: Option<(LogIndex, LogIndex)>,
+    ) -> std::process::Command {
         use std::process::Stdio;
         let mut cmd = std::process::Command::new(&self.knomosis_path);
         for (flag, value) in &self.extra_flags {
@@ -974,6 +1325,13 @@ impl SubprocessTruthOracle {
         cmd.arg("export-terminate-bundle")
             .arg(&self.log_path)
             .arg(idx.to_string());
+        // The optional batch bounds (Workstream SB): `knomosis
+        // export-terminate-bundle LOG IDX PREV_END END` makes the
+        // CLI additionally emit the action's batch binding — the
+        // inclusion wire the batched terminate calldata carries.
+        if let Some((prev_end, end)) = batch {
+            cmd.arg(prev_end.to_string()).arg(end.to_string());
+        }
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::inherit());
         #[cfg(unix)]
@@ -986,8 +1344,8 @@ impl SubprocessTruthOracle {
 }
 
 impl TerminateBundleOracle for SubprocessTruthOracle {
-    /// Shell out to `knomosis export-terminate-bundle LOG IDX`,
-    /// parse the JSON, return the bundle.
+    /// Shell out to `knomosis export-terminate-bundle LOG IDX
+    /// [PREV_END END]`, parse the JSON, return the bundle.
     ///
     /// Reuses the same defensive pattern as
     /// [`SubprocessTruthOracle::commit_at`]:
@@ -997,8 +1355,12 @@ impl TerminateBundleOracle for SubprocessTruthOracle {
     ///   * Stdout cap of [`MAX_TERMINATE_BUNDLE_JSON_BYTES`] since
     ///     bundle JSON is much larger than the 64-hex-char truth
     ///     output.
-    fn terminate_bundle_at(&self, idx: LogIndex) -> Result<TerminateBundle, TerminateBundleError> {
-        let mut cmd = self.build_bundle_command(idx);
+    fn terminate_bundle_at(
+        &self,
+        idx: LogIndex,
+        batch: Option<(LogIndex, LogIndex)>,
+    ) -> Result<TerminateBundle, TerminateBundleError> {
+        let mut cmd = self.build_bundle_command(idx, batch);
         let mut child = cmd.spawn().map_err(|e| TerminateBundleError::Malformed {
             idx,
             detail: format!("spawn failed: {e}"),
@@ -1071,10 +1433,11 @@ pub enum HonestMove {
     /// index of the range).
     TerminateOnSingleStep {
         /// The honest expectation for what the L1 step VM will
-        /// compute.  Local only: the contract's 5-argument
-        /// `terminateOnSingleStep` takes no claimed post-commit, so
-        /// this never reaches the calldata — it feeds the observer's
-        /// own pre-broadcast `BundleCommitMismatch` cross-check.
+        /// compute.  Local only: `terminateOnSingleStep` takes no
+        /// claimed post-commit (the contract compares its own fold
+        /// against the on-chain `g.high.commit`), so this never
+        /// reaches the calldata — it feeds the observer's own
+        /// pre-broadcast `BundleCommitMismatch` cross-check.
         expected_post_commit: StateCommit,
     },
 }
@@ -1235,6 +1598,7 @@ mod tests {
             challenger_bond: 1_000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         }
     }
 
@@ -1442,6 +1806,7 @@ mod tests {
             challenger_bond: 1_000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
 
         let mut rounds = 0;
@@ -1811,8 +2176,9 @@ mod tests {
 #[cfg(test)]
 mod terminate_bundle_tests {
     use super::{
-        parse_terminate_bundle_json, MemoryTerminateBundleOracle, TerminateBundle,
-        TerminateBundleError, TerminateBundleOracle, MAX_TERMINATE_BUNDLE_JSON_BYTES,
+        parse_terminate_bundle_json, MemoryTerminateBundleOracle, SubprocessTruthOracle,
+        TerminateBundle, TerminateBundleError, TerminateBundleOracle,
+        MAX_TERMINATE_BUNDLE_JSON_BYTES,
     };
     use crate::submitter::OpenedCell;
 
@@ -1831,6 +2197,27 @@ mod terminate_bundle_tests {
             }],
             gap_mask: vec![0u8; 32],
             siblings: vec![],
+            // No batch binding: the pre-batching bundle shape,
+            // which must keep parsing (a bundle exported without
+            // batch bounds).
+            ..TerminateBundle::default()
+        }
+    }
+
+    /// A bundle carrying a well-formed batch binding for disputed
+    /// index `idx` inside batch `[0, 4)`.
+    fn batch_bound_bundle(idx: u64) -> TerminateBundle {
+        TerminateBundle {
+            prev_end: Some(0),
+            end_index: Some(4),
+            batch_idx: Some(idx),
+            actions_root: Some([0xA0; 32]),
+            action_key: Some([0xA1; 32]),
+            leaf_commit: Some([0xA2; 32]),
+            action_sig: Some(vec![0x11; 65]),
+            action_gap_mask: Some(vec![0u8; 32]),
+            action_siblings: Some(vec![0xBB; 64]),
+            ..sample_bundle(&idx.to_string())
         }
     }
 
@@ -1839,7 +2226,7 @@ mod terminate_bundle_tests {
     #[test]
     fn memory_bundle_oracle_missed_default() {
         let oracle = MemoryTerminateBundleOracle::new();
-        let result = oracle.terminate_bundle_at(7);
+        let result = oracle.terminate_bundle_at(7, None);
         assert!(matches!(
             result,
             Err(TerminateBundleError::Missed { idx: 7 })
@@ -1853,7 +2240,7 @@ mod terminate_bundle_tests {
         let mut oracle = MemoryTerminateBundleOracle::new();
         let bundle = sample_bundle("7");
         oracle.insert(7, bundle.clone());
-        let result = oracle.terminate_bundle_at(7).unwrap();
+        let result = oracle.terminate_bundle_at(7, None).unwrap();
         assert_eq!(result, bundle);
         assert_eq!(oracle.len(), 1);
         assert!(!oracle.is_empty());
@@ -1869,7 +2256,7 @@ mod terminate_bundle_tests {
         b2.action_kind = 5;
         oracle.insert(0, b1);
         oracle.insert(0, b2.clone());
-        let result = oracle.terminate_bundle_at(0).unwrap();
+        let result = oracle.terminate_bundle_at(0, None).unwrap();
         assert_eq!(result, b2);
         assert_eq!(oracle.len(), 1);
     }
@@ -1882,7 +2269,7 @@ mod terminate_bundle_tests {
         let bundle = sample_bundle("99");
         inner.insert(99, bundle.clone());
         let boxed: Box<dyn TerminateBundleOracle + Send + Sync> = Box::new(inner);
-        let result = boxed.terminate_bundle_at(99).unwrap();
+        let result = boxed.terminate_bundle_at(99, None).unwrap();
         assert_eq!(result, bundle);
     }
 
@@ -1893,6 +2280,125 @@ mod terminate_bundle_tests {
         let json = serde_json::to_string(&bundle).unwrap();
         let parsed = parse_terminate_bundle_json(0, &json).unwrap();
         assert_eq!(parsed, bundle);
+    }
+
+    /// A batch-bound bundle (Workstream SB) round-trips: every
+    /// binding field survives serialize → parse.
+    #[test]
+    fn parse_batch_bound_bundle_round_trip() {
+        let bundle = batch_bound_bundle(2);
+        let json = serde_json::to_string(&bundle).unwrap();
+        let parsed = parse_terminate_bundle_json(2, &json).unwrap();
+        assert_eq!(parsed, bundle);
+        assert!(parsed.has_batch_binding());
+    }
+
+    /// The binding is ALL-OR-NOTHING: a bundle carrying some batch
+    /// fields but not all is refused (a truncated / hand-edited
+    /// document, not an unbound bundle).
+    #[test]
+    fn parse_rejects_partial_batch_binding() {
+        let mut bundle = batch_bound_bundle(2);
+        bundle.action_sig = None;
+        let json = serde_json::to_string(&bundle).unwrap();
+        let err = parse_terminate_bundle_json(2, &json).unwrap_err();
+        assert!(
+            matches!(err, TerminateBundleError::Malformed { .. }),
+            "expected Malformed for a partial binding, got {err:?}",
+        );
+    }
+
+    /// The leaf binds a FIXED 65-byte signature (ruling R7); the L1
+    /// reverts on any other width, so the parser refuses first.
+    #[test]
+    fn parse_rejects_wrong_signature_width() {
+        let mut bundle = batch_bound_bundle(2);
+        bundle.action_sig = Some(vec![0x11; 64]);
+        let json = serde_json::to_string(&bundle).unwrap();
+        let err = parse_terminate_bundle_json(2, &json).unwrap_err();
+        assert!(
+            matches!(err, TerminateBundleError::Malformed { .. }),
+            "expected Malformed for a 64-byte signature, got {err:?}",
+        );
+    }
+
+    /// The inclusion wire's bitmask is exactly 32 bytes.
+    #[test]
+    fn parse_rejects_wrong_action_gap_mask_width() {
+        let mut bundle = batch_bound_bundle(2);
+        bundle.action_gap_mask = Some(vec![0u8; 31]);
+        let json = serde_json::to_string(&bundle).unwrap();
+        let err = parse_terminate_bundle_json(2, &json).unwrap_err();
+        assert!(
+            matches!(err, TerminateBundleError::Malformed { .. }),
+            "expected Malformed for a 31-byte bitmask, got {err:?}",
+        );
+    }
+
+    /// The inclusion wire's sibling region is whole 32-byte words.
+    #[test]
+    fn parse_rejects_ragged_action_siblings() {
+        let mut bundle = batch_bound_bundle(2);
+        bundle.action_siblings = Some(vec![0u8; 33]);
+        let json = serde_json::to_string(&bundle).unwrap();
+        let err = parse_terminate_bundle_json(2, &json).unwrap_err();
+        assert!(
+            matches!(err, TerminateBundleError::Malformed { .. }),
+            "expected Malformed for ragged action siblings, got {err:?}",
+        );
+    }
+
+    /// `batch_idx` must sit inside `[prev_end, end)` AND match the
+    /// requested index — a bundle for the wrong step is refused
+    /// rather than broadcast.
+    #[test]
+    fn parse_rejects_batch_idx_out_of_range_or_mismatched() {
+        // Outside the bounds.
+        let mut outside = batch_bound_bundle(2);
+        outside.batch_idx = Some(4);
+        let json = serde_json::to_string(&outside).unwrap();
+        assert!(matches!(
+            parse_terminate_bundle_json(4, &json),
+            Err(TerminateBundleError::Malformed { .. })
+        ));
+        // In-bounds but not the requested index.
+        let mismatched = batch_bound_bundle(2);
+        let json = serde_json::to_string(&mismatched).unwrap();
+        assert!(matches!(
+            parse_terminate_bundle_json(3, &json),
+            Err(TerminateBundleError::Malformed { .. })
+        ));
+    }
+
+    /// The subprocess oracle's argv carries the batch bounds when
+    /// supplied — `export-terminate-bundle LOG IDX PREV_END END` —
+    /// and omits them when not.
+    #[test]
+    fn subprocess_bundle_command_carries_batch_bounds() {
+        let oracle = SubprocessTruthOracle::new(
+            std::path::PathBuf::from("/usr/bin/knomosis"),
+            std::path::PathBuf::from("/tmp/test.log"),
+        );
+        let with_bounds = oracle.build_bundle_command(3, Some((0, 4)));
+        let args: Vec<String> = with_bounds
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            vec!["export-terminate-bundle", "/tmp/test.log", "3", "0", "4"],
+            "bounds appended after the index",
+        );
+        let without_bounds = oracle.build_bundle_command(3, None);
+        let args: Vec<String> = without_bounds
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            vec!["export-terminate-bundle", "/tmp/test.log", "3"],
+            "no bounds ⇒ the bare three-argument form",
+        );
     }
 
     /// Parser rejects oversize JSON.
@@ -1968,6 +2474,7 @@ mod terminate_bundle_tests {
             opened_cells: cells,
             gap_mask: vec![0u8; 32],
             siblings: vec![],
+            ..TerminateBundle::default()
         };
         let json = serde_json::to_string(&bundle).unwrap();
         let err = parse_terminate_bundle_json(0, &json).unwrap_err();
@@ -1996,6 +2503,7 @@ mod terminate_bundle_tests {
             opened_cells: vec![],
             gap_mask: vec![0u8; 32],
             siblings: vec![0u8; 33],
+            ..TerminateBundle::default()
         };
         let json = serde_json::to_string(&bundle).unwrap();
         let err = parse_terminate_bundle_json(0, &json).unwrap_err();

@@ -1253,6 +1253,7 @@ impl Drop for SqliteTransaction<'_> {
 mod tests {
     use super::{next_prefix, JournalMode, SqliteOpenOptions, SqliteStorage, SynchronousMode};
     use crate::storage::{Storage, StorageError};
+    use knomosis_amount::Amount;
 
     /// `next_prefix` mathematical contract.
     #[test]
@@ -1632,8 +1633,9 @@ mod tests {
         writer.put(b"b/some-balance", b"\x00\x01").unwrap();
         writer.put(b"c/identifier", b"deployment-alpha").unwrap();
         let mut tx = writer.combined_transaction().unwrap();
-        tx.credit_actor_budget_current_epoch_grants(7, 100).unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(7, 30)
+        tx.credit_actor_budget_current_epoch_grants(7, Amount::from_u64(100))
+            .unwrap();
+        tx.credit_actor_budget_current_epoch_consumed(7, Amount::from_u64(30))
             .unwrap();
         tx.commit().unwrap();
         (writer, path)
@@ -1668,14 +1670,29 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (writer, path) = seed_live_writer(&dir);
         let ro = SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()).unwrap();
-        assert_eq!(ro.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
-        assert_eq!(ro.get_actor_budget_current_epoch_consumed(7).unwrap(), 30);
+        assert_eq!(
+            ro.get_actor_budget_current_epoch_grants(7).unwrap(),
+            Amount::from_u64(100)
+        );
+        assert_eq!(
+            ro.get_actor_budget_current_epoch_consumed(7).unwrap(),
+            Amount::from_u64(30)
+        );
         let rtx = ro.combined_read_transaction().unwrap();
-        assert_eq!(rtx.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
-        assert_eq!(rtx.get_actor_budget_current_epoch_consumed(7).unwrap(), 30);
+        assert_eq!(
+            rtx.get_actor_budget_current_epoch_grants(7).unwrap(),
+            Amount::from_u64(100)
+        );
+        assert_eq!(
+            rtx.get_actor_budget_current_epoch_consumed(7).unwrap(),
+            Amount::from_u64(30)
+        );
         rtx.rollback().unwrap();
         let btx = ro.begin_combined_read_tx().unwrap();
-        assert_eq!(btx.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
+        assert_eq!(
+            btx.get_actor_budget_current_epoch_grants(7).unwrap(),
+            Amount::from_u64(100)
+        );
         btx.rollback().unwrap();
         drop(writer);
     }
@@ -1735,12 +1752,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (writer, path) = seed_live_writer(&dir);
         let target = crate::migration::target_schema_version();
-        // On-disk version is `target` (2).  Supported = {3} → reject.
-        let opts = ReadOnlyOpenOptions::new().with_supported_schema_versions([3u32]);
+        // On-disk version is `target`.  Supported = {target + 1} →
+        // reject.  Derived rather than hardcoded: a literal here names
+        // whatever the NEXT migration will be, so it silently stops
+        // testing rejection the moment that migration lands.
+        let unsupported = target + 1;
+        let opts = ReadOnlyOpenOptions::new().with_supported_schema_versions([unsupported]);
         match SqliteStorage::open_read_only(&path, &opts) {
             Err(StorageError::SchemaVersionUnsupported { found, supported }) => {
                 assert_eq!(found, target);
-                assert_eq!(supported, vec![3]);
+                assert_eq!(supported, vec![unsupported]);
             }
             other => panic!("expected SchemaVersionUnsupported, got {other:?}"),
         }
@@ -1757,18 +1778,22 @@ mod tests {
     fn read_only_future_schema_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let (writer, path) = seed_live_writer(&dir);
-        // Simulate a future writer bumping the on-disk schema to 3.
+        // Simulate a FUTURE writer bumping the on-disk schema one past
+        // what this binary knows.  Derived from the target for the same
+        // reason as the sibling case: a hardcoded version stops being
+        // "the future" as soon as a migration reaches it.
+        let target = crate::migration::target_schema_version();
+        let future = target + 1;
         writer
             .lock_connection()
             .execute(
-                "UPDATE _meta SET value = '3' WHERE key = 'schema_version'",
-                [],
+                "UPDATE _meta SET value = ?1 WHERE key = 'schema_version'",
+                rusqlite::params![future.to_string()],
             )
             .unwrap();
-        let opts = ReadOnlyOpenOptions::new()
-            .with_supported_schema_versions([crate::migration::target_schema_version()]);
+        let opts = ReadOnlyOpenOptions::new().with_supported_schema_versions([target]);
         match SqliteStorage::open_read_only(&path, &opts) {
-            Err(StorageError::SchemaVersionUnsupported { found, .. }) => assert_eq!(found, 3),
+            Err(StorageError::SchemaVersionUnsupported { found, .. }) => assert_eq!(found, future),
             other => panic!("expected SchemaVersionUnsupported, got {other:?}"),
         }
         drop(writer);

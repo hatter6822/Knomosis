@@ -12,12 +12,12 @@
 //! implementation backed by the five SQLite tables created by
 //! `migration_002_budget_views`:
 //!
-//!   * `actor_budgets` — lifetime cumulative grants (`u128`).
+//!   * `actor_budgets` — lifetime cumulative grants.
 //!   * `actor_budgets_current_epoch_grants` — current-epoch
-//!     cumulative grants (`u128`); reset at every epoch boundary
+//!     cumulative grants; reset at every epoch boundary
 //!     by [`BudgetStorageTransaction::reset_current_epoch`].
 //!   * `actor_budgets_current_epoch_consumed` — current-epoch
-//!     cumulative consumption (`u128`); reset at every epoch
+//!     cumulative consumption; reset at every epoch
 //!     boundary.
 //!   * `pool_balances_eth` — per-pool-actor ETH (resource 0)
 //!     NET balance (gross inflows minus drains).
@@ -26,8 +26,9 @@
 //!
 //! ## Wire shape
 //!
-//! Every row uses 8 BE bytes for the actor key + 16 BE bytes for
-//! the value (a `u128`).  The fixed-width BE encoding ensures
+//! Every row uses 8 BE bytes for the actor key + 32 BE bytes for
+//! the value (a `knomosis_amount::Amount`).  The fixed-width BE
+//! encoding ensures
 //! lexicographic ordering matches numeric ordering, so a
 //! `SELECT * FROM actor_budgets ORDER BY actor` returns actors in
 //! ascending numeric order.
@@ -73,15 +74,15 @@ use crate::storage::StorageError;
 pub type ActorId = u64;
 
 /// 128-bit budget / pool counter (mirrors Lean's `Amount` /
-/// `BudgetUnits`).  Stored as a 16-byte BE u128 in the underlying
+/// `BudgetUnits`).  Stored as a 32-byte BE integer in the underlying
 /// table.
-pub type CounterValue = u128;
+pub type CounterValue = knomosis_amount::Amount;
 
 /// Fixed-width on-disk key length (8-byte BE u64 actor id).
 pub const ACTOR_KEY_LEN: usize = 8;
 
-/// Fixed-width on-disk value length (16-byte BE u128).
-pub const COUNTER_VALUE_LEN: usize = 16;
+/// Fixed-width on-disk value length (32-byte BE `Amount`).
+pub const COUNTER_VALUE_LEN: usize = knomosis_amount::AMOUNT_BYTES;
 
 /// Budget-storage-layer errors.
 #[derive(Debug, thiserror::Error)]
@@ -104,10 +105,10 @@ pub enum BudgetStorageError {
         /// Actual value length read from disk.
         actual: usize,
     },
-    /// A credit operation overflowed `u128::MAX`.  Halts the
+    /// A credit operation overflowed [`CounterValue`]'s ceiling.  Halts the
     /// caller's batch via `?` propagation (consistent with
     /// `BalanceView::credit`'s discipline).
-    #[error("credit overflow on {table} for actor {actor}: current {current} + delta {delta} > u128::MAX")]
+    #[error("credit overflow on {table} for actor {actor}: current {current} + delta {delta} exceeds 2^256 - 1")]
     CreditOverflow {
         /// Which table overflowed.
         table: &'static str,
@@ -151,22 +152,22 @@ pub fn parse_actor_key(key: &[u8]) -> Option<ActorId> {
     Some(ActorId::from_be_bytes(buf))
 }
 
-/// Encode a counter value as a 16-byte BE u128.
+/// Encode a counter value as a [`COUNTER_VALUE_LEN`]-byte BE integer.
 #[must_use]
 pub fn encode_counter(value: CounterValue) -> [u8; COUNTER_VALUE_LEN] {
     value.to_be_bytes()
 }
 
-/// Decode a 16-byte BE u128 to a counter value.  Returns `None`
-/// if the byte slice has the wrong length.
+/// Decode a [`COUNTER_VALUE_LEN`]-byte BE integer to a counter value.
+/// Returns `None` if the byte slice has the wrong length.
+///
+/// A wrong length is refused rather than zero-extended: a cell left at
+/// the retired 16-byte width by a database that skipped
+/// `migration_003_widen_amount_cells` is a schema error to surface,
+/// not a value to guess at.
 #[must_use]
 pub fn decode_counter(bytes: &[u8]) -> Option<CounterValue> {
-    if bytes.len() != COUNTER_VALUE_LEN {
-        return None;
-    }
-    let mut buf = [0u8; COUNTER_VALUE_LEN];
-    buf.copy_from_slice(bytes);
-    Some(CounterValue::from_be_bytes(buf))
+    CounterValue::from_be_slice(bytes).ok()
 }
 
 /// The five table names created by `migration_002_budget_views`.
@@ -267,7 +268,7 @@ pub trait BudgetStorage: Send + Sync {
 /// Mutable budget-storage operations inside a transaction.
 ///
 /// All mutations checked: credit operations propagate
-/// [`BudgetStorageError::CreditOverflow`] on `u128::MAX` overflow
+/// [`BudgetStorageError::CreditOverflow`] on overflow past `2^256 - 1`
 /// (consistent with `BalanceView::credit`'s halt-on-overflow
 /// discipline); drain operations propagate
 /// [`BudgetStorageError::DrainUnderflow`].
@@ -452,7 +453,7 @@ fn read_counter_cell(
         })
         .map_err(|e| BudgetStorageError::Storage(StorageError::Backend(e.to_string())))?;
     match row {
-        None => Ok(0),
+        None => Ok(CounterValue::ZERO),
         Some(bytes) => decode_counter(&bytes).ok_or(BudgetStorageError::CorruptCell {
             table,
             actor,
@@ -820,12 +821,13 @@ mod tests {
         TABLE_POOL_BALANCES_BOLD, TABLE_POOL_BALANCES_ETH,
     };
     use crate::sqlite::SqliteStorage;
+    use knomosis_amount::Amount;
 
     /// Constants pinned.
     #[test]
     fn constants_stable() {
         assert_eq!(ACTOR_KEY_LEN, 8);
-        assert_eq!(COUNTER_VALUE_LEN, 16);
+        assert_eq!(COUNTER_VALUE_LEN, 32);
         assert_eq!(TABLE_ACTOR_BUDGETS, "actor_budgets");
         assert_eq!(
             TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS,
@@ -860,8 +862,8 @@ mod tests {
     #[test]
     fn counter_round_trip() {
         for v in [0u128, 1, 42, u128::MAX, u128::from(u64::MAX)] {
-            let b = encode_counter(v);
-            assert_eq!(decode_counter(&b).unwrap(), v);
+            let b = encode_counter(Amount::from(v));
+            assert_eq!(decode_counter(&b).unwrap(), Amount::from(v));
         }
     }
 
@@ -877,11 +879,17 @@ mod tests {
     #[test]
     fn fresh_db_reads_zero() {
         let s = SqliteStorage::open_in_memory().unwrap();
-        assert_eq!(s.get_actor_budget(42).unwrap(), 0);
-        assert_eq!(s.get_actor_budget_current_epoch_grants(42).unwrap(), 0);
-        assert_eq!(s.get_actor_budget_current_epoch_consumed(42).unwrap(), 0);
-        assert_eq!(s.get_pool_eth(1).unwrap(), 0);
-        assert_eq!(s.get_pool_bold(1).unwrap(), 0);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(0));
+        assert_eq!(
+            s.get_actor_budget_current_epoch_grants(42).unwrap(),
+            Amount::from_u64(0)
+        );
+        assert_eq!(
+            s.get_actor_budget_current_epoch_consumed(42).unwrap(),
+            Amount::from_u64(0)
+        );
+        assert_eq!(s.get_pool_eth(1).unwrap(), Amount::from_u64(0));
+        assert_eq!(s.get_pool_bold(1).unwrap(), Amount::from_u64(0));
     }
 
     /// `credit_actor_budget` then `get_actor_budget` round-trips.
@@ -889,9 +897,9 @@ mod tests {
     fn credit_and_read() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(42, 100).unwrap();
+        tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
         tx.commit().unwrap();
-        assert_eq!(s.get_actor_budget(42).unwrap(), 100);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(100));
     }
 
     /// Credits to different tables are independent.
@@ -899,18 +907,25 @@ mod tests {
     fn credits_to_different_tables_independent() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(42, 100).unwrap();
-        tx.credit_pool_eth(42, 200).unwrap();
-        tx.credit_pool_bold(42, 300).unwrap();
-        tx.credit_actor_budget_current_epoch_grants(42, 50).unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(42, 25)
+        tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
+        tx.credit_pool_eth(42, Amount::from_u64(200)).unwrap();
+        tx.credit_pool_bold(42, Amount::from_u64(300)).unwrap();
+        tx.credit_actor_budget_current_epoch_grants(42, Amount::from_u64(50))
+            .unwrap();
+        tx.credit_actor_budget_current_epoch_consumed(42, Amount::from_u64(25))
             .unwrap();
         tx.commit().unwrap();
-        assert_eq!(s.get_actor_budget(42).unwrap(), 100);
-        assert_eq!(s.get_pool_eth(42).unwrap(), 200);
-        assert_eq!(s.get_pool_bold(42).unwrap(), 300);
-        assert_eq!(s.get_actor_budget_current_epoch_grants(42).unwrap(), 50);
-        assert_eq!(s.get_actor_budget_current_epoch_consumed(42).unwrap(), 25);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(100));
+        assert_eq!(s.get_pool_eth(42).unwrap(), Amount::from_u64(200));
+        assert_eq!(s.get_pool_bold(42).unwrap(), Amount::from_u64(300));
+        assert_eq!(
+            s.get_actor_budget_current_epoch_grants(42).unwrap(),
+            Amount::from_u64(50)
+        );
+        assert_eq!(
+            s.get_actor_budget_current_epoch_consumed(42).unwrap(),
+            Amount::from_u64(25)
+        );
     }
 
     /// Cumulative credits accumulate.
@@ -919,23 +934,27 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         for delta in [10u128, 20, 30] {
             let mut tx = s.budget_transaction().unwrap();
-            tx.credit_actor_budget(42, delta).unwrap();
+            tx.credit_actor_budget(42, Amount::from(delta)).unwrap();
             tx.commit().unwrap();
         }
-        assert_eq!(s.get_actor_budget(42).unwrap(), 60);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(60));
     }
 
     /// Credit overflow halts the transaction with a typed error.
     #[test]
     fn credit_overflow_halts() {
         let s = SqliteStorage::open_in_memory().unwrap();
-        // Seed actor 42 to u128::MAX - 5.
+        // Seed actor 42 five short of the ceiling.  That seed used to
+        // be `u128::MAX - 5`; at 256 bits it has to be `Amount::MAX -
+        // 5` or the follow-up credit simply fits and the case stops
+        // testing overflow at all.
+        let near_max = Amount::MAX.checked_sub(Amount::from_u64(5)).unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(42, u128::MAX - 5).unwrap();
+        tx.credit_actor_budget(42, near_max).unwrap();
         tx.commit().unwrap();
         // Try to credit 100 — overflow.
         let mut tx = s.budget_transaction().unwrap();
-        match tx.credit_actor_budget(42, 100) {
+        match tx.credit_actor_budget(42, Amount::from_u64(100)) {
             Err(BudgetStorageError::CreditOverflow {
                 table,
                 actor,
@@ -944,15 +963,15 @@ mod tests {
             }) => {
                 assert_eq!(table, "actor_budgets");
                 assert_eq!(actor, 42);
-                assert_eq!(current, u128::MAX - 5);
-                assert_eq!(delta, 100);
+                assert_eq!(current, near_max);
+                assert_eq!(delta, Amount::from_u64(100));
             }
             other => panic!("expected CreditOverflow, got {other:?}"),
         }
         // Rollback to clean up.
         tx.rollback().unwrap();
         // Value unchanged.
-        assert_eq!(s.get_actor_budget(42).unwrap(), u128::MAX - 5);
+        assert_eq!(s.get_actor_budget(42).unwrap(), near_max);
     }
 
     /// Debit drain on pool view succeeds when there's enough.
@@ -960,13 +979,13 @@ mod tests {
     fn debit_pool_eth_drain_succeeds() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_pool_eth(1, 1000).unwrap();
+        tx.credit_pool_eth(1, Amount::from_u64(1000)).unwrap();
         tx.commit().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        let new_v = tx.debit_pool_eth(1, 300).unwrap();
-        assert_eq!(new_v, 700);
+        let new_v = tx.debit_pool_eth(1, Amount::from_u64(300)).unwrap();
+        assert_eq!(new_v, Amount::from_u64(700));
         tx.commit().unwrap();
-        assert_eq!(s.get_pool_eth(1).unwrap(), 700);
+        assert_eq!(s.get_pool_eth(1).unwrap(), Amount::from_u64(700));
     }
 
     /// Debit underflow halts with a typed error.
@@ -974,10 +993,10 @@ mod tests {
     fn debit_underflow_halts() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_pool_eth(1, 100).unwrap();
+        tx.credit_pool_eth(1, Amount::from_u64(100)).unwrap();
         tx.commit().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        match tx.debit_pool_eth(1, 500) {
+        match tx.debit_pool_eth(1, Amount::from_u64(500)) {
             Err(BudgetStorageError::DrainUnderflow {
                 table,
                 actor,
@@ -986,14 +1005,14 @@ mod tests {
             }) => {
                 assert_eq!(table, "pool_balances_eth");
                 assert_eq!(actor, 1);
-                assert_eq!(current, 100);
-                assert_eq!(delta, 500);
+                assert_eq!(current, Amount::from_u64(100));
+                assert_eq!(delta, Amount::from_u64(500));
             }
             other => panic!("expected DrainUnderflow, got {other:?}"),
         }
         tx.rollback().unwrap();
         // Cell unchanged.
-        assert_eq!(s.get_pool_eth(1).unwrap(), 100);
+        assert_eq!(s.get_pool_eth(1).unwrap(), Amount::from_u64(100));
     }
 
     /// `scan_actor_budgets` returns entries in ascending actor
@@ -1002,12 +1021,19 @@ mod tests {
     fn scan_actor_budgets_ascending_order() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(5, 50).unwrap();
-        tx.credit_actor_budget(1, 10).unwrap();
-        tx.credit_actor_budget(99, 99).unwrap();
+        tx.credit_actor_budget(5, Amount::from_u64(50)).unwrap();
+        tx.credit_actor_budget(1, Amount::from_u64(10)).unwrap();
+        tx.credit_actor_budget(99, Amount::from_u64(99)).unwrap();
         tx.commit().unwrap();
         let rows = s.scan_actor_budgets().unwrap();
-        assert_eq!(rows, vec![(1, 10), (5, 50), (99, 99)]);
+        assert_eq!(
+            rows,
+            vec![
+                (1, Amount::from_u64(10)),
+                (5, Amount::from_u64(50)),
+                (99, Amount::from_u64(99))
+            ]
+        );
     }
 
     /// `scan_pool_eth` / `scan_pool_bold` are independent.
@@ -1015,11 +1041,14 @@ mod tests {
     fn scan_pool_views_independent() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_pool_eth(1, 100).unwrap();
-        tx.credit_pool_bold(2, 200).unwrap();
+        tx.credit_pool_eth(1, Amount::from_u64(100)).unwrap();
+        tx.credit_pool_bold(2, Amount::from_u64(200)).unwrap();
         tx.commit().unwrap();
-        assert_eq!(s.scan_pool_eth().unwrap(), vec![(1, 100)]);
-        assert_eq!(s.scan_pool_bold().unwrap(), vec![(2, 200)]);
+        assert_eq!(s.scan_pool_eth().unwrap(), vec![(1, Amount::from_u64(100))]);
+        assert_eq!(
+            s.scan_pool_bold().unwrap(),
+            vec![(2, Amount::from_u64(200))]
+        );
     }
 
     /// Transaction rollback discards every staged mutation.
@@ -1027,11 +1056,11 @@ mod tests {
     fn rollback_discards_mutations() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(42, 100).unwrap();
-        tx.credit_pool_eth(1, 200).unwrap();
+        tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
+        tx.credit_pool_eth(1, Amount::from_u64(200)).unwrap();
         tx.rollback().unwrap();
-        assert_eq!(s.get_actor_budget(42).unwrap(), 0);
-        assert_eq!(s.get_pool_eth(1).unwrap(), 0);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(0));
+        assert_eq!(s.get_pool_eth(1).unwrap(), Amount::from_u64(0));
     }
 
     /// Dropping a transaction without commit/rollback ROLLBACKs
@@ -1041,11 +1070,11 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         {
             let mut tx = s.budget_transaction().unwrap();
-            tx.credit_actor_budget(42, 100).unwrap();
+            tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
             // `tx` dropped here without commit.
         }
         // Value not persisted.
-        assert_eq!(s.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(0));
     }
 
     /// `reset_current_epoch` truncates both per-epoch tables but
@@ -1054,24 +1083,30 @@ mod tests {
     fn reset_current_epoch_truncates_grants_and_consumed_only() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(42, 1000).unwrap(); // lifetime
-        tx.credit_actor_budget_current_epoch_grants(42, 100)
+        tx.credit_actor_budget(42, Amount::from_u64(1000)).unwrap(); // lifetime
+        tx.credit_actor_budget_current_epoch_grants(42, Amount::from_u64(100))
             .unwrap(); // current epoch
-        tx.credit_actor_budget_current_epoch_consumed(42, 50)
+        tx.credit_actor_budget_current_epoch_consumed(42, Amount::from_u64(50))
             .unwrap();
-        tx.credit_pool_eth(1, 999).unwrap();
+        tx.credit_pool_eth(1, Amount::from_u64(999)).unwrap();
         tx.commit().unwrap();
         // Now reset.
         let mut tx = s.budget_transaction().unwrap();
         tx.reset_current_epoch().unwrap();
         tx.commit().unwrap();
         // Lifetime grants unchanged.
-        assert_eq!(s.get_actor_budget(42).unwrap(), 1000);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(1000));
         // Current-epoch counters wiped.
-        assert_eq!(s.get_actor_budget_current_epoch_grants(42).unwrap(), 0);
-        assert_eq!(s.get_actor_budget_current_epoch_consumed(42).unwrap(), 0);
+        assert_eq!(
+            s.get_actor_budget_current_epoch_grants(42).unwrap(),
+            Amount::from_u64(0)
+        );
+        assert_eq!(
+            s.get_actor_budget_current_epoch_consumed(42).unwrap(),
+            Amount::from_u64(0)
+        );
         // Pool views unchanged.
-        assert_eq!(s.get_pool_eth(1).unwrap(), 999);
+        assert_eq!(s.get_pool_eth(1).unwrap(), Amount::from_u64(999));
     }
 
     /// Transaction-bound read sees the staged value (read-your-writes).
@@ -1079,12 +1114,12 @@ mod tests {
     fn tx_read_your_writes() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(42, 100).unwrap();
-        assert_eq!(tx.get_actor_budget(42).unwrap(), 100);
-        tx.credit_actor_budget(42, 50).unwrap();
-        assert_eq!(tx.get_actor_budget(42).unwrap(), 150);
+        tx.credit_actor_budget(42, Amount::from_u64(100)).unwrap();
+        assert_eq!(tx.get_actor_budget(42).unwrap(), Amount::from_u64(100));
+        tx.credit_actor_budget(42, Amount::from_u64(50)).unwrap();
+        assert_eq!(tx.get_actor_budget(42).unwrap(), Amount::from_u64(150));
         tx.commit().unwrap();
-        assert_eq!(s.get_actor_budget(42).unwrap(), 150);
+        assert_eq!(s.get_actor_budget(42).unwrap(), Amount::from_u64(150));
     }
 
     /// u64::MAX actor handled.
@@ -1092,11 +1127,12 @@ mod tests {
     fn u64_max_actor_handled() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(u64::MAX, 999).unwrap();
+        tx.credit_actor_budget(u64::MAX, Amount::from_u64(999))
+            .unwrap();
         tx.commit().unwrap();
-        assert_eq!(s.get_actor_budget(u64::MAX).unwrap(), 999);
+        assert_eq!(s.get_actor_budget(u64::MAX).unwrap(), Amount::from_u64(999));
         let rows = s.scan_actor_budgets().unwrap();
-        assert_eq!(rows, vec![(u64::MAX, 999)]);
+        assert_eq!(rows, vec![(u64::MAX, Amount::from_u64(999))]);
     }
 
     /// Zero credit succeeds + creates a cell with value 0 (vs.
@@ -1106,9 +1142,9 @@ mod tests {
     fn zero_credit_creates_cell() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.budget_transaction().unwrap();
-        tx.credit_actor_budget(42, 0).unwrap();
+        tx.credit_actor_budget(42, Amount::from_u64(0)).unwrap();
         tx.commit().unwrap();
         let rows = s.scan_actor_budgets().unwrap();
-        assert_eq!(rows, vec![(42, 0)]);
+        assert_eq!(rows, vec![(42, Amount::from_u64(0))]);
     }
 }

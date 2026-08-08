@@ -46,10 +46,30 @@ library StepPlan {
         uint256 newBal0;
         /// @dev ...and of cell 1.
         uint256 newBal1;
+        /// @dev ...and of cells 2 and 3 — used only by `reserveSwap`
+        ///      (kind 25), the first FOUR-balance-cell variant (the
+        ///      user and the reserve each move at both swap
+        ///      resources).  Every other variant leaves them at their
+        ///      pre-values via `planBalances4`'s pass-through.
+        uint256 newBal2;
+        /// @dev See `newBal2`.
+        uint256 newBal3;
+        /// @dev Whether this variant grants budget AT ALL.
+        ///
+        ///      Carried separately from `grantAmount` because a zero
+        ///      amount is NOT the same condition.  `ActorBudget.topUp`
+        ///      normalises before it adds, so a grant of zero still
+        ///      refreshes a stale cell to the free tier — and
+        ///      `grantRecipient` is `0` for the twenty-two variants
+        ///      that grant nothing, which collides with the real actor
+        ///      id `0`.  Inferring "no grant" from `grantAmount == 0`
+        ///      conflated the two and skipped the normalisation Lean
+        ///      performs, forking the state root.
+        bool grants;
         /// @dev The actor an action grants budget to, if any.
         uint64 grantRecipient;
-        /// @dev The granted units; zero for the twenty-two variants
-        ///      that grant nothing.
+        /// @dev The granted units.  May legitimately be zero on a
+        ///      granting variant — see `grants`.
         uint256 grantAmount;
         /// @dev The extra budget consume a refund claim carries.
         uint256 refundExtra;
@@ -70,12 +90,18 @@ library StepPlan {
     function planGrant(uint8 actionKind, bytes calldata fields, uint64 signer)
         internal
         pure
-        returns (uint64 grantRecipient, uint256 grantAmount, uint256 refundExtra)
+        returns (
+            bool grants,
+            uint64 grantRecipient,
+            uint256 grantAmount,
+            uint256 refundExtra
+        )
     {
         if (actionKind == 19) {
             // depositWithFee: recipient @8, budgetGrant @88 — it
             // follows BOTH 32-byte amounts.
             return (
+                true,
                 uint64(StepWrites.readFieldUint(fields, 8, 8)),
                 StepWrites.readFieldUint(fields, 88, 8),
                 0
@@ -84,12 +110,13 @@ library StepPlan {
         if (actionKind == 20) {
             // topUpActionBudget: the SIGNER, budgetIncrement @40 —
             // it follows the 32-byte gasAmount at 8.
-            return (signer, StepWrites.readFieldUint(fields, 40, 8), 0);
+            return (true, signer, StepWrites.readFieldUint(fields, 40, 8), 0);
         }
         if (actionKind == 21) {
             // topUpActionBudgetFor: recipient @0, budgetIncrement @48
             // — it follows the 32-byte gasAmount at 16.
             return (
+                true,
                 uint64(StepWrites.readFieldUint(fields, 0, 8)),
                 StepWrites.readFieldUint(fields, 48, 8),
                 0
@@ -100,10 +127,10 @@ library StepPlan {
             // of the action cost — which is what stops a refund from
             // being a free round trip.  budgetUnits @8 — UNCHANGED by
             // the amount widening: it PRECEDES `weiPerBudgetUnit`,
-            // which is the field that widened.
-            return (0, 0, StepWrites.readFieldUint(fields, 8, 8));
+            // which is the field that widened.  It grants nothing.
+            return (false, 0, 0, StepWrites.readFieldUint(fields, 8, 8));
         }
-        return (0, 0, 0);
+        return (false, 0, 0, 0);
     }
 
     /// @notice The post-values of a step's balance cells.
@@ -168,17 +195,8 @@ library StepPlan {
                 pre1
             );
         }
-        if (actionKind == 19) {
-            // depositWithFee: recipient @8, poolActor @16,
-            // userAmount @24 (32), poolAmount @56 (32).
-            return StepWrites.deriveDepositWithFeeBalances(
-                pre0, pre1,
-                uint64(StepWrites.readFieldUint(fields, 8, 8)),
-                uint64(StepWrites.readFieldUint(fields, 16, 8)),
-                StepWrites.readFieldUint(fields, 24, 32),
-                StepWrites.readFieldUint(fields, 56, 32)
-            );
-        }
+        // Kind 19 (depositWithFee) is a THREE-cell plan since the
+        // Workstream SB seed leg and lives in `planBalances4`.
         if (actionKind == 20) {
             // topUpActionBudget: gasAmount @8 (32), poolActor @48.
             // Sufficiency only — there is NO positivity conjunct, so a
@@ -208,18 +226,9 @@ library StepPlan {
         if (actionKind == 22) {
             return _planRefundBalances(fields, signer, pre0, pre1);
         }
-        if (actionKind == 23) {
-            // ammSwap: fromResource @0, toResource @8, amountIn @16
-            // (32), amountOut @48 (32).  The one variant touching two
-            // DIFFERENT resources, so the cells are independent.
-            return StepWrites.deriveAmmSwapBalances(
-                pre0, pre1,
-                uint64(StepWrites.readFieldUint(fields, 0, 8)),
-                uint64(StepWrites.readFieldUint(fields, 8, 8)),
-                StepWrites.readFieldUint(fields, 16, 32),
-                StepWrites.readFieldUint(fields, 48, 32)
-            );
-        }
+        // Kind 23 (the retired L1-AMM ammSwap mirror) is a permanent
+        // hole: `StepWrites.isAdjudicable(23)` is false, so a step
+        // carrying it is refused upstream and no arm exists here.
         if (actionKind == 24) {
             // reclaimAmmReserves: amount @8 (32), reserveActor @40,
             // poolActor @48.  The precondition is an EQUALITY, not a
@@ -233,6 +242,68 @@ library StepPlan {
         }
         // The variants that write no balance cell at all.
         return (pre0, pre1);
+    }
+
+    /// @notice The four-cell plan (Workstream SB): `reserveSwap` is
+    ///         the first variant whose balance write set is a QUAD —
+    ///         the user and the reserve each at both swap resources,
+    ///         in the law's write order (user debit at `from`, reserve
+    ///         credit at `from`, reserve debit at `to`, user credit at
+    ///         `to`) — and `depositWithFee`'s three-leg split fills
+    ///         slots 0..2 (recipient, pool net, reserve seed).
+    ///
+    /// @dev    Every other kind delegates to the two-slot
+    ///         `planBalances` and passes cells 2 and 3 through at
+    ///         their pre-values, so a caller can hold ONE plan shape
+    ///         for every variant.
+    function planBalances4(
+        uint8 actionKind,
+        bytes calldata fields,
+        uint64 signer,
+        uint256 pre0,
+        uint256 pre1,
+        uint256 pre2,
+        uint256 pre3
+    )
+        internal
+        pure
+        returns (uint256 new0, uint256 new1, uint256 new2, uint256 new3)
+    {
+        if (actionKind == 25) {
+            // reserveSwap: fromResource @0, toResource @8, user @16,
+            // amountIn @24 (32), minAmountOut @56 (32),
+            // reserveActor @88.  The quote is re-derived inside from
+            // the two proven reserve pre-values (cells 1 and 2).
+            (new0, new1, new2, new3) = StepWrites.deriveReserveSwapBalances(
+                pre0, pre1, pre2, pre3,
+                uint64(StepWrites.readFieldUint(fields, 0, 8)),
+                uint64(StepWrites.readFieldUint(fields, 8, 8)),
+                uint64(StepWrites.readFieldUint(fields, 16, 8)),
+                uint64(StepWrites.readFieldUint(fields, 88, 8)),
+                StepWrites.readFieldUint(fields, 24, 32),
+                StepWrites.readFieldUint(fields, 56, 32)
+            );
+            return (new0, new1, new2, new3);
+        }
+        if (actionKind == 19) {
+            // depositWithFee (three-leg): recipient @8, poolActor @16,
+            // userAmount @24 (32), poolAmount @56 (32), seedAmount
+            // @104 (32, the Workstream SB appended field).  The seed
+            // target is the canonical AMM reserve actor the compiled
+            // law pins, not a calldata field.
+            (new0, new1, new2) = StepWrites.deriveDepositWithFeeBalances(
+                pre0, pre1, pre2,
+                uint64(StepWrites.readFieldUint(fields, 8, 8)),
+                uint64(StepWrites.readFieldUint(fields, 16, 8)),
+                StepWrites.AMM_RESERVE_ACTOR,
+                StepWrites.readFieldUint(fields, 24, 32),
+                StepWrites.readFieldUint(fields, 56, 32),
+                StepWrites.readFieldUint(fields, 104, 32)
+            );
+            return (new0, new1, new2, pre3);
+        }
+        (new0, new1) = planBalances(actionKind, fields, signer, pre0, pre1);
+        return (new0, new1, pre2, pre3);
     }
 
     /// @dev `claimBudgetRefund`, split out because its two cells are

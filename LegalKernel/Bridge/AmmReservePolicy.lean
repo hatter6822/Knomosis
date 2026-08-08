@@ -11,55 +11,48 @@
 LegalKernel.Bridge.AmmReservePolicy — Workstream GP.11.6.
 
 Declares the canonical `LocalPolicy` that governs the AMM-reserve
-actor's (`ammReserveActor`, GP.11.5 / `ActorId 3`) outflow.  The
-reserve holds the L2 reflection of the L1 bridge's embedded ETH↔BOLD
-AMM liquidity at `ResourceId 0` (ETH) and `ResourceId 1` (BOLD); its
-*only* legitimate mutation path is a bridge-attested `ammSwap` action
-(frozen Action index 23).
+actor's (`ammReserveActor`, GP.11.5 / `ActorId 3`) outflow.  Under
+the one-AMM L2-primary topology the reserve is the LIVE pool the
+user-facing `Laws.reserveSwap` (frozen Action index 25) trades
+against, funded by the deposit fee-split's seed leg.  Its balances
+move ONLY as a counterparty: debited/credited by user-signed
+`reserveSwap` actions (the user signs, never the reserve) and swept
+by the bridge-signed `reclaimAmmReserves` (index 24) after the
+disaster kill switch.  The reserve actor itself signs NOTHING.
 
 `ammReservePolicy` enforces that discipline as a per-actor
 `LocalPolicy` (Workstream LP) consulted by the admission layer
 (`Authority/SignedAction.lean`'s `localPolicyPermits` conjunct)
 whenever `ammReserveActor` signs an action.  It uses a single clause:
 
-  1. `denyTags ammReserveDeniedTags` — deny every Action constructor
-     tag EXCEPT `ammSwap` (tag 23).  Reading the `denyTags` semantics
-     in `Authority/LocalPolicySemantics.lean`, a clause `denyTags ts`
-     *permits* an action iff its tag is NOT in `ts`; so to allow only
-     `ammSwap` we deny every other tag.
+  1. `denyTags ammReserveDeniedTags` — deny EVERY Action constructor
+     tag.  Reading the `denyTags` semantics in
+     `Authority/LocalPolicySemantics.lean`, a clause `denyTags ts`
+     *permits* an action iff its tag is NOT in `ts`; denying the whole
+     tag range makes the reserve key inert.
 
-No `requireRecipientIn` or `capAmount` clauses are needed because:
-  - The L1 contract's `ammSwap` math (GP.11.3) already provides the
-    deterministic swap output from reserves + caller's input.
-  - The bridge actor (the signer of `ammSwap` actions in production)
-    has its own `bridgePolicy` controlling what it may sign.
-  - The `ammReserveActor` policy is purely defensive: it ensures that
-    even if the AMM reserve actor's key were somehow compromised, the
-    actor could not be used to sign non-swap actions.
+(The retired index 23 — the excised L1-AMM mirror `ammSwap`, which
+this list once carved out as the reserve's sole permitted tag — stays
+in the denied range; a retired tag must never become signable.)
 
-Combined with `bridgePolicy` (which authorises `bridgeActor` to sign
-`ammSwap`), `bridgeAuthorizedAction` (which classifies `ammSwap` as
-bridge-authorised), and the `ammReserveAuthorityPolicy` (which closes
-the LP.7 meta-action escape hatch), this means `ammReserveActor`'s
-balances can only be mutated by a legitimate, L1-attested AMM swap.
+No `requireRecipientIn` or `capAmount` clauses are needed because the
+policy is purely defensive: even if the AMM reserve actor's key were
+somehow compromised, the actor could not be used to sign ANY action.
+Fund recovery needs no reserve signature either — the bridge-signed
+`reclaimAmmReserves` sweep moves the balance through the bridge's
+authority.
 
 **Deny-list maintenance contract (forcing function).**
-`ammReserveDeniedTags` is `(List.range 25).filter (· ≠ 23)` =
-`[0, 1, …, 22, 24]` — every Action tag except `ammSwap`, covering the
-current frozen set (0..24; the GP.11.10 `reclaimAmmReserves` at 24 is
-bridge-SIGNED, so the reserve actor itself must be barred from it like
-every other non-swap action — the sweep moves the reserve's balance
-through the bridge's signature, never the reserve's own).  This range
-is a manually-maintained constant: whenever a NEW Action constructor
-is appended at index N, this constant must be bumped to
-`List.range (N+1)`.  The maintenance is mechanically enforced by
-`Action.tag_lt_denyListBound` (already defined in
-`GasPoolPolicy.lean`), whose exhaustive `cases action` proof fails to
-elaborate the moment an Action constructor whose tag is `≥ 25` is
-added; `ammReservePolicy_denies_all_non_ammSwap` consumes that bound
-(via `mem_ammReserveDeniedTags_of_tag_ne_ammSwap`), so a forgotten
-range bump is a build break rather than a silent reserve-outflow
-escalation.
+`ammReserveDeniedTags` is `List.range 26` = `[0, 1, …, 25]` — the
+whole current frozen tag set.  This range is a manually-maintained
+constant: whenever a NEW Action constructor is appended at index N,
+this constant must be bumped to `List.range (N+1)`.  The maintenance
+is mechanically enforced by `Action.tag_lt_denyListBound` (already
+defined in `GasPoolPolicy.lean`), whose exhaustive `cases action`
+proof fails to elaborate the moment an Action constructor whose tag
+is `≥ 26` is added; `ammReservePolicy_denies_all` consumes that bound
+(via `mem_ammReserveDeniedTags`), so a forgotten range bump is a
+build break rather than a silent reserve-outflow escalation.
 
 **Two-layer policy discipline (mirrors GP.7.2's `gasPoolPolicy`).**
 The `ammReservePolicy` (a `LocalPolicy`) is structurally unable to bar
@@ -67,8 +60,8 @@ meta-actions (`declareLocalPolicy` / `revokeLocalPolicy`) due to the
 LP.7 exemption, and is sender-blind (cannot distinguish the signer from
 the action's `sender` field).  The complementary
 `ammReserveAuthorityPolicy` (an `AuthorityPolicy`) closes both gaps: it
-bars `ammReserveActor` from signing ANY action except `ammSwap`, with no
-meta-action exemption.  Both halves are wired at genesis via the
+bars `ammReserveActor` from signing ANY action, with no meta-action
+exemption.  Both halves are wired at genesis via the
 `ammReserveGenesis` bundle, making the discipline both installable and
 irrevocable.
 
@@ -93,107 +86,65 @@ open LegalKernel.Encoding (Encodable)
 /-! ## The deny-list and the canonical policy -/
 
 /-- The Action tags the AMM-reserve actor is forbidden from signing:
-    every constructor index EXCEPT `ammSwap` (tag 23).
+    EVERY constructor index.
 
-    `(List.range 25).filter (· ≠ 23) = [0, 1, …, 22, 24]` — the
-    current frozen Action set spans indices 0..24, all of which
-    (except `ammSwap` = 23) the reserve actor must be forbidden from
-    signing.  In particular the GP.11.10 `reclaimAmmReserves` (24) is
-    denied: the post-disable sweep is signed by `bridgeActor`, never
-    by the reserve actor itself.  See the module docstring's
-    maintenance contract: a new constructor at index ≥ 25 forces a
-    bump here, caught at build time by
-    `ammReservePolicy_denies_all_non_ammSwap`. -/
-def ammReserveDeniedTags : List Nat := (List.range 25).filter (· ≠ 23)
+    `List.range 26 = [0, 1, …, 25]` — the whole current frozen Action
+    tag set, the retired index 23 included.  The reserve is a pure
+    COUNTERPARTY: user-signed `reserveSwap` actions (25) trade against
+    its balances and the bridge-signed `reclaimAmmReserves` (24)
+    sweeps them, so no signature of its own is ever legitimate.  See
+    the module docstring's maintenance contract: a new constructor at
+    index ≥ 26 forces a bump here, caught at build time by
+    `ammReservePolicy_denies_all`. -/
+def ammReserveDeniedTags : List Nat := List.range 26
 
 /-- The canonical `LocalPolicy` governing `ammReserveActor` outflow.
 
-    A single clause: deny every Action tag except `ammSwap` (tag 23).
-    This is the simplest possible "only-this-action" filter — no
-    recipient restriction or amount cap because the swap's output is
-    deterministic (computed by the L1 contract's constant-product
-    formula) and the signing authority is `bridgeActor` (not
-    `ammReserveActor` itself in normal operation).
-
-    The policy is a defence-in-depth measure: in production, the
-    `ammReserveActor` has no externally-controllable key (it is a
-    virtual actor whose balance is mutated only by bridge-attested
-    `ammSwap` actions signed by `bridgeActor`).  The policy prevents
-    any other action type from being applied in the reserve actor's
-    name, even under a hypothetical key-compromise scenario. -/
+    A single clause: deny every Action tag.  The policy is a
+    defence-in-depth measure: in production, the `ammReserveActor` has
+    no externally-controllable key (it is a virtual actor whose
+    balance moves only as the counterparty of user-signed
+    `reserveSwap` actions and the bridge-signed reclaim sweep).  The
+    policy prevents any action from being applied in the reserve
+    actor's name, even under a hypothetical key-compromise
+    scenario. -/
 def ammReservePolicy : LocalPolicy :=
   { clauses := [ .denyTags ammReserveDeniedTags ] }
 
 /-! ## Deny-list membership (the forcing-function lemma) -/
 
-/-- 23 is NOT a member of `ammReserveDeniedTags` — the `ammSwap` tag
-    survives the deny-list.  This is the necessary condition for an
-    `ammSwap` action to pass the policy. -/
-theorem ammSwap_tag_not_mem_ammReserveDeniedTags :
-    (23 : Nat) ∉ ammReserveDeniedTags := by
-  simp [ammReserveDeniedTags]
-
-/-- Every non-`ammSwap` Action's tag is a member of
-    `ammReserveDeniedTags`.  Holds because each current Action tag is
-    `< 25` (`Action.tag_lt_denyListBound`) and the deny-list is every
-    value in `[0, 25)` except `23`. -/
-theorem mem_ammReserveDeniedTags_of_tag_ne_ammSwap
-    (action : Action) (h : Action.tag action ≠ 23) :
+/-- Every Action's tag is a member of `ammReserveDeniedTags`.  Holds
+    because each current Action tag is `< 26`
+    (`Action.tag_lt_denyListBound`) and the deny-list is every value
+    in `[0, 26)`. -/
+theorem mem_ammReserveDeniedTags (action : Action) :
     Action.tag action ∈ ammReserveDeniedTags := by
-  simp only [ammReserveDeniedTags, List.mem_filter, List.mem_range, decide_eq_true_eq]
-  exact ⟨Action.tag_lt_denyListBound action, h⟩
+  simp only [ammReserveDeniedTags, List.mem_range]
+  exact Action.tag_lt_denyListBound action
 
-/-! ## Core security theorem: only `ammSwap` is permitted -/
+/-! ## Core security theorem: nothing is permitted -/
 
-/-- **Reserve outflow is `ammSwap`-only.**  For any action whose tag is
-    not `23` (i.e. every Action constructor except `ammSwap`),
-    `ammReservePolicy` denies it for `ammReserveActor` unconditionally.
-    This is the headline GP.11.6 guarantee: the AMM reserve can never
-    `transfer`, `mint`, `burn`, `withdraw`, or sign any non-swap
-    action — its sole permitted path is a bridge-attested `ammSwap`.
+/-- **The reserve key is inert.**  `ammReservePolicy` denies every
+    action for `ammReserveActor` unconditionally.  This is the
+    headline GP.11.6 guarantee under the one-AMM topology: the AMM
+    reserve can never `transfer`, `mint`, `burn`, `withdraw`, or sign
+    anything at all — its balances move only as a counterparty.
 
     The `denyTags` clause does the work: `ammReserveDeniedTags`
-    contains every non-23 tag
-    (`mem_ammReserveDeniedTags_of_tag_ne_ammSwap`), so a non-`ammSwap`
-    action fails that clause and hence the whole policy. -/
-theorem ammReservePolicy_denies_all_non_ammSwap
-    (action : Action) (h : Action.tag action ≠ 23) :
+    contains every tag (`mem_ammReserveDeniedTags`), so every action
+    fails that clause and hence the whole policy. -/
+theorem ammReservePolicy_denies_all (action : Action) :
     ¬ ammReservePolicy.permits ammReserveActor action := by
   intro hp
   have hd := hp (.denyTags ammReserveDeniedTags) (by simp [ammReservePolicy])
-  exact hd (mem_ammReserveDeniedTags_of_tag_ne_ammSwap action h)
+  exact hd (mem_ammReserveDeniedTags action)
 
-/-- **`ammSwap` is admitted by the policy.**  An `ammSwap` action
-    passes the `ammReservePolicy` deny-list (its tag 23 is not in
-    `ammReserveDeniedTags`), so the policy permits it for any signer.
-    This is the positive half of the characterisation: the reserve's
-    sole permitted action type is indeed admitted. -/
-theorem ammReservePolicy_permits_ammSwap
-    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
-    ammReservePolicy.permits ammReserveActor (.ammSwap fr tr ai ao ra) := by
-  intro c hc
-  simp [ammReservePolicy] at hc
-  subst hc
-  exact ammSwap_tag_not_mem_ammReserveDeniedTags
-
-/-- **Complete characterisation of `ammReservePolicy`.**  An action is
-    permitted by `ammReservePolicy` for `ammReserveActor` if and only
-    if its tag equals `23` (i.e. it is an `ammSwap`).  This is the
-    single source-of-truth for the reserve policy's behaviour. -/
+/-- **Complete characterisation of `ammReservePolicy`.**  No action is
+    permitted by `ammReservePolicy` for `ammReserveActor`.  This is
+    the single source-of-truth for the reserve policy's behaviour. -/
 theorem ammReservePolicy_permits_iff (action : Action) :
-    ammReservePolicy.permits ammReserveActor action ↔
-    Action.tag action = 23 := by
-  constructor
-  · intro hp
-    exact Classical.byContradiction fun h =>
-      absurd hp (ammReservePolicy_denies_all_non_ammSwap action h)
-  · intro heq
-    unfold LocalPolicy.permits ammReservePolicy
-    intro c hc
-    simp at hc
-    subst hc
-    show Action.tag action ∉ ammReserveDeniedTags
-    simp [ammReserveDeniedTags, heq]
+    ammReservePolicy.permits ammReserveActor action ↔ False := by
+  exact iff_false_intro (ammReservePolicy_denies_all action)
 
 /-! ## Admission-layer reach: the LP.7 meta-action escape hatch
 
@@ -225,9 +176,10 @@ theorem ammReservePolicy_admission_permits_meta_actions
 /-- **Full admission-layer characterisation.**  Under a declared
     `ammReservePolicy`, `localPolicyPermits` admits `ammReserveActor`
     to sign action `a` iff EITHER the action is a meta-action OR
-    `ammReservePolicy.permits` it — i.e. `a` is an `ammSwap` or a
-    meta-action.  This is the single source of truth for the
-    admission layer's behaviour with respect to the AMM reserve. -/
+    `ammReservePolicy.permits` it — i.e. `a` is a meta-action, since
+    the policy permits nothing.  This is the single source of truth
+    for the admission layer's behaviour with respect to the AMM
+    reserve. -/
 theorem ammReservePolicy_admission_permits_iff
     (es : ExtendedState) (action : Action)
     (hpol : es.localPolicies.lookup ammReserveActor = ammReservePolicy) :
@@ -243,41 +195,31 @@ Mirrors the `gasPoolAuthorityPolicy` pattern (GP.7.2).  The admission
 layer's `AdmissibleWith` is a conjunction of an
 `AuthorityPolicy.authorized` check AND the meta-exempt
 `localPolicyPermits` check; the meta-action exemption relaxes ONLY the
-latter.  So an `AuthorityPolicy` that withholds non-`ammSwap` authority
-from `ammReserveActor` blocks the escape hatch.
+latter.  So an `AuthorityPolicy` that withholds all authority from
+`ammReserveActor` blocks the escape hatch.
 
 `ammReserveAuthorityPolicy` is designed to be intersected with the
 deployment's base policy:
 
-  * For `signer = ammReserveActor`: authorise EXACTLY `ammSwap` — the
-    same surface `ammReservePolicy` permits, but now also barring
+  * For `signer = ammReserveActor`: authorise NOTHING — the same
+    surface `ammReservePolicy` permits, but now also barring
     meta-actions (which the `LocalPolicy` left open).
   * For `signer ≠ ammReserveActor`: authorise everything (`True`), so
     the intersection is a no-op on every other actor. -/
 
 /-- The authority predicate restricting `ammReserveActor`: it may sign
-    EXACTLY an `ammSwap` action whose reserve-actor field (`ra`) is
-    `ammReserveActor` itself — so the signed swap can only ever mutate
-    the reserve's OWN balances; every other action — including the
-    meta-actions the LP.7 exemption would otherwise admit — is
-    unauthorised.  Other signers are authorised unconditionally (the
-    deployment's base policy governs them after intersection).
+    NOTHING — every action, including the meta-actions the LP.7
+    exemption would otherwise admit, is unauthorised.  Other signers
+    are authorised unconditionally (the deployment's base policy
+    governs them after intersection).
 
-    The `ra = ammReserveActor` binding is defence-in-depth (mirrors
-    GP.7.2's sender-binding in `gasPoolActorAuthorized`): in production
-    the `ammSwap` is always signed by `bridgeActor` (not
-    `ammReserveActor`), and `bridgePolicy` is the binding gate.  But
-    if `bridgePolicy` were ever relaxed or if the reserve actor key
-    were hypothetically compromised, this binding prevents the key
-    from signing an `ammSwap` targeting a DIFFERENT actor's balances
-    (e.g. `.ammSwap 0 1 100 95 victimActor`). -/
+    The reserve needs no signing authority: user-signed `reserveSwap`
+    actions move its balances as a counterparty, and the bridge-signed
+    `reclaimAmmReserves` sweep recovers them after a disaster — so a
+    hypothetically compromised reserve key can do nothing at all. -/
 def ammReserveActorAuthorized : ActorId → Action → Prop :=
-  fun signer action =>
-    if signer = ammReserveActor then
-      match action with
-      | .ammSwap _ _ _ _ ra => ra = ammReserveActor
-      | _ => False
-    else True
+  fun signer _action =>
+    if signer = ammReserveActor then False else True
 
 /-- Decidability of `ammReserveActorAuthorized`. -/
 instance ammReserveActorAuthorized_decidable
@@ -285,12 +227,12 @@ instance ammReserveActorAuthorized_decidable
     Decidable (ammReserveActorAuthorized signer action) := by
   unfold ammReserveActorAuthorized
   by_cases h : signer = ammReserveActor
-  · rw [if_pos h]; cases action <;> simp <;> infer_instance
+  · rw [if_pos h]; infer_instance
   · rw [if_neg h]; infer_instance
 
 /-- **The complementary `AuthorityPolicy` (closes the meta-action
     hole).**  Intersect this with the deployment's base policy at
-    genesis.  It restricts `ammReserveActor` to `ammSwap` only and
+    genesis.  It bars `ammReserveActor` from signing anything and
     leaves every other actor unconstrained. -/
 def ammReserveAuthorityPolicy : AuthorityPolicy where
   authorized := ammReserveActorAuthorized
@@ -303,55 +245,18 @@ def ammReserveAuthorityPolicy : AuthorityPolicy where
 theorem ammReserveAuthorityPolicy_rejects_meta :
     ¬ ammReserveAuthorityPolicy.authorized ammReserveActor .revokeLocalPolicy ∧
     (∀ p, ¬ ammReserveAuthorityPolicy.authorized ammReserveActor
-              (.declareLocalPolicy p)) :=
-  ⟨id, fun _ => id⟩
+              (.declareLocalPolicy p)) := by
+  refine ⟨?_, fun p => ?_⟩ <;>
+    · intro hauth
+      simp [ammReserveAuthorityPolicy, ammReserveActorAuthorized] at hauth
 
-/-- **The authority policy bars every non-`ammSwap` action for
-    `ammReserveActor`.**  Any action whose tag is not `23` is
-    unauthorised — strictly stronger than the `LocalPolicy`'s deny-list,
-    since it also covers the meta-actions. -/
-theorem ammReserveAuthorityPolicy_rejects_non_ammSwap
-    (action : Action) (h : Action.tag action ≠ 23) :
+/-- **The authority policy bars every action for `ammReserveActor`.**
+    Strictly stronger than the `LocalPolicy`'s deny-list, since it
+    also covers the meta-actions. -/
+theorem ammReserveAuthorityPolicy_rejects_all (action : Action) :
     ¬ ammReserveAuthorityPolicy.authorized ammReserveActor action := by
   intro hauth
-  cases action <;> first | exact absurd rfl h | exact hauth
-
-/-- **The authority policy authorises `ammSwap` targeting the reserve.**
-    `ammReserveActor` may sign an `ammSwap` action whose reserve-actor
-    field is `ammReserveActor` itself — the sole permitted path.  The
-    `ra = ammReserveActor` hypothesis is defence-in-depth (gap #1 fix):
-    only swaps that name the correct reserve are authorised. -/
-theorem ammReserveAuthorityPolicy_authorizes_ammSwap
-    (fr tr : ResourceId) (ai ao : Amount) :
-    ammReserveAuthorityPolicy.authorized ammReserveActor
-      (.ammSwap fr tr ai ao ammReserveActor) :=
-  rfl
-
-/-- **The authority policy bars an `ammSwap` targeting a different actor.**
-    Defence-in-depth (mirrors GP.7.2's
-    `gasPoolAuthorityPolicy_rejects_non_pool_sender`): an `ammSwap` whose
-    reserve-actor field (`ra`) is NOT `ammReserveActor` is rejected, so a
-    hypothetically compromised reserve key cannot sign a swap that would
-    mutate some OTHER actor's balances. -/
-theorem ammReserveAuthorityPolicy_rejects_non_reserve_target
-    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId)
-    (h : ra ≠ ammReserveActor) :
-    ¬ ammReserveAuthorityPolicy.authorized ammReserveActor
-        (.ammSwap fr tr ai ao ra) := by
-  intro hauth
-  exact h hauth
-
-/-- **Positive extraction: an authorised `ammSwap` targets the reserve.**
-    If `ammReserveAuthorityPolicy` authorises an `ammReserveActor`-signed
-    `ammSwap`, then the swap's reserve-actor field must be
-    `ammReserveActor`.  The positive form suited to downstream consumption
-    (e.g. a future per-trace accounting argument). -/
-theorem ammReserveAuthorityPolicy_authorized_ammSwap_target
-    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId)
-    (hp : ammReserveAuthorityPolicy.authorized ammReserveActor
-            (.ammSwap fr tr ai ao ra)) :
-    ra = ammReserveActor :=
-  hp
+  simp [ammReserveAuthorityPolicy, ammReserveActorAuthorized] at hauth
 
 /-- **The intersection is a no-op on non-reserve actors.**  For any
     `signer ≠ ammReserveActor`, intersecting `ammReserveAuthorityPolicy`
@@ -484,39 +389,13 @@ theorem ammReserveGenesisPolicy_other_actors_unrestricted
   unfold ammReserveGenesisPolicy
   exact ammReserveAuthorityPolicy_other_actors_unrestricted P signer action h
 
-/-- **The genesis policy bars every non-`ammSwap` reserve action.** -/
-theorem ammReserveGenesisPolicy_rejects_non_ammSwap
-    (P : AuthorityPolicy) (action : Action) (h : Action.tag action ≠ 23) :
+/-- **The genesis policy bars every reserve-signed action.** -/
+theorem ammReserveGenesisPolicy_rejects_all
+    (P : AuthorityPolicy) (action : Action) :
     ¬ (ammReserveGenesisPolicy P).authorized ammReserveActor action := by
   unfold ammReserveGenesisPolicy
   intro hauth
-  exact ammReserveAuthorityPolicy_rejects_non_ammSwap action h hauth.2
-
-/-- **The legitimate `ammSwap` targeting the reserve is still admitted
-    under the genesis policy** (given the base policy permits it). -/
-theorem ammReserveGenesisPolicy_authorizes_ammSwap
-    (P : AuthorityPolicy)
-    (fr tr : ResourceId) (ai ao : Amount)
-    (hP : P.authorized ammReserveActor (.ammSwap fr tr ai ao ammReserveActor)) :
-    (ammReserveGenesisPolicy P).authorized ammReserveActor
-      (.ammSwap fr tr ai ao ammReserveActor) := by
-  unfold ammReserveGenesisPolicy
-  exact ⟨hP, ammReserveAuthorityPolicy_authorizes_ammSwap fr tr ai ao⟩
-
-/-- **Fund safety: the genesis policy bars an `ammSwap` targeting a
-    different actor.**  A held `ammReserveActor` key may only sign swaps
-    that mutate the RESERVE's own balances — a swap whose reserve-actor
-    field `ra ≠ ammReserveActor` is unauthorised. -/
-theorem ammReserveGenesisPolicy_rejects_non_reserve_target
-    (P : AuthorityPolicy)
-    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId)
-    (h : ra ≠ ammReserveActor) :
-    ¬ (ammReserveGenesisPolicy P).authorized ammReserveActor
-        (.ammSwap fr tr ai ao ra) := by
-  unfold ammReserveGenesisPolicy
-  intro hauth
-  exact ammReserveAuthorityPolicy_rejects_non_reserve_target
-    fr tr ai ao ra h hauth.2
+  exact ammReserveAuthorityPolicy_rejects_all action hauth.2
 
 /-! ### Bundle wiring -/
 
@@ -569,8 +448,8 @@ theorem ammReserveGenesisState_preserves_gasPool_localPolicy
 /-! ### CBE encoding prerequisites (GP.7.4 genesis-persistence pattern) -/
 
 /-- **`ammReservePolicy` satisfies the CBE encoding bounds.**  The
-    single-clause policy uses only `denyTags` with 23 entries (all
-    values < 24 < 2^64), well within the §3.0 field limits.  This
+    single-clause policy uses only `denyTags` with 26 entries (all
+    values < 26 < 2^64), well within the §3.0 field limits.  This
     is the prerequisite for the round-trip theorem below. -/
 theorem ammReservePolicy_fieldsBounded :
     Encoding.LocalPolicy.fieldsBounded ammReservePolicy := by
@@ -583,9 +462,8 @@ theorem ammReservePolicy_fieldsBounded :
   refine ⟨by decide, ?_⟩
   apply List.all_eq_true.mpr
   intro n hn
-  have hlt : n < 25 := by
-    have := List.mem_filter.mp hn |>.1
-    simpa using List.mem_range.mp this
+  have hlt : n < 26 := by
+    simpa [ammReserveDeniedTags] using hn
   exact decide_eq_true (by omega)
 
 /-- **CBE round-trip for `ammReservePolicy`.**  Encoding then
@@ -660,6 +538,132 @@ def ammReserveGenesisOfConfig (base : ExtendedState) (P : AuthorityPolicy)
     (cfg : Option AmmReserveConfig) : AmmReserveGenesis :=
   { state  := ammReserveGenesisStateOfConfig base cfg
   , policy := ammReserveGenesisPolicyOfConfig P cfg }
+
+/-! ## Workstream SB — the `reserveSwap` user/reserve binding
+
+`Laws.reserveSwap` (frozen `Action` index 25) is the USER-facing L2
+swap: the `user` field's balance is debited/credited, and the
+`reserveActor` field names the counterparty whose reserves trade.
+Both fields are ACTION DATA, so without a policy-layer pin a signer
+could name (a) a VICTIM as `user` — moving someone else's balance —
+or (b) a victim as `reserveActor` — trading against an arbitrary
+actor's holdings instead of the canonical AMM reserve.
+
+`reserveSwapUserBinding` closes both at the `AuthorityPolicy` layer
+(the amendment-1.11 `gasPoolActorAuthorized` sender-binding
+precedent): for EVERY signer, a `.reserveSwap` is authorised only
+when `user = signer` AND `reserveActor = ammReserveActor`.  Every
+non-`reserveSwap` action is unconstrained (`True`), so intersecting
+this policy into a deployment's base policy is a no-op outside
+tag 25.
+
+This sits at the `AuthorityPolicy` conjunct of `AdmissibleWith`,
+which has NO meta-action exemption and is consulted for every
+signer — unlike a `LocalPolicy`, which gates only the DECLARING
+actor's own signatures and so could never bind a field to the
+signer. -/
+
+/-- The authority predicate binding `reserveSwap`'s two actor fields:
+    `user = signer` (a third party cannot move someone else's
+    balance) and `reserveActor = ammReserveActor` (the counterparty
+    is the canonical reserve, never a victim's holdings).  Every
+    other action is authorised unconditionally — the deployment's
+    base policy governs it after intersection. -/
+def reserveSwapUserBinding : ActorId → Action → Prop :=
+  fun signer action =>
+    match action with
+    | .reserveSwap _ _ user _ _ ra =>
+        user = signer ∧ ra = ammReserveActor
+    | _ => True
+
+/-- Decidability of `reserveSwapUserBinding`. -/
+instance reserveSwapUserBinding_decidable
+    (signer : ActorId) (action : Action) :
+    Decidable (reserveSwapUserBinding signer action) := by
+  unfold reserveSwapUserBinding
+  cases action <;> infer_instance
+
+/-- **The `reserveSwap` binding as an `AuthorityPolicy`.**  Intersect
+    this with the deployment's base policy at genesis (alongside
+    `ammReserveAuthorityPolicy` / `gasPoolAuthorityPolicy`). -/
+def reserveSwapBindingPolicy : AuthorityPolicy where
+  authorized := reserveSwapUserBinding
+  decAuth    := fun _ _ => inferInstance
+
+/-- **A third party cannot name someone else as the swap's `user`.**
+    A `.reserveSwap` whose `user` field differs from the signer is
+    unauthorised under the binding — the swap's debit/credit legs can
+    only ever move the SIGNER's own balances. -/
+theorem reserveSwapBindingPolicy_rejects_third_party_user
+    (signer : ActorId) (fr tr : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (ra : ActorId)
+    (h : user ≠ signer) :
+    ¬ reserveSwapBindingPolicy.authorized signer
+        (.reserveSwap fr tr user amountIn minAmountOut ra) :=
+  fun hauth => h hauth.1
+
+/-- **The swap's counterparty is pinned to the canonical reserve.**
+    A `.reserveSwap` naming any `reserveActor ≠ ammReserveActor` is
+    unauthorised — a signer cannot elect an arbitrary actor's
+    balances as the pool it trades against. -/
+theorem reserveSwapBindingPolicy_rejects_non_reserve_counterparty
+    (signer : ActorId) (fr tr : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (ra : ActorId)
+    (h : ra ≠ ammReserveActor) :
+    ¬ reserveSwapBindingPolicy.authorized signer
+        (.reserveSwap fr tr user amountIn minAmountOut ra) :=
+  fun hauth => h hauth.2
+
+/-- **The self-signed canonical swap is authorised.**  The binding
+    admits exactly the legitimate shape: the signer as `user`, the
+    canonical reserve as counterparty. -/
+theorem reserveSwapBindingPolicy_authorizes_self_swap
+    (signer : ActorId) (fr tr : ResourceId)
+    (amountIn minAmountOut : Amount) :
+    reserveSwapBindingPolicy.authorized signer
+      (.reserveSwap fr tr signer amountIn minAmountOut ammReserveActor) :=
+  ⟨rfl, rfl⟩
+
+/-- **Positive extraction: an authorised swap is self-targeted at the
+    canonical reserve.**  The form downstream accounting arguments
+    consume. -/
+theorem reserveSwapBindingPolicy_authorized_shape
+    (signer : ActorId) (fr tr : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (ra : ActorId)
+    (hp : reserveSwapBindingPolicy.authorized signer
+            (.reserveSwap fr tr user amountIn minAmountOut ra)) :
+    user = signer ∧ ra = ammReserveActor :=
+  hp
+
+/-- **The binding is a no-op outside tag 25.**  For any
+    non-`reserveSwap` action, intersecting `reserveSwapBindingPolicy`
+    into a base policy `P` leaves the authorisation exactly `P`'s. -/
+theorem reserveSwapBindingPolicy_other_actions_unrestricted
+    (P : AuthorityPolicy) (signer : ActorId) (action : Action)
+    (h : ∀ fr tr user amountIn minAmountOut ra,
+      action ≠ .reserveSwap fr tr user amountIn minAmountOut ra) :
+    (P.intersect reserveSwapBindingPolicy).authorized signer action ↔
+      P.authorized signer action := by
+  unfold AuthorityPolicy.intersect reserveSwapBindingPolicy
+    reserveSwapUserBinding
+  cases hact : action with
+  | reserveSwap fr tr user amountIn minAmountOut ra =>
+      exact absurd hact (h fr tr user amountIn minAmountOut ra)
+  | _ => simp
+
+/-- **The binding survives intersection.**  Under
+    `P.intersect reserveSwapBindingPolicy`, a third-party-user swap is
+    rejected regardless of what `P` says — the deployment's base
+    policy cannot re-open the hole. -/
+theorem reserveSwapBindingPolicy_intersect_rejects_third_party
+    (P : AuthorityPolicy) (signer : ActorId) (fr tr : ResourceId)
+    (user : ActorId) (amountIn minAmountOut : Amount) (ra : ActorId)
+    (h : user ≠ signer) :
+    ¬ (P.intersect reserveSwapBindingPolicy).authorized signer
+        (.reserveSwap fr tr user amountIn minAmountOut ra) :=
+  fun hauth =>
+    reserveSwapBindingPolicy_rejects_third_party_user signer fr tr user
+      amountIn minAmountOut ra h hauth.2
 
 /-- **Opt-out is a no-op on the state.**  A deployment that supplies no
     AMM-reserve config gets its base genesis verbatim. -/

@@ -48,15 +48,16 @@ The constructor-tag map (frozen):
   | 16  | `revokeLocalPolicy`  | (no fields)                                             |
   | 17  | `faultProofChallenge` | `bindingHash`, `disputedStartIdx`, `disputedEndIdx`, `challengerCommit` |
   | 18  | `faultProofResolution`| `bindingHash`, `gameId`, `winner`, `revertFromIdx`     |
-  | 19  | `depositWithFee`     | `resource`, `recipient`, `poolActor`, `userAmount`, `poolAmount`, `budgetGrant`, `depositId` |
+  | 19  | `depositWithFee`     | `resource`, `recipient`, `poolActor`, `userAmount`, `poolAmount`, `budgetGrant`, `depositId`, `seedAmount` |
   | 20  | `topUpActionBudget`  | `gasResource`, `gasAmount`, `budgetIncrement`, `poolActor` |
   | 21  | `topUpActionBudgetFor` | `recipient`, `gasResource`, `gasAmount`, `budgetIncrement`, `poolActor` |
   | 22  | `claimBudgetRefund`  | `gasResource`, `budgetUnits`, `weiPerBudgetUnit`, `poolActor` |
-  | 23  | `ammSwap`            | `fromResource`, `toResource`, `amountIn`, `amountOut`, `ammReserveActor` |
+  | 23  | RETIRED (`ammSwap`)  | the excised L1-AMM mirror — the decoder refuses tag 23; never reuse |
   | 24  | `reclaimAmmReserves` | `r`, `amount`, `reserveActor`, `poolActor`              |
+  | 25  | `reserveSwap`        | `fromResource`, `toResource`, `user`, `amountIn`, `minAmountOut`, `reserveActor` |
 
 The `Action.fieldsBounded` predicate captures the canonical-encoding
-bound on every numeric field: `< 2^128` for the wei-denominated amount
+bound on every numeric field: `< 2^256` for the wei-denominated amount
 fields, which ride the 33-byte CBE amount head, and `< 2^64` for
 identifiers, unit counts, nonces, epochs and deposit ids, which ride
 the 9-byte uint head.  Round-trip and injectivity
@@ -90,7 +91,7 @@ for everything else.  Phase 5's runtime adaptor gates on this before
 serialising. -/
 
 /-- The canonical-encoding bound on every numeric field of `a`:
-    `< 2^128` for a wei-denominated amount, `< 2^64` for an
+    `< 2^256` for a wei-denominated amount, `< 2^64` for an
     identifier, unit count, nonce, epoch, index or deposit id.  For
     `replaceKey`, the public key's byte length is the relevant bound.
     For dispute / verdict actions, the bound is delegated to the inner
@@ -133,10 +134,10 @@ def Action.fieldsBounded : Action → Prop
   | .faultProofResolution bh gid w rfi =>
       bh.size < 256 ^ 8 ∧ gid < 256 ^ 8 ∧ w.toNat < 256 ^ 8 ∧ rfi < 256 ^ 8
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
-  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount =>
       r.toNat < 256 ^ 8 ∧ recipient.toNat < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8 ∧
       userAmount < 256 ^ 32 ∧ poolAmount < 256 ^ 32 ∧
-      budgetGrant < 256 ^ 8 ∧ depositId < 256 ^ 8
+      budgetGrant < 256 ^ 8 ∧ depositId < 256 ^ 8 ∧ seedAmount < 256 ^ 32
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       gasResource.toNat < 256 ^ 8 ∧ gasAmount < 256 ^ 32 ∧
       budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
@@ -146,14 +147,15 @@ def Action.fieldsBounded : Action → Prop
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       gasResource.toNat < 256 ^ 8 ∧ budgetUnits < 256 ^ 8 ∧
       weiPerBudgetUnit < 256 ^ 32 ∧ poolActor.toNat < 256 ^ 8
-  -- Workstream GP (GP.11.4): ammSwap.
-  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      fromResource.toNat < 256 ^ 8 ∧ toResource.toNat < 256 ^ 8 ∧
-      amountIn < 256 ^ 32 ∧ amountOut < 256 ^ 32 ∧ ammReserveActor.toNat < 256 ^ 8
   -- Workstream GP (GP.11.10): reclaimAmmReserves.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       r.toNat < 256 ^ 8 ∧ amount < 256 ^ 32 ∧
       reserveActor.toNat < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
+  -- Workstream SB: reserveSwap.
+  | .reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      fromResource.toNat < 256 ^ 8 ∧ toResource.toNat < 256 ^ 8 ∧
+      user.toNat < 256 ^ 8 ∧ amountIn < 256 ^ 32 ∧ minAmountOut < 256 ^ 32 ∧
+      reserveActor.toNat < 256 ^ 8
   -- Workstream-LX (LX.18): codegen-managed Lex `fieldsBounded`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no new constructor).  M2 populates the
@@ -263,7 +265,7 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) w.toNat ++
       Encodable.encode (T := Nat) rfi
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
-  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount =>
       Encodable.encode (T := Nat) 19 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) recipient.toNat ++
@@ -271,7 +273,8 @@ def Action.encode : Action → Stream
       encodeAmount userAmount ++
       encodeAmount poolAmount ++
       Encodable.encode (T := Nat) budgetGrant ++
-      Encodable.encode (T := Nat) depositId
+      Encodable.encode (T := Nat) depositId ++
+      encodeAmount seedAmount
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       Encodable.encode (T := Nat) 20 ++
       Encodable.encode (T := Nat) gasResource.toNat ++
@@ -292,14 +295,8 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) budgetUnits ++
       encodeAmount weiPerBudgetUnit ++
       Encodable.encode (T := Nat) poolActor.toNat
-  -- Workstream GP (GP.11.4): ammSwap.
-  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      Encodable.encode (T := Nat) 23 ++
-      Encodable.encode (T := Nat) fromResource.toNat ++
-      Encodable.encode (T := Nat) toResource.toNat ++
-      encodeAmount amountIn ++
-      encodeAmount amountOut ++
-      Encodable.encode (T := Nat) ammReserveActor.toNat
+  -- Tag 23 (`ammSwap`) is RETIRED — no encode arm; the decoder
+  -- refuses the tag below.
   -- Workstream GP (GP.11.10): reclaimAmmReserves.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       Encodable.encode (T := Nat) 24 ++
@@ -307,6 +304,15 @@ def Action.encode : Action → Stream
       encodeAmount amount ++
       Encodable.encode (T := Nat) reserveActor.toNat ++
       Encodable.encode (T := Nat) poolActor.toNat
+  -- Workstream SB: reserveSwap.
+  | .reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      Encodable.encode (T := Nat) 25 ++
+      Encodable.encode (T := Nat) fromResource.toNat ++
+      Encodable.encode (T := Nat) toResource.toNat ++
+      Encodable.encode (T := Nat) user.toNat ++
+      encodeAmount amountIn ++
+      encodeAmount minAmountOut ++
+      Encodable.encode (T := Nat) reserveActor.toNat
   -- Workstream-LX (LX.18): codegen-managed Lex `encode` arms land
   -- between the fence markers below.  Empty in M1.
   -- BEGIN LEX-GENERATED (do not edit by hand)
@@ -549,8 +555,11 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
               | .ok (budgetGrant, s₇) =>
                 match Action.readNatField s₇ with
                 | .ok (depositId, s₈) =>
-                  .ok (.depositWithFee r recipient poolActor userAmount poolAmount
-                          budgetGrant depositId, s₈)
+                  match Action.readAmountField s₈ with
+                  | .ok (seedAmount, s₉) =>
+                    .ok (.depositWithFee r recipient poolActor userAmount
+                            poolAmount budgetGrant depositId seedAmount, s₉)
+                  | .error e => .error e
                 | .error e => .error e
               | .error e => .error e
             | .error e => .error e
@@ -607,25 +616,8 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
         | .error e => .error e
       | .error e => .error e
     | .error e => .error e
-  | .ok (23, s₁) =>
-    -- ammSwap (fromResource, toResource, amountIn, amountOut, ammReserveActor)
-    match Action.readUInt64Field s₁ with
-    | .ok (fromResource, s₂) =>
-      match Action.readUInt64Field s₂ with
-      | .ok (toResource, s₃) =>
-        match Action.readAmountField s₃ with
-        | .ok (amountIn, s₄) =>
-          match Action.readAmountField s₄ with
-          | .ok (amountOut, s₅) =>
-            match Action.readUInt64Field s₅ with
-            | .ok (ammReserveActor, s₆) =>
-              .ok (.ammSwap fromResource toResource amountIn amountOut
-                      ammReserveActor, s₆)
-            | .error e => .error e
-          | .error e => .error e
-        | .error e => .error e
-      | .error e => .error e
-    | .error e => .error e
+  -- Tag 23 (`ammSwap`) is RETIRED: it falls through to the
+  -- unknown-tag refusal below, exactly like a never-assigned tag.
   | .ok (24, s₁) =>
     -- reclaimAmmReserves (r, amount, reserveActor, poolActor)
     match Action.readUInt64Field s₁ with
@@ -637,6 +629,29 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
           match Action.readUInt64Field s₄ with
           | .ok (poolActor, s₅) =>
             .ok (.reclaimAmmReserves r amount reserveActor poolActor, s₅)
+          | .error e => .error e
+        | .error e => .error e
+      | .error e => .error e
+    | .error e => .error e
+  | .ok (25, s₁) =>
+    -- reserveSwap (fromResource, toResource, user, amountIn,
+    --              minAmountOut, reserveActor)
+    match Action.readUInt64Field s₁ with
+    | .ok (fromResource, s₂) =>
+      match Action.readUInt64Field s₂ with
+      | .ok (toResource, s₃) =>
+        match Action.readUInt64Field s₃ with
+        | .ok (user, s₄) =>
+          match Action.readAmountField s₄ with
+          | .ok (amountIn, s₅) =>
+            match Action.readAmountField s₅ with
+            | .ok (minAmountOut, s₆) =>
+              match Action.readUInt64Field s₆ with
+              | .ok (reserveActor, s₇) =>
+                .ok (.reserveSwap fromResource toResource user amountIn
+                        minAmountOut reserveActor, s₇)
+              | .error e => .error e
+            | .error e => .error e
           | .error e => .error e
         | .error e => .error e
       | .error e => .error e
@@ -1017,10 +1032,11 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readUInt64Field_roundtrip w _]
     dsimp only
     rw [readNatField_roundtrip rfi rest h4]
-  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
-    obtain ⟨_, _, _, h4, h5, h6, h7⟩ := h
+  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount =>
+    obtain ⟨_, _, _, h4, h5, h6, h7, h8⟩ := h
     show Action.decode (Action.encode
-            (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId) ++ rest)
+            (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant
+              depositId seedAmount) ++ rest)
         = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
@@ -1030,14 +1046,16 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
         encodeAmount userAmount ++
         encodeAmount poolAmount ++
         Encodable.encode (T := Nat) budgetGrant ++
-        Encodable.encode (T := Nat) depositId ++ rest =
+        Encodable.encode (T := Nat) depositId ++
+        encodeAmount seedAmount ++ rest =
       Encodable.encode (T := Nat) 19 ++ (Encodable.encode (T := Nat) r.toNat ++
         (Encodable.encode (T := Nat) recipient.toNat ++
         (Encodable.encode (T := Nat) poolActor.toNat ++
         (encodeAmount userAmount ++
         (encodeAmount poolAmount ++
         (Encodable.encode (T := Nat) budgetGrant ++
-        (Encodable.encode (T := Nat) depositId ++ rest)))))))
+        (Encodable.encode (T := Nat) depositId ++
+        (encodeAmount seedAmount ++ rest))))))))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 19 _ (by decide)]
     dsimp only
@@ -1053,7 +1071,9 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip budgetGrant _ h6]
     dsimp only
-    rw [readNatField_roundtrip depositId rest h7]
+    rw [readNatField_roundtrip depositId _ h7]
+    dsimp only
+    rw [readAmountField_roundtrip seedAmount rest h8]
   | topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
     obtain ⟨_, h2, h3, _⟩ := h
     show Action.decode (Action.encode
@@ -1133,35 +1153,6 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readAmountField_roundtrip weiPerBudgetUnit _ h3]
     dsimp only
     rw [readUInt64Field_roundtrip poolActor rest]
-  | ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-    obtain ⟨_, _, h3, h4, _⟩ := h
-    show Action.decode (Action.encode
-            (.ammSwap fromResource toResource amountIn amountOut ammReserveActor) ++ rest)
-        = .ok (_, rest)
-    unfold Action.encode Action.decode
-    rw [show
-      Encodable.encode (T := Nat) 23 ++ Encodable.encode (T := Nat) fromResource.toNat ++
-        Encodable.encode (T := Nat) toResource.toNat ++
-        encodeAmount amountIn ++
-        encodeAmount amountOut ++
-        Encodable.encode (T := Nat) ammReserveActor.toNat ++ rest =
-      Encodable.encode (T := Nat) 23 ++ (Encodable.encode (T := Nat) fromResource.toNat ++
-        (Encodable.encode (T := Nat) toResource.toNat ++
-        (encodeAmount amountIn ++
-        (encodeAmount amountOut ++
-        (Encodable.encode (T := Nat) ammReserveActor.toNat ++ rest)))))
-        from by simp [List.append_assoc]]
-    rw [nat_roundtrip 23 _ (by decide)]
-    dsimp only
-    rw [readUInt64Field_roundtrip fromResource _]
-    dsimp only
-    rw [readUInt64Field_roundtrip toResource _]
-    dsimp only
-    rw [readAmountField_roundtrip amountIn _ h3]
-    dsimp only
-    rw [readAmountField_roundtrip amountOut _ h4]
-    dsimp only
-    rw [readUInt64Field_roundtrip ammReserveActor rest]
   | reclaimAmmReserves r amount reserveActor poolActor =>
     obtain ⟨_, h2, _, _⟩ := h
     show Action.decode (Action.encode
@@ -1187,6 +1178,40 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readUInt64Field_roundtrip reserveActor _]
     dsimp only
     rw [readUInt64Field_roundtrip poolActor rest]
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+    obtain ⟨_, _, _, h4, h5, _⟩ := h
+    show Action.decode (Action.encode
+            (.reserveSwap fromResource toResource user amountIn minAmountOut
+              reserveActor) ++ rest)
+        = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 25 ++ Encodable.encode (T := Nat) fromResource.toNat ++
+        Encodable.encode (T := Nat) toResource.toNat ++
+        Encodable.encode (T := Nat) user.toNat ++
+        encodeAmount amountIn ++
+        encodeAmount minAmountOut ++
+        Encodable.encode (T := Nat) reserveActor.toNat ++ rest =
+      Encodable.encode (T := Nat) 25 ++ (Encodable.encode (T := Nat) fromResource.toNat ++
+        (Encodable.encode (T := Nat) toResource.toNat ++
+        (Encodable.encode (T := Nat) user.toNat ++
+        (encodeAmount amountIn ++
+        (encodeAmount minAmountOut ++
+        (Encodable.encode (T := Nat) reserveActor.toNat ++ rest))))))
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 25 _ (by decide)]
+    dsimp only
+    rw [readUInt64Field_roundtrip fromResource _]
+    dsimp only
+    rw [readUInt64Field_roundtrip toResource _]
+    dsimp only
+    rw [readUInt64Field_roundtrip user _]
+    dsimp only
+    rw [readAmountField_roundtrip amountIn _ h4]
+    dsimp only
+    rw [readAmountField_roundtrip minAmountOut _ h5]
+    dsimp only
+    rw [readUInt64Field_roundtrip reserveActor rest]
 
 /-- Empty-suffix round-trip for `Action`. -/
 theorem action_roundtrip_empty (a : Action) (h : Action.fieldsBounded a) :
@@ -1256,12 +1281,12 @@ theorem Action.tag_matches_encode_tag (a : Action) :
     rfl
   | faultProofChallenge _ _ _ _   => exact ⟨_, rfl⟩
   | faultProofResolution _ _ _ _  => exact ⟨_, rfl⟩
-  | depositWithFee _ _ _ _ _ _ _  => exact ⟨_, rfl⟩
+  | depositWithFee _ _ _ _ _ _ _ _  => exact ⟨_, rfl⟩
   | topUpActionBudget _ _ _ _     => exact ⟨_, rfl⟩
   | topUpActionBudgetFor _ _ _ _ _ => exact ⟨_, rfl⟩
   | claimBudgetRefund _ _ _ _     => exact ⟨_, rfl⟩
-  | ammSwap _ _ _ _ _             => exact ⟨_, rfl⟩
   | reclaimAmmReserves _ _ _ _    => exact ⟨_, rfl⟩
+  | reserveSwap _ _ _ _ _ _       => exact ⟨_, rfl⟩
 
 /-! ## Spot-check `example`s (compile-time-only test vectors) -/
 

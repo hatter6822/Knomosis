@@ -93,12 +93,14 @@ def encodeActionHex (a : Action) : String :=
 
 /-- Build a `depositWithFee` (index 19) entry.  Field order on the
     wire: `r ‖ recipient ‖ poolActor ‖ userAmount ‖ poolAmount ‖
-    budgetGrant ‖ depositId`. -/
-def mkDepositWithFee (r recipient poolActor userAmount poolAmount budgetGrant depositId : Nat)
+    budgetGrant ‖ depositId ‖ seedAmount` (Workstream SB appended the
+    AMM seed leg). -/
+def mkDepositWithFee
+    (r recipient poolActor userAmount poolAmount budgetGrant depositId seedAmount : Nat)
     (category : String) : Json :=
   let a : Action :=
     .depositWithFee (UInt64.ofNat r) (UInt64.ofNat recipient) (UInt64.ofNat poolActor)
-      userAmount poolAmount budgetGrant depositId
+      userAmount poolAmount budgetGrant depositId seedAmount
   .obj
     [ ("kind",        .str "depositWithFee")
     , ("category",    .str category)
@@ -109,6 +111,7 @@ def mkDepositWithFee (r recipient poolActor userAmount poolAmount budgetGrant de
     , ("poolAmount",  .num poolAmount)
     , ("budgetGrant", .num budgetGrant)
     , ("depositId",   .num depositId)
+    , ("seedAmount",  .num seedAmount)
     , ("expectedCbe", .str (encodeActionHex a))
     ]
 
@@ -179,17 +182,22 @@ def maxU64 : Nat := 18446744073709551615
 /-- The fixture entries (23 total: 8 depositWithFee + 5
     topUpActionBudget + 5 topUpActionBudgetFor + 5 claimBudgetRefund). -/
 def entries : List Json :=
-  [ -- depositWithFee (ETH leg, r = 0)
-    mkDepositWithFee 0 0 0 0 0 0 0 "depositWithFee:all-zero"
-  , mkDepositWithFee 0 1 2 1000 500 10 42 "depositWithFee:canonical"
-  , mkDepositWithFee 0 7 1 (10 ^ 18) (10 ^ 17) (10 ^ 8) 99 "depositWithFee:one-eth-ten-percent"
-  , mkDepositWithFee 0 3 1 (10 ^ 15) (10 ^ 15) maxBudgetPerDeposit 7 "depositWithFee:budget-at-cap"
-  , mkDepositWithFee 0 maxU64 maxU64 maxU64 0 0 maxU64 "depositWithFee:max-u64-ids-and-user"
+  [ -- depositWithFee (ETH leg, r = 0).  The seed column spans its own
+    -- corners: zero (seedless), a small value, a 10%-of-pool slice,
+    -- the seed-equals-fee edge, and the u64 boundary.
+    mkDepositWithFee 0 0 0 0 0 0 0 0 "depositWithFee:all-zero"
+  , mkDepositWithFee 0 1 2 1000 500 10 42 25 "depositWithFee:canonical"
+  , mkDepositWithFee 0 7 1 (10 ^ 18) (10 ^ 17) (10 ^ 8) 99 (10 ^ 16)
+      "depositWithFee:one-eth-ten-percent"
+  , mkDepositWithFee 0 3 1 (10 ^ 15) (10 ^ 15) maxBudgetPerDeposit 7 (10 ^ 15)
+      "depositWithFee:budget-at-cap"
+  , mkDepositWithFee 0 maxU64 maxU64 maxU64 0 0 maxU64 0 "depositWithFee:max-u64-ids-and-user"
     -- depositWithFee (BOLD leg, r = 1) — identical to the ETH
     -- canonical except the resource field.
-  , mkDepositWithFee 1 1 2 1000 500 10 42 "depositWithFee:bold-canonical"
-  , mkDepositWithFee 1 7 1 (10 ^ 18) (10 ^ 17) (10 ^ 8) 99 "depositWithFee:bold-one-bold-ten-percent"
-  , mkDepositWithFee 1 3 1 0 maxU64 maxBudgetPerDeposit 1 "depositWithFee:bold-max-pool"
+  , mkDepositWithFee 1 1 2 1000 500 10 42 25 "depositWithFee:bold-canonical"
+  , mkDepositWithFee 1 7 1 (10 ^ 18) (10 ^ 17) (10 ^ 8) 99 (10 ^ 16)
+      "depositWithFee:bold-one-bold-ten-percent"
+  , mkDepositWithFee 1 3 1 0 maxU64 maxBudgetPerDeposit 1 maxU64 "depositWithFee:bold-max-pool"
     -- topUpActionBudget (index 20)
   , mkTopUpActionBudget 0 0 0 0 "topUpActionBudget:all-zero"
   , mkTopUpActionBudget 0 100 5 2 "topUpActionBudget:canonical"
@@ -213,7 +221,7 @@ def entries : List Json :=
 /-- The fixture's JSON value: a header + the entries array. -/
 def buildFixture : Json :=
   let header : Json := .obj
-    [ ("identifier",          .str "knomosis-l1-ingest/deposit-with-fee-action/v2")
+    [ ("identifier",          .str "knomosis-l1-ingest/deposit-with-fee-action/v3")
     , ("count",               .num entries.length)
     , ("countDepositWithFee", .num 8)
     , ("countTopUpBudget",    .num 5)
@@ -264,11 +272,11 @@ def tests : List TestCase :=
     , body := do
         -- Anchor the Lean encoder to ground truth so the cross-stack
         -- equivalence is not circular: `.depositWithFee 0 1 2 1000
-        -- 500 10 42` must encode to the 120-byte sequence below (six
-        -- 9-byte CBE uint heads plus two 33-byte amount heads, tag 19
-        -- first), identical to the
+        -- 500 10 42 25` must encode to the 153-byte sequence below
+        -- (six 9-byte CBE uint heads plus three 33-byte amount heads,
+        -- tag 19 first), identical to the
         -- Rust `encode_deposit_with_fee_known_vector` test.
-        let a : Action := .depositWithFee 0 1 2 1000 500 10 42
+        let a : Action := .depositWithFee 0 1 2 1000 500 10 42 25
         let hex := encodeActionHex a
         let expected :=
           -- tag 19 | r 0 | recipient 1 | poolActor 2
@@ -280,7 +288,10 @@ def tests : List TestCase :=
           "06e803000000000000000000000000000000000000000000000000000000000000" ++
           "06f401000000000000000000000000000000000000000000000000000000000000" ++
           -- budgetGrant 10 | depositId 42
-          "000a00000000000000" ++ "002a00000000000000"
+          "000a00000000000000" ++ "002a00000000000000" ++
+          -- seedAmount 25 — the Workstream SB APPENDED amount head,
+          -- last on the wire so every pre-existing offset survives
+          "061900000000000000000000000000000000000000000000000000000000000000"
         if hex ≠ expected then
           throw <| IO.userError s!"depositWithFee canonical bytes mismatch:\n  got      {hex}\n  expected {expected}"
     }

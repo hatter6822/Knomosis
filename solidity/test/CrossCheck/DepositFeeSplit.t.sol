@@ -355,6 +355,11 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework, DepositEventDecoder, 
             // the four greppable bytes it would save.  The libraries
             // this walk exercises directly are named; the bridge's own
             // refusals are not, deliberately.
+            // casting to 'uint16' is safe because the `checkLe(feeBps,
+            // 5000, …)` above bounds the fixture's value well inside
+            // `uint16`, so a corpus entry that could truncate here is
+            // already a recorded failure rather than a silent one.
+            // forge-lint: disable-next-line(unsafe-typecast)
             try bridge.depositETHWithFee{value: msgValue}(uint16(feeBps)) {
                 // fall through to the log decode below
             } catch (bytes memory err) {
@@ -370,8 +375,8 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework, DepositEventDecoder, 
             checkEq(p, fixPool, "live poolAmount != Lean fixture");
             checkEq(ammSeed, fixSeed, "live ammSeedAmount != Lean fixture (GP.11.2)");
             checkEq(uint256(g), fixBudget, "live budgetGrant != Lean fixture");
-            // The live reserve grew by exactly the seed.
-            checkEq(bridge.ammReserveEth(), ammSeed, "live reserve != emitted ammSeedAmount");
+            // One-AMM topology: the emitted seed is the L2 reserve
+            // actor's credit (the excised L1 books no longer exist).
 
             // The bridge computes receiptHash with real keccak256 over
             // ITS OWN deploymentId + the emitted fields; re-derive via the
@@ -416,6 +421,7 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework, DepositEventDecoder, 
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

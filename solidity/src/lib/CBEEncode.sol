@@ -80,6 +80,12 @@ library CBEEncode {
         out = new bytes(widthBytes);
         uint256 v = n;
         for (uint256 i = 0; i < widthBytes; i++) {
+            // casting to 'uint8' is safe because `& 0xFF` has already
+            // reduced the operand to its low byte, so the cast is the
+            // identity on every reachable value rather than a
+            // truncation.  Emitting the low byte per iteration is the
+            // little-endian order the CBE body is defined in.
+            // forge-lint: disable-next-line(unsafe-typecast)
             out[i] = bytes1(uint8(v & 0xFF));
             v >>= 8;
         }

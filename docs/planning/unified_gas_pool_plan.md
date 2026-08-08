@@ -7086,11 +7086,12 @@ sub-WU table above is the implementation roadmap.
     accounting variable (catches a TVL-vs-balance divergence the
     accounting-only bounds would miss) — over 128 000 random ETH+BOLD
     deposits at a moderate cap so some deposits revert).  The deposit→withdraw
-    interaction (the seeded reserve
-    surviving a withdrawal) is covered end-to-end by the AMM-enabled
+    interaction (the seed's escrowed backing surviving a withdrawal)
+    is covered end-to-end by the AMM-enabled
     `BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`,
-    which drains TVL to exactly the seed floor and asserts `ammReserveBold <=
-    boldTotalLockedValue <= totalLockedValue` survives.
+    which drains TVL to exactly the seed-backing floor (and, under the
+    SB L2-primary topology amendment below, asserts the L1
+    `ammReserveBold` book stays 0 throughout).
     `AmmStorage.t.sol`'s ratio-invariance test is
     `test_coreSplit_ratioInvariant_butAmmSeedScales` (the core
     user/pool/budget triple is ratio-invariant while the canonical event's
@@ -7104,6 +7105,25 @@ sub-WU table above is the implementation roadmap.
     remain GP.11.4 / GP.11.5; the deposit-side L2 reconstruction that
     consumes the `ammSeedAmount` field lands with the sequencer-side
     deposit-materialisation work.
+
+    **Topology amendment (Workstream SB, L2-primary).**  The deposit seed
+    leg no longer accrues the L1 `ammReserve*` books.  `_seedAmmReserves`
+    became the non-mutating `internal view` `_ammSeedSplit(resourceId,
+    poolAmount) → ammSeedAmount` — it still computes the split, and the
+    canonical event + receiptHash still carry and bind `ammSeedAmount`
+    (the wire format above is unchanged), but the seed is credited on the
+    L2 (`Laws.depositWithFee`'s appended `seedAmount` field credits the
+    `ammReserveActor` there) while its wei/BOLD backing stays in the
+    bridge's general escrow as ordinary TVL.  `ammReserveEth` /
+    `ammReserveBold` now hold pre-existing L1-local liquidity only,
+    mutated solely by the L1 `ammSwap` (GP.11.3) — they stay 0 on a fresh
+    deployment.  The monotonic-accumulation statements above are therefore
+    historical (they described the retired accrual); the swap suites model
+    a deployment that already held L1 liquidity via the
+    `AmmLiquidityHarness` test installer (books + backing + TVL move
+    together), and the deposit-side invariant suite now pins the reserves
+    CONSTANT under deposits.  The conservation and receiptHash-binding
+    guarantees are unaffected.
 
 #### WU GP.11.3: AMM swap function
 

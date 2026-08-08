@@ -20,11 +20,36 @@ pragma solidity ^0.8.36;
 ///         overflows, and a hypothetical overflow reverts rather than
 ///         wrapping.  The library validates its OWN inputs (defence in
 ///         depth) so it is a faithful, self-contained reference even though
-///         `KnomosisBridge.ammSwap` pre-validates before every call.
+///         its callers (the step VM's kind-25 arm mirroring the L2
+///         `Laws.reserveSwap`) pre-validate before every call.
 library AmmMath {
     /// @notice Basis-points denominator (100% == 10000 bps).  A `feeBps`
     ///         argument is interpreted as a fraction of this.
     uint256 internal constant BPS_DENOMINATOR = 10_000;
+
+    /// @notice The L2 reserve swap's fee (Workstream SB), in basis
+    ///         points — 0.30%, retained in the reserve actor's balances
+    ///         as pool yield.  ONE value across the surfaces:
+    ///         `KnomosisBridge.AMM_SWAP_FEE_BPS` pins the same number
+    ///         for the L1 AMM (their equality is asserted in
+    ///         `StepVMRootReserveSwap.t.sol`, so a drift is a test
+    ///         failure, not a silent re-pricing), and Lean's
+    ///         `Bridge.AmmMath.swapFeeBps` is the cross-stack corpus's
+    ///         authority for the kind-25 rows.
+    uint256 internal constant SWAP_FEE_BPS = 30;
+
+    /// @notice The floor a reserve leg may not be drawn below by a swap.
+    /// @dev    ONE constant for both stacks, exactly as `SWAP_FEE_BPS`
+    ///         is: `Bridge.AmmMath.minimumLiquidity` on the Lean side,
+    ///         and the value `KnomosisBridge.AMM_MINIMUM_LIQUIDITY`
+    ///         already enforces for the L1 pool.  Lives here rather
+    ///         than only on the bridge because the STEP VM needs it
+    ///         too — the L2 `reserveSwap` law is floored, so the
+    ///         fault-proof replay of that law has to apply the same
+    ///         guard or the two stacks disagree about which swaps are
+    ///         admissible, which is the one disagreement a fault proof
+    ///         cannot survive.
+    uint256 internal constant MINIMUM_LIQUIDITY = 1000;
 
     /// @notice Thrown when an input amount is zero (`getAmountOut`) or a
     ///         requested output amount is zero (`getAmountIn`).  A swap
@@ -64,8 +89,7 @@ library AmmMath {
     /// @dev    The flooring rounds the output DOWN, which can only make
     ///         `k = reserveIn * reserveOut` increase (less leaves the pool),
     ///         never decrease — the formal basis for the k-monotonicity
-    ///         invariant.  See `KnomosisBridge.ammSwap`'s on-chain
-    ///         belt-and-braces k-check and `AmmInvariants.t.sol`.
+    ///         invariant (`reserveSwap_k_nondecreasing` on the Lean side).
     function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut, uint256 feeBps)
         internal
         pure
@@ -99,7 +123,7 @@ library AmmMath {
     /// @return amountIn    The minimum input (rounded up) for `amountOut`.
     /// @dev    Provided for completeness / symmetry (the standard Uniswap v2
     ///         pair) and exercised by `AmmMath.t.sol`'s round-trip tests;
-    ///         `KnomosisBridge.ammSwap` uses only `getAmountOut`.
+    ///         the production swap path uses only `getAmountOut`.
     function getAmountIn(uint256 amountOut, uint256 reserveIn, uint256 reserveOut, uint256 feeBps)
         internal
         pure

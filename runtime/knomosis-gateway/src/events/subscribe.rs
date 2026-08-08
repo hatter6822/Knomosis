@@ -220,15 +220,28 @@ impl UpstreamSubscription {
                     oldest_available_seq,
                 }
             }
+            // `LagExceeded` / `ServerShutdown` report how far this
+            // CONNECTION got, which is progress, not a new start point —
+            // so the cursor may only advance.  Assigning
+            // `last_delivered_seq` directly let it REGRESS, and the
+            // regression had a sharp edge: `0` is the live-tail
+            // sentinel, and `last_delivered_seq` is `0` exactly when the
+            // connection ended before delivering anything (a lagging or
+            // shutting-down upstream, which is when these frames arrive
+            // at all).  The next reconnect then asked for the live tail
+            // instead of the accumulated cursor, silently skipping every
+            // event since — and a backfill drained against that
+            // subscription answered "caught up" having read none of the
+            // history it was asked for.
             Ok(ServerFrame::LagExceeded { last_delivered_seq }) => {
-                self.resume_from = last_delivered_seq;
+                self.resume_from = self.resume_from.max(last_delivered_seq);
                 self.client = None;
                 StreamItem::Reconnecting {
                     reason: ReconnectReason::LagExceeded,
                 }
             }
             Ok(ServerFrame::ServerShutdown { last_delivered_seq }) => {
-                self.resume_from = last_delivered_seq;
+                self.resume_from = self.resume_from.max(last_delivered_seq);
                 self.client = None;
                 StreamItem::Reconnecting {
                     reason: ReconnectReason::ServerShutdown,
@@ -483,6 +496,53 @@ mod tests {
         assert_eq!(sub.resume_from(), 50);
         assert_eq!(server.handshakes.recv().unwrap(), 7); // initial resume_from
         assert_eq!(server.handshakes.recv().unwrap(), 42); // after lag → 42
+    }
+
+    #[test]
+    fn a_zero_last_delivered_does_not_reset_the_cursor_to_live_tail() {
+        // THE REGRESSION.  `last_delivered_seq == 0` means "this
+        // connection delivered nothing", which is exactly what a lagging
+        // or shutting-down upstream reports.  Assigning it to the cursor
+        // reset it to `0` — the LIVE-TAIL sentinel — so the reconnect
+        // asked for the newest events instead of resuming at 7, silently
+        // skipping the whole history in between.  A backfill draining
+        // that subscription then answered "caught up" having read none
+        // of the range it was asked for.
+        let server = mock_server(vec![
+            vec![Frame::LagExceeded(0)],
+            vec![Frame::ServerShutdown(0)],
+        ]);
+        let mut sub = UpstreamSubscription::new(server.addr, 7, 1 << 20, None);
+        assert_eq!(
+            sub.recv(),
+            StreamItem::Reconnecting {
+                reason: ReconnectReason::LagExceeded
+            }
+        );
+        assert_eq!(sub.resume_from(), 7, "cursor must not regress to live tail");
+        assert_eq!(
+            sub.recv(),
+            StreamItem::Reconnecting {
+                reason: ReconnectReason::ServerShutdown
+            }
+        );
+        assert_eq!(sub.resume_from(), 7, "still 7 after a second zero report");
+        // And the reconnect actually ASKS for 7 — the property the
+        // cursor exists to provide.
+        assert_eq!(server.handshakes.recv().unwrap(), 7);
+        assert_eq!(server.handshakes.recv().unwrap(), 7);
+    }
+
+    #[test]
+    fn a_stale_last_delivered_does_not_rewind_the_cursor() {
+        // The general form: the cursor is progress, so it may advance
+        // but never move backwards.  A report BELOW the current cursor
+        // would otherwise re-deliver events already handed downstream,
+        // which the ring dedups but the backfill counts.
+        let server = mock_server(vec![vec![Frame::LagExceeded(3)]]);
+        let mut sub = UpstreamSubscription::new(server.addr, 9, 1 << 20, None);
+        let _ = sub.recv();
+        assert_eq!(sub.resume_from(), 9, "a lower report must not rewind");
     }
 
     #[test]

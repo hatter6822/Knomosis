@@ -544,6 +544,7 @@ impl ReceiptSource for crate::source::json_rpc::JsonRpcL1Source {
 mod tests {
     use super::*;
     use crate::action::Action;
+    use crate::action::Amount;
     use crate::address_book::{GAS_POOL_ACTOR_ID, SEQUENCER_ACTOR_ID};
     use crate::key::SIGNATURE_LEN;
     use std::collections::HashMap;
@@ -628,7 +629,7 @@ mod tests {
             r: 0,
             sender: GAS_POOL_ACTOR_ID,
             receiver: SEQUENCER_ACTOR_ID,
-            amount,
+            amount: Amount::from(amount),
         })
     }
 
@@ -637,7 +638,7 @@ mod tests {
             r: 1,
             sender: GAS_POOL_ACTOR_ID,
             receiver: SEQUENCER_ACTOR_ID,
-            amount,
+            amount: Amount::from(amount),
         })
     }
 
@@ -680,7 +681,7 @@ mod tests {
         assert_eq!(g.batch_id, 7);
         assert_eq!(g.gas_used, 21_000);
         assert_eq!(g.gas_price, 50);
-        assert_eq!(g.reimbursement(), 1_050_000);
+        assert_eq!(g.reimbursement(), Amount::from_u64(1_050_000));
         assert_eq!(g.receipt_binding_hash, canonical_receipt_binding_hash(&tx));
     }
 
@@ -730,7 +731,7 @@ mod tests {
             r: 0,
             sender: GAS_POOL_ACTOR_ID,
             receiver: 9,
-            amount: 1,
+            amount: Amount::from_u64(1),
         });
         assert_eq!(
             verify_eth_claim_independently(&source, &wrong, &tx, 7, CONFIRMED).unwrap(),
@@ -1042,7 +1043,7 @@ mod tests {
             .unwrap()
             .expect("present");
         assert_eq!(gr.receipt_binding_hash, canonical_receipt_binding_hash(&tx));
-        assert_eq!(gr.reimbursement(), 1_050_000);
+        assert_eq!(gr.reimbursement(), Amount::from_u64(1_050_000));
         // Missing tx → None.
         assert!(
             fetch_and_derive_gas_receipt(&source, &[0xCC; 32], 7, CONFIRMED)

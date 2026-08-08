@@ -256,22 +256,28 @@ def actionEvents
     -- `extractEvents`.
     []
   | .depositWithFee r recipient poolActor _userAmount _poolAmount
-                     _budgetGrant _depositId =>
-    -- Workstream GP §15E (v1.0): bridge depositWithFee.  Emit two
-    -- delta-filtered `balanceChanged` events (one for recipient,
-    -- one for poolActor); the deployment-level semantic event
-    -- (`depositWithFeeCredited`) is emitted unconditionally by
-    -- `extractEvents` (which has the budget-grant and deposit-id
-    -- in scope).
+                     _budgetGrant _depositId _seedAmount =>
+    -- Workstream GP §15E (v1.0) + SB: bridge depositWithFee.  Emit
+    -- three delta-filtered `balanceChanged` events — the recipient,
+    -- the poolActor (whose credit is the NET share), and the
+    -- canonical AMM reserve's seed leg; the deployment-level
+    -- semantic events (`depositWithFeeCredited`, `reserveSeeded`)
+    -- are emitted unconditionally by `extractEvents` (which has the
+    -- budget-grant and deposit-id in scope).
     let recipOld := LegalKernel.getBalance preState  r recipient
     let recipNew := LegalKernel.getBalance postState r recipient
     let poolOld  := LegalKernel.getBalance preState  r poolActor
     let poolNew  := LegalKernel.getBalance postState r poolActor
+    let resOld   := LegalKernel.getBalance preState  r Bridge.ammReserveActor
+    let resNew   := LegalKernel.getBalance postState r Bridge.ammReserveActor
     let evRecip := if recipOld != recipNew then
                      [Event.balanceChanged r recipient recipOld recipNew] else []
     let evPool  := if poolOld != poolNew then
                      [Event.balanceChanged r poolActor poolOld poolNew] else []
-    evRecip ++ evPool
+    let evRes   := if resOld != resNew then
+                     [Event.balanceChanged r Bridge.ammReserveActor resOld resNew]
+                   else []
+    evRecip ++ evPool ++ evRes
   | .topUpActionBudget gasResource _gasAmount _budgetIncrement poolActor =>
     -- Workstream GP §15E (v1.0): L2 user self-topup.  The signer
     -- (whose balance is debited) is NOT in scope at the
@@ -317,23 +323,6 @@ def actionEvents
       [Event.balanceChanged gasResource poolActor poolOld poolNew]
     else
       []
-  | .ammSwap fromResource toResource _amountIn _amountOut ammReserveActor =>
-    -- Workstream GP (GP.11.4): L2 AMM swap.  The swap credits the
-    -- reserve actor at `fromResource` and debits at `toResource`; emit
-    -- delta-filtered `balanceChanged` events for both legs.  The
-    -- semantic `ammSwapExecuted` event is emitted by `extractEvents`
-    -- (which has the full action payload in scope).
-    let fromOld := LegalKernel.getBalance preState  fromResource ammReserveActor
-    let fromNew := LegalKernel.getBalance postState fromResource ammReserveActor
-    let toOld   := LegalKernel.getBalance preState  toResource ammReserveActor
-    let toNew   := LegalKernel.getBalance postState toResource ammReserveActor
-    let evFrom := if fromOld != fromNew then
-                    [Event.balanceChanged fromResource ammReserveActor fromOld fromNew]
-                  else []
-    let evTo   := if toOld != toNew then
-                    [Event.balanceChanged toResource ammReserveActor toOld toNew]
-                  else []
-    evFrom ++ evTo
   | .reclaimAmmReserves resource _amount reserveActor poolActor =>
     -- Workstream GP (GP.11.10): post-disable reserve sweep.  The sweep
     -- debits the reserve actor (to zero) and credits the pool actor at
@@ -351,6 +340,34 @@ def actionEvents
                     [Event.balanceChanged resource poolActor poolOld poolNew]
                   else []
     evRes ++ evPool
+  | .reserveSwap fromResource toResource user _amountIn _minAmountOut reserveActor =>
+    -- Workstream SB: the user-facing L2 swap.  Four legs move — the
+    -- user and the reserve each at both resources; emit
+    -- delta-filtered `balanceChanged` events for all four.  The
+    -- semantic `reserveSwapExecuted` event is emitted by
+    -- `extractEvents` (which recomputes the quote from the
+    -- pre-state, exactly as the law's apply did).
+    let userFromOld := LegalKernel.getBalance preState  fromResource user
+    let userFromNew := LegalKernel.getBalance postState fromResource user
+    let resFromOld  := LegalKernel.getBalance preState  fromResource reserveActor
+    let resFromNew  := LegalKernel.getBalance postState fromResource reserveActor
+    let resToOld    := LegalKernel.getBalance preState  toResource reserveActor
+    let resToNew    := LegalKernel.getBalance postState toResource reserveActor
+    let userToOld   := LegalKernel.getBalance preState  toResource user
+    let userToNew   := LegalKernel.getBalance postState toResource user
+    let evUserFrom := if userFromOld != userFromNew then
+                        [Event.balanceChanged fromResource user userFromOld userFromNew]
+                      else []
+    let evResFrom  := if resFromOld != resFromNew then
+                        [Event.balanceChanged fromResource reserveActor resFromOld resFromNew]
+                      else []
+    let evResTo    := if resToOld != resToNew then
+                        [Event.balanceChanged toResource reserveActor resToOld resToNew]
+                      else []
+    let evUserTo   := if userToOld != userToNew then
+                        [Event.balanceChanged toResource user userToOld userToNew]
+                      else []
+    evUserFrom ++ evResFrom ++ evResTo ++ evUserTo
   -- Workstream-LX (LX.19): codegen-managed Lex `actionEvents`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no `Action` constructor, so it has no
@@ -431,10 +448,16 @@ def extractEvents
     -- `balanceChanged` events live in `actionEvents`.
     match st.action with
     | .depositWithFee r recipient poolActor userAmount poolAmount
-                       budgetGrant depositId =>
+                       budgetGrant depositId seedAmount =>
+      -- Workstream SB: the frozen tag-16 event keeps its shape, and
+      -- its `poolAmount` slot carries the ACTUAL pool credit — the
+      -- NET `poolAmount - seedAmount` — so pool-view indexers stay
+      -- exact; the seed leg gets its own `reserveSeeded` event,
+      -- attributable to the deposit by id.
       [Event.depositWithFeeCredited r recipient poolActor
-                                     userAmount poolAmount
-                                     budgetGrant depositId]
+                                     userAmount (poolAmount - seedAmount)
+                                     budgetGrant depositId,
+       Event.reserveSeeded r seedAmount Bridge.ammReserveActor depositId]
     | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       -- The signer (whose budget is incremented) comes from the
       -- enclosing SignedAction.
@@ -445,19 +468,23 @@ def extractEvents
       -- (delegate/payer) comes from the enclosing SignedAction.
       [Event.delegatedActionBudgetTopUp recipient st.signer gasResource
                                 gasAmount budgetIncrement poolActor]
-    | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
-      -- GP.11.4: L2 AMM swap semantic event.  Emitted UNCONDITIONALLY
-      -- (mirroring bridge / LP / fault-proof / reward events): indexers
-      -- consume this event to maintain AMM reserve views and LP yield
-      -- accounting (k-monotonicity tracking).
-      [Event.ammSwapExecuted fromResource toResource amountIn amountOut
-                              ammReserveActor]
     | .reclaimAmmReserves resource amount reserveActor poolActor =>
       -- GP.11.10: post-disable reserve sweep semantic event.  Emitted
       -- UNCONDITIONALLY like the other bridge-family events: indexers
       -- consume it to close out AMM reserve views and attribute the
       -- pool credit to the disaster-recovery flow.
       [Event.ammReservesReclaimed resource amount reserveActor poolActor]
+    | .reserveSwap fromResource toResource user amountIn _minAmountOut reserveActor =>
+      -- Workstream SB: user-swap semantic event.  Emitted
+      -- UNCONDITIONALLY like its bridge-family siblings.  The
+      -- `amountOut` is the COMPUTED quote, recomputed here from the
+      -- PRE-state exactly as `Laws.reserveSwap`'s apply priced it —
+      -- one formula (`Laws.reserveQuote`), read by the law's pre,
+      -- its apply, and this event.
+      [Event.reserveSwapExecuted fromResource toResource user amountIn
+        (Laws.reserveQuote preState.base fromResource toResource
+          reserveActor amountIn)
+        reserveActor]
     | _                                     => []
   -- Workstream GP §15E (v1.0): for `topUpActionBudget`, also emit
   -- the signer's gas-balance change as a delta-filtered
@@ -787,23 +814,53 @@ theorem extractEvents_depositWithFee_emits_credited
     (pre post : ExtendedState) (r : ResourceId)
     (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : LegalKernel.Bridge.DepositId)
+    (depositId : LegalKernel.Bridge.DepositId) (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : Signature) :
     Event.depositWithFeeCredited r recipient poolActor userAmount
-                                  poolAmount budgetGrant depositId ∈
+                                  (poolAmount - seedAmount) budgetGrant
+                                  depositId ∈
     extractEvents pre post
       ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                        budgetGrant depositId, signer, nonce, sig⟩ := by
+                        budgetGrant depositId seedAmount, signer, nonce, sig⟩ := by
   unfold extractEvents
-  -- The depositWithFeeCredited event is in the `gasPoolEvts`
-  -- segment (position 6 in the 8-segment post-GP.6.4 output list).
+  -- The depositWithFeeCredited event leads the `gasPoolEvts`
+  -- segment (position 6 in the 8-segment post-GP.6.4 output list),
+  -- now paired with the Workstream-SB `reserveSeeded` event.
   show _ ∈ _ ++ _ ++ _ ++ _ ++ _ ++
             [Event.depositWithFeeCredited r recipient poolActor userAmount
-                                            poolAmount budgetGrant depositId] ++ _ ++ _
+                                            (poolAmount - seedAmount)
+                                            budgetGrant depositId,
+             Event.reserveSeeded r seedAmount Bridge.ammReserveActor
+                                  depositId] ++ _ ++ _
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
-  exact List.mem_singleton.mpr rfl
+  exact List.mem_cons_self
+
+/-- Workstream SB: a `depositWithFee` also emits the `reserveSeeded`
+    event — the seed leg's own observable, attributable to the L1
+    deposit by id. -/
+theorem extractEvents_depositWithFee_emits_reserveSeeded
+    (pre post : ExtendedState) (r : ResourceId)
+    (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (depositId : LegalKernel.Bridge.DepositId) (seedAmount : Amount)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) :
+    Event.reserveSeeded r seedAmount Bridge.ammReserveActor depositId ∈
+    extractEvents pre post
+      ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                        budgetGrant depositId seedAmount, signer, nonce, sig⟩ := by
+  unfold extractEvents
+  show _ ∈ _ ++ _ ++ _ ++ _ ++ _ ++
+            [Event.depositWithFeeCredited r recipient poolActor userAmount
+                                            (poolAmount - seedAmount)
+                                            budgetGrant depositId,
+             Event.reserveSeeded r seedAmount Bridge.ammReserveActor
+                                  depositId] ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
+  refine List.mem_append.mpr (Or.inl ?_)
+  refine List.mem_append.mpr (Or.inr ?_)
+  exact List.mem_cons_of_mem _ List.mem_cons_self
 
 /-- Workstream GP §15E (v1.0): `topUpActionBudget` always emits an
     `actionBudgetTopUp` event in its output list.  The event

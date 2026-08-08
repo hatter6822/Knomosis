@@ -603,6 +603,83 @@ def proportionalDiluteEmitsPerChangedRecipient : TestCase := {
       "only the recipient that actually moved emits"
 }
 
+/-- Workstream SB: a `reserveSwap` emits four delta-filtered
+    `balanceChanged` events (the user and the reserve, each at both
+    resources) plus the semantic `reserveSwapExecuted` carrying the
+    COMPUTED quote — recomputed by `extractEvents` from the pre-state
+    exactly as the law priced it, not read from the action (the
+    action carries only the `minAmountOut` floor).
+
+    The post-state is built by APPLYING the kernel, so the events are
+    checked against what the law did.  Quote fixture: 1000 in against
+    10000/10000 reserves at 30 bps ⇒ 906 out (worked by hand in the
+    `laws-reserve-swap` suite). -/
+def reserveSwapEmitsFourLegsAndSemantic : TestCase := {
+  name := "reserveSwap emits four balanceChanged legs + reserveSwapExecuted with the computed quote"
+  body := do
+    let s0 := setBalance ({ balances := ∅ }) 0 9 5000
+    let s1 := setBalance (setBalance s0 0 3 10000) 1 3 10000
+    let pre : ExtendedState :=
+      { base := s1, nonces := { next := ∅ }, registry := KeyRegistry.empty }
+    let post : ExtendedState :=
+      { pre with
+        base := step_impl pre.base (Laws.reserveSwap 0 1 9 1000 900 3)
+      , nonces := { next := (∅ : Std.TreeMap _ _ _).insert 9 1 } }
+    let st : SignedAction := ⟨.reserveSwap 0 1 9 1000 900 3, 9, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    let balEvs := evs.filter (fun e => match e with | .balanceChanged .. => true | _ => false)
+    assertEq (expected := (4 : Nat)) (actual := balEvs.length)
+      "four legs move, four balanceChanged events"
+    assert (balEvs.any (fun e => match e with
+              | .balanceChanged r a o n => r == 0 && a == 9 && o == 5000 && n == 4000
+              | _ => false))
+      "user debited at fromResource (5000 -> 4000)"
+    assert (balEvs.any (fun e => match e with
+              | .balanceChanged r a o n => r == 0 && a == 3 && o == 10000 && n == 11000
+              | _ => false))
+      "reserve credited at fromResource (10000 -> 11000)"
+    assert (balEvs.any (fun e => match e with
+              | .balanceChanged r a o n => r == 1 && a == 3 && o == 10000 && n == 9094
+              | _ => false))
+      "reserve debited at toResource by the quote (10000 -> 9094)"
+    assert (balEvs.any (fun e => match e with
+              | .balanceChanged r a o n => r == 1 && a == 9 && o == 0 && n == 906
+              | _ => false))
+      "user credited at toResource by the quote (0 -> 906)"
+    -- The semantic event carries the COMPUTED amountOut, not the
+    -- action's minAmountOut floor.
+    assert (evs.any (fun e => match e with
+              | .reserveSwapExecuted fr tr user ai ao ra =>
+                  fr == 0 && tr == 1 && user == 9 && ai == 1000 &&
+                  ao == 906 && ra == 3
+              | _ => false))
+      "reserveSwapExecuted carries the computed quote 906"
+}
+
+/-- Workstream SB: a REJECTED `reserveSwap` (failed slippage floor)
+    emits no balance events and still no semantic lie — the semantic
+    event is emitted unconditionally like its bridge-family siblings,
+    but its quote is the honest recomputed value, and the
+    delta-filtered legs are silent because the kernel no-opped. -/
+def rejectedReserveSwapEmitsNoBalanceLegs : TestCase := {
+  name := "a no-op reserveSwap emits no balanceChanged legs"
+  body := do
+    let s0 := setBalance ({ balances := ∅ }) 0 9 5000
+    let s1 := setBalance (setBalance s0 0 3 10000) 1 3 10000
+    let pre : ExtendedState :=
+      { base := s1, nonces := { next := ∅ }, registry := KeyRegistry.empty }
+    -- minAmountOut 907 is one above the quote: the kernel no-ops.
+    let post : ExtendedState :=
+      { pre with
+        base := step_impl pre.base (Laws.reserveSwap 0 1 9 1000 907 3)
+      , nonces := { next := (∅ : Std.TreeMap _ _ _).insert 9 1 } }
+    let st : SignedAction := ⟨.reserveSwap 0 1 9 1000 907 3, 9, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    let balEvs := evs.filter (fun e => match e with | .balanceChanged .. => true | _ => false)
+    assertEq (expected := (0 : Nat)) (actual := balEvs.length)
+      "no leg moved, no balanceChanged events"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferEmitsThreeEvents, freezeOneEvent, replaceKeyTwoEvents,
@@ -623,7 +700,10 @@ def tests : List TestCase :=
    emitsBudgetConsumedAPI,
    -- The bulk-law event path (previously uncovered):
    distributeOthersEmitsPerRecipient, affectedActorsIsTheRecipientList,
-   proportionalDiluteEmitsPerChangedRecipient]
+   proportionalDiluteEmitsPerChangedRecipient,
+   -- Workstream SB: the user-swap event path.
+   reserveSwapEmitsFourLegsAndSemantic,
+   rejectedReserveSwapEmitsNoBalanceLegs]
 
 end ExtractTests
 end LegalKernel.Test.Events

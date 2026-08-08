@@ -68,7 +68,7 @@ library FeeSplitMath {
     }
 
     /// @notice Reference for the Workstream GP.11.2 AMM-seed split of a
-    ///         pool fee.  Mirrors `KnomosisBridge._seedAmmReserves`:
+    ///         pool fee.  Mirrors `KnomosisBridge._ammSeedSplit`:
     ///           ammSeedAmount   = floor(poolAmount * ammSeedRatioBps / 10000)
     ///           freePoolAmount  = poolAmount - ammSeedAmount
     /// @dev    `ammSeedRatioBps` is taken as `uint256` so JSON-parsing call

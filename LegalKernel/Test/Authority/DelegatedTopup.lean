@@ -449,10 +449,11 @@ def mkBridgeWitness
       ⟨.topUpActionBudgetFor recipient gasRes ga bi poolActor, signer, nonce, sig⟩ :=
   ⟨h,
    fun _ _ _ _ heq => by simp at heq,
-   fun _ _ _ _ _ _ _ heq => by simp at heq,
+   fun _ _ _ _ _ _ _ _ heq => by simp at heq,
    fun _ _ heq => by simp at heq,
    fun hbo => by simp [Action.isBridgeOnly] at hbo,
-   fun _ _ _ _ heq => by simp at heq⟩
+   fun _ _ _ _ heq => by simp at heq,
+   fun _ _ _ _ _ _ heq => by simp at heq⟩
 
 /-- Admit through the bridge-aware budget gate, throwing on a
     test-setup `AdmissibleWith` failure. -/

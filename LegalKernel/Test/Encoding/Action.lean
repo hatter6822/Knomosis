@@ -425,7 +425,7 @@ def tagMatchesEncodeTagAPI : TestCase := {
 def depositWithFeeRT : TestCase := {
   name := "Action.depositWithFee roundtrip"
   body := do
-    let a : Action := .depositWithFee 1 10 99 50 50 200 42
+    let a : Action := .depositWithFee 1 10 99 50 50 200 42 20
     match Encodable.decode (T := Action) (Encodable.encode a) with
     | .ok (a', rest) =>
       assertEq a a' "decoded action"
@@ -450,7 +450,7 @@ def topUpActionBudgetRT : TestCase := {
 def depositWithFeeVsDepositBytes : TestCase := {
   name := "Action.depositWithFee ≠ Action.deposit (distinct tags)"
   body := do
-    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7)
+    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7 8)
     let b2 := Encodable.encode (T := Action) (.deposit 1 2 4 7)
     if b1 == b2 then
       throw <| IO.userError "depositWithFee and deposit encoded identically"
@@ -473,7 +473,7 @@ def topUpActionBudgetVsTransferBytes : TestCase := {
 def depositWithFeeTagPin : TestCase := {
   name := "Action.tag depositWithFee = 19 (frozen)"
   body := do
-    assertEq (expected := 19) (actual := Action.tag (.depositWithFee 1 2 3 4 5 6 7))
+    assertEq (expected := 19) (actual := Action.tag (.depositWithFee 1 2 3 4 5 6 7 8))
       "depositWithFee tag"
 }
 
@@ -490,10 +490,24 @@ def topUpActionBudgetTagPin : TestCase := {
 def depositWithFeeFieldInjective : TestCase := {
   name := "Action.depositWithFee per-field injectivity (budgetGrant distinguished)"
   body := do
-    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 100 7)
-    let b2 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 200 7)
+    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 100 7 8)
+    let b2 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 200 7 8)
     if b1 == b2 then
       throw <| IO.userError "depositWithFee with distinct budgetGrant encoded identically"
+    else pure ()
+}
+
+/-- The appended `seedAmount` field (Workstream SB) is distinguished
+    by the encoding — two splits differing only in the seed slice
+    encode differently, so the codec cannot conflate a seeded deposit
+    with an unseeded one. -/
+def depositWithFeeSeedInjective : TestCase := {
+  name := "Action.depositWithFee per-field injectivity (seedAmount distinguished)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7 0)
+    let b2 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7 8)
+    if b1 == b2 then
+      throw <| IO.userError "depositWithFee with distinct seedAmount encoded identically"
     else pure ()
 }
 
@@ -618,7 +632,7 @@ def sampleAddr : Bridge.EthAddress :=
 
 /-! ## Per-constructor completeness oracle
 
-`Action` has 25 frozen constructors.  Before this, the suite pinned only
+`Action` has 26 frozen constructors.  Before this, the suite pinned only
 spot-checks, so nothing mechanically established that a sweep touched
 every variant — a constructor could be added, or an existing one's
 encoding changed, without any test noticing.
@@ -666,12 +680,14 @@ def sampleActions : List Action :=
   , .revokeLocalPolicy
   , .faultProofChallenge (ByteArray.mk #[0xAA]) 1 2 (ByteArray.mk #[0xBB])
   , .faultProofResolution (ByteArray.mk #[0xCC]) 1 2 3
-  , .depositWithFee 1 10 99 50 50 200 42
+  , .depositWithFee 1 10 99 50 50 200 42 20
   , .topUpActionBudget 1 2 3 4
   , .topUpActionBudgetFor 20 1 2 3 4
   , .claimBudgetRefund 0 89 1000 1
-  , .ammSwap 0 1 1000 995 77
-  , .reclaimAmmReserves 0 5000 77 88 ]
+  -- Tag 23 (`ammSwap`) is RETIRED — no sample; `retiredTag23Refused`
+  -- below pins the decoder's refusal instead.
+  , .reclaimAmmReserves 0 5000 77 88
+  , .reserveSwap 0 1 9 1000 990 3 ]
 
 /-- The frozen tag every `Action` constructor must carry.  Total over
     `Action` — see the section note above. -/
@@ -699,17 +715,20 @@ def requiredActionTag : Action → Nat
   | .topUpActionBudget    .. => 20
   | .topUpActionBudgetFor .. => 21
   | .claimBudgetRefund    .. => 22
-  | .ammSwap              .. => 23
+  -- 23 is the RETIRED `ammSwap` index — reserved, never reused.
   | .reclaimAmmReserves   .. => 24
+  | .reserveSwap          .. => 25
 
-/-- The sweep covers exactly the 25 frozen tags 0..24, one action per
-    tag, and `Action.tag` agrees with the hand-spelled table. -/
+/-- The sweep covers exactly the 25 LIVE frozen tags — 0..25 minus the
+    retired 23 — one action per tag, and `Action.tag` agrees with the
+    hand-spelled table. -/
 def actionSweepCoversAllTags : TestCase := {
-  name := "Action sweep covers tags 0..24"
+  name := "Action sweep covers the live tags 0..25 \\ {23}"
   body := do
     let tags := sampleActions.map Action.tag
     assertEq (25 : Nat) tags.length "sample count"
-    assertEq (List.range 25) tags "sample tags are 0..24 in order"
+    assertEq ((List.range 26).filter (· ≠ 23)) tags
+      "sample tags are 0..25 minus the retired 23, in order"
     for a in sampleActions do
       assertEq (requiredActionTag a) (Action.tag a)
         s!"Action.tag agrees with requiredActionTag for tag {requiredActionTag a}"
@@ -717,7 +736,7 @@ def actionSweepCoversAllTags : TestCase := {
 
 /-- Every frozen constructor round-trips encode→decode. -/
 def actionSweepRoundtrips : TestCase := {
-  name := "Action codec round-trips all 25 constructors"
+  name := "Action codec round-trips all 25 live constructors"
   body := do
     for a in sampleActions do
       let bytes := Encodable.encode (T := Action) a
@@ -729,10 +748,25 @@ def actionSweepRoundtrips : TestCase := {
         throw <| IO.userError s!"action {Action.tag a} decode failed: {repr e}"
 }
 
+/-- **Negative control: the RETIRED tag 23 is refused.**  The excised
+    `ammSwap` L1-mirror's index must behave exactly like a
+    never-assigned tag — a stream leading with 23 fails to decode, so
+    the hole cannot be silently reused or replayed. -/
+def retiredTag23Refused : TestCase := {
+  name := "retired action tag 23 is refused by the decoder"
+  body := do
+    let bytes := Encodable.encode (T := Nat) 23
+    match Action.decode bytes with
+    | .ok (a, _) =>
+      throw <| IO.userError
+        s!"retired tag 23 decoded to constructor tag {Action.tag a}"
+    | .error _ => pure ()
+}
+
 /-- Workstream Phase-4 `Action` codec test cases, including the
     per-constructor completeness oracle. -/
 def tests : List TestCase :=
-  [actionSweepCoversAllTags, actionSweepRoundtrips,
+  [actionSweepCoversAllTags, actionSweepRoundtrips, retiredTag23Refused,
    transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
    distributeOthersRT, proportionalDiluteRT, registerIdentityRT,
    registerIdentityVsReplaceKeyBytes, transferVsMintBytes,
@@ -748,7 +782,8 @@ def tests : List TestCase :=
    depositWithFeeRT, topUpActionBudgetRT,
    depositWithFeeVsDepositBytes, topUpActionBudgetVsTransferBytes,
    depositWithFeeTagPin, topUpActionBudgetTagPin,
-   depositWithFeeFieldInjective, topUpActionBudgetFieldInjective,
+   depositWithFeeFieldInjective, depositWithFeeSeedInjective,
+   topUpActionBudgetFieldInjective,
    -- GP.3.4:
    topUpActionBudgetForRT, topUpActionBudgetForVsTopUpActionBudgetBytes,
    topUpActionBudgetForTagPin, topUpActionBudgetForFieldInjective,

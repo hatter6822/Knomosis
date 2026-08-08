@@ -67,15 +67,17 @@ expect() {
 }
 
 # Per-cap declaration grep (value-agnostic), reused by several tampers.
-# The two GP.11.1 embedded-AMM caps (`AMM_SWAP_FEE_BPS`,
-# `MAX_AMM_SEED_RATIO_BPS`) are included so the drift / type-change /
-# missing / duplicate tamper classes exercise them too.
+# The GP.11.1 seed-ratio cap (`MAX_AMM_SEED_RATIO_BPS`) is included so
+# the drift / type-change / missing / duplicate tamper classes exercise
+# it too.  (Its former swap-side neighbours `AMM_SWAP_FEE_BPS` /
+# `AMM_MINIMUM_LIQUIDITY` left the bridge with the embedded L1 AMM;
+# they live on as `AmmMath` library constants, corpus-pinned rather
+# than cap-gated.)
 caps=(
     MAX_FEE_BPS_CAP
     MIN_WEI_PER_BUDGET_UNIT
     MAX_BUDGET_PER_DEPOSIT
     LIQUITY_ORACLE_READ_GAS
-    AMM_SWAP_FEE_BPS
     MAX_AMM_SEED_RATIO_BPS
 )
 

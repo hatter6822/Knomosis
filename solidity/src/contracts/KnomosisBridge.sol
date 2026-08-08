@@ -15,7 +15,6 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
 import {CBEDecode} from "src/lib/CBEDecode.sol";
-import {AmmMath} from "src/lib/AmmMath.sol";
 
 /// @title KnomosisBridge
 /// @notice The L1 bridge contract.  Hosts deposits, withdrawals,
@@ -265,6 +264,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     address public immutable disputeVerifier;
     address public immutable sequencerStake;
     address public immutable migration;
+    /// @notice The fault-proof rollback authority (SB ruling R6):
+    ///         a second address allowed to call `revertToPriorRoot`,
+    ///         alongside `disputeVerifier`.  Zero = disabled.
+    address public immutable faultProofRollbackAuthority;
 
     uint64 public immutable disputeWindowBlocks;
     uint64 public immutable maxRedemptionWindowBlocks;
@@ -324,10 +327,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         deployment time and immutable thereafter; e.g. 5000 bps =
     ///         50% of each fee deposit seeds AMM liquidity and 50% stays
     ///         as free pool reserves.  Validated `<= MAX_AMM_SEED_RATIO_BPS`
-    ///         in the constructor.  A value of 0 disables the AMM at
-    ///         construction (no deposit ever seeds the reserves, and the
-    ///         `ammSwap` path reverts on an empty reserve), preserving the
-    ///         pre-v1.3 behaviour exactly.  Workstream GP.11.1.
+    ///         in the constructor.  A value of 0 disables the pool at
+    ///         construction (no deposit ever seeds the L2 reserve
+    ///         actor, so the L2 swap's minimum-liquidity floor refuses
+    ///         every trade), preserving the pre-v1.3 behaviour
+    ///         exactly.  Workstream GP.11.1.
     uint16 public immutable ammSeedRatioBps;
 
     /// @notice EIP-712 domain components for state-root attestations.
@@ -399,16 +403,6 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
     // ---- Embedded-AMM compile-time caps (Workstream GP.11.1) ----
 
-    /// @notice Compile-time AMM swap fee in basis points.  30 bps =
-    ///         0.30%, matching Uniswap v2's standard fee.  Charged on
-    ///         every `ammSwap` (Workstream GP.11.3); accrues to the AMM
-    ///         reserves as LP yield for the gas pool (the sole LP).
-    /// @dev    Constitutional cap; a change is a Genesis-Plan §13.6
-    ///         amendment, pinned in source by
-    ///         `scripts/audit_compile_time_caps.sh` and at runtime by
-    ///         `AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`.
-    uint16 public constant AMM_SWAP_FEE_BPS = 30;
-
     /// @notice Compile-time hard cap on the AMM seed ratio (8000 bps =
     ///         80%).  At the cap only 20% of pool fees stay claimable by
     ///         the sequencer for immediate L1-gas reimbursement; the rest
@@ -421,6 +415,12 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `scripts/audit_compile_time_caps.sh` and at runtime by
     ///         `AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`.
     uint16 public constant MAX_AMM_SEED_RATIO_BPS = 8000;
+
+    // The excised L1 AMM's other two compile-time caps
+    // (`AMM_SWAP_FEE_BPS`, `AMM_MINIMUM_LIQUIDITY`) live on as
+    // `AmmMath.SWAP_FEE_BPS` / `AmmMath.MINIMUM_LIQUIDITY`, the
+    // constants the kernel's `Laws.reserveSwap` and the step VM's
+    // kind-25 arm price and floor the LIVE L2 pool with.
 
     // ---- BOLD constitutional pins (Workstream GP.5.4) ----
 
@@ -608,30 +608,16 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         withdrawal when BOLD is enabled.
     uint256 public boldTotalLockedValue;
 
-    // ---- Embedded-AMM reserves (Workstream GP.11.1) ----
-
-    /// @notice ETH currently in the AMM's reserves.  Funded from the gas
-    ///         pool's L1 reserve fraction allocated to AMM liquidity (the
-    ///         immutable `ammSeedRatioBps`).  Seeded on deposit
-    ///         (Workstream GP.11.2) and mutated by every `ammSwap`
-    ///         (Workstream GP.11.3); there is no admin or direct setter.
-    ///         Starts at 0; stays 0 for the lifetime of an
-    ///         `ammSeedRatioBps == 0` (AMM-disabled) deployment.
-    uint256 public ammReserveEth;
-
-    /// @notice BOLD currently in the AMM's reserves.  Same funding and
-    ///         mutation constraints as `ammReserveEth`, on the BOLD leg.
-    ///         Only ever non-zero on a BOLD-enabled deployment with a
-    ///         non-zero `ammSeedRatioBps`.
-    uint256 public ammReserveBold;
-
-    /// @notice Workstream GP.11.3 — the embedded-AMM kill switch (GP.11.10,
-    ///         pulled forward).  Once `true`, `ammSwap` reverts `AmmIsDisabled`
-    ///         and `_seedAmmReserves` stops accruing reserves; the reserves
-    ///         themselves are preserved (re-tagged as free gas-pool funds the
-    ///         sequencer can claim).  ONE-WAY: there is no path to reset it
-    ///         (`ammDisabled_is_monotonic`); reactivating the AMM requires a
-    ///         fresh bridge deployment.  Default `false`.
+    /// @notice The AMM disaster kill switch (GP.11.10), re-pointed at
+    ///         the LIVE L2 pool under the one-AMM topology.  Once
+    ///         `true`, `_ammSeedSplit` reports a zero seed (deposits
+    ///         stop feeding the L2 reserve actor), the L2 admission
+    ///         gate refuses every user `reserveSwap` (the committed
+    ///         `ammDisabled` state-root mirror is `BridgeAdmissibleWith`
+    ///         conjunct 10), and the bridge-signed `reclaimAmmReserves`
+    ///         sweep becomes admissible.  ONE-WAY: there is no path to
+    ///         reset it (`ammDisabled_is_monotonic`); reviving the pool
+    ///         requires a fresh deployment.  Default `false`.
     bool public ammDisabled;
 
     // ------------------------------------------------------------------
@@ -742,6 +728,21 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // only when the AMM cannot function (ratio 0 or BOLD-disabled).
         // Intended to be a multisig; validated `!= address(this)`.
         address ammDisasterRecovery;
+        // Workstream SB ruling R6: a SECOND rollback authority or-ed
+        // into `revertToPriorRoot`'s gate — the fault-proof path's
+        // `KnomosisDisputeVerifierV2`, so a challenger win drives the
+        // reverted range through to THIS contract's fund-safety gates
+        // (withdrawals, redemptions) instead of stopping at the
+        // state-root registry.  A second authority rather than a
+        // rebinding of `disputeVerifier`: V1 quorum upholds call
+        // `revertToPriorRoot` with no try/catch and self-check the
+        // binding, so rebinding would hard-revert every live V1
+        // uphold.  `address(0)` disables the second gate (a
+        // deployment without the fault-proof stack).  Forward
+        // reference (V2 is deployed after the bridge), so no
+        // code-existence check is possible here; the deploy scripts
+        // require-check the predicted address.
+        address faultProofRollbackAuthority;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
     }
@@ -937,6 +938,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         disputeVerifier = args.disputeVerifier;
         sequencerStake = args.sequencerStake;
         migration = args.migration;
+        faultProofRollbackAuthority = args.faultProofRollbackAuthority;
         disputeWindowBlocks = args.disputeWindowBlocks;
         maxRedemptionWindowBlocks = args.maxRedemptionWindowBlocks;
         maxAttestationStaleBlocks = args.maxAttestationStaleBlocks;
@@ -956,9 +958,6 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // path reads this immutable rather than the mainnet constant.
         boldToken = args.boldTokenAddress;
         // Workstream GP.11.1 — validated `<= MAX_AMM_SEED_RATIO_BPS` above.
-        // `ammReserveEth` / `ammReserveBold` are mutable state and start at
-        // 0 (the implicit default); they are seeded only on deposit
-        // (GP.11.2) and never directly settable.
         ammSeedRatioBps = args.ammSeedRatioBps;
         // Workstream GP.11.3 — the AMM kill-switch role (validated `!=
         // address(this)` above).  Stored verbatim; `address(0)` leaves the
@@ -1035,17 +1034,23 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     // Modifiers
     // ------------------------------------------------------------------
 
-    /// @notice The four §9.1.4 automatic circuit breakers.  Applied
-    ///         to every state-shaping entry point.  Pure-state
-    ///         predicates; no privileged caller required to
-    ///         "trip" them.
-    modifier circuitOpen() {
-        // (a) AttestationStale
+    /// @dev The `AttestationStale` breaker, as its own predicate so
+    ///      `submitStateRoot` can be exempted from THIS arm while still
+    ///      carrying the other three.
+    function _requireAttestationFresh() internal view {
         if (
             latestStateRootSubmittedAtBlock != 0
                 && block.number
                     > uint256(latestStateRootSubmittedAtBlock) + uint256(maxAttestationStaleBlocks)
         ) revert AttestationStale();
+    }
+
+    /// @dev Breaker arms (b), (c) and (d) — the three that apply to EVERY
+    ///      guarded entry point, `submitStateRoot` included.  Factored out
+    ///      so `circuitOpen` and `circuitOpenExceptStaleness` share one
+    ///      body and cannot drift apart: the exemption below is a single
+    ///      arm, and that has to stay true as arms are added.
+    function _requireOperationalBreakersOpen() internal view {
         // (b) DisputeCooldown
         if (
             lastUpheldDisputeBlock != 0
@@ -1059,6 +1064,45 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (migration != address(0) && IKnomosisMigration(migration).activated()) {
             revert MigrationActivated();
         }
+    }
+
+    /// @notice The `circuitOpen` breakers MINUS the attestation-staleness
+    ///         arm — for `submitStateRoot`, the one call that can clear it.
+    ///
+    /// @dev    The breaker is SELF-CLEARING, and this is what makes that
+    ///         possible.  `latestStateRootSubmittedAtBlock` is written by
+    ///         `submitStateRoot` and nowhere else, so gating that call on
+    ///         attestation freshness made the breaker absorbing: one
+    ///         missed window and no fresh root could ever be submitted,
+    ///         no later call could refresh the timestamp, and the bridge
+    ///         was bricked permanently with no recovery path short of
+    ///         redeploying.
+    ///
+    ///         Submitting a fresh, attestor-signed state root IS the
+    ///         recovery action, so it is the one thing staleness must not
+    ///         block.  Everything else the breaker guards — deposits,
+    ///         withdrawals, the fee-split paths — stays blocked while the
+    ///         attestation is stale, and unblocks automatically the moment
+    ///         a fresh root lands.  No governance action, no human in the
+    ///         loop.
+    ///
+    ///         The other three arms still apply here: an upheld dispute's
+    ///         cooldown, the TVL cap and an activated migration are all
+    ///         reasons a new root should NOT be accepted, and none of them
+    ///         is cleared by accepting one.
+    modifier circuitOpenExceptStaleness() {
+        _requireOperationalBreakersOpen();
+        _;
+    }
+
+    /// @notice The four §9.1.4 automatic circuit breakers.  Applied
+    ///         to every state-shaping entry point.  Pure-state
+    ///         predicates; no privileged caller required to
+    ///         "trip" them.
+    modifier circuitOpen() {
+        // (a) AttestationStale
+        _requireAttestationFresh();
+        _requireOperationalBreakersOpen();
         _;
     }
 
@@ -1107,15 +1151,6 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         can never be `address(0)`).
     modifier onlyAmmDisasterRecovery() {
         if (msg.sender != ammDisasterRecovery) revert NotAmmDisasterRecovery();
-        _;
-    }
-
-    /// @notice Gates the embedded AMM on the one-way `ammDisabled` kill
-    ///         switch.  Reverts `AmmIsDisabled` once `emergencyDisableAmm`
-    ///         has been triggered.  Applied to `ammSwap` (and any future
-    ///         AMM-modifying entry point).
-    modifier ammActive() {
-        if (ammDisabled) revert AmmIsDisabled();
         _;
     }
 
@@ -1399,11 +1434,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     /// @notice Shared fee-split deposit bookkeeping.  Resource-generic
     ///         so the BOLD entry point (GP.5.4) can reuse it verbatim.
     ///         Enforces the TVL cap on the FULL deposit
-    ///         (`userAmount + poolAmount`), seeds the embedded AMM from
-    ///         the pool fee (Workstream GP.11.2), bumps the per-depositor
-    ///         nonce, computes the canonical `receiptHash` (which binds the
-    ///         GP.11.2 `ammSeedAmount`), and emits `DepositWithFeeInitiated`
-    ///         carrying the split.  Makes no external calls.
+    ///         (`userAmount + poolAmount`), computes the AMM seed split
+    ///         of the pool fee (Workstream GP.11.2 / SB L2-primary — the
+    ///         seed is credited on L2, no L1 reserve grows), bumps the
+    ///         per-depositor nonce, computes the canonical `receiptHash`
+    ///         (which binds the `ammSeedAmount`), and emits
+    ///         `DepositWithFeeInitiated` carrying the split.  Makes no
+    ///         external calls.
     /// @dev    Conservation across the whole fee-split deposit:
     ///         `userAmount + poolAmount == deposit` (the entry point's
     ///         floor split), and `poolAmount == ammSeedAmount +
@@ -1413,11 +1450,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         The `receiptHash` binds `poolAmount` and `ammSeedAmount`
     ///         as INDEPENDENT fields, and that independence is
     ///         load-bearing: `ammSeedAmount` is **not** a pure function
-    ///         of `poolAmount` and `ammSeedRatioBps`.  `_seedAmmReserves`
+    ///         of `poolAmount` and `ammSeedRatioBps`.  `_ammSeedSplit`
     ///         also returns zero when `boldEnabled` is false (an
-    ///         ETH<->BOLD pair that can never swap must not accrue
-    ///         reserves) and when the mutable GP.11.3 `ammDisabled` kill
-    ///         switch has fired.  An L2 ingestor that recomputed the
+    ///         ETH<->BOLD pair that can never swap must not feed the
+    ///         reserve actor) and when the mutable GP.11.3 `ammDisabled`
+    ///         kill switch has fired.  An L2 ingestor that recomputed the
     ///         split from `(poolAmount, ammSeedRatioBps)` alone would
     ///         therefore diverge from the chain on every deposit made
     ///         after an emergency disable.  Read `ammSeedAmount` from
@@ -1453,19 +1490,18 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             boldTotalLockedValue = newBoldTvl;
         }
 
-        // Workstream GP.11.2 — carve the AMM-liquidity seed out of the
-        // pool fee and grow the matching reserve.  Pure internal
-        // accounting over funds already escrowed by the calling entry
-        // point; the reclassified value stays inside `totalLockedValue`
-        // (the seed is a subset of `poolAmount`, which is a subset of the
-        // already-counted `amount`), so no TVL re-accounting is needed.
-        // Runs after the cap checks so a capped-out deposit reverts
-        // before any reserve is touched.  `ammSeedAmount` is carried in the
-        // canonical `DepositWithFeeInitiated` event AND bound in the
-        // `receiptHash` below, so the free-pool / AMM split is observable
-        // and tamper-evident on L2 (`freePoolAmount == poolAmount -
-        // ammSeedAmount`).
-        uint256 ammSeedAmount = _seedAmmReserves(resourceId, poolAmount);
+        // Workstream GP.11.2 as re-cut by Workstream SB (L2-primary
+        // topology) — compute the AMM seed split of the pool fee.  A
+        // pure read: no L1 reserve is grown; the seed leg is credited
+        // ON L2 (the `depositWithFee` law's third leg, to the reserve
+        // actor) from the `ammSeedAmount` carried in the canonical
+        // `DepositWithFeeInitiated` event AND bound in the
+        // `receiptHash` below, so the free-pool / AMM split is
+        // observable and tamper-evident (`freePoolAmount == poolAmount
+        // - ammSeedAmount`).  The wei stays in this contract's general
+        // escrow — already counted in `totalLockedValue` — backing the
+        // L2 reserve actor's balance.
+        uint256 ammSeedAmount = _ammSeedSplit(resourceId, poolAmount);
 
         uint64 nonce = depositNonce[msg.sender];
         bytes32 receiptHash = keccak256(
@@ -1497,13 +1533,19 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         );
     }
 
-    /// @notice Workstream GP.11.2 — split a pool fee into an AMM-liquidity
-    ///         seed and a sequencer-claimable free-pool remainder, growing
-    ///         the matching reserve by the seed.  Pure internal accounting:
-    ///         no external calls, no event (the caller binds + emits
-    ///         `ammSeedAmount` in the canonical `DepositWithFeeInitiated`).
+    /// @notice Workstream GP.11.2 as re-cut by Workstream SB (the
+    ///         L2-primary pool topology): compute the AMM-liquidity SEED
+    ///         SPLIT of a pool fee — without accruing any L1 reserve.
+    ///         The seed leg is credited ON L2: the L2 `depositWithFee`
+    ///         law's third leg credits `Bridge.ammReserveActor` with the
+    ///         `ammSeedAmount` this function reports (read from the
+    ///         canonical `DepositWithFeeInitiated` event, bound in the
+    ///         receipt hash), and the wei itself stays in this contract's
+    ///         GENERAL ESCROW backing that L2 balance — ordinary TVL
+    ///         accounting, no reclassification.  (The excised L1 books
+    ///         are gone; the L2 reserve actor's balances ARE the pool.)
     /// @param  resourceId  The deposit's resource; only the ETH and BOLD
-    ///                     gas legs are seeded.
+    ///                     gas legs carry a seed split.
     /// @param  poolAmount  The pool fee to split.
     /// @return ammSeedAmount  `floor(poolAmount * ammSeedRatioBps / 10000)`
     ///                     (`0` when the AMM is disabled, the resource is
@@ -1513,29 +1555,31 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     /// @dev    `ammSeedRatioBps <= MAX_AMM_SEED_RATIO_BPS = 8000 < 10000`
     ///         (constructor-enforced), so `ammSeedAmount <= poolAmount` and
     ///         the free-pool remainder is non-negative.  The `poolAmount *
-    ///         ratio` multiply and the `reserve + ammSeedAmount` add use
-    ///         checked arithmetic: both are physically unreachable to
-    ///         overflow (`poolAmount` and the reserve are bounded by the
+    ///         ratio` multiply uses checked arithmetic: physically
+    ///         unreachable to overflow (`poolAmount` is bounded by the
     ///         deployment's `tvlCap`, `ratio <= 8000`), and a hypothetical
-    ///         overflow reverts rather than wrapping.  The explicit
-    ///         per-resource `if`/`else if` (no `else` write) means an
-    ///         out-of-gas-leg resource seeds NOTHING — defence-in-depth, as
+    ///         overflow reverts rather than wrapping.  An out-of-gas-leg
+    ///         resource splits NOTHING — defence-in-depth, as
     ///         `_registerDepositWithFee` is only ever reached with the ETH
-    ///         or BOLD resource today.
+    ///         or BOLD resource today — and the zero is load-bearing on
+    ///         L2 too: the L2 seed leg credits exactly what this reports.
     /// @dev    GP.11.3 — once the AMM kill switch is triggered
-    ///         (`emergencyDisableAmm` ⇒ `ammDisabled`), this returns 0 before
-    ///         computing the seed, so a disabled AMM stops accruing reserves.
-    ///         The split stays observable + bound because the actual
-    ///         `ammSeedAmount` (0 once disabled) is emitted in the canonical
+    ///         (`emergencyDisableAmm` ⇒ `ammDisabled`), this returns 0
+    ///         before computing the seed, so a disabled AMM's deposits
+    ///         stop feeding the L2 reserve actor.  The split stays
+    ///         observable + bound because the actual `ammSeedAmount` (0
+    ///         once disabled) is emitted in the canonical
     ///         `DepositWithFeeInitiated` event regardless.
-    /// @dev    `internal` (not `private`) so a test harness can drive all
-    ///         branches directly — in particular the off-gas-leg `else`
-    ///         path, which is unreachable through the public entry points
-    ///         (ETH / BOLD only) and would otherwise be uncoverable.  It
-    ///         exposes nothing externally (no ABI selector) and the contract
-    ///         is not designed for production inheritance.
-    function _seedAmmReserves(uint64 resourceId, uint256 poolAmount)
+    /// @dev    `view` is the structural enforcement of the non-accrual:
+    ///         the compiler refuses any storage write here, so the
+    ///         L2-primary topology cannot silently regress.  `internal`
+    ///         (not `private`) so a test harness can drive all branches
+    ///         directly — in particular the off-gas-leg path, which is
+    ///         unreachable through the public entry points (ETH / BOLD
+    ///         only) and would otherwise be uncoverable.
+    function _ammSeedSplit(uint64 resourceId, uint256 poolAmount)
         internal
+        view
         returns (uint256 ammSeedAmount)
     {
         uint16 ratio = ammSeedRatioBps;
@@ -1543,104 +1587,38 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (ratio == 0) {
             return 0;
         }
-        // The AMM is an ETH<->BOLD pair: with BOLD disabled it can NEVER swap
-        // (ammSwap reverts AmmEmpty), so seeding would only divert ETH fees
-        // into a permanently unswappable reserve.  A BOLD-disabled deployment
-        // therefore seeds NOTHING regardless of the configured ratio — the
-        // whole poolAmount stays sequencer-claimable free pool.  This is
-        // load-bearing, not mere defence in depth: the constructor's
-        // `AmmDisasterRecoveryRequired` guard is nested under `boldEnabled`, so
-        // a `ratio > 0 && !boldEnabled` deployment is reachable.
+        // The AMM is an ETH<->BOLD pair: with BOLD disabled it can NEVER
+        // swap, so a seed split would only divert ETH fees toward a
+        // reserve actor that can never trade them back.  A BOLD-disabled
+        // deployment therefore splits NOTHING regardless of the
+        // configured ratio — the whole poolAmount stays
+        // sequencer-claimable free pool.  This is load-bearing, not mere
+        // defence in depth: the constructor's
+        // `AmmDisasterRecoveryRequired` guard is nested under
+        // `boldEnabled`, so a `ratio > 0 && !boldEnabled` deployment is
+        // reachable.
         if (!boldEnabled) {
             return 0;
         }
-        // GP.11.3 kill switch: once the AMM is emergency-disabled it stops
-        // accruing reserves; the whole poolAmount stays as free pool.
+        // GP.11.3 kill switch: once the AMM is emergency-disabled the
+        // split is zero; the whole poolAmount stays as free pool.
         if (ammDisabled) {
+            return 0;
+        }
+        // Out-of-scope resource: never split for an unrelated reserve.
+        // Unreachable via the current entry points (ETH / BOLD only);
+        // kept so a future fee-split resource cannot silently mis-seed.
+        if (resourceId != RESOURCE_ID_NATIVE_ETH && resourceId != RESOURCE_ID_BOLD) {
             return 0;
         }
 
         ammSeedAmount = (poolAmount * uint256(ratio)) / 10_000;
-        // Dust deposit floored to a zero seed: nothing to move.
-        if (ammSeedAmount == 0) {
-            return 0;
-        }
-
-        if (resourceId == RESOURCE_ID_NATIVE_ETH) {
-            ammReserveEth += ammSeedAmount;
-        } else if (resourceId == RESOURCE_ID_BOLD) {
-            ammReserveBold += ammSeedAmount;
-        } else {
-            // Out-of-scope resource: never seed an unrelated reserve.
-            // Unreachable via the current entry points (ETH / BOLD only);
-            // kept so a future fee-split resource cannot silently mis-seed.
-            return 0;
-        }
     }
 
     // ------------------------------------------------------------------
-    // Workstream GP.11.3 — embedded ETH<->BOLD AMM swap
+    // GP.11.10 — AMM disaster recovery (the L2 pool's kill switch)
     // ------------------------------------------------------------------
 
-    /// @notice Emitted on every successful `ammSwap`.  `newReserveIn` /
-    ///         `newReserveOut` are the post-swap reserves of the INPUT /
-    ///         OUTPUT assets respectively (mapped to ETH / BOLD by
-    ///         `fromResource` / `toResource`), so an off-chain consumer can
-    ///         reconstruct the full reserve state without re-reading storage.
-    event AmmSwapExecuted(
-        address indexed swapper,
-        uint64 indexed fromResource,
-        uint64 indexed toResource,
-        uint256 amountIn,
-        uint256 amountOut,
-        uint256 newReserveIn,
-        uint256 newReserveOut
-    );
-
-    /// @notice The swap's `deadline` (a unix timestamp) has passed.  MEV
-    ///         protection against a transaction sitting in the mempool.
-    error SwapDeadlineExpired();
-    /// @notice `amountIn == 0` — a swap must supply a positive input.
-    error ZeroSwapInput();
-    /// @notice The computed output floored to zero (a dust input relative to
-    ///         the reserves).  Rejected so a swap can never donate its input
-    ///         to the pool for nothing (Uniswap v2's positive-output rule).
-    error ZeroSwapOutput();
-    /// @notice For an ETH-input swap, `msg.value` did not equal `amountIn`.
-    error EthAmountMismatch(uint256 expected, uint256 actual);
-    /// @notice For a BOLD-input swap, ETH was sent alongside (must be zero).
-    error UnexpectedEth();
-    /// @notice `fromResource` is neither ETH (0) nor BOLD (1) — the AMM is
-    ///         an ETH<->BOLD market only.
-    error UnsupportedSwapResource(uint64 resource);
-    /// @notice A reserve is zero: the pool is unseeded (or BOLD is disabled,
-    ///         in which case the BOLD reserve is permanently zero), so no
-    ///         constant-product swap is possible.
-    error AmmEmpty();
-    /// @notice The computed output is below the caller's `minAmountOut`
-    ///         (slippage protection).
-    error SlippageExceeded(uint256 actualOut, uint256 minOut);
-    /// @notice Defence-in-depth: the constant-product math proves
-    ///         `amountOut < reserveOut` strictly, so this never fires; it
-    ///         guards against a hypothetical swap-math regression that would
-    ///         otherwise drain a reserve to (or past) zero.
-    error ReserveExhausted();
-    /// @notice The ETH output transfer to the swapper failed (recipient
-    ///         reverted or rejected the value).
-    error EthTransferFailed();
-    /// @notice Defence-in-depth: the post-swap product
-    ///         `newReserveIn * newReserveOut` is less than the pre-swap
-    ///         product (k decreased).  Mathematically unreachable — the
-    ///         retained fee makes k monotonically non-decreasing — so this
-    ///         only fires if `AmmMath.getAmountOut` regressed, failing the
-    ///         swap closed instead of leaking value out of the pool.
-    error AmmKInvariantViolated();
-    /// @notice The AMM has been disabled via `emergencyDisableAmm` (GP.11.3 /
-    ///         GP.11.10 kill switch); every `ammSwap` now reverts.
-    error AmmIsDisabled();
-    /// @notice The GP.5.5 BOLD circuit breaker is closed (a depeg signal), so
-    ///         the AMM is frozen — `ammSwap` reverts until the circuit reopens.
-    error AmmPausedByBoldCircuit();
     /// @notice `emergencyDisableAmm` was called by an address other than the
     ///         immutable `ammDisasterRecovery` role.
     error NotAmmDisasterRecovery();
@@ -1648,18 +1626,21 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         disabled (the kill switch is one-way and idempotent-by-revert).
     error AmmAlreadyDisabled();
 
-    /// @notice Emitted on `emergencyDisableAmm`, carrying the block timestamp
-    ///         and the reserves at the moment of the one-way pause (which are
-    ///         left untouched — re-tagged as free gas-pool funds, not moved).
-    event AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256 reserveBold);
+    /// @notice Emitted on `emergencyDisableAmm`, carrying the block
+    ///         timestamp of the one-way pause.  (The excised L1 books'
+    ///         two reserve arguments are gone with the books; the LIVE
+    ///         pool's balances are L2 state the ingest layer already
+    ///         watches through the state root.)
+    event AmmDisabled(uint256 timestamp);
 
-    /// @notice Operator-triggered emergency pause of the embedded AMM (the
-    ///         GP.11.10 disaster-recovery kill switch, pulled forward into
-    ///         GP.11.3).  After this call `ammSwap` reverts `AmmIsDisabled`
-    ///         and `_seedAmmReserves` stops accruing reserves; the reserves
-    ///         themselves are PRESERVED (not zeroed or moved — they remain
-    ///         claimable by the sequencer through the existing gas-pool
-    ///         mechanism).  A graceful shutdown of the AMM, not a value drain.
+    /// @notice Operator-triggered emergency pause of the LIVE L2 pool
+    ///         (the GP.11.10 disaster-recovery kill switch).  After this
+    ///         call `_ammSeedSplit` reports a zero seed (deposits stop
+    ///         feeding the L2 reserve actor), the committed `ammDisabled`
+    ///         state-root mirror makes every user `reserveSwap`
+    ///         inadmissible on L2, and the bridge-signed
+    ///         `reclaimAmmReserves` sweep becomes admissible.  A graceful
+    ///         shutdown of the pool, not a value drain.
     /// @dev    ONE-WAY: `ammDisabled` cannot be reset (`ammDisabled_is_monotonic`);
     ///         re-enabling the AMM requires a fresh bridge deployment.
     ///         Deliberately stricter than the BOLD circuit breaker (which
@@ -1669,202 +1650,18 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     function emergencyDisableAmm() external onlyAmmDisasterRecovery {
         if (ammDisabled) revert AmmAlreadyDisabled();
         ammDisabled = true;
-        emit AmmDisabled(block.timestamp, ammReserveEth, ammReserveBold);
+        emit AmmDisabled(block.timestamp);
     }
 
-    /// @notice Permissionless ETH<->BOLD swap via the bridge's internal
-    ///         constant-product AMM.  The fee is the immutable
-    ///         `AMM_SWAP_FEE_BPS` (0.30%); fee revenue STAYS in the
-    ///         reserves (Uniswap v2-style), growing the pool over time as LP
-    ///         yield for the gas pool.
-    ///
-    /// @param  fromResource  Resource the caller supplies
-    ///                       (`RESOURCE_ID_NATIVE_ETH` = 0 or
-    ///                       `RESOURCE_ID_BOLD` = 1).
-    /// @param  amountIn      Amount of the input resource supplied.  For an
-    ///                       ETH swap this MUST equal `msg.value`; for a BOLD
-    ///                       swap it is pulled via `safeTransferFrom` and
-    ///                       `msg.value` must be zero.
-    /// @param  minAmountOut  Minimum acceptable output; the call reverts
-    ///                       `SlippageExceeded` if the computed output is
-    ///                       less.  Set to 0 only when the exact output has
-    ///                       been pre-computed (e.g. an arbitrage bot); a
-    ///                       wallet should always pass a positive bound.
-    /// @param  deadline      Unix timestamp after which the swap reverts
-    ///                       (`SwapDeadlineExpired`).  Standard Uniswap
-    ///                       MEV-protection; set ~5 minutes ahead.
-    /// @return amountOut     The output amount sent to the caller.
-    ///
-    /// @dev    Solvency.  A swap NEVER touches `totalLockedValue` /
-    ///         `boldTotalLockedValue`: the AMM is a self-contained,
-    ///         value-conserving sub-pool whose total economic value is
-    ///         preserved (and grows by the fee) on every swap.  Solvency is
-    ///         guaranteed instead by the REAL-TOKEN-BACKING invariants
-    ///         `ammReserveEth <= address(this).balance` and
-    ///         `ammReserveBold <= BOLD.balanceOf(this)`: each reserve moves
-    ///         in EXACT lockstep with the matching real balance (input
-    ///         reserve += amountIn and balance += amountIn; output reserve
-    ///         -= amountOut and balance -= amountOut), so both invariants are
-    ///         preserved by construction (`AmmInvariants.t.sol`).  Because a
-    ///         swap only ever touches the AMM reserves — never any L2 user's
-    ///         backing — every pending L2 withdrawal stays fully backed.
-    ///         (The GP.11.2 deposit-only `reserves <= TVL` bound mixes
-    ///         incommensurable ETH-wei and BOLD-wei units and is NOT a swap
-    ///         invariant; the real-token-backing bounds above are the
-    ///         meaningful cross-currency solvency statement.)
-    /// @dev    Checks-Effects-Interactions.  Reserves are updated (effects)
-    ///         BEFORE the output transfer (interaction), and the whole
-    ///         function is `nonReentrant`, so a malicious BOLD token or a
-    ///         malicious ETH recipient cannot re-enter to double-spend
-    ///         (`AmmReentrancy.t.sol`).
-    /// @dev    Availability.  Three independent brakes gate the swap (GP.11.3):
-    ///         the `ammActive` modifier reverts `AmmIsDisabled` once an
-    ///         operator triggers the one-way `emergencyDisableAmm()` kill
-    ///         switch; the body reverts `AmmPausedByBoldCircuit` while the
-    ///         GP.5.5 BOLD circuit breaker is closed (an automatic depeg
-    ///         freeze); and the body reverts `MigrationActivated` once the
-    ///         bridge has migrated to a successor (the migration arm of the
-    ///         `circuitOpen` breaker — a retired bridge's AMM freezes; the
-    ///         transient attestation-stale / dispute-cooldown arms are
-    ///         deliberately NOT applied, keeping the AMM up during those
-    ///         recoverable states).  None moves any reserve.
-    function ammSwap(uint64 fromResource, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
-        external
-        payable
-        nonReentrant
-        ammActive
-        returns (uint256 amountOut)
-    {
-        // ---- Checks ----
-        // A ~12s validator timestamp nudge is irrelevant to a deadline set
-        // minutes ahead; this is the standard Uniswap MEV-staleness guard.
-        // forge-lint: disable-next-line(block-timestamp)
-        if (block.timestamp > deadline) revert SwapDeadlineExpired();
-        if (amountIn == 0) revert ZeroSwapInput();
-        // The AMM is an ETH<->BOLD market; on a BOLD-disabled deployment the
-        // BOLD reserve is permanently zero, so no swap can ever be valid.
-        // Fail early + clearly here rather than at a `transferFrom` to the
-        // empty BOLD address (BOLD-disabled) or the reserve check below.
-        if (!boldEnabled) revert AmmEmpty();
-        // GP.11.3 — the GP.5.5 BOLD circuit breaker also freezes the AMM: a
-        // closed circuit (manual close OR the permissionless Liquity-shutdown
-        // auto-trigger) signals a BOLD depeg, during which the AMM's price is
-        // stale and BOLD->ETH swaps would drain the gas pool's ETH reserve at
-        // a bad rate.  Halting both directions while the L2 `withdrawWithProof`
-        // exit path stays open keeps the "deposits halted, withdrawals
-        // continue" posture (the AMM is an optional liquidity service).
-        if (boldCircuitClosed) revert AmmPausedByBoldCircuit();
-        // GP.11.3 review fix — freeze the AMM once the bridge has MIGRATED to a
-        // successor.  A migrated bridge is permanently retired; leaving swaps
-        // live would let callers keep mutating the old bridge's reserves and
-        // move real assets after the hand-off, contradicting the migration
-        // freeze the rest of the bridge enforces via `circuitOpen`.  Only the
-        // MIGRATION arm of `circuitOpen` is applied here; the transient arms
-        // (attestation-stale / dispute-cooldown) are deliberately NOT, so the
-        // AMM stays available as an optional liquidity service during those
-        // recoverable states (its own one-way kill switch + the BOLD-breaker
-        // depeg freeze remain the AMM-specific brakes).
-        if (migration != address(0) && IKnomosisMigration(migration).activated()) {
-            revert MigrationActivated();
-        }
-
-        uint256 reserveIn;
-        uint256 reserveOut;
-        uint64 toResource;
-        bool ethIn;
-
-        if (fromResource == RESOURCE_ID_NATIVE_ETH) {
-            // ETH in: `msg.value` carries the input; no token pull.
-            if (msg.value != amountIn) revert EthAmountMismatch(amountIn, msg.value);
-            reserveIn = ammReserveEth;
-            reserveOut = ammReserveBold;
-            toResource = RESOURCE_ID_BOLD;
-            ethIn = true;
-        } else if (fromResource == RESOURCE_ID_BOLD) {
-            // BOLD in: no ETH may accompany the call.
-            if (msg.value != 0) revert UnexpectedEth();
-            // Pull `amountIn` BOLD-wei and verify the received balance delta
-            // (defence-in-depth against a fee-on-transfer / rebasing BOLD),
-            // mirroring `depositBoldWithFee`.  This `safeTransferFrom` is the
-            // only call before the reserve update and is `nonReentrant`-
-            // guarded; the post-pull reserve read is therefore stable.
-            IERC20 bold = IERC20(boldToken);
-            uint256 balBefore = bold.balanceOf(address(this));
-            bold.safeTransferFrom(msg.sender, address(this), amountIn);
-            uint256 balAfter = bold.balanceOf(address(this));
-            // Underflow-safe: a successful `safeTransferFrom` credits this
-            // contract, so `balAfter >= balBefore`.
-            uint256 received;
-            unchecked {
-                received = balAfter - balBefore;
-            }
-            if (received != amountIn) revert BoldTransferAmountMismatch(amountIn, received);
-            reserveIn = ammReserveBold;
-            reserveOut = ammReserveEth;
-            toResource = RESOURCE_ID_NATIVE_ETH;
-            ethIn = false;
-        } else {
-            revert UnsupportedSwapResource(fromResource);
-        }
-
-        // Both reserves must be seeded for the constant-product curve.
-        if (reserveIn == 0 || reserveOut == 0) revert AmmEmpty();
-
-        // Constant-product output net of the retained 0.30% fee.  `AmmMath`
-        // guarantees `amountOut < reserveOut` strictly.
-        amountOut = AmmMath.getAmountOut(amountIn, reserveIn, reserveOut, uint256(AMM_SWAP_FEE_BPS));
-
-        // Reject a dust input whose output floors to zero (no value out).
-        if (amountOut == 0) revert ZeroSwapOutput();
-        if (amountOut < minAmountOut) revert SlippageExceeded(amountOut, minAmountOut);
-        // Defence-in-depth; provably unreachable (see `ReserveExhausted`).
-        if (amountOut >= reserveOut) revert ReserveExhausted();
-
-        // ---- Effects ----
-        // `newReserveIn` is a CHECKED add (reverts on the physically-
-        // unreachable overflow — reserves are bounded by the TVL cap);
-        // `newReserveOut` is a proven-safe subtraction (`amountOut <
-        // reserveOut` checked just above).
-        uint256 newReserveIn = reserveIn + amountIn;
-        uint256 newReserveOut;
-        unchecked {
-            newReserveOut = reserveOut - amountOut;
-        }
-
-        // Belt-and-braces k-monotonicity: the retained fee makes
-        // `newReserveIn * newReserveOut >= reserveIn * reserveOut` by
-        // construction (and the output flooring only adds to it).  Assert it
-        // on-chain so a swap-math regression fails closed rather than leaking
-        // value out of the pool.  The products are bounded by TVL^2, far
-        // below `uint256.max` for any realistic reserves.
-        if (newReserveIn * newReserveOut < reserveIn * reserveOut) {
-            revert AmmKInvariantViolated();
-        }
-
-        if (ethIn) {
-            ammReserveEth = newReserveIn;
-            ammReserveBold = newReserveOut;
-        } else {
-            ammReserveBold = newReserveIn;
-            ammReserveEth = newReserveOut;
-        }
-
-        // ---- Interactions ----
-        if (ethIn) {
-            // Send the BOLD output to the caller.
-            IERC20(boldToken).safeTransfer(msg.sender, amountOut);
-        } else {
-            // Send the ETH output to the caller.  Reserves are already
-            // updated and `nonReentrant` is held, so a re-entrant recipient
-            // cannot double-spend.
-            (bool sent,) = msg.sender.call{value: amountOut}("");
-            if (!sent) revert EthTransferFailed();
-        }
-
-        emit AmmSwapExecuted(
-            msg.sender, fromResource, toResource, amountIn, amountOut, newReserveIn, newReserveOut
-        );
-    }
+    // The embedded ETH<->BOLD constant-product AMM (`ammSwap`,
+    // GP.11.3) that lived here was EXCISED under the one-AMM
+    // L2-primary topology: the user-facing swap is the L2
+    // `Laws.reserveSwap` (kernel action 25) over the reserve actor's
+    // live balances, funded by the deposit fee-split's seed leg.  The
+    // disaster-recovery kill switch (`emergencyDisableAmm`,
+    // `ammDisabled`) survives, re-pointed at the L2 pool: firing it
+    // halts L2 swap admission and unlocks the bridge-signed
+    // `reclaimAmmReserves` sweep.
 
     // ------------------------------------------------------------------
     // E.1.2 State-root submission
@@ -1879,7 +1676,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
     function submitStateRoot(bytes32 root, uint64 logIndexHigh, bytes calldata attestorSig)
         external
-        circuitOpen
+        circuitOpenExceptStaleness
     {
         if (logIndexHigh <= latestSubmittedLogIndexHigh) revert NonMonotonic();
         if (attestorSig.length != 65) revert InvalidSignatureLength();
@@ -1954,16 +1751,28 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///           CBE bytes   recipientL1  (29 bytes; 1 tag + 8 length + 20 payload)
     ///           CBE amount  amount       (17 bytes; 1 tag + 16 LE)
     ///           CBE uint    l2LogIndex   (9 bytes)
-    ///         Total: 64 bytes — the audit-2 lossless 20-byte address
-    ///         encoding, plus the amount on the wide head.  `amount` is
-    ///         wei-denominated and this is the EXIT path, so a narrow
-    ///         head would have capped what a withdrawal could redeem
-    ///         (and silently truncated anything above it).
+    ///           CBE uint    wdId         (9 bytes)
+    ///         The audit-2 lossless 20-byte address encoding, plus the
+    ///         amount on the wide head.  `amount` is wei-denominated and
+    ///         this is the EXIT path, so a narrow head would have capped
+    ///         what a withdrawal could redeem (and silently truncated
+    ///         anything above it).
+    ///
+    ///         `wdId` is the withdrawal's key in Lean's
+    ///         `BridgeState.pending`, and therefore its POSITION in the
+    ///         SMT `WithdrawalRoot.rangeRoot` builds.  It is the field a
+    ///         submitted proof's index is bound to.  It used to be
+    ///         absent, and the binding was to `l2LogIndex` — a different
+    ///         counter, which advances on every action while the
+    ///         withdrawal id advances only on withdrawals.  The two
+    ///         diverge permanently after the first non-withdraw action,
+    ///         so every honest proof was rejected.
     struct PendingWithdrawal {
         uint64 resourceId;
         address recipientL1;
         uint256 amount;
         uint64 l2LogIndex;
+        uint64 wdId;
     }
 
     /// @notice The proof shape mirrors Lean's `WithdrawalProof`:
@@ -2018,7 +1827,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // length comparison that the keccak check already
         // subsumes.
         if (keccak256(proofLeaf) != leafHash) revert InvalidProof();
-        if (proofIndex != wd.l2LogIndex) revert InvalidProof();
+        // Bind the proof's tree position to the leaf's OWN claim about
+        // where it sits.  The check exists so a prover cannot choose
+        // the position; binding it to `l2LogIndex` did that job for a
+        // counter the tree is not keyed by, so it rejected every honest
+        // proof instead.  `wdId` is the key `appendWithdrawal` inserted
+        // at, which is exactly the SMT position.
+        if (proofIndex != wd.wdId) revert InvalidProof();
         if (!SmtVerifier.verifyProof(uint256(proofIndex), proofLeaf, siblings, root)) {
             revert InvalidProof();
         }
@@ -2076,6 +1891,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         (wd.recipientL1, off) = CBEDecode.readAddressExact(leafBlob, off);
         (wd.amount, off) = CBEDecode.readAmount(leafBlob, off);
         (wd.l2LogIndex, off) = CBEDecode.readUint(leafBlob, off);
+        (wd.wdId, off) = CBEDecode.readUint(leafBlob, off);
         CBEDecode.assertFullyConsumed(leafBlob, off);
     }
 
@@ -2122,7 +1938,14 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     );
 
     function revertToPriorRoot(uint64 disputedLogIndexHigh) external {
-        if (msg.sender != disputeVerifier) revert NotDisputeVerifier();
+        // Two authorities (SB ruling R6): the V1 dispute verifier
+        // (quorum upholds) and the fault-proof rollback authority
+        // (challenger wins driven through `KnomosisDisputeVerifierV2`).
+        // A zero authority disables the second gate on its own —
+        // `msg.sender` is never the zero address.
+        if (msg.sender != disputeVerifier && msg.sender != faultProofRollbackAuthority) {
+            revert NotDisputeVerifier();
+        }
 
         // O(1) reversion: track the (floor, ceiling) pair.
         //   - floor lowers monotonically (only decreases).

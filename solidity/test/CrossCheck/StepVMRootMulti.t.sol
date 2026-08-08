@@ -3,6 +3,7 @@ pragma solidity 0.8.36;
 
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {SmtMultiVerifier} from "src/lib/SmtMultiVerifier.sol";
+import {AmmMath} from "src/lib/AmmMath.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
 import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
@@ -302,7 +303,7 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     function test_bulk_variants_are_refused() public {
         KnomosisStepVMRoot.OpenedCell[] memory none_ =
             new KnomosisStepVMRoot.OpenedCell[](0);
-        uint8[3] memory kinds = [uint8(6), uint8(7), uint8(25)];
+        uint8[3] memory kinds = [uint8(6), uint8(7), uint8(26)];
         for (uint256 i = 0; i < kinds.length; i++) {
             vm.expectRevert(
                 abi.encodeWithSelector(
@@ -325,11 +326,14 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     ///         scheme, so it outlives the entry point that first
     ///         asserted it.
     function test_isAdjudicable_excludes_exactly_the_bulk_pair() public {
-        for (uint256 k = 0; k <= 30; k++) {
+        for (uint8 k = 0; k <= 30; k++) {
             beginEntry(string.concat("#", vm.toString(k)));
-            bool expected = k <= 24 && k != 6 && k != 7;
+            // The bulk pair (6, 7) by the write-set decision; 23 as the
+            // retired L1-AMM ammSwap mirror, a permanent hole refused
+            // like a never-assigned kind.
+            bool expected = k <= 25 && k != 6 && k != 7 && k != 23;
             checkEq(
-                StepWrites.isAdjudicable(uint8(k)), expected,
+                StepWrites.isAdjudicable(k), expected,
                 string.concat("adjudicability at kind ", vm.toString(k))
             );
         }
@@ -352,10 +356,11 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     ///         plan said it was, and no probe exceeds it.
     function test_the_opening_cap_is_derived_from_the_write_set() public {
         vmRoot.assertConsistent();
-        // `depositWithFee` writes six cells; plus the policy cell.
-        assertEq(vmRoot.widestFrontier(new bytes(128)), 7, "widest frontier");
+        // `depositWithFee` writes seven cells (Workstream SB's seed
+        // leg); plus the policy cell.
+        assertEq(vmRoot.widestFrontier(new bytes(160)), 8, "widest frontier");
         assertLe(
-            vmRoot.widestFrontier(new bytes(128)),
+            vmRoot.widestFrontier(new bytes(160)),
             vmRoot.MAX_CELL_OPENINGS(),
             "the cap must exceed the widest frontier"
         );
@@ -363,7 +368,7 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         if (!fixtureExists(STEP_VM_FIXTURE)) return;
         string memory raw = readFixture(STEP_VM_FIXTURE);
         uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
-        uint256 cap = vmRoot.widestFrontier(new bytes(128));
+        uint256 cap = vmRoot.widestFrontier(new bytes(160));
         for (uint256 i = 0; i < n; i++) {
             string memory base = multiProbeBase(i);
             beginEntry(_probeLabel(raw, base));
@@ -456,6 +461,21 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         }
         if (s == StepWrites.ActionFieldsTooShort.selector) {
             return _withArgs("ActionFieldsTooShort", err);
+        }
+        // The kind-25 quote reaches `AmmMath` through `StepWrites`'
+        // reserve-swap derivation (Workstream SB).  Its guards are
+        // established before the call — the derivation evaluates the
+        // precondition wrap-free first — so these should be
+        // unreachable there; they are named so an unexpected escape
+        // reads as itself rather than as hex.
+        if (s == AmmMath.AmmMathInsufficientInput.selector) {
+            return _withArgs("AmmMathInsufficientInput", err);
+        }
+        if (s == AmmMath.AmmMathInsufficientLiquidity.selector) {
+            return _withArgs("AmmMathInsufficientLiquidity", err);
+        }
+        if (s == AmmMath.AmmMathFeeTooHigh.selector) {
+            return _withArgs("AmmMathFeeTooHigh", err);
         }
         if (s == SmtMultiVerifier.MultiProofTooManyCells.selector) {
             return _withArgs("MultiProofTooManyCells", err);
@@ -568,6 +588,11 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
         out[0] = 0x06;
         uint256 v = n;
         for (uint256 i = 0; i < 32; i++) {
+            // casting to 'uint8' is safe because `& 0xFF` has already
+            // reduced the operand to its low byte, so the cast is the
+            // identity rather than a truncation.  Mirrors
+            // `CBEEncode._leBytes`, which this helper reproduces.
+            // forge-lint: disable-next-line(unsafe-typecast)
             out[1 + i] = bytes1(uint8(v & 0xFF));
             v >>= 8;
         }

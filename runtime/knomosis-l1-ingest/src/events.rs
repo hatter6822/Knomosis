@@ -112,8 +112,9 @@ pub const DEPOSIT_WITH_FEE_INITIATED_TOPIC: TopicHash = [
 ];
 
 /// Compile-time-pinned `keccak256` topic-0 hash for the Workstream
-/// GP.11.10 disaster-recovery event
-/// `AmmDisabled(uint256,uint256,uint256)`.
+/// GP.11.10 disaster-recovery event `AmmDisabled(uint256)`.
+/// (The two reserve-snapshot words the pre-excision signature
+/// carried left with the L1 reserve books they read.)
 ///
 /// Emitted exactly once per deployment by
 /// `KnomosisBridge.emergencyDisableAmm()` — the one-way AMM kill
@@ -127,8 +128,8 @@ pub const DEPOSIT_WITH_FEE_INITIATED_TOPIC: TopicHash = [
 /// The `topic_constants_match_keccak_of_signature` test verifies the
 /// pin equals `keccak256(EventTopic::AmmDisabled.signature())`.
 pub const AMM_DISABLED_TOPIC: TopicHash = [
-    0x62, 0x7d, 0x75, 0xba, 0x7f, 0x7f, 0x70, 0xdf, 0x8f, 0x25, 0x47, 0x96, 0x22, 0x17, 0x59, 0xe6,
-    0xde, 0x47, 0xdf, 0x17, 0x12, 0x08, 0x65, 0xd2, 0x4e, 0x72, 0x0f, 0x85, 0xc2, 0x3c, 0xad, 0x58,
+    0xdd, 0xbc, 0x5c, 0xd6, 0x90, 0x78, 0xde, 0x41, 0xf6, 0xb8, 0xac, 0x3a, 0x31, 0x9e, 0x19, 0x2a,
+    0x1a, 0x8c, 0xf7, 0xf0, 0xe0, 0xc7, 0x34, 0x23, 0xb6, 0x47, 0xab, 0x54, 0x80, 0x99, 0xb9, 0xfb,
 ];
 
 /// Minimal Ethereum log record.  Carries the bare fields RH-B
@@ -178,10 +179,11 @@ pub enum EventTopic {
     /// (`KnomosisBridge.depositETHWithFee`).  Note three indexed
     /// params (`token` is indexed here, unlike `DepositInitiated`).
     DepositWithFeeInitiated,
-    /// `AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256
-    /// reserveBold)` — the Workstream-GP.11.10 one-way AMM kill
-    /// switch (`KnomosisBridge.emergencyDisableAmm()`).  No indexed
-    /// params.
+    /// `AmmDisabled(uint256 timestamp)` — the Workstream-GP.11.10
+    /// one-way AMM kill switch
+    /// (`KnomosisBridge.emergencyDisableAmm()`).  No indexed params.
+    /// (The two reserve-snapshot words left with the excised L1
+    /// reserve books.)
     AmmDisabled,
 }
 
@@ -209,8 +211,9 @@ impl EventTopic {
             }
             Self::AmmDisabled => {
                 // Matches `KnomosisBridge.AmmDisabled` (Workstream
-                // GP.11.3 / GP.11.10).
-                "AmmDisabled(uint256,uint256,uint256)"
+                // GP.11.3 / GP.11.10; single-word since the L1-AMM
+                // excision).
+                "AmmDisabled(uint256)"
             }
         }
     }
@@ -324,11 +327,12 @@ pub enum IngestedEvent {
         log_index: u64,
     },
     /// `DepositInitiated` — a deposit was registered on L1.
-    /// `Bridge.Ingest.ingest` returns `none` for this variant in
-    /// MVP scope (deposit translation goes through
-    /// `applyActionToBridgeState` at the kernel level); the
-    /// translator records the event in the watcher's audit log
-    /// and emits no `Action`.
+    /// In the default (Lean-mirror) mode `Bridge.Ingest.ingest`
+    /// returns `none` for this variant and the translator records
+    /// the event in the watcher's audit log only; with the opt-in
+    /// `--materialise-deposits` flag (Workstream SB.9) the
+    /// translator constructs a bridge-signed `Action::Deposit`
+    /// crediting the depositor's book-resolved L2 actor.
     DepositInitiated {
         /// The depositor's Ethereum address.
         depositor: EthAddress,
@@ -352,12 +356,12 @@ pub enum IngestedEvent {
     },
     /// `DepositWithFeeInitiated` — a user-chosen fee-split deposit was
     /// registered on L1 (Workstream GP.5.1).  Like `DepositInitiated`,
-    /// `Bridge.Ingest.ingest` returns `none` for this variant: deposit
-    /// materialisation is the sequencer's responsibility (chain-level
-    /// follow-up), not the ingestor's, so the translator emits no
-    /// `Action` and records it only in the watcher's audit log.  The
-    /// ingestor decodes it for observability + dedup symmetry with
-    /// `DepositInitiated`.
+    /// the default (Lean-mirror) mode emits no `Action` and records
+    /// the event only in the watcher's audit log; with the opt-in
+    /// `--materialise-deposits` flag (Workstream SB.9) the translator
+    /// constructs a bridge-signed `Action::DepositWithFee` carrying
+    /// the fee split and the seed leg lifted verbatim from this
+    /// event's fields.
     DepositWithFeeInitiated {
         /// The depositor's Ethereum address (`msg.sender`).
         sender: EthAddress,
@@ -396,16 +400,14 @@ pub enum IngestedEvent {
     /// `reclaimAmmReserves` sweeps) are the sequencer's
     /// responsibility, mirroring how deposit materialisation is
     /// handled.  The ingestor decodes it for observability + dedup:
-    /// the watcher's audit log carries the frozen reserves, giving
-    /// operators the machine-readable disaster marker the runbook's
-    /// monitoring checklist alerts on.
+    /// the watcher's audit log is the operator's machine-readable
+    /// disaster marker the runbook's monitoring checklist alerts on.
+    /// (The frozen-reserve snapshot words left the event with the
+    /// excised L1 reserve books; the L2 pool the switch governs is
+    /// read from the state root.)
     AmmDisabled {
         /// `block.timestamp` at the moment of the disable.
         timestamp: [u8; 32],
-        /// The frozen ETH reserve (raw `uint256` bytes).
-        reserve_eth: [u8; 32],
-        /// The frozen BOLD reserve (raw `uint256` bytes).
-        reserve_bold: [u8; 32],
         /// L1 block number.
         block_number: u64,
         /// L1 transaction hash.
@@ -800,8 +802,9 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
         }
         EventTopic::AmmDisabled => {
             // Topics: [signature_hash] — no indexed params.
-            // Data: uint256 timestamp + uint256 reserveEth + uint256
-            // reserveBold (3 × 32 = 96 bytes).
+            // Data: uint256 timestamp (1 × 32 bytes; the two
+            // reserve-snapshot words left with the excised L1
+            // reserve books).
             if log.topics.len() != 1 {
                 return Err(DecodeError::TopicCountMismatch {
                     event: "AmmDisabled",
@@ -810,12 +813,8 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
                 });
             }
             let timestamp = read_slot(&log.data, 0)?;
-            let reserve_eth = read_slot(&log.data, 32)?;
-            let reserve_bold = read_slot(&log.data, 64)?;
             Ok(Some(IngestedEvent::AmmDisabled {
                 timestamp,
-                reserve_eth,
-                reserve_bold,
                 block_number: log.block_number,
                 tx_hash: log.tx_hash,
                 log_index: log.log_index,
@@ -1273,24 +1272,18 @@ mod tests {
         }
     }
 
-    /// GP.11.10: `AmmDisabled` decodes its three uint256 data slots
-    /// with a single (signature-only) topic.
+    /// GP.11.10: `AmmDisabled` decodes its single uint256 timestamp
+    /// slot with a single (signature-only) topic.  (The two
+    /// reserve-snapshot slots left with the excised L1 reserve
+    /// books.)
     #[test]
     fn decode_event_amm_disabled() {
-        let mut data = Vec::new();
         let mut ts = [0u8; 32];
         ts[31] = 0x2A; // timestamp 42
-        let mut re = [0u8; 32];
-        re[30] = 0x01; // reserveEth 256
-        let mut rb = [0u8; 32];
-        rb[31] = 0x07; // reserveBold 7
-        data.extend_from_slice(&ts);
-        data.extend_from_slice(&re);
-        data.extend_from_slice(&rb);
         let log = RawLog {
             address: EthAddress::from_bytes(&[0x11; 20]).unwrap(),
             topics: vec![EventTopic::AmmDisabled.hash()],
-            data,
+            data: ts.to_vec(),
             block_number: 99,
             tx_hash: [0x55; 32],
             log_index: 3,
@@ -1298,15 +1291,11 @@ mod tests {
         match decode_event(&log) {
             Ok(Some(IngestedEvent::AmmDisabled {
                 timestamp,
-                reserve_eth,
-                reserve_bold,
                 block_number,
                 tx_hash,
                 log_index,
             })) => {
                 assert_eq!(timestamp, ts);
-                assert_eq!(reserve_eth, re);
-                assert_eq!(reserve_bold, rb);
                 assert_eq!(block_number, 99);
                 assert_eq!(tx_hash, [0x55; 32]);
                 assert_eq!(log_index, 3);
@@ -1322,7 +1311,7 @@ mod tests {
         let log = RawLog {
             address: EthAddress::from_bytes(&[0x11; 20]).unwrap(),
             topics: vec![EventTopic::AmmDisabled.hash(), [0xAA; 32]],
-            data: vec![0u8; 96],
+            data: vec![0u8; 32],
             block_number: 1,
             tx_hash: [0x00; 32],
             log_index: 0,
@@ -1341,14 +1330,14 @@ mod tests {
         }
     }
 
-    /// GP.11.10: truncated `AmmDisabled` data (< 96 bytes) is
+    /// GP.11.10: truncated `AmmDisabled` data (< 32 bytes) is
     /// rejected by the slot reader, never silently zero-filled.
     #[test]
     fn decode_event_amm_disabled_short_data() {
         let log = RawLog {
             address: EthAddress::from_bytes(&[0x11; 20]).unwrap(),
             topics: vec![EventTopic::AmmDisabled.hash()],
-            data: vec![0u8; 64], // missing the reserveBold slot
+            data: vec![0u8; 16], // half the timestamp slot
             block_number: 1,
             tx_hash: [0x00; 32],
             log_index: 0,

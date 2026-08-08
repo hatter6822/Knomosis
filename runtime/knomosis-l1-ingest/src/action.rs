@@ -35,38 +35,30 @@
 //! | 16  | `RevokeLocalPolicy`       | (no fields)                                |
 //! | 17  | `FaultProofChallenge`     | `binding_hash, start, end, commit`         |
 //! | 18  | `FaultProofResolution`    | `binding_hash, game_id, winner, revert_from` |
-//! | 19  | `DepositWithFee`          | `r, recipient, pool_actor, user_amount, pool_amount, budget_grant, deposit_id` |
+//! | 19  | `DepositWithFee`          | `r, recipient, pool_actor, user_amount, pool_amount, budget_grant, deposit_id, seed_amount` |
 //! | 20  | `TopUpActionBudget`       | `gas_resource, gas_amount, budget_increment, pool_actor` |
 //! | 21  | `TopUpActionBudgetFor`    | `recipient, gas_resource, gas_amount, budget_increment, pool_actor` |
 //! | 22  | `ClaimBudgetRefund`       | `gas_resource, budget_units, wei_per_budget_unit, pool_actor` |
-//! | 23  | `AmmSwap`                 | `from_resource, to_resource, amount_in, amount_out, amm_reserve_actor` |
+//! | 23  | RETIRED (`ammSwap`)       | the excised L1-AMM mirror — a permanent hole; never reuse |
 //! | 24  | `ReclaimAmmReserves`      | `r, amount, reserve_actor, pool_actor` |
+//! | 25  | `ReserveSwap`             | `from_resource, to_resource, user, amount_in, min_amount_out, reserve_actor` |
 //!
 //! ## What this crate models
 //!
-//! The L1 ingestor only ever emits two Action variants:
-//! `RegisterIdentity` (for first-time identity registrations) and
-//! `ReplaceKey` (for key rotations).  Even so, we include every
-//! constructor's tag definition so the byte-level encoder can
-//! validate decoded fixtures via the full tag table, and so future
-//! work units (deposit translation, withdraw translation) extend
-//! this enum without breaking ABI.
+//! The L1 ingestor emits `RegisterIdentity` (first-time identity
+//! registrations), `ReplaceKey` (key rotations), and — with the
+//! opt-in `--materialise-deposits` flag (Workstream SB.9) —
+//! `Deposit` / `DepositWithFee` (the materialised L1 deposit
+//! credits; see `translation::preview_ingest_materialising`).
+//! Every other constructor's tag definition is included so the
+//! byte-level encoder can validate decoded fixtures via the full
+//! tag table and future work units extend this enum without
+//! breaking ABI.
 //!
-//! `Deposit` and `Withdraw` (tags 13 / 14) are sketched here as
-//! constructors for forward-compatibility — the
-//! `Bridge/Ingest.lean::ingest` function returns `none` for
-//! deposit events in MVP scope (deposit translation goes
-//! through `applyActionToBridgeState` at the kernel level, not
-//! through `ingest`).  The ingestor never emits these today; the
-//! variants live here to keep the action-tag map complete and
-//! make the encoder's exhaustive match obviously total.
-//!
-//! `DepositWithFee`, `TopUpActionBudget`, `TopUpActionBudgetFor`
-//! (tags 19 / 20 / 21, Workstream GP) are similarly sketched here
-//! for encoder completeness.  Like `Deposit`, `Bridge/Ingest.lean::
-//! ingest` returns `none` for `DepositWithFeeInitiated` events
-//! (deposit materialisation is the sequencer's responsibility,
-//! chain-level follow-up) so the ingestor never emits them, but
+//! `Withdraw` (tag 14) is sketched here for forward-compatibility;
+//! the ingestor never emits it (withdrawals originate on the L2).
+//! `TopUpActionBudget` / `TopUpActionBudgetFor` (tags 20 / 21,
+//! Workstream GP) are similarly encoder-completeness constructors:
 //! the encoder must be able to produce their CBE bytes
 //! byte-equivalent to Lean for the kernel-layer admission path
 //! that `bridgeActor` uses with these constructors.
@@ -87,11 +79,15 @@ pub type ActorId = u64;
 /// `Authority.ResourceId`.
 pub type ResourceId = u64;
 
-/// `Nat`-valued Amount — abbreviation for Lean's
-/// `Authority.Amount`.  Mirrors `Lean.Nat`'s unbounded representation
-/// at the type level; the CBE encoder enforces `< 2^64` at the
-/// boundary (per `Encoding.Action.fieldsBounded`).
-pub type Amount = u128;
+/// `Nat`-valued Amount — abbreviation for Lean's `Authority.Amount`.
+///
+/// The bound is `< 256^32 = 2^256`, which is what
+/// `Encoding.Action.fieldsBounded` actually states for every
+/// value-carrying arm (`a < 256 ^ 32`) and what `Laws.maxAmount`
+/// caps a credit at.  An earlier version of this docstring claimed
+/// the encoder enforced `< 2^64`; it does not, and the claim outlived
+/// the `encode_u128_checked` path that once made it true.
+pub type Amount = knomosis_amount::Amount;
 
 /// Per-actor monotone counter — abbreviation for Lean's
 /// `Authority.Nonce`.
@@ -275,10 +271,10 @@ pub enum Action {
         /// The actor's initial public key.
         pk: PublicKey,
     },
-    /// `deposit(r, recipient, amount, depositId)`.  Tag 13.  The
-    /// L1 ingestor does *not* emit this — deposit translation
-    /// goes through `applyActionToBridgeState` at the kernel
-    /// layer.  Included for encoder completeness.
+    /// `deposit(r, recipient, amount, depositId)`.  Tag 13.
+    /// Emitted by the ingestor for `DepositInitiated` events when
+    /// deposit materialisation is enabled (`--materialise-deposits`,
+    /// Workstream SB.9); `NoAction` otherwise.
     Deposit {
         /// The resource id being credited.
         r: ResourceId,
@@ -333,11 +329,10 @@ pub enum Action {
     /// GP).  The fee-split deposit credits the recipient with
     /// `userAmount` of resource `r` and the gas-pool actor with
     /// `poolAmount` of resource `r`, AND grants the recipient
-    /// `budgetGrant` units of action-budget headroom.  Currently
-    /// not emitted by the ingestor (deposit materialisation is
-    /// the sequencer's responsibility); included for encoder
-    /// completeness because the kernel admission path produces
-    /// `bridgeActor`-signed `DepositWithFee` actions internally.
+    /// `budgetGrant` units of action-budget headroom.  Emitted by
+    /// the ingestor for `DepositWithFeeInitiated` events when
+    /// deposit materialisation is enabled (`--materialise-deposits`,
+    /// Workstream SB.9); `NoAction` otherwise.
     DepositWithFee {
         /// The resource id being credited (0 = native ETH, 1 = BOLD).
         r: ResourceId,
@@ -357,6 +352,11 @@ pub enum Action {
         budget_grant: u64,
         /// The L1 deposit id (per-depositor nonce).
         deposit_id: DepositId,
+        /// The slice of the pool leg seeded into the canonical AMM
+        /// reserve actor (Workstream SB; appended field, wei-
+        /// denominated, `seed_amount <= pool_amount` enforced by the
+        /// kernel law's precondition).
+        seed_amount: Amount,
     },
     /// `topUpActionBudget(gasResource, gasAmount, budgetIncrement,
     /// poolActor)`.  Tag 20 (Workstream GP).  Lets an actor pay
@@ -412,28 +412,13 @@ pub enum Action {
         budget_units: u64,
         /// The trusted budget→gas exchange rate (wei per budget unit).
         /// Pinned by the admission gate; same `Nat`-as-CBE encoding.
-        wei_per_budget_unit: u128,
+        wei_per_budget_unit: Amount,
         /// The gas-pool actor the refund is paid from.
         pool_actor: ActorId,
     },
-    /// `ammSwap(fromResource, toResource, amountIn, amountOut, ammReserveActor)`.
-    /// Tag 23 (Workstream GP.11.4).  Bridge-attested constant-product
-    /// swap between two resources via the AMM reserve actor.
-    /// Never an L1-ingested event (it is an L2 user/bridge action);
-    /// included for `Action`-mirror completeness + cross-stack CBE
-    /// byte-equivalence (the Lean->Rust differential pins it).
-    AmmSwap {
-        /// The resource being swapped in.
-        from_resource: ResourceId,
-        /// The resource being swapped out.
-        to_resource: ResourceId,
-        /// The input amount.
-        amount_in: Amount,
-        /// The output amount.
-        amount_out: Amount,
-        /// The AMM reserve actor whose balances are adjusted.
-        amm_reserve_actor: ActorId,
-    },
+    // Tag 23 (the retired L1-AMM `ammSwap` mirror) is a permanent
+    // hole: the Lean decoder refuses it like a never-assigned tag, so
+    // no Rust mirror variant exists and none may ever be seated here.
     /// `reclaimAmmReserves(r, amount, reserveActor, poolActor)`.
     /// Tag 24 (Workstream GP.11.10).  Bridge-attested EXACT SWEEP of
     /// the disabled AMM's frozen L2 reserve balance at one resource
@@ -453,6 +438,30 @@ pub enum Action {
         reserve_actor: ActorId,
         /// The gas-pool actor being credited (canonically 1).
         pool_actor: ActorId,
+    },
+    /// `reserveSwap(fromResource, toResource, user, amountIn,
+    /// minAmountOut, reserveActor)`.  Tag 25 (Workstream SB).  The
+    /// USER-SIGNED L2 swap against the reserve actor's live balances,
+    /// priced in-kernel by `AmmMath.getAmountOut` — the one-AMM
+    /// L2-primary topology's user swap.  Never an L1-ingested event;
+    /// included for `Action`-mirror completeness + cross-stack CBE
+    /// byte-equivalence (the Lean->Rust differential pins it).
+    ReserveSwap {
+        /// The resource being swapped in.
+        from_resource: ResourceId,
+        /// The resource being swapped out.
+        to_resource: ResourceId,
+        /// The swapping user (bound `user = signer` at the
+        /// AuthorityPolicy on the Lean side).
+        user: ActorId,
+        /// The input amount.
+        amount_in: Amount,
+        /// The user's slippage floor: the kernel-computed quote must
+        /// be at least this (and at least 1).
+        min_amount_out: Amount,
+        /// The AMM reserve actor whose balances price and fund the
+        /// swap (canonically 3).
+        reserve_actor: ActorId,
     },
 }
 
@@ -482,8 +491,9 @@ impl Action {
             Self::TopUpActionBudget { .. } => 20,
             Self::TopUpActionBudgetFor { .. } => 21,
             Self::ClaimBudgetRefund { .. } => 22,
-            Self::AmmSwap { .. } => 23,
+            // 23 is the retired ammSwap's permanent hole.
             Self::ReclaimAmmReserves { .. } => 24,
+            Self::ReserveSwap { .. } => 25,
         }
     }
 }
@@ -501,6 +511,7 @@ fn hex_nibble(n: u8) -> char {
 
 #[cfg(test)]
 mod tests {
+    use super::Amount;
     use super::{Action, EthAddress, PublicKey};
 
     /// Tag indices match the frozen Lean table.
@@ -512,7 +523,7 @@ mod tests {
                 r: 0,
                 sender: 0,
                 receiver: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
             }
             .tag(),
             0
@@ -521,7 +532,7 @@ mod tests {
             Action::Mint {
                 r: 0,
                 to: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             1
@@ -530,7 +541,7 @@ mod tests {
             Action::Burn {
                 r: 0,
                 from_actor: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             2
@@ -548,7 +559,7 @@ mod tests {
             Action::Reward {
                 r: 0,
                 to: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             5
@@ -557,7 +568,7 @@ mod tests {
             Action::DistributeOthers {
                 r: 0,
                 excluded: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             6
@@ -566,7 +577,7 @@ mod tests {
             Action::ProportionalDilute {
                 r: 0,
                 excluded: 0,
-                total_reward: 0
+                total_reward: Amount::from_u64(0)
             }
             .tag(),
             7
@@ -585,7 +596,7 @@ mod tests {
             Action::Deposit {
                 r: 0,
                 recipient: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 deposit_id: 0
             }
             .tag(),
@@ -595,7 +606,7 @@ mod tests {
             Action::Withdraw {
                 r: 0,
                 sender: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 recipient_l1: EthAddress::ZERO
             }
             .tag(),
@@ -627,10 +638,11 @@ mod tests {
                 r: 0,
                 recipient: 0,
                 pool_actor: 0,
-                user_amount: 0,
-                pool_amount: 0,
+                user_amount: Amount::from_u64(0),
+                pool_amount: Amount::from_u64(0),
                 budget_grant: 0,
                 deposit_id: 0,
+                seed_amount: Amount::from_u64(0),
             }
             .tag(),
             19
@@ -638,7 +650,7 @@ mod tests {
         assert_eq!(
             Action::TopUpActionBudget {
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -649,7 +661,7 @@ mod tests {
             Action::TopUpActionBudgetFor {
                 recipient: 0,
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -657,25 +669,28 @@ mod tests {
             21
         );
         assert_eq!(
-            Action::AmmSwap {
-                from_resource: 0,
-                to_resource: 1,
-                amount_in: 0,
-                amount_out: 0,
-                amm_reserve_actor: 0,
-            }
-            .tag(),
-            23
-        );
-        assert_eq!(
             Action::ReclaimAmmReserves {
                 r: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 reserve_actor: 3,
                 pool_actor: 1,
             }
             .tag(),
             24
+        );
+        // Tag 23 (the retired ammSwap) is a permanent hole: no
+        // constructor carries it, and reserveSwap sits at 25, NOT 23.
+        assert_eq!(
+            Action::ReserveSwap {
+                from_resource: 0,
+                to_resource: 1,
+                user: 9,
+                amount_in: Amount::from_u64(0),
+                min_amount_out: Amount::from_u64(0),
+                reserve_actor: 3,
+            }
+            .tag(),
+            25
         );
     }
 
@@ -688,21 +703,22 @@ mod tests {
             r: 0,
             recipient: 0,
             pool_actor: 0,
-            user_amount: 0,
-            pool_amount: 0,
+            user_amount: Amount::from_u64(0),
+            pool_amount: Amount::from_u64(0),
             budget_grant: 0,
             deposit_id: 0,
+            seed_amount: Amount::from_u64(0),
         };
         let top_up = Action::TopUpActionBudget {
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: 0,
             pool_actor: 0,
         };
         let top_up_for = Action::TopUpActionBudgetFor {
             recipient: 0,
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: 0,
             pool_actor: 0,
         };

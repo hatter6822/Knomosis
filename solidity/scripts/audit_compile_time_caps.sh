@@ -32,11 +32,17 @@
 #   LIQUITY_V2_TROVE_MANAGER_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22
 #   LIQUITY_V2_TROVE_MANAGER_RETH   = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e
 #
-# Workstream GP.11.1 adds two constitutional embedded-AMM caps (checked
-# by the CAPS loop's uintN / decimal-literal pattern):
+# Workstream GP.11.1 adds one constitutional AMM cap (checked by the
+# CAPS loop's uintN / decimal-literal pattern):
 #
-#   AMM_SWAP_FEE_BPS       = 30   (uint16; 0.30% Uniswap-v2-standard fee)
 #   MAX_AMM_SEED_RATIO_BPS = 8000 (uint16; 80% max pool->AMM seed ratio)
+#
+# The swap-side pair that used to sit beside it (AMM_SWAP_FEE_BPS,
+# AMM_MINIMUM_LIQUIDITY) left the bridge with the embedded L1 AMM under
+# the one-AMM L2-primary topology; the values live on as the AmmMath
+# library constants (`AmmMath.SWAP_FEE_BPS`, `AmmMath.MINIMUM_LIQUIDITY`)
+# the L2 kernel prices `Laws.reserveSwap` by, corpus-pinned against the
+# Lean `swapFeeBps` rather than grep-pinned here.
 #
 # Changing any of these values is a Genesis-Plan §13.6 amendment and
 # triggers the two-reviewer rule.  This gate is the fast tripwire that
@@ -139,7 +145,6 @@ CAPS=(
     "MIN_WEI_PER_BUDGET_UNIT|uint64|1"
     "MAX_BUDGET_PER_DEPOSIT|uint64|1000000000000"
     "LIQUITY_ORACLE_READ_GAS|uint256|100000"
-    "AMM_SWAP_FEE_BPS|uint16|30"
     "MAX_AMM_SEED_RATIO_BPS|uint16|8000"
 )
 
@@ -331,4 +336,20 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "audit_compile_time_caps: 6 compile-time caps + 4 address pins + 1 symbol pin + 3 multisig governance constants verified."
+# Counts are DERIVED from the tables above, not written out.  The
+# summary previously carried a hardcoded "6 compile-time caps" and this
+# gate grew a seventh without it moving — a gate whose own report drifts
+# from what it actually checked is the shape of problem it exists to
+# catch.
+#
+# `CONFIRMATION_WINDOW` is verified by its own block rather than from
+# `MULTISIG_CAPS`, because it carries a time-unit literal (`7 days`)
+# that the numeric pattern cannot match — hence the `+ 1`.  The multisig
+# section is conditional, so the array may be unset; `${#ARR[@]}` is 0
+# then and the whole term collapses to 0 rather than mis-reporting.
+if [[ -n "${MULTISIG_CAPS+x}" ]]; then
+    MULTISIG_VERIFIED=$(( ${#MULTISIG_CAPS[@]} + 1 ))
+else
+    MULTISIG_VERIFIED=0
+fi
+echo "audit_compile_time_caps: ${#CAPS[@]} compile-time caps + ${#ADDRESS_PINS[@]} address pins + 1 symbol pin + ${MULTISIG_VERIFIED} multisig governance constants verified."

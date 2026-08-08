@@ -56,6 +56,12 @@ path = "examples/gen_ecdsa_fixtures.rs"
 
 [dependencies]
 k256 = { workspace = true }
+# `sha3` supplies the keccak256 the WIRE verification path
+# (`verify_signed_message`) applies to the raw signing-input bytes —
+# the same primitive the production signer (`knomosis-l1-ingest`'s
+# `BridgeActorKey`) pre-hashes with, so the two sides of the
+# cross-stack contract share one digest recipe.
+sha3 = { workspace = true }
 subtle = { workspace = true }
 
 [dev-dependencies]

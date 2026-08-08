@@ -12,6 +12,7 @@
 //! against a fresh in-memory SQLite database so the per-test
 //! state is isolated.
 
+use knomosis_amount::Amount;
 use knomosis_indexer::balance::BalanceView;
 use knomosis_indexer::decoder::{decode_event, encode_event};
 use knomosis_indexer::event::Event;
@@ -29,20 +30,20 @@ fn end_to_end_pipeline() {
         Event::BalanceChanged {
             resource: 1,
             actor: 100,
-            old_value: 0,
-            new_value: 500,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(500),
         },
         Event::BalanceChanged {
             resource: 1,
             actor: 200,
-            old_value: 0,
-            new_value: 300,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(300),
         },
         Event::BalanceChanged {
             resource: 2,
             actor: 100,
-            old_value: 0,
-            new_value: 1000,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(1000),
         },
     ];
 
@@ -57,9 +58,9 @@ fn end_to_end_pipeline() {
 
     // Query the balance view.
     let view = BalanceView::new(&storage);
-    assert_eq!(view.get(100, 1).unwrap(), 500);
-    assert_eq!(view.get(200, 1).unwrap(), 300);
-    assert_eq!(view.get(100, 2).unwrap(), 1000);
+    assert_eq!(view.get(100, 1).unwrap(), Amount::from_u64(500));
+    assert_eq!(view.get(200, 1).unwrap(), Amount::from_u64(300));
+    assert_eq!(view.get(100, 2).unwrap(), Amount::from_u64(1000));
     assert_eq!(indexer.cursor(), 3);
 }
 
@@ -81,8 +82,8 @@ fn restart_resumes_at_cursor() {
                     &[Event::BalanceChanged {
                         resource: 1,
                         actor: i,
-                        old_value: 0,
-                        new_value: u128::from(i) * 100,
+                        old_value: Amount::from_u64(0),
+                        new_value: Amount::from(u128::from(i) * 100),
                     }],
                 )
                 .unwrap();
@@ -97,7 +98,7 @@ fn restart_resumes_at_cursor() {
         assert_eq!(indexer.cursor(), 5);
         let view = BalanceView::new(&storage);
         for i in 1..=5u64 {
-            assert_eq!(view.get(i, 1).unwrap(), u128::from(i) * 100);
+            assert_eq!(view.get(i, 1).unwrap(), Amount::from(i * 100));
         }
     }
 
@@ -112,8 +113,8 @@ fn restart_resumes_at_cursor() {
                     &[Event::BalanceChanged {
                         resource: 1,
                         actor: i,
-                        old_value: 0,
-                        new_value: u128::from(i) * 100,
+                        old_value: Amount::from_u64(0),
+                        new_value: Amount::from(u128::from(i) * 100),
                     }],
                 )
                 .unwrap();
@@ -137,21 +138,21 @@ fn multi_event_per_seq() {
         Event::BalanceChanged {
             resource: 1,
             actor: 100, // sender
-            old_value: 500,
-            new_value: 400,
+            old_value: Amount::from_u64(500),
+            new_value: Amount::from_u64(400),
         },
         Event::BalanceChanged {
             resource: 1,
             actor: 200, // receiver
-            old_value: 0,
-            new_value: 100,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(100),
         },
     ];
     indexer.apply_batch(1, &batch).unwrap();
 
     let view = BalanceView::new(&storage);
-    assert_eq!(view.get(100, 1).unwrap(), 400);
-    assert_eq!(view.get(200, 1).unwrap(), 100);
+    assert_eq!(view.get(100, 1).unwrap(), Amount::from_u64(400));
+    assert_eq!(view.get(200, 1).unwrap(), Amount::from_u64(100));
     assert_eq!(indexer.cursor(), 1);
 }
 
@@ -169,8 +170,8 @@ fn underflow_rolls_back_batch() {
             &[Event::BalanceChanged {
                 resource: 1,
                 actor: 100,
-                old_value: 0,
-                new_value: 50,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(50),
             }],
         )
         .unwrap();
@@ -182,13 +183,13 @@ fn underflow_rolls_back_batch() {
         Event::BalanceChanged {
             resource: 1,
             actor: 200,
-            old_value: 0,
-            new_value: 999,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(999),
         },
         Event::WithdrawalRequested {
             resource: 1,
             sender: 100,
-            amount: 100,
+            amount: Amount::from_u64(100),
             recipient_l1: [0; 20],
             withdrawal_id: 1,
         },
@@ -198,9 +199,9 @@ fn underflow_rolls_back_batch() {
 
     let view = BalanceView::new(&storage);
     // Actor 200's balance should NOT be 999 — the batch rolled back.
-    assert_eq!(view.get(200, 1).unwrap(), 0);
+    assert_eq!(view.get(200, 1).unwrap(), Amount::from_u64(0));
     // Actor 100's balance unchanged.
-    assert_eq!(view.get(100, 1).unwrap(), 50);
+    assert_eq!(view.get(100, 1).unwrap(), Amount::from_u64(50));
     // Cursor unchanged.
     assert_eq!(indexer.cursor(), 1);
 }
@@ -219,15 +220,15 @@ fn realistic_scenario() {
                 Event::DepositCredited {
                     resource: 0,
                     recipient: 1,
-                    amount: 1000,
+                    amount: Amount::from_u64(1000),
                     deposit_id: 1,
                 },
                 // Kernel emits BalanceChanged too — overrides.
                 Event::BalanceChanged {
                     resource: 0,
                     actor: 1,
-                    old_value: 0,
-                    new_value: 1000,
+                    old_value: Amount::from_u64(0),
+                    new_value: Amount::from_u64(1000),
                 },
             ],
         )
@@ -241,13 +242,13 @@ fn realistic_scenario() {
                 Event::RewardIssued {
                     resource: 0,
                     recipient: 1,
-                    amount: 100,
+                    amount: Amount::from_u64(100),
                 },
                 Event::BalanceChanged {
                     resource: 0,
                     actor: 1,
-                    old_value: 1000,
-                    new_value: 1100,
+                    old_value: Amount::from_u64(1000),
+                    new_value: Amount::from_u64(1100),
                 },
             ],
         )
@@ -261,22 +262,22 @@ fn realistic_scenario() {
                 Event::BalanceChanged {
                     resource: 0,
                     actor: 1,
-                    old_value: 1100,
-                    new_value: 800,
+                    old_value: Amount::from_u64(1100),
+                    new_value: Amount::from_u64(800),
                 },
                 Event::BalanceChanged {
                     resource: 0,
                     actor: 2,
-                    old_value: 0,
-                    new_value: 300,
+                    old_value: Amount::from_u64(0),
+                    new_value: Amount::from_u64(300),
                 },
             ],
         )
         .unwrap();
 
     let view = BalanceView::new(&storage);
-    assert_eq!(view.get(1, 0).unwrap(), 800);
-    assert_eq!(view.get(2, 0).unwrap(), 300);
+    assert_eq!(view.get(1, 0).unwrap(), Amount::from_u64(800));
+    assert_eq!(view.get(2, 0).unwrap(), Amount::from_u64(300));
     assert_eq!(indexer.cursor(), 3);
 }
 
@@ -287,8 +288,8 @@ fn decoder_round_trip_every_variant() {
         Event::BalanceChanged {
             resource: 1,
             actor: 2,
-            old_value: 3,
-            new_value: 4,
+            old_value: Amount::from_u64(3),
+            new_value: Amount::from_u64(4),
         },
         Event::NonceAdvanced {
             actor: 5,
@@ -313,19 +314,19 @@ fn decoder_round_trip_every_variant() {
         Event::RewardIssued {
             resource: 12,
             recipient: 13,
-            amount: 14,
+            amount: Amount::from_u64(14),
         },
         Event::WithdrawalRequested {
             resource: 15,
             sender: 16,
-            amount: 17,
+            amount: Amount::from_u64(17),
             recipient_l1: [0xAB; 20],
             withdrawal_id: 18,
         },
         Event::DepositCredited {
             resource: 19,
             recipient: 20,
-            amount: 21,
+            amount: Amount::from_u64(21),
             deposit_id: 22,
         },
         Event::LocalPolicyDeclared {
@@ -351,7 +352,7 @@ fn decoder_round_trip_every_variant() {
             game_id: 33,
             winner: 34,
             loser: 35,
-            payout: 36,
+            payout: Amount::from_u64(36),
         },
     ];
     assert_eq!(events.len(), 16);
@@ -367,7 +368,7 @@ fn decoder_round_trip_every_variant() {
 fn many_actors_many_events() {
     let storage = SqliteStorage::open_in_memory().unwrap();
     let mut indexer = Indexer::open(&storage).unwrap();
-    let mut expected: std::collections::HashMap<(u64, u64), u128> =
+    let mut expected: std::collections::HashMap<(u64, u64), Amount> =
         std::collections::HashMap::new();
 
     for seq in 1..=100u64 {
@@ -375,11 +376,14 @@ fn many_actors_many_events() {
         for actor_off in 0..10u64 {
             let actor = (seq + actor_off) % 100; // pseudo-random
             let resource = actor_off % 3;
-            let new_value = u128::from(seq * 1000 + actor_off);
+            let new_value = Amount::from(u128::from(seq * 1000 + actor_off));
             batch.push(Event::BalanceChanged {
                 resource,
                 actor,
-                old_value: expected.get(&(actor, resource)).copied().unwrap_or(0),
+                old_value: expected
+                    .get(&(actor, resource))
+                    .copied()
+                    .unwrap_or(Amount::ZERO),
                 new_value,
             });
             expected.insert((actor, resource), new_value);

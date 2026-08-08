@@ -348,8 +348,6 @@ theorem getCellValue_of_not_mem (es : ExtendedState) (t : CellTag)
     | some b => exact absurd (epochBudget_tag_enumerated es a b
                   (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_b)) h
   | bridgeNextWdId => exact absurd (singleton_tags_enumerated es _ (by decide)) h
-  | bridgeAmmReserveEth => exact absurd (singleton_tags_enumerated es _ (by decide)) h
-  | bridgeAmmReserveBold => exact absurd (singleton_tags_enumerated es _ (by decide)) h
   | bridgeBoldCircuitClosed => exact absurd (singleton_tags_enumerated es _ (by decide)) h
   | bridgeBoldTvlCap => exact absurd (singleton_tags_enumerated es _ (by decide)) h
   | bridgeBoldTotalLockedValue =>

@@ -70,6 +70,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "knomosis-amount",
     "knomosis-cli-common",
     "knomosis-cross-stack",
     "knomosis-verify-secp256k1",
@@ -106,7 +107,7 @@ exclude = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -160,6 +161,18 @@ signal-hook = { version = "0.3", default-features = false }
 k256 = { version = "0.13", default-features = false, features = ["ecdsa", "arithmetic"] }
 sha3 = { version = "0.10", default-features = false }
 subtle = { version = "2.6", default-features = false }
+# `crypto-bigint` — the const-generic big-integer arithmetic behind
+# `knomosis-amount`'s 256-bit accounting scalar.  Already in the
+# dependency graph transitively (`k256` builds on it), so the promotion
+# to a DIRECT dependency adds no new code to the build; it is pinned
+# here so the version is a reviewed workspace decision rather than
+# whatever `k256`'s resolver happens to pick.  `default-features =
+# false` drops the default `rand` feature (and with it `rand_core/std`);
+# the `serde` feature is deliberately left off because `Amount`
+# serialises as a decimal string, not in `crypto-bigint`'s own
+# representation.  Same minor-version pin discipline as the crypto
+# crates above.
+crypto-bigint = { version = "0.5", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 proptest = { version = "1.5", default-features = false, features = ["std"] }
 cc = "1.0"
@@ -233,6 +246,7 @@ tiny_http = { version = "0.12", default-features = false }
 # `workspace = true` shorthand).
 knomosis-cli-common = { path = "knomosis-cli-common" }
 knomosis-cross-stack = { path = "knomosis-cross-stack" }
+knomosis-verify-secp256k1 = { path = "knomosis-verify-secp256k1" }
 
 # CI / release profile.  `lto = "thin"` keeps release builds reasonably
 # fast while still hitting cross-crate optimisations.  `panic = "abort"`

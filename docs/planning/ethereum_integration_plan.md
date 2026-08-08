@@ -3268,13 +3268,33 @@ error MigrationActivated();
      latestStateRootSubmittedAtBlock + maxAttestationStaleBlocks`
      when `latestStateRootSubmittedAtBlock != 0`.  Fires if the
      attestor has gone silent (typical default:
-     `maxAttestationStaleBlocks = 7200` ≈ 24 hours).  Forces
-     the watchdog / human operators to intervene by deploying
-     a successor before the contract drifts further from the
-     L2 state.  *Initial-state escape hatch*: when
+     `maxAttestationStaleBlocks = 7200` ≈ 24 hours), halting
+     deposits, withdrawals and the fee-split paths until the
+     attestor comes back.  *Initial-state escape hatch*: when
      `latestStateRootSubmittedAtBlock == 0` (no state root
      submitted yet), the breaker does not fire — otherwise the
      bridge would be DOA at deployment.
+
+     *Recovery escape hatch*: this is the ONE breaker arm
+     `submitStateRoot` is exempt from (it carries
+     `circuitOpenExceptStaleness`, which is `circuitOpen` minus
+     this arm).  Without the exemption the breaker is
+     **absorbing**, not merely restrictive:
+     `latestStateRootSubmittedAtBlock` is written by
+     `submitStateRoot` and by nothing else, so once the window
+     lapses no fresh root can be accepted, no later call can
+     refresh the timestamp, and the bridge is bricked
+     permanently — with the user-exit path shut — short of
+     redeploying.  Submitting a fresh, attestor-signed root IS
+     the recovery action, so it is the one thing staleness must
+     not block; everything the breaker guards then unblocks
+     automatically, with no governance action and no human in
+     the loop.  The other three arms below still apply to
+     `submitStateRoot`: each is a reason a new root should not
+     be accepted, and none of them is cleared by accepting one.
+     Pinned by `test_breaker_AttestationStale_is_self_clearing`
+     and `test_submitStateRoot_still_carries_the_other_breakers`
+     (`solidity/test/KnomosisBridge.t.sol`).
   2. **`DisputeCooldown`** — `lastUpheldDisputeBlock != 0 &&
      block.number < lastUpheldDisputeBlock + cooldownBlocks`.
      Fires after a dispute upholds, halting new state-shaping

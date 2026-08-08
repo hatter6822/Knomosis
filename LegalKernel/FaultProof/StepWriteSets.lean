@@ -175,17 +175,17 @@ constructor list. -/
 /-- `budgetGrant` writes at most one actor's budget, and names which. -/
 theorem budgetGrant_getElem?_of_ne (signer : ActorId) (action : Action)
     (freeTier currentEpoch : Nat) (ebs : EpochBudgetState) (a : ActorId)
-    (h_dwf : ∀ r recipient poolActor ua pa bg d,
-      action = .depositWithFee r recipient poolActor ua pa bg d → a ≠ recipient)
+    (h_dwf : ∀ r recipient poolActor ua pa bg d sa,
+      action = .depositWithFee r recipient poolActor ua pa bg d sa → a ≠ recipient)
     (h_top : ∀ gr ga bi pa, action = .topUpActionBudget gr ga bi pa → a ≠ signer)
     (h_for : ∀ recipient gr ga bi pa,
       action = .topUpActionBudgetFor recipient gr ga bi pa → a ≠ recipient) :
     (budgetGrant signer action freeTier currentEpoch ebs)[a]? = ebs[a]? := by
   unfold budgetGrant EpochBudgetState.topUp
   cases hact : action with
-  | depositWithFee r recipient poolActor ua pa bg d =>
+  | depositWithFee r recipient poolActor ua pa bg d sa =>
     exact LegalKernel.RBMap.find?_insert_other _ recipient a _
-      (fun he => h_dwf r recipient poolActor ua pa bg d hact (he ▸ rfl))
+      (fun he => h_dwf r recipient poolActor ua pa bg d sa hact (he ▸ rfl))
   | topUpActionBudget gr ga bi pa =>
     exact LegalKernel.RBMap.find?_insert_other _ signer a _
       (fun he => h_top gr ga bi pa hact (he ▸ rfl))
@@ -204,8 +204,8 @@ theorem budgetGrant_getElem?_of_ne (signer : ActorId) (action : Action)
 theorem productionApplyBudget_epochBudgets_of_ne
     (es : ExtendedState) (st : SignedAction) (idx : Nat) (a : ActorId)
     (h_signer : a ≠ st.signer)
-    (h_dwf : ∀ r recipient poolActor ua pa bg d,
-      st.action = .depositWithFee r recipient poolActor ua pa bg d → a ≠ recipient)
+    (h_dwf : ∀ r recipient poolActor ua pa bg d sa,
+      st.action = .depositWithFee r recipient poolActor ua pa bg d sa → a ≠ recipient)
     (h_for : ∀ recipient gr ga bi pa,
       st.action = .topUpActionBudgetFor recipient gr ga bi pa → a ≠ recipient) :
     (productionApplyBudget es st idx).epochBudgets[a]? = es.epochBudgets[a]? := by
@@ -304,24 +304,22 @@ theorem productionApplyBudget_localPolicies_of_ne
 /-! ### The bridge scalars
 
 `applyActionToBridgeState` writes `consumed`, `pending` and `nextWdId`.
-It writes nothing else, and the six scalars below are the "nothing
+It writes nothing else, and the four scalars below are the "nothing
 else" made checkable — a future bridge action that touched one would
 break these rather than silently escaping the write set. -/
 
 /-- Every bridge field the step VM does not write survives one
-    `applyActionToBridgeState`, packaged as the six equations
+    `applyActionToBridgeState`, packaged as the four equations
     `writeSetComplete_of_field_footprints` asks for. -/
 theorem applyActionToBridgeState_scalars
     (bs : BridgeState) (action : Action) (idx : Nat) :
-    (applyActionToBridgeState bs action idx).ammReserveEth = bs.ammReserveEth ∧
-    (applyActionToBridgeState bs action idx).ammReserveBold = bs.ammReserveBold ∧
     (applyActionToBridgeState bs action idx).boldCircuitClosed = bs.boldCircuitClosed ∧
     (applyActionToBridgeState bs action idx).boldTvlCap = bs.boldTvlCap ∧
     (applyActionToBridgeState bs action idx).boldTotalLockedValue
       = bs.boldTotalLockedValue ∧
     (applyActionToBridgeState bs action idx).ammDisabled = bs.ammDisabled := by
   unfold applyActionToBridgeState
-  cases action <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  cases action <;> exact ⟨rfl, rfl, rfl, rfl⟩
 
 
 /-! ## The bridge maps
@@ -337,8 +335,8 @@ exists. -/
 theorem productionApplyBudget_bridgeConsumed_of_ne
     (es : ExtendedState) (st : SignedAction) (idx : Nat) (d : Bridge.DepositId)
     (h_dep : ∀ r recipient amount d', st.action = .deposit r recipient amount d' → d ≠ d')
-    (h_dwf : ∀ r recipient poolActor ua pa bg d',
-      st.action = .depositWithFee r recipient poolActor ua pa bg d' → d ≠ d') :
+    (h_dwf : ∀ r recipient poolActor ua pa bg d' sa,
+      st.action = .depositWithFee r recipient poolActor ua pa bg d' sa → d ≠ d') :
     (productionApplyBudget es st idx).bridge.consumed[d]? = es.bridge.consumed[d]? := by
   rw [productionApplyBudget_bridge]
   unfold applyActionToBridgeState
@@ -348,11 +346,11 @@ theorem productionApplyBudget_bridgeConsumed_of_ne
     unfold Bridge.BridgeState.markConsumed
     exact LegalKernel.RBMap.find?_insert_other _ d' d _
       (fun he => h_dep r recipient amount d' hact (he ▸ rfl))
-  | depositWithFee r recipient poolActor ua pa bg d' =>
+  | depositWithFee r recipient poolActor ua pa bg d' sa =>
     show (es.bridge.markConsumed d' _).consumed[d]? = _
     unfold Bridge.BridgeState.markConsumed
     exact LegalKernel.RBMap.find?_insert_other _ d' d _
-      (fun he => h_dwf r recipient poolActor ua pa bg d' hact (he ▸ rfl))
+      (fun he => h_dwf r recipient poolActor ua pa bg d' sa hact (he ▸ rfl))
   | _ => rfl
 
 /-- A pending-withdrawal cell moves only at the pre-state's
@@ -481,9 +479,9 @@ set_option linter.unusedSimpArgs false in
     pending cell lets these name their recipients.
 
     The linter option is scoped to this proof and is about the shared
-    automation: one `simp only` list serves all twenty-five arms, and
+    automation: one `simp only` list serves all twenty-six arms, and
     only three have a non-empty state-keyed write list, so the
-    append-elimination lemma is idle in the other twenty-two. -/
+    append-elimination lemma is idle in the other twenty-three. -/
 theorem productionApplyBudget_getBalance_of_not_written
     (es : ExtendedState) (st : SignedAction) (idx : Nat)
     (r : ResourceId) (a : ActorId)
@@ -546,13 +544,16 @@ theorem productionApplyBudget_getBalance_of_not_written
     -- first conjunct is the STATIC half rather than the first cell.
     exact getBalance_setBalance_of_ne _ r' sender _ r a
       (balance_pair_ne h.1.1)
-  | depositWithFee r' recipient poolActor ua pa bg d =>
+  | depositWithFee r' recipient poolActor ua pa bg d sa =>
     rw [hact] at h
     simp only [Action.writeCells, Action.stateWriteCells, List.append_nil,
       List.mem_append, List.mem_cons, List.not_mem_nil, or_false, not_or] at h
     show LegalKernel.getBalance
-      ((Laws.depositWithFee r' recipient poolActor ua pa bg d).apply_impl es.base) r a = _
+      ((Laws.depositWithFee r' recipient poolActor ua pa bg d sa
+        Bridge.ammReserveActor).apply_impl es.base) r a = _
     simp only [Laws.depositWithFee]
+    rw [getBalance_setBalance_of_ne _ r' Bridge.ammReserveActor _ r a
+      (balance_pair_ne h.2.2.1)]
     rw [getBalance_setBalance_of_ne _ r' poolActor _ r a
       (balance_pair_ne h.2.1)]
     exact getBalance_setBalance_of_ne _ r' recipient _ r a
@@ -590,17 +591,6 @@ theorem productionApplyBudget_getBalance_of_not_written
       (balance_pair_ne h.1)]
     exact getBalance_setBalance_of_ne _ gr pa _ r a
       (balance_pair_ne h.2.1)
-  | ammSwap fr tr amountIn amountOut ra =>
-    rw [hact] at h
-    simp only [Action.writeCells, Action.stateWriteCells, List.append_nil,
-      List.mem_append, List.mem_cons, List.not_mem_nil, or_false, not_or] at h
-    show LegalKernel.getBalance
-      ((Laws.ammSwap fr tr amountIn amountOut ra).apply_impl es.base) r a = _
-    simp only [Laws.ammSwap]
-    rw [getBalance_setBalance_of_ne _ tr ra _ r a
-      (balance_pair_ne h.2.1)]
-    exact getBalance_setBalance_of_ne _ fr ra _ r a
-      (balance_pair_ne h.1)
   | reclaimAmmReserves r' amount ra pa =>
     rw [hact] at h
     simp only [Action.writeCells, Action.stateWriteCells, List.append_nil,
@@ -611,6 +601,24 @@ theorem productionApplyBudget_getBalance_of_not_written
     rw [getBalance_setBalance_of_ne _ r' pa _ r a
       (balance_pair_ne h.2.1)]
     exact getBalance_setBalance_of_ne _ r' ra _ r a
+      (balance_pair_ne h.1)
+  | reserveSwap fr tr user amountIn minAmountOut ra =>
+    -- Workstream SB: four declared balance cells, stripped
+    -- outermost-first (user credit at `tr`, reserve debit at `tr`,
+    -- reserve credit at `fr`, user debit at `fr`).
+    rw [hact] at h
+    simp only [Action.writeCells, Action.stateWriteCells, List.append_nil,
+      List.mem_append, List.mem_cons, List.not_mem_nil, or_false, not_or] at h
+    show LegalKernel.getBalance
+      ((Laws.reserveSwap fr tr user amountIn minAmountOut ra).apply_impl es.base) r a = _
+    simp only [Laws.reserveSwap]
+    rw [getBalance_setBalance_of_ne _ tr user _ r a
+      (balance_pair_ne h.2.2.2.1)]
+    rw [getBalance_setBalance_of_ne _ tr ra _ r a
+      (balance_pair_ne h.2.2.1)]
+    rw [getBalance_setBalance_of_ne _ fr ra _ r a
+      (balance_pair_ne h.2.1)]
+    exact getBalance_setBalance_of_ne _ fr user _ r a
       (balance_pair_ne h.1)
   -- The two bulk variants.  Their write set is state-keyed
   -- (`Action.stateWriteCells` enumerates `Laws.bulkRecipients`), so
@@ -712,9 +720,11 @@ theorem mem_writeCellsAt_consumed_deposit
 /-- `depositWithFee` likewise. -/
 theorem mem_writeCellsAt_consumed_depositWithFee
     (es : ExtendedState) (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) (signer : ActorId) :
+    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) (sa : Amount)
+    (signer : ActorId) :
     CellTag.bridgeConsumed d
-      ∈ (Action.depositWithFee r recipient poolActor ua pa bg d).writeCellsAt es signer := by
+      ∈ (Action.depositWithFee r recipient poolActor ua pa bg d sa).writeCellsAt
+          es signer := by
   simp [Action.writeCellsAt, Action.writeCells, Action.stateWriteCells]
 
 /-- **The cell `Action.writeCells` could not name.**  `withdraw`
@@ -739,9 +749,11 @@ theorem mem_writeCellsAt_nextWdId_withdraw
     than the signer declare that recipient's budget cell. -/
 theorem mem_writeCellsAt_epochBudget_depositWithFee
     (es : ExtendedState) (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) (signer : ActorId) :
+    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) (sa : Amount)
+    (signer : ActorId) :
     CellTag.epochBudget recipient
-      ∈ (Action.depositWithFee r recipient poolActor ua pa bg d).writeCellsAt es signer := by
+      ∈ (Action.depositWithFee r recipient poolActor ua pa bg d sa).writeCellsAt
+          es signer := by
   simp [Action.writeCellsAt, Action.writeCells, Action.stateWriteCells]
 
 /-- ...and the delegated top-up likewise. -/
@@ -788,10 +800,10 @@ theorem writeSetComplete_productionApplyBudget
       (by intro r recipient amount d' hact he
           subst he; rw [hact] at h
           exact h (mem_writeCellsAt_consumed_deposit es r recipient amount d st.signer))
-      (by intro r recipient poolActor ua pa bg d' hact he
+      (by intro r recipient poolActor ua pa bg d' sa hact he
           subst he; rw [hact] at h
           exact h (mem_writeCellsAt_consumed_depositWithFee es r recipient poolActor
-            ua pa bg d st.signer)))
+            ua pa bg d sa st.signer)))
     (fun w h => productionApplyBudget_bridgePending_of_ne es st idx w
       (by intro r sender amount rcp hact he
           subst he; rw [hact] at h
@@ -807,18 +819,14 @@ theorem writeSetComplete_productionApplyBudget
     ((productionApplyBudget_bridge es st idx) ▸
       (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.1)
     ((productionApplyBudget_bridge es st idx) ▸
-      (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.2.1)
-    ((productionApplyBudget_bridge es st idx) ▸
-      (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.2.2.1)
-    ((productionApplyBudget_bridge es st idx) ▸
-      (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.2.2.2)
+      (applyActionToBridgeState_scalars es.bridge st.action idx).2.2.2)
     (fun a h => productionApplyBudget_epochBudgets_of_ne es st idx a
       (by intro he; subst he
           exact h (mem_writeCellsAt_epochBudget es st.action st.signer))
-      (by intro r recipient poolActor ua pa bg d hact he
+      (by intro r recipient poolActor ua pa bg d sa hact he
           subst he; rw [hact] at h
           exact h (mem_writeCellsAt_epochBudget_depositWithFee es r a poolActor
-            ua pa bg d st.signer))
+            ua pa bg d sa st.signer))
       (by intro recipient gr ga bi pa hact he
           subst he; rw [hact] at h
           exact h (mem_writeCellsAt_epochBudget_topUpFor es a gr ga bi pa st.signer)))
@@ -873,7 +881,7 @@ theorem localPolicy_cases (a : Action) (signer x : ActorId)
 theorem bridgeConsumed_cases (a : Action) (signer : ActorId) (d : LegalKernel.Bridge.DepositId)
     (h : CellTag.bridgeConsumed d ∈ a.writeCells signer) :
     (∃ r rcp amt, a = .deposit r rcp amt d) ∨
-      (∃ r rcp pa ua pam bg, a = .depositWithFee r rcp pa ua pam bg d) := by
+      (∃ r rcp pa ua pam bg sa, a = .depositWithFee r rcp pa ua pam bg d sa) := by
   cases a <;> simp_all [Action.writeCells]
 
 /-- The next-withdrawal-id counter is written by `withdraw` alone. -/

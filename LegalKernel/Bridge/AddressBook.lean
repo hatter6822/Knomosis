@@ -696,5 +696,102 @@ example : (empty.lookupRev 0) = none := by
 example : empty.nextActorId = 4 := rfl
 
 end AddressBook
+/-! ## The bridge actor
+
+`ActorId 0` is reserved for the bridge actor — the deployment
+authority that signs every L1-derived Knomosis action.
+
+The reservation is operational: `AddressBook.empty.nextActorId = 4`
+(post-GP.11.5), so addresses assigned via `assign` get `id ≥ 4`,
+leaving ids `0` / `1` / `2` / `3` exclusively for the bridge / gas-pool /
+sequencer / AMM-reserve actors.  No structural enforcement is needed; the
+convention plus the runtime adaptor's discipline suffice. -/
+
+/-- The bridge actor's `ActorId`.  Fixed at `0` so that the
+    `AddressBook`'s assigned ids (starting from `4` post-GP.11.5)
+    never collide with the bridge actor's slot. -/
+def bridgeActor : ActorId := 0
+
+/-! ## Reserved gas-pool actors (GP.7.1)
+
+Workstream GP.7.1 reserves two `ActorId` slots immediately after the
+bridge actor:
+
+  * `gasPoolActor` (`ActorId 1`) accumulates the deposit fee-split
+    revenue and the per-actor budget top-up payments at both
+    `ResourceId 0` (ETH) and `ResourceId 1` (BOLD).  Its outflow is
+    bounded by the canonical `gasPoolPolicy` (GP.7.2): it may only
+    `transfer` to `sequencerActor`, capped per action; the per-epoch
+    drain bound is the inductive GP.7.3 theorem.
+
+  * `sequencerActor` (`ActorId 2`) is the deployment's sequencer key:
+    the sole authorised recipient of `gasPoolActor` outflow, and the
+    actor that submits L2 state roots to L1.
+
+Like the bridge actor, the reservation is operational — the genesis
+`AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
+`AddressBook.addressBook_empty_nextActorId`), so an `empty` + `assign`
+chain never issues a reserved slot to a user-registered identity.  The
+reserved actors are pairwise distinct (the disjointness theorems
+below), which the GP.7.2 `gasPoolPolicy` relies on: the pool's
+recipient restriction is only meaningful when `sequencerActor` is a
+*different* actor than `gasPoolActor`. -/
+
+/-- The reserved `ActorId` of the gas-pool actor (Workstream GP.7.1).
+    Holds the deposit fee-split skim and the per-actor budget top-up
+    payments; its outflow is bounded by the canonical `gasPoolPolicy`
+    (GP.7.2), which permits only capped `transfer`s to
+    `sequencerActor`.
+
+    Fixed at `1`, the first slot after the bridge actor.  The genesis
+    `AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
+    `AddressBook.addressBook_empty_nextActorId`) so this slot is never
+    issued to a user-registered identity. -/
+def gasPoolActor : ActorId := 1
+
+/-- The reserved `ActorId` of the sequencer actor (Workstream GP.7.1).
+    The only authorised recipient of `gasPoolActor` outflow under the
+    canonical `gasPoolPolicy` (GP.7.2): the sequencer claims accrued
+    gas-pool revenue (L1-gas reimbursement) and submits L2 state roots
+    to L1.
+
+    Fixed at `2`, the second reserved slot after the bridge actor. -/
+def sequencerActor : ActorId := 2
+
+/-! ## Reserved AMM-reserve actor (GP.11.5)
+
+Workstream GP.11.5 reserves a third deployment slot after the bridge
+actor — the L2-side counterpart of the L1 `KnomosisBridge`'s
+`ammReserveEth` / `ammReserveBold` storage slots (GP.11.1 / GP.11.2 /
+GP.11.3):
+
+  * `ammReserveActor` (`ActorId 3`) holds the L2 reflection of the L1
+    bridge's embedded ETH↔BOLD AMM liquidity at both `ResourceId 0`
+    (ETH) and `ResourceId 1` (BOLD).  Its balances are mutated only by
+    bridge-attested `ammSwap` actions (frozen `Action` index 23): an
+    `ammSwap` credits this actor at the swap's `fromResource` and debits
+    it at the `toResource`, mirroring the on-chain reserve update.
+
+Like the GP.7.1 slots, the reservation is operational: the genesis
+`AddressBook.empty.nextActorId` advances a further step (`3 → 4`;
+`AddressBook.addressBook_empty_nextActorId`), so an `empty` + `assign`
+chain never issues `ActorId 3` to a user-registered identity.  The slot
+is provably distinct from the three GP.7.1 reserved actors (the
+disjointness theorems below). -/
+
+/-- The reserved `ActorId` of the AMM-reserve actor (Workstream GP.11.5).
+    Holds the L2 reflection of the L1 bridge's embedded ETH↔BOLD AMM
+    liquidity (`ammReserveEth` / `ammReserveBold`) at both `ResourceId 0`
+    (ETH) and `ResourceId 1` (BOLD).  Its balances are mutated only by
+    bridge-attested `ammSwap` actions (frozen `Action` index 23); no
+    other action targets this actor.
+
+    Fixed at `3`, the third reserved slot after the bridge actor.  The
+    genesis `AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
+    `AddressBook.addressBook_empty_nextActorId`) so this slot is never
+    issued to a user-registered identity. -/
+def ammReserveActor : ActorId := 3
+
+
 end Bridge
 end LegalKernel

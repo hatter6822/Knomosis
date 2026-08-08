@@ -5,60 +5,44 @@ import {BoldTestSupport} from "test/utils/BoldTestSupport.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
-import {MockBold} from "test/utils/MockBold.sol";
 
 /// @title AmmTestBase
-/// @notice Shared scaffolding for the Workstream GP.11.3 embedded-AMM swap
-///         test suites (`AmmSwap` / `AmmReentrancy` / `AmmInvariants` /
-///         `AmmSlippage` / `AmmSandwich`): the canonical deployment configs,
-///         the BOLD etch, reserve seeding via fee-split deposits, and an
-///         INDEPENDENT constant-product reference (`_refOut`) — recomputed
-///         from the raw formula, NOT via the contract's `AmmMath`, so the
-///         behavioural suites check `contract == independent formula` while
-///         `AmmMath.t.sol` separately pins `AmmMath == hand-computed truth`.
+/// @notice Shared scaffolding for the surviving AMM-adjacent suites
+///         (`AmmStorage` / `AmmDepositSeeding` / `AmmKillSwitch` and the
+///         GP.11.10 disaster-recovery suites): the canonical deployment
+///         configs and the BOLD etch.  The L1 embedded AMM was EXCISED
+///         under the one-AMM L2-primary topology — the user-facing swap
+///         is the L2 `Laws.reserveSwap` over the reserve actor's live
+///         balances — so the old swap-suite helpers (the legacy-liquidity
+///         harness, `_seedBothLegs`, the independent `_refOut` reference)
+///         are gone with the swap they exercised.
 abstract contract AmmTestBase is Test, BoldTestSupport {
     address internal constant BOLD_BREAKER = address(0xB12E6B6E);
     address internal constant BOLD_ADMIN = address(0xAD814);
-    /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.  Wired into
+    /// @dev The GP.11.10 AMM disaster-recovery (kill-switch) role.  Wired into
     ///      `_deployBoldEnabled` so the kill switch + breaker are testable.
     address internal constant AMM_DR = address(0xA33D6);
 
     uint64 internal constant NATIVE_ETH = 0;
     uint64 internal constant BOLD_RID = 1;
-    /// @dev Mirror of `KnomosisBridge.AMM_SWAP_FEE_BPS` (0.30%).
-    uint256 internal constant FEE = 30;
 
-    /// @dev Seeds the reserves via deposits.
+    /// @dev Funds fee-split deposits in the seeding suites.
     address internal lp = address(0x11D);
-    /// @dev Performs swaps.
-    address internal swapper = address(0x5A11);
-
-    /// @dev Local copy of the contract event for `vm.expectEmit`.
-    event AmmSwapExecuted(
-        address indexed swapper,
-        uint64 indexed fromResource,
-        uint64 indexed toResource,
-        uint256 amountIn,
-        uint256 amountOut,
-        uint256 newReserveIn,
-        uint256 newReserveOut
-    );
 
     function setUp() public virtual {
         vm.deal(lp, type(uint128).max);
-        vm.deal(swapper, type(uint128).max);
     }
 
     // ------------------------------------------------------------------
-    // Deployment + seeding
+    // Deployment
     // ------------------------------------------------------------------
 
-    /// @notice Place a fresh conformant `MockBold`'s runtime code at the
-    ///         pinned BOLD address.  MUST run BEFORE deploying a BOLD-enabled
-    ///         bridge (the constructor cross-checks `BOLD_TOKEN.symbol()`).
-    /// @notice The canonical BOLD-enabled + AMM-enabled (80% seed) +
+    /// @notice The canonical BOLD-enabled + seed-enabled (80% ratio) +
     ///         kill-switch-enabled (`AMM_DR`) `ConstructorArgs`.  Exposed so
     ///         the constructor-guard test can override a single field.
+    ///         (Place a conformant `MockBold` at the pinned BOLD address
+    ///         with `_etchBold()` BEFORE deploying — the constructor
+    ///         cross-checks `BOLD_TOKEN.symbol()`.)
     function _boldEnabledArgs() internal pure returns (KnomosisBridge.ConstructorArgs memory) {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
@@ -84,13 +68,14 @@ abstract contract AmmTestBase is Test, BoldTestSupport {
             enableLiquityAutoCircuitTrigger: false,
             ammSeedRatioBps: 8000,
             ammDisasterRecovery: AMM_DR,
+            faultProofRollbackAuthority: address(0),
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });
     }
 
-    /// @notice A BOLD-enabled bridge at the max seed ratio (80%), so deposits
-    ///         seed the reserves generously.  Requires `_etchBold()` first.
+    /// @notice A BOLD-enabled bridge at the max seed ratio (80%).
+    ///         Requires `_etchBold()` first.
     function _deployBoldEnabled() internal returns (KnomosisBridge) {
         return new KnomosisBridge(_boldEnabledArgs());
     }
@@ -101,7 +86,7 @@ abstract contract AmmTestBase is Test, BoldTestSupport {
         bridge = _deployBoldEnabled();
     }
 
-    /// @notice A BOLD-DISABLED bridge (the BOLD reserve can never fill).
+    /// @notice A BOLD-DISABLED bridge (the BOLD seed leg can never fire).
     function _deployBoldDisabled() internal returns (KnomosisBridge) {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
@@ -128,48 +113,10 @@ abstract contract AmmTestBase is Test, BoldTestSupport {
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 8000,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
         );
-    }
-
-    /// @notice Mint `amount` BOLD to `user` and approve `bridge`.
-    /// @notice Seed both AMM reserves to a realistic ~1 ETH : 3000 BOLD ratio.
-    ///         100 ETH at 50% fee -> pool 50 -> 80% seed = 40 ETH;
-    ///         300000 BOLD at 50% fee -> pool 150000 -> 80% seed = 120000 BOLD.
-    function _seedBothLegs(KnomosisBridge bridge)
-        internal
-        returns (uint256 reserveEth, uint256 reserveBold)
-    {
-        vm.prank(lp);
-        bridge.depositETHWithFee{value: 100 ether}(5000);
-
-        uint256 boldDeposit = 300_000 ether;
-        _mintApprove(bridge, lp, boldDeposit);
-        vm.prank(lp);
-        bridge.depositBoldWithFee(boldDeposit, 5000);
-
-        reserveEth = bridge.ammReserveEth();
-        reserveBold = bridge.ammReserveBold();
-        assertGt(reserveEth, 0, "ETH reserve seeded");
-        assertGt(reserveBold, 0, "BOLD reserve seeded");
-    }
-
-    /// @notice Independent constant-product output reference (NOT via the
-    ///         contract's `AmmMath`): `floor(amountIn*(10000-FEE)*reserveOut
-    ///         / (reserveIn*10000 + amountIn*(10000-FEE)))`.
-    function _refOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
-        internal
-        pure
-        returns (uint256)
-    {
-        uint256 amountInWithFee = amountIn * (10_000 - FEE);
-        return (amountInWithFee * reserveOut) / (reserveIn * 10_000 + amountInWithFee);
-    }
-
-    /// @notice A deadline comfortably in the future for non-deadline tests.
-    function _farDeadline() internal view returns (uint256) {
-        return block.timestamp + 1 hours;
     }
 }

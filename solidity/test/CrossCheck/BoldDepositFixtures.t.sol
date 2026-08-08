@@ -409,11 +409,12 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
     ///         length prefix, so 88 bytes => 178 chars, 18 bytes => 38
     ///         chars.)
     ///
-    ///         `depositWithFee` carries seven fields; C-1 widened the two
-    ///         wei-denominated ones (`userAmount`, `poolAmount`) from the
-    ///         9-byte CBE uint head to the 17-byte amount head, taking the
-    ///         action from 72 to 88 bytes.  `budgetGrant` is a UNIT count
-    ///         and stays narrow, so `recipientBudgetCbe` is unchanged.
+    ///         `depositWithFee` carries eight fields; C-1 widened the
+    ///         wei-denominated amounts onto the 33-byte amount head and
+    ///         Workstream SB appended `seedAmount` on the same head,
+    ///         taking the action to 153 bytes.  `budgetGrant` is a UNIT
+    ///         count and stays narrow, so `recipientBudgetCbe` is
+    ///         unchanged.
     function test_actionCbe_wellformed() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
@@ -438,8 +439,8 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
             checkEq(
                 string(abi.encodePacked(budget[0], budget[1])), "0x", "recipientBudgetCbe 0x prefix"
             );
-            // 120 bytes => "0x" + 240 hex chars
-            checkEq(action.length, 2 + 240, "actionCbe decodes to 120 bytes");
+            // 153 bytes => "0x" + 306 hex chars
+            checkEq(action.length, 2 + 306, "actionCbe decodes to 153 bytes");
             // 18 bytes => "0x" + 36 hex chars
             checkEq(budget.length, 2 + 36, "recipientBudgetCbe decodes to 18 bytes");
         }
@@ -533,6 +534,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework, DepositEventDecod
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: address(0),
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

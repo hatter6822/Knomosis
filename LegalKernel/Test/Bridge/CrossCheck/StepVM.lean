@@ -485,17 +485,19 @@ def buildWithdrawHappy
     cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
 /-- Workstream GP — build a happy-path fixture for
-    `Action.depositWithFee`.
+    `Action.depositWithFee` (three-leg form, Workstream SB).
 
     Pre-state: `recipient` has `recipientInitBal`; if `poolActor ≠
-    recipient`, `poolActor` has `poolInitBal`.  No precondition on
-    balances (the law's `pre` is `True`; saturating adds always
-    succeed).  The kernel-level effect is the two-step `setBalance`
-    sequence in `Laws.depositWithFee.apply_impl`:
-    `recipient += userAmount; poolActor += poolAmount`.  When
-    `recipient = poolActor`, both writes land on the same cell, so
-    the new balance is `pre + userAmount + poolAmount` (matching
-    Solidity's `_stepDepositWithFee`'s self-credit branch).
+    recipient`, `poolActor` has `poolInitBal`.  The kernel-level
+    effect is the three-step `setBalance` chain in
+    `Laws.depositWithFee.apply_impl`: `recipient += userAmount;
+    poolActor += poolAmount − seedAmount; ammReserveActor +=
+    seedAmount`.  The law's precondition is the C-3 ceiling per leg
+    plus `seedAmount ≤ poolAmount`; every happy fixture keeps its
+    seed within the fee, so the evaluated precondition holds and the
+    chain fires.  When `recipient = poolActor`, the first two writes
+    land on the same cell (matching Solidity's
+    `_stepDepositWithFee`'s self-credit branch).
 
     Per the admission gate's `depositWithFee_signerCheck` round-5
     defense, the signer MUST be `Bridge.bridgeActor`.  Production
@@ -505,11 +507,12 @@ def buildDepositWithFeeHappy
     (idx : Nat) (r : ResourceId) (recipient poolActor : ActorId)
     (recipientInitBal poolInitBal userAmount poolAmount : Amount)
     (budgetGrant : Nat) (depositId : Bridge.DepositId)
+    (seedAmount : Amount)
     (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   let signer : ActorId := Bridge.bridgeActor
   let action : Action :=
     .depositWithFee r recipient poolActor userAmount poolAmount
-                    budgetGrant depositId
+                    budgetGrant depositId seedAmount
   let st : SignedAction := { action, signer, nonce, sig }
   let isSelf := decide (recipient = poolActor)
   -- Pre-state: balance(r, recipient) := recipientInitBal; if
@@ -522,10 +525,10 @@ def buildDepositWithFeeHappy
   let es := stateWithBalances r entries
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  -- Per Laws.depositWithFee.apply_impl:
-  --   recipient += userAmount; then poolActor += poolAmount.
-  -- Self-credit case: both writes target the same cell, so the
-  -- new balance is `pre + userAmount + poolAmount`.
+  -- Per Laws.depositWithFee.apply_impl (three-leg):
+  --   recipient += userAmount; poolActor += poolAmount − seedAmount;
+  --   ammReserveActor += seedAmount.
+  -- Self-credit case: the first two writes target the same cell.
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -1047,9 +1050,14 @@ def depositWithFeeFixtures : List StepVMFixture :=
     let depositId : Bridge.DepositId := i * 79
     let recipientInitBal : Amount := 25 + i
     let poolInitBal : Amount := 15 + i
+    -- Seed sweep (Workstream SB): 0, 3, …, 15 — i = 0 is seedless,
+    -- i = 3 seeds THROUGH the self-credit case, and i = 5's seed
+    -- equals its poolAmount (the full-seed edge).
+    let seedAmount : Amount := 3 * i
     buildDepositWithFeeHappy i ((i + 1).toUInt64) recipient poolActor
                              recipientInitBal poolInitBal
                              userAmount poolAmount budgetGrant depositId
+                             seedAmount
                              (i * 83) (ByteArray.mk #[i.toUInt8])) ++
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "depositWithFee")
@@ -1147,61 +1155,6 @@ def claimBudgetRefundFixtures : List StepVMFixture :=
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "claimBudgetRefund")
 
-/-- GP.11.8: build an `ammSwap` (index 23) happy fixture.  The swap
-    credits `amountIn` to `ammReserveActor`'s `fromResource` balance and
-    debits `amountOut` from its `toResource` balance.  Pre-state funds
-    the reserve actor at both resources so the debit succeeds. -/
-def buildAmmSwapHappy
-    (idx : Nat) (fromResource toResource : ResourceId)
-    (signer ammReserveActor : ActorId)
-    (amountIn amountOut fromInitBal toInitBal : Nat)
-    (nonce : Nonce) (sig : ByteArray) :
-    StepVMFixture :=
-  let action : Action :=
-    .ammSwap fromResource toResource amountIn amountOut ammReserveActor
-  let st : SignedAction := { action, signer, nonce, sig }
-  let es := stateWithBalances fromResource
-              [(ammReserveActor, fromInitBal)] |>
-            (fun es =>
-              { es with base :=
-                LegalKernel.setBalance es.base toResource ammReserveActor toInitBal })
-  let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st 0
-  let bundle :=
-    LegalKernel.FaultProof.Observer.buildObserverCellProofs
-      es action signer
-  { fixtureId := s!"ammSwap-happy-{idx}",
-    actionVariant := "ammSwap",
-    preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
-    signedActionHex := encodeSignedAction st,
-    expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedRevertReason := "null",
-    actionKindByte := actionKindByte action,
-    actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat,
-    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
-
-/-- GP.11.8 fixtures for `ammSwap` (10 entries: 6 happy + 4
-    adversarial).  The 6 happy entries sweep `fromResource ∈ {0,1}`
-    (ETH→BOLD / BOLD→ETH), vary amounts, and end with an exact-drain
-    boundary (`i = 5`: `toInitBal = amountOut`, so the to-reserve is
-    drained to 0). -/
-def ammSwapFixtures : List StepVMFixture :=
-  (List.range 6).map (fun i =>
-    let fromResource : ResourceId := ((i % 2) : Nat).toUInt64
-    let toResource : ResourceId := (((i + 1) % 2) : Nat).toUInt64
-    let signer : ActorId := ((i + 10) : Nat).toUInt64
-    let ammReserveActor : ActorId := 3
-    let amountIn : Nat := (i + 1) * 100
-    let amountOut : Nat := (i + 1) * 50
-    let fromInitBal : Nat := 10000 + i * 100
-    let toInitBal : Nat := if i == 5 then amountOut else amountOut + 500 + i * 50
-    buildAmmSwapHappy i fromResource toResource signer ammReserveActor
-                      amountIn amountOut fromInitBal toInitBal
-                      (i * 97) (ByteArray.mk #[i.toUInt8])) ++
-  (List.range 4).map (fun i =>
-    buildAdversarialBadPreCommit i "ammSwap")
-
 /-- GP.11.10: build a `reclaimAmmReserves` (index 24) happy fixture.
     The sweep debits the reserve actor's ENTIRE `r` balance (the
     exact-sweep precondition pins `amount = balance`) and credits the
@@ -1290,10 +1243,82 @@ def faultProofResolutionFixtures : List StepVMFixture :=
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "faultProofResolution")
 
+/-- Workstream SB: build a `reserveSwap` (index 25) happy fixture —
+    the user-facing L2 constant-product swap, the first FOUR-balance-
+    cell variant.  Pre-state funds the user's `fromResource` balance
+    and the reserve at BOTH resources; the quote is what
+    `Laws.reserveQuote` computes over those pre-values, so the
+    fixture's post-state prices the swap exactly as the kernel does.
+    The signer IS the user (`reserveSwapUserBinding`'s canonical
+    discipline). -/
+def buildReserveSwapHappy
+    (idx : Nat) (fromResource toResource : ResourceId)
+    (user reserveActor : ActorId)
+    (amountIn minAmountOut : Nat)
+    (userFromBal userToBal resFromBal resToBal : Nat)
+    (nonce : Nonce) (sig : ByteArray) :
+    StepVMFixture :=
+  let action : Action :=
+    .reserveSwap fromResource toResource user amountIn minAmountOut reserveActor
+  let st : SignedAction := { action, signer := user, nonce, sig }
+  let es0 := stateWithBalances fromResource
+              [(user, userFromBal), (reserveActor, resFromBal)]
+  let base' :=
+    LegalKernel.setBalance
+      (LegalKernel.setBalance es0.base toResource reserveActor resToBal)
+      toResource user userToBal
+  let es : ExtendedState := { es0 with base := base' }
+  let preCommit := commitExtendedState es
+  let postCommit := recomputeCommitment es st 0
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action user
+  { fixtureId := s!"reserveSwap-happy-{idx}",
+    actionVariant := "reserveSwap",
+    preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
+    signedActionHex := encodeSignedAction st,
+    expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
+    expectedRevertReason := "null",
+    actionKindByte := actionKindByte action,
+    actionFieldsHex := encodeActionFields action,
+    signerNat := user.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
+
+/-- Workstream SB fixtures for `reserveSwap` (10 entries: 6 happy + 4
+    adversarial).  The 6 happy entries sweep both swap directions
+    (`fromResource ∈ {0,1}`), vary amounts and reserve depths, and pin
+    three boundaries: `i = 3` drains the user's from-balance exactly,
+    `i = 4` sets `minAmountOut` EXACTLY at the quote (the tightest
+    admissible slippage), and `i = 5` sets it one ABOVE the quote — a
+    kernel NO-OP (not a revert), so the corpus pins that the L1 fold
+    reproduces a refused swap's unchanged balances too. -/
+def reserveSwapFixtures : List StepVMFixture :=
+  (List.range 6).map (fun i =>
+    let fromResource : ResourceId := ((i % 2) : Nat).toUInt64
+    let toResource : ResourceId := (((i + 1) % 2) : Nat).toUInt64
+    let user : ActorId := ((i + 10) : Nat).toUInt64
+    let reserveActor : ActorId := 3
+    let amountIn : Nat := (i + 1) * 200
+    let resFromBal : Nat := 10000 + i * 500
+    let resToBal : Nat := 10000 - i * 300
+    let quote : Nat :=
+      Bridge.AmmMath.getAmountOut amountIn resFromBal resToBal
+        Bridge.AmmMath.swapFeeBps
+    let minAmountOut : Nat :=
+      if i == 4 then quote else if i == 5 then quote + 1 else quote / 2
+    let userFromBal : Nat := if i == 3 then amountIn else amountIn + 50 * (i + 1)
+    let userToBal : Nat := if i % 2 == 0 then 0 else 777 + i
+    buildReserveSwapHappy i fromResource toResource user reserveActor
+                          amountIn minAmountOut
+                          userFromBal userToBal resFromBal resToBal
+                          (i * 101) (ByteArray.mk #[i.toUInt8])) ++
+  (List.range 4).map (fun i =>
+    buildAdversarialBadPreCommit i "reserveSwap")
+
 /-- The full corpus: every variant's fixtures concatenated.
-    Total: 24 + 24 + 20 × 10 + 3 × 10 = 278 entries (post-GP.11.10:
-    +reclaimAmmReserves on top of the 268 entries that already carried
-    +ammSwap). -/
+    Total: 24 + 24 + 19 × 10 + 4 × 10 = 278 entries (the retired
+    kind 23 `ammSwap` carries no fixtures; Workstream SB added
+    +reserveSwap, GP.11.10 added +reclaimAmmReserves). -/
 def allFixtures : List StepVMFixture :=
   transferFixtures ++ mintFixtures ++ burnFixtures ++
   freezeResourceFixtures ++ replaceKeyFixtures ++ rewardFixtures ++
@@ -1305,8 +1330,8 @@ def allFixtures : List StepVMFixture :=
   faultProofResolutionFixtures ++ depositWithFeeFixtures ++
   topUpActionBudgetFixtures ++ topUpActionBudgetForFixtures ++
   claimBudgetRefundFixtures ++
-  ammSwapFixtures ++
-  reclaimAmmReservesFixtures
+  reclaimAmmReservesFixtures ++
+  reserveSwapFixtures
 
 /-! ## Test suite (Lean-side fixture-stability tests) -/
 
@@ -1487,17 +1512,25 @@ two.  Emitting it makes the disagreement visible in the corpus instead
 of in a game.
 -/
 
-/-- The `(recipient, amount)` an action grants, and the extra units a
-    refund claim consumes.  Mirrors `budgetGrant`'s per-variant arms
-    and `refundConsumeExtra`. -/
-private def grantTripleOf (action : Action) (signer : ActorId) :
-    ActorId × Nat × Nat :=
+/-- Whether an action grants at all, the `(recipient, amount)` it
+    grants, and the extra units a refund claim consumes.  Mirrors
+    `budgetGrant`'s per-variant arms and `refundConsumeExtra`.
+
+    The leading `Bool` is not redundant with `amount ≠ 0`.
+    `ActorBudget.topUp` NORMALISES before it adds, so a grant of zero
+    still refreshes a stale cell to the free tier — a granting variant
+    whose amount happens to be zero is not the same as a variant that
+    grants nothing.  The L1 mirror inferred one from the other and so
+    skipped the normalisation, forking the root; `StepPlan.planGrant`
+    now carries the flag and this emits it. -/
+private def grantPlanOf (action : Action) (signer : ActorId) :
+    Bool × ActorId × Nat × Nat :=
   match action with
-  | .depositWithFee _ recipient _ _ _ g _ => (recipient, g, 0)
-  | .topUpActionBudget _ _ inc _          => (signer, inc, 0)
-  | .topUpActionBudgetFor recipient _ _ inc _ => (recipient, inc, 0)
-  | .claimBudgetRefund _ budgetUnits _ _  => (signer, 0, budgetUnits)
-  | _                                     => (signer, 0, 0)
+  | .depositWithFee _ recipient _ _ _ g _ _ => (true, recipient, g, 0)
+  | .topUpActionBudget _ _ inc _          => (true, signer, inc, 0)
+  | .topUpActionBudgetFor recipient _ _ inc _ => (true, recipient, inc, 0)
+  | .claimBudgetRefund _ budgetUnits _ _  => (false, signer, 0, budgetUnits)
+  | _                                     => (false, signer, 0, 0)
 
 /-- Per-entry goldens for the nonce and epoch-budget derivations, over
     the fixture base state — the pre-values, the grant triple, and the
@@ -1511,14 +1544,23 @@ def uniformWriteGoldens : List Test.Bridge.CrossCheck.Json :=
     [ ("transfer",            .transfer 1 signer 8 5)
     , ("mint",                .mint 1 8 5)
     , ("withdraw",            .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
-    , ("depositWithFee",      .depositWithFee 1 8 9 5 1 3 3)
+    , ("depositWithFee",      .depositWithFee 1 8 9 5 1 3 3 1)
     , ("topUpActionBudget",   .topUpActionBudget 1 5 2 9)
     , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 5 2 9)
-    , ("claimBudgetRefund",   .claimBudgetRefund 1 2 3 9) ]
+    , ("claimBudgetRefund",   .claimBudgetRefund 1 2 3 9)
+      -- A GRANTING variant whose grant is ZERO.  `fixtureBase`'s policy
+      -- is `.bounded 100 1 1` and actor 8 holds no budget cell, so
+      -- `lastSeenEpoch 0 < 1` and `topUp … 0` is `normalise`: the cell
+      -- moves to `{1, 100}` and becomes PRESENT in the tree.  A verifier
+      -- that reads "amount is zero" as "no grant" leaves it canonically
+      -- absent and folds to a different root.  Reachable in production
+      -- whenever a deposit's `poolAmount / weiPerBudgetUnit` floors to
+      -- zero.
+    , ("depositWithFeeZeroGrant", .depositWithFee 1 8 9 5 1 0 4 0) ]
   probes.flatMap (fun (name, action) =>
     let st : SignedAction :=
       { action, signer, nonce := 0, sig := ByteArray.empty }
-    let (grantRecipient, grantAmount, refundExtra) := grantTripleOf action signer
+    let (grants, grantRecipient, grantAmount, refundExtra) := grantPlanOf action signer
     -- The signer's own cell and, where they differ, the grant
     -- recipient's: the branch that credits a recipient on a step the
     -- signer could afford is only exercised when the two are distinct.
@@ -1528,6 +1570,7 @@ def uniformWriteGoldens : List Test.Bridge.CrossCheck.Json :=
       .obj [ ("variant",        .str name)
            , ("signer",         .str (h256 signer.toNat))
            , ("target",         .str (h256 target.toNat))
+           , ("grants",         .bool grants)
            , ("grantRecipient", .str (h256 grantRecipient.toNat))
            , ("grantAmount",    .str (h256 grantAmount))
            , ("refundExtra",    .str (h256 refundExtra))
@@ -1610,21 +1653,7 @@ def balanceWriteGoldens : List Test.Bridge.CrossCheck.Json :=
   let depositOk := pair (deriveDepositBalance read r 8 0) (bal 8) 0
   let topUpOk := pair (deriveTopUpBalances read r 7 9 5) (bal 7) (bal 9)
   let topUpSelf := pair (deriveTopUpBalances read r 7 7 5) (bal 7) (bal 7)
-  -- The cross-resource variant: reserve 9 credited at `r`, debited at
-  -- resource 2.  Its `toBal` is read at the OTHER resource, which is
-  -- why it does not go through the chained pair.
-  let swapOk := pair (deriveAmmSwapBalances read r 2 5 10 9)
-    (bal 9) (LegalKernel.getBalance es.base 2 9)
-  -- ...and the no-op case, where the reserve at `toResource` cannot
-  -- cover `amountOut`.  Without it the swap probe would only ever
-  -- exercise the succeeding branch.
-  let swapNoop := pair (deriveAmmSwapBalances read r 2 5 999999 9)
-    (bal 9) (LegalKernel.getBalance es.base 2 9)
-  [ balanceGolden "ammSwap" (bal 9) (LegalKernel.getBalance es.base 2 9)
-      1 2 5 10 swapOk.1 swapOk.2
-  , balanceGolden "ammSwap" (bal 9) (LegalKernel.getBalance es.base 2 9)
-      1 2 5 999999 swapNoop.1 swapNoop.2
-  , balanceGolden "transfer" (bal 7) (bal 8) 7 8 30 0 transferOk.1 transferOk.2
+  [ balanceGolden "transfer" (bal 7) (bal 8) 7 8 30 0 transferOk.1 transferOk.2
   , balanceGolden "transfer" (bal 7) (bal 7) 7 7 30 0 transferSelf.1 transferSelf.2
   , balanceGolden "transfer" (bal 7) (bal 8) 7 8 999999 0
       transferNoop.1 transferNoop.2
@@ -1699,10 +1728,15 @@ def recordWriteGoldens : List Test.Bridge.CrossCheck.Json :=
   , .obj [ ("kind", .str "pending")
          , ("payloadHex", .str (hx (LegalKernel.Bridge.EthAddress.toBytes rcp)))
          , ("a", .str (h256 1)), ("b", .str (h256 5))
-         , ("c", .str (h256 7)), ("d", .str (h256 0))
+         -- `c` is the l2LogIndex, `d` the withdrawal id.  They are
+         -- DELIBERATELY different numbers: the two counters diverge in
+         -- production after the first non-withdraw action, and the L1
+         -- used to bind the proof index to the wrong one.  A golden
+         -- that made them equal would pass either way.
+         , ("c", .str (h256 7)), ("d", .str (h256 3))
          , ("encodedHex", .str (hx (derivePendingCellValue
              { resource := 1, recipient := rcp
-             , amount := 5, l2LogIndex := 7 }))) ] ]
+             , amount := 5, l2LogIndex := 7, wdId := 3 }))) ] ]
 
 /-! ### The multiproof wire, per probe
 
@@ -1729,13 +1763,25 @@ than trusted.
     frontier's cells with their proven pre-values in path order, the
     shared wire, and the two roots the wire serves. -/
 def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
+  -- The probe signer's REGISTERED key: the SEC1-compressed secp256k1
+  -- verifying key for secret scalar `0x01…01` — the same key the
+  -- `knomosis verify-check` self-test vector uses.  Registered so the
+  -- game consumers (`BatchGame.t.sol`, `KnomosisFaultProofGame.t.sol`)
+  -- can sign the probe's canonical digest IN-TEST with `vm.sign` and
+  -- drive the F-A signature gate's honest path; the probes' pre/post
+  -- roots include the registry cell accordingly.
+  let signerPk : ByteArray := ByteArray.mk
+    #[0x03,0x1b,0x84,0xc5,0x56,0x7b,0x12,0x64,0x40,0x99,0x5d,0x3e,0xd5,0xaa,0xba,0x05,
+      0x65,0xd7,0x1e,0x18,0x34,0x60,0x48,0x19,0xff,0x9c,0x17,0xf5,0xe9,0xd5,0xdd,0x07,0x8f]
   let es : ExtendedState :=
     let base : LegalKernel.State :=
       { balances :=
           ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
              ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
              ((∅ : BalanceMap).insert 9 60) }
-    { fixtureBase with base := base }
+    { fixtureBase with
+        base := base
+        registry := (∅ : KeyRegistry).insert 7 signerPk }
   let signer : ActorId := 7
   let hx := Test.Bridge.CrossCheck.hexFromBytes
   let probes : List (String × Action) :=
@@ -1752,18 +1798,30 @@ def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
     , ("freezeResource", .freezeResource 1)
     , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
     , ("deposit",    .deposit 1 8 5 3)
-    , ("depositWithFee", .depositWithFee 1 8 9 5 2 3 4)
-    , ("depositWithFeeSelf", .depositWithFee 1 signer 9 5 2 3 5)
+    , ("depositWithFee", .depositWithFee 1 8 9 5 2 3 4 1)
+    , ("depositWithFeeSelf", .depositWithFee 1 signer 9 5 2 3 5 1)
     , ("topUpActionBudget", .topUpActionBudget 1 10 4 9)
     , ("topUpActionBudgetForSelf", .topUpActionBudgetFor signer 1 10 4 9)
     , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 10 4 9)
     , ("claimBudgetRefund", .claimBudgetRefund 1 2 3 9)
-    , ("ammSwap",    .ammSwap 1 2 5 10 9)
     , ("registerIdentity", .registerIdentity 8 (ByteArray.mk #[1, 2, 3]))
     , ("replaceKey", .replaceKey 8 (ByteArray.mk #[0xAA, 0xBB]))
     , ("declareLocalPolicy", .declareLocalPolicy Authority.LocalPolicy.empty)
     , ("revokeLocalPolicy", .revokeLocalPolicy) ]
-  probes.filterMap (fun (name, action) =>
+  -- The F-A negative control: the SAME transfer over a state whose
+  -- signer is UNREGISTERED (the registry cell is absent).  The game
+  -- consumers drive it to a ChallengerWon settlement — no key can
+  -- have authorised the entry — while `executeStepToRootMulti`
+  -- treats it like any other probe (the signature gate lives in the
+  -- game, not the step VM).
+  let esUnregistered : ExtendedState :=
+    let base : LegalKernel.State :=
+      { balances :=
+          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
+             ((∅ : BalanceMap).insert 9 60) }
+    { fixtureBase with base := base }
+  let mkGolden := fun (es : ExtendedState) (name : String) (action : Action) =>
     let st : SignedAction :=
       { action, signer, nonce := 0, sig := ByteArray.empty }
     match stepMultiPostRoot es st 0 with
@@ -1787,6 +1845,21 @@ def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
         , ("actionKindByte", .num (actionKindByte action).toNat)
         , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
         , ("signerNat", .num signer.toNat)
+          -- The pre-state's expected nonce for the signer — the only
+          -- value the admission gate accepts a signature over, and
+          -- what the F-A digest recomputation uses.  Redundant with
+          -- the frontier's nonce cell; emitted so a consumer can sign
+          -- the digest without first decoding the cell.
+        , ("signerNonceNat", .num (Authority.expectsNonce es signer))
+          -- F-A: the signer's registry cell — its pre-value (empty =
+          -- canonically absent, the unregistered case) and its
+          -- single-cell opening against the PRE-state root, on the
+          -- `bitmask(32) ‖ siblings` wire the game's
+          -- `terminateOnSingleStep` consumes.
+        , ("registryValueHex",
+           .str (hx (getCellValue es (.registry signer))))
+        , ("registryProofHex",
+           .str (hx (buildStateCellProof es (.registry signer)).toWireBytes))
         , ("l2LogIndex", .num 0)
           -- The gap count, so the consumer's own derivation from the
           -- key set is checked against Lean's rather than against
@@ -1819,7 +1892,10 @@ def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
                  , ("preLeafPreimageHex",
                     .str (hx (encodeAsBytes (smtCellKey t) ++ encodeAsBytes v)))
                  , ("isAbsent", .bool (decide (v = canonicalAbsentValue t))) ])))
-        ]))
+        ])
+  probes.filterMap (fun (name, action) => mkGolden es name action) ++
+    (mkGolden esUnregistered "transferUnregistered"
+      (.transfer 1 signer 8 30)).toList
 
 /-! ### The write SET, per variant
 
@@ -1862,9 +1938,9 @@ def writeSetGoldens : List Test.Bridge.CrossCheck.Json :=
     , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
     , .faultProofChallenge ByteArray.empty 0 1 ByteArray.empty
     , .faultProofResolution ByteArray.empty 0 8 0
-    , .depositWithFee 1 8 9 5 1 3 4, .topUpActionBudget 1 5 2 9
+    , .depositWithFee 1 8 9 5 1 3 4 1, .topUpActionBudget 1 5 2 9
     , .topUpActionBudgetFor 8 1 5 2 9, .claimBudgetRefund 1 2 3 9
-    , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 25 9 8 ]
+    , .reclaimAmmReserves 1 25 9 8 ]
   probes.map (fun action =>
     let cells := Authority.Action.writeCellsAt es action signer
     .obj [ ("actionKindByte", .num (actionKindByte action).toNat)
@@ -1895,12 +1971,12 @@ preimage — which is what makes an absent cell openable at all, and a
 step crediting a fresh actor opens one on its first line.
 -/
 
-/-- One representative tag per cell kind, so the goldens cover all
-    fifteen rather than the handful a step happens to touch. -/
+/-- One representative tag per LIVE cell kind (7/8 are the retired
+    book-mirror holes), so the goldens cover all thirteen rather than
+    the handful a step happens to touch. -/
 def absentValueProbeTags : List CellTag :=
   [ .balance 1 7, .nonce 7, .registry 7, .localPolicy 7
   , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
-  , .bridgeAmmReserveEth, .bridgeAmmReserveBold
   , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
   , .epochBudget 7, .budgetPolicy ]
@@ -2056,23 +2132,22 @@ def tests : List Test.TestCase :=
         Test.assertEq (expected := 10)
           (actual := claimBudgetRefundFixtures.length) "6 happy + 4 adversarial"
     }
-  , { name := "GP.11.8: ammSwap fixture corpus has 10 entries"
-    , body := do
-        Test.assertEq (expected := 10)
-          (actual := ammSwapFixtures.length) "6 happy + 4 adversarial"
-    }
   , { name := "GP.11.10: reclaimAmmReserves fixture corpus has 10 entries"
     , body := do
         Test.assertEq (expected := 10)
           (actual := reclaimAmmReservesFixtures.length) "6 happy + 4 adversarial"
     }
-  , { name := "GP.11.10: full corpus has 278 entries"
+  , { name := "SB: reserveSwap fixture corpus has 10 entries"
     , body := do
-        -- 24 + 24 + 20 × 10 + 3 × 10 = 278 (GP.11.10 extension:
-        -- +reclaimAmmReserves on top of the 268 entries that already
-        -- carried +ammSwap).
+        Test.assertEq (expected := 10)
+          (actual := reserveSwapFixtures.length) "6 happy + 4 adversarial"
+    }
+  , { name := "SB: full corpus has 278 entries"
+    , body := do
+        -- 24 + 24 + 19 × 10 + 4 × 10 = 278 (the retired kind 23
+        -- carries no fixtures).
         Test.assertEq (expected := 278) (actual := allFixtures.length)
-          "278 = 24 + 24 + 20 × 10 + 3 × 10"
+          "278 = 24 + 24 + 19 × 10 + 4 × 10"
     }
   , { name := "F.1.8: every fixture has non-empty fixtureId"
     , body := do
@@ -2086,17 +2161,18 @@ def tests : List Test.TestCase :=
                       (fun f => f.actionVariant.length > 0))
           "all fixtures have valid action variants"
     }
-  , { name := "GP.11.10: every happy fixture's actionKindByte is in 0..24"
+  , { name := "SB: every happy fixture's actionKindByte is in 0..25"
     , body := do
         let happy := allFixtures.filter
                        (fun f => f.expectedRevertReason = "null")
         -- Post-Workstream-GP: dispatcher range widened from 0..18
         -- (SVC.5.e) to 0..20 (depositWithFee = 19, topUpActionBudget =
         -- 20), to 0..21 (GP.5.3: topUpActionBudgetFor = 21), to
-        -- 0..22 (GP.9.1: claimBudgetRefund = 22), to 0..23 (GP.11.8:
-        -- ammSwap = 23), and now to 0..24 (GP.11.10:
-        -- reclaimAmmReserves = 24).
-        Test.assert (happy.all (fun f => f.actionKindByte.toNat ≤ 24))
+        -- 0..22 (GP.9.1: claimBudgetRefund = 22), to 0..24 (GP.11.10:
+        -- reclaimAmmReserves = 24; 23 was the since-RETIRED ammSwap,
+        -- now a permanent hole), and to 0..25 (Workstream SB:
+        -- reserveSwap = 25).
+        Test.assert (happy.all (fun f => f.actionKindByte.toNat ≤ 25))
           "all happy fixture actionKindBytes are valid dispatchers"
     }
   , { name := "F.1.8: happy-path fixtures have non-null expectedPostStateCommit"
@@ -2443,12 +2519,16 @@ def tests : List Test.TestCase :=
           -- GP.9.1: refund-on-exit at index 22.
           , ("countClaimBudgetRefund",
              .num claimBudgetRefundFixtures.length)
-          -- GP.11.8: L2 AMM swap at index 23.
-          , ("countAmmSwap",
-             .num ammSwapFixtures.length)
           -- GP.11.10: post-disable reserve sweep at index 24.
           , ("countReclaimAmmReserves",
              .num reclaimAmmReservesFixtures.length)
+          -- Workstream SB: user-facing L2 swap at index 25.
+          , ("countReserveSwap",
+             .num reserveSwapFixtures.length)
+          -- The ONE swap-fee constant, pinned so the Solidity consumer
+          -- asserts its `AmmMath.SWAP_FEE_BPS` against the Lean value
+          -- the kind-25 quotes were priced with.
+          , ("reserveSwapFeeBps", .num Bridge.AmmMath.swapFeeBps)
           -- GP.5.3 hash-independent layout goldens (data-flow): the
           -- Solidity consumer reads these and recomputes
           -- `abi.encodePacked`, proving the packed byte layout agrees

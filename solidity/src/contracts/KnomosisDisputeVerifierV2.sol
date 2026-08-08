@@ -7,6 +7,14 @@ pragma solidity 0.8.36;
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 
+/// @notice The bridge's rollback entry point (SB ruling R6): this
+///         contract is the bridge's `faultProofRollbackAuthority`,
+///         so a fault-proof challenger win reaches the bridge's
+///         fund-safety gates.
+interface IKnomosisBridgeRollback {
+    function revertToPriorRoot(uint64 disputedLogIndexHigh) external;
+}
+
 /// @title KnomosisDisputeVerifierV2
 /// @notice Version 2 of the dispute verifier supporting both
 ///         fault-proof game settlements (deterministic claim
@@ -57,9 +65,12 @@ contract KnomosisDisputeVerifierV2 is ReentrancyGuard {
     uint8 public constant VERDICT_UPHELD   = 1;
     uint8 public constant VERDICT_REJECTED = 2;
 
-    /// @notice The bridge contract.  Reserved for forward-looking
-    ///         bridge-state queries; the canonical rollback path
-    ///         is through `stateRootSubmission.revertStateRootsFrom`.
+    /// @notice The bridge contract.  `finaliseFromFaultProof`
+    ///         drives a challenger win's revert through to it (SB
+    ///         ruling R6) — this contract is the bridge's
+    ///         `faultProofRollbackAuthority`; the state-root
+    ///         REGISTRY leg (`revertStateRootsFrom`) is executed by
+    ///         the game itself during settlement.
     address public immutable bridge;
 
     /// @notice The sequencer-stake contract (for slashing).
@@ -76,6 +87,13 @@ contract KnomosisDisputeVerifierV2 is ReentrancyGuard {
     /* Storage                                                    */
     /* ---------------------------------------------------------- */
 
+    /// @dev `UpheldByFaultProof` is retained for slot stability but
+    ///      no longer written: a fault-proof settlement carries no
+    ///      V2 dispute RECORD (the game is the adjudication;
+    ///      `finaliseFromFaultProof` drives the bridge leg and emits
+    ///      its own game-keyed event).  Removing the arm would
+    ///      renumber `UpheldByQuorum` / `Rejected` under every
+    ///      off-chain decoder of the status field.
     enum DisputeStatusV2 {
         Open,
         UpheldByFaultProof,
@@ -105,8 +123,12 @@ contract KnomosisDisputeVerifierV2 is ReentrancyGuard {
         bytes32 disputeHash
     );
 
+    /// @notice A fault-proof challenger win was driven through to
+    ///         the bridge (SB ruling R6).  Keyed by the GAME, not a
+    ///         dispute record: no V2 dispute is filed for a
+    ///         fault-proof settlement — the game itself is the
+    ///         adjudication.
     event DisputeUpheldByFaultProof(
-        uint256 indexed disputeId,
         uint256 indexed gameId,
         uint64  revertFromIdx
     );
@@ -209,27 +231,35 @@ contract KnomosisDisputeVerifierV2 is ReentrancyGuard {
     /* ---------------------------------------------------------- */
 
     /// @notice Called by the fault-proof game contract when a
-    ///         settlement results in challenger-wins.  Marks the
-    ///         dispute as upheld-by-fault-proof.
+    ///         settlement results in challenger-wins: drive the
+    ///         revert THROUGH to the bridge (Workstream SB ruling
+    ///         R6), so the bridge's fund-safety gates (withdrawals,
+    ///         redemptions) see the reverted range.
+    ///
+    ///         The previous form took a `disputeId` and only marked
+    ///         a V2 dispute record upheld — but no path ever FILED
+    ///         such a record for a fault-proof settlement, so the
+    ///         function was dead and a challenger win never reached
+    ///         the bridge (one of the two pre-existing defects the
+    ///         workstream closes).  The state-root REGISTRY rollback
+    ///         is executed directly by `KnomosisFaultProofGame`
+    ///         during settlement; this call is the BRIDGE leg, and
+    ///         this contract is the bridge's
+    ///         `faultProofRollbackAuthority`.
+    ///
+    ///         NOT try/catch-wrapped here: the game wraps its call
+    ///         to this function, so a bridge revert (e.g. a
+    ///         misconfigured authority) surfaces to the game's
+    ///         catch arm without blocking settlement.
     function finaliseFromFaultProof(
-        uint256 disputeId,
         uint256 gameId,
         uint64  revertFromIdx
     ) external nonReentrant {
         if (msg.sender != faultProofGame) revert NotFaultProofGame();
 
-        DisputeRecord storage d = disputes[disputeId];
-        if (d.filedAtBlock == 0) revert UnknownDispute();
-        if (d.status != DisputeStatusV2.Open) revert AlreadyDecided();
+        IKnomosisBridgeRollback(bridge).revertToPriorRoot(revertFromIdx);
 
-        // Effects first (CEI ordering).
-        d.status = DisputeStatusV2.UpheldByFaultProof;
-
-        // The state-root rollback is executed directly by
-        // `KnomosisFaultProofGame` during settlement.  This contract
-        // only records the verifier-side dispute outcome.
-
-        emit DisputeUpheldByFaultProof(disputeId, gameId, revertFromIdx);
+        emit DisputeUpheldByFaultProof(gameId, revertFromIdx);
     }
 
     /* ---------------------------------------------------------- */

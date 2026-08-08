@@ -87,7 +87,37 @@ pub trait GameStateReader {
         &self,
         game_id: u128,
         expected_deployment_id: [u8; 32],
-    ) -> Result<GameState, GameStateReadError>;
+    ) -> Result<ObservedGame, GameStateReadError>;
+}
+
+/// A game as READ FROM L1: the Lean-mirrored [`GameState`] plus the
+/// L1-only bookkeeping that sits beside it.
+///
+/// `turn_deadline` is deliberately NOT a `GameState` field.
+/// `GameState` mirrors Lean's `FaultProof.Game.GameState`
+/// declaration-for-declaration, and the Lean model is a pure
+/// transition system with no notion of an L1 block number — the
+/// timeout appears there only as the `TimedOut*` statuses a game can
+/// end in.  `BISECTION_RESPONSE_TIMEOUT` is a per-deployment
+/// `immutable` on the contract rather than a shared constant, so
+/// the deadline is not derivable off-chain either: it has to be
+/// read, and it belongs in the observer's own bookkeeping.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ObservedGame {
+    /// The game state proper.
+    pub state: GameState,
+    /// The L1 block number after which the party whose turn it is
+    /// loses by timeout.  `claimTimeout` requires
+    /// `block.number > turnDeadline` strictly.
+    pub turn_deadline: u64,
+    /// The game's immutable disputed log index (contract slot 17) —
+    /// under batching (Workstream SB) this is the disputed BATCH
+    /// record's key, which the terminate path uses to look up the
+    /// batch bounds + actions root the disputed action must be
+    /// proven under.  Read from the contract rather than derived:
+    /// `range.high.idx` diverges from it the moment a disagree
+    /// response reassigns `high` to a midpoint.
+    pub disputed_log_index: u64,
 }
 
 /// A [`GameStateReader`] that OWNS its JSON-RPC source, so it can
@@ -117,7 +147,7 @@ impl GameStateReader for OwnedContractGameReader {
         &self,
         game_id: u128,
         expected_deployment_id: [u8; 32],
-    ) -> Result<GameState, GameStateReadError> {
+    ) -> Result<ObservedGame, GameStateReadError> {
         ContractGameReader::new(&self.rpc, self.game_contract)
             .read_and_validate(game_id, expected_deployment_id)
     }
@@ -128,7 +158,7 @@ impl GameStateReader for ContractGameReader<'_> {
         &self,
         game_id: u128,
         expected_deployment_id: [u8; 32],
-    ) -> Result<GameState, GameStateReadError> {
+    ) -> Result<ObservedGame, GameStateReadError> {
         ContractGameReader::read_and_validate(self, game_id, expected_deployment_id)
     }
 }
@@ -299,7 +329,7 @@ impl<'a> ContractGameReader<'a> {
         &self,
         game_id: u128,
         expected_deployment_id: [u8; 32],
-    ) -> Result<GameState, GameStateReadError> {
+    ) -> Result<ObservedGame, GameStateReadError> {
         let calldata = encode_games_calldata(game_id);
         let calldata_hex = format!("0x{}", hex::encode(calldata));
         let params = json!([
@@ -322,7 +352,8 @@ impl<'a> ContractGameReader<'a> {
             }
         };
         let bytes = decode_hex_response(&hex_str)?;
-        let (state, sequencer_addr, challenger_addr) = decode_game_state_with_addresses(&bytes)?;
+        let (observed, sequencer_addr, challenger_addr) = decode_game_state_with_addresses(&bytes)?;
+        let state = &observed.state;
 
         if state.deployment_id != expected_deployment_id {
             return Err(GameStateReadError::DeploymentIdMismatch {
@@ -356,7 +387,7 @@ impl<'a> ContractGameReader<'a> {
                 state.sequencer,
             ));
         }
-        Ok(state)
+        Ok(observed)
     }
 }
 
@@ -420,7 +451,7 @@ fn decode_hex_response(hex_str: &str) -> Result<Vec<u8>, GameStateReadError> {
 /// `read_*_from_slot` helpers add a defensive layer in debug
 /// builds.
 pub fn decode_game_state(bytes: &[u8]) -> Result<GameState, GameStateReadError> {
-    decode_game_state_with_addresses(bytes).map(|(gs, _, _)| gs)
+    decode_game_state_with_addresses(bytes).map(|(g, _, _)| g.state)
 }
 
 /// Decode the `eth_call` response into a [`GameState`] PLUS the
@@ -440,7 +471,7 @@ pub fn decode_game_state(bytes: &[u8]) -> Result<GameState, GameStateReadError> 
 /// Cannot panic in practice — see [`decode_game_state`].
 pub fn decode_game_state_with_addresses(
     bytes: &[u8],
-) -> Result<(GameState, [u8; 20], [u8; 20]), GameStateReadError> {
+) -> Result<(ObservedGame, [u8; 20], [u8; 20]), GameStateReadError> {
     if bytes.len() != GAMES_RESPONSE_BYTES {
         return Err(GameStateReadError::WrongLength {
             expected: GAMES_RESPONSE_BYTES,
@@ -487,7 +518,7 @@ pub fn decode_game_state_with_addresses(
         1 => TurnSide::Challenger,
         other => return Err(GameStateReadError::InvalidTurn(other)),
     };
-    let _turn_deadline = read_u64_from_slot(slot(11));
+    let turn_deadline = read_u64_from_slot(slot(11));
     let sequencer_bond = read_u128_from_slot(slot(12));
     let challenger_bond = read_u128_from_slot(slot(13));
     // Audit-pass-4 fix: validate slot 14's full layout.
@@ -505,7 +536,7 @@ pub fn decode_game_state_with_addresses(
     };
     let deployment_id: [u8; 32] = slot(15).try_into().unwrap();
     let _last_step_block = read_u64_from_slot(slot(16));
-    let _disputed_log_index = read_u64_from_slot(slot(17));
+    let disputed_log_index = read_u64_from_slot(slot(17));
 
     // Extract full 20-byte L1 addresses for callers that need
     // to perform invariant checks (zero-address, collision)
@@ -514,26 +545,31 @@ pub fn decode_game_state_with_addresses(
     let challenger_addr = read_full_address_from_slot(slot(1));
 
     Ok((
-        GameState {
-            sequencer,
-            challenger,
-            range: DisputedRange {
-                low: Claim {
-                    idx: low_idx,
-                    commit: low_commit,
+        ObservedGame {
+            state: GameState {
+                sequencer,
+                challenger,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: low_idx,
+                        commit: low_commit,
+                    },
+                    high: Claim {
+                        idx: high_idx,
+                        commit: high_commit,
+                    },
                 },
-                high: Claim {
-                    idx: high_idx,
-                    commit: high_commit,
-                },
+                pending_midpoint,
+                depth,
+                turn,
+                sequencer_bond,
+                challenger_bond,
+                status,
+                deployment_id,
+                actions_root: [0u8; 32],
             },
-            pending_midpoint,
-            depth,
-            turn,
-            sequencer_bond,
-            challenger_bond,
-            status,
-            deployment_id,
+            turn_deadline,
+            disputed_log_index,
         },
         sequencer_addr,
         challenger_addr,
@@ -905,8 +941,8 @@ mod tests {
         }
         // The decoded sequencer ActorId is 0 (low-8 projection),
         // but the FULL address [0xAB; 12] + [0; 8] is non-zero.
-        let (gs, seq_addr, _ch_addr) = decode_game_state_with_addresses(&bytes).unwrap();
-        assert_eq!(gs.sequencer, 0); // low-8 projection
+        let (g, seq_addr, _ch_addr) = decode_game_state_with_addresses(&bytes).unwrap();
+        assert_eq!(g.state.sequencer, 0); // low-8 projection
         assert_ne!(seq_addr, [0u8; 20]); // full address is non-zero
                                          // Verify the high bytes are preserved.
         for b in &seq_addr[0..12] {

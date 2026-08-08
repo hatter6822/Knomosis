@@ -393,6 +393,7 @@ fn chaos_adversarial_opponent_yields_correct_response() {
         challenger_bond: 1000,
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
+        actions_root: [0u8; 32],
     };
     // Honest challenger should AGREE (midpoint matches truth oracle).
     let mv = compute_next_move(&oracle, &gs, TurnSide::Challenger).unwrap();

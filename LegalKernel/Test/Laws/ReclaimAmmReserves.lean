@@ -295,10 +295,10 @@ def tests : List TestCase :=
         -- LEDGER mirrors are untouched even by the reclaim action
         -- (the sweep moves KERNEL balances, not bridge-ledger fields).
         let bs : BridgeState := { BridgeState.empty with
-          ammDisabled := true, ammReserveEth := 42 }
+          ammDisabled := true, boldTvlCap := 42 }
         let bs' := applyActionToBridgeState bs (.reclaimAmmReserves 0 5000 3 1) 0
         assertEq (expected := true) (actual := bs'.ammDisabled) "ammDisabled preserved"
-        assertEq (expected := 42) (actual := bs'.ammReserveEth) "ammReserveEth preserved"
+        assertEq (expected := 42) (actual := bs'.boldTvlCap) "boldTvlCap preserved"
     }
   , { name := "amm_mirrors_constant_over_admitted_trace API stable"
     , body := do

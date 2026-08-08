@@ -109,8 +109,7 @@ user-initiated flow.  See CLAUDE.md's audit-1 changelog. -/
 def Action.isBridgeOnly : Action → Bool
   | .registerIdentity _ _              => true
   | .deposit _ _ _ _                   => true
-  | .depositWithFee _ _ _ _ _ _ _      => true
-  | .ammSwap _ _ _ _ _                 => true
+  | .depositWithFee _ _ _ _ _ _ _ _      => true
   | .reclaimAmmReserves _ _ _ _        => true
   | _                                  => false
 
@@ -171,7 +170,12 @@ def applyActionToBridgeState (bs : BridgeState) (action : Action)
   | .deposit r _recipient amount d =>
     bs.markConsumed d ({ resource := r, userAmount := amount,
                          poolAmount := 0, budgetGrant := 0 })
-  | .depositWithFee r _recipient _poolActor userAmount poolAmount budgetGrant d =>
+  | .depositWithFee r _recipient _poolActor userAmount poolAmount budgetGrant d
+                     _seedAmount =>
+    -- Workstream SB: `seedAmount` splits the POOL leg on the balance
+    -- side only; the L2 supply expansion this deposit accounts for is
+    -- still `userAmount + poolAmount`, so the consumed record is
+    -- unchanged.
     bs.markConsumed d ({ resource := r, userAmount := userAmount,
                          poolAmount := poolAmount, budgetGrant := budgetGrant })
   | .withdraw r _sender amount rcp =>
@@ -179,7 +183,11 @@ def applyActionToBridgeState (bs : BridgeState) (action : Action)
       { resource    := r
         recipient   := rcp
         amount      := amount
-        l2LogIndex  := l2LogIndex }
+        l2LogIndex  := l2LogIndex
+        -- `appendWithdrawal` overwrites this with the key it inserts
+        -- at; naming the same value here keeps the record readable at
+        -- the construction site rather than leaving a placeholder.
+        wdId        := bs.nextWdId }
   | _ => bs
 
 /-- Smoke check: non-bridge actions leave `BridgeState` unchanged.
@@ -188,8 +196,8 @@ def applyActionToBridgeState (bs : BridgeState) (action : Action)
 theorem applyActionToBridgeState_non_bridge
     (bs : BridgeState) (action : Action) (idx : Nat)
     (hne_dep : ∀ r recipient amount d, action ≠ .deposit r recipient amount d)
-    (hne_dwf : ∀ r recipient poolActor ua pa bg d,
-      action ≠ .depositWithFee r recipient poolActor ua pa bg d)
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d sa,
+      action ≠ .depositWithFee r recipient poolActor ua pa bg d sa)
     (hne_wd  : ∀ r sender amount rcp, action ≠ .withdraw r sender amount rcp) :
     applyActionToBridgeState bs action idx = bs := by
   unfold applyActionToBridgeState
@@ -213,13 +221,13 @@ theorem applyActionToBridgeState_non_bridge
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | depositWithFee r recipient poolActor ua pa bg d =>
-      exact absurd hact (hne_dwf r recipient poolActor ua pa bg d)
+  | depositWithFee r recipient poolActor ua pa bg d sa =>
+      exact absurd hact (hne_dwf r recipient poolActor ua pa bg d sa)
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
-  | ammSwap _ _ _ _ _             => rfl
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-- A `.depositWithFee` admission persists the `depositId` in
     `bridge.consumed`.  Companion to `applyActionToBridgeState`'s
@@ -230,9 +238,10 @@ theorem applyActionToBridgeState_non_bridge
 @[simp] theorem applyActionToBridgeState_depositWithFee_consumed
     (bs : BridgeState) (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (d : DepositId) (idx : Nat) :
+    (d : DepositId) (seedAmount : Amount) (idx : Nat) :
     (applyActionToBridgeState bs
-      (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d)
+      (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d
+        seedAmount)
       idx).consumed.contains d = true := by
   unfold applyActionToBridgeState BridgeState.markConsumed
   simp
@@ -282,9 +291,10 @@ def BridgeAdmissibleWith
   -- the bridge-aware admission path would accept the same
   -- bridge-signed depositWithFee payload multiple times and
   -- re-credit user/pool balances + re-grant budget on each replay.
-  (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId,
+  (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId
+      seedAmount,
     st.action = .depositWithFee r recipient poolActor userAmount poolAmount
-                  budgetGrant depositId →
+                  budgetGrant depositId seedAmount →
     es.bridge.consumed.contains depositId = false) ∧
   -- (7) registration first-time-only:
   (∀ actor pk,
@@ -303,11 +313,34 @@ def BridgeAdmissibleWith
   -- reclamation is inadmissible, so the GP.11.6 reserve isolation
   -- (`ammReservePolicy` + this conjunct) keeps its pre-disaster
   -- strength: the ONLY action that can move the reserve actor's
-  -- balances before a disaster remains `ammSwap`.
+  -- balances before a disaster remains the user-signed `reserveSwap`.
   (∀ r amount reserveActor poolActor,
     st.action = .reclaimAmmReserves r amount reserveActor poolActor →
     reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧
-    es.bridge.ammDisabled = true)
+    es.bridge.ammDisabled = true) ∧
+  -- (10) kill-switch halt for the user swap (the reclaim gate's dual).
+  -- A `.reserveSwap` is admissible only while the L2 `ammDisabled`
+  -- mirror is UNSET: once the L1 `emergencyDisableAmm()` fires and the
+  -- mirror is committed, the sequencer's admission gate refuses every
+  -- user swap, freezing the pool for the bridge-signed reclaim sweep.
+  --
+  -- **Enforcement boundary (deliberate, mirrors conjunct 9).**  Like
+  -- every `BridgeAdmissibleWith` conjunct, this is a SEQUENCER-side
+  -- admission check, not part of the total `productionApplyBudget`
+  -- semantics the fault-proof game replays — the game adjudicates
+  -- what an admitted step COMPUTES, not whether the sequencer should
+  -- have admitted it.  The game-enforceable half of the disable story
+  -- is downstream: the reclaim sweep drains the reserve to zero, and
+  -- `Laws.reserveSwap`'s minimum-liquidity floor — a precondition
+  -- over OPENED balances the verifier re-evaluates — then makes every
+  -- later swap a provable no-op.  So a sequencer that ignores this
+  -- conjunct can at worst let swaps trade at the law's proven
+  -- constant-product price during the disable→sweep window, never
+  -- reach past the sweep.
+  (∀ fromResource toResource user amountIn minAmountOut reserveActor,
+    st.action = .reserveSwap fromResource toResource user amountIn
+                  minAmountOut reserveActor →
+    es.bridge.ammDisabled = false)
 
 /-- Projection: bridge admissibility implies kernel admissibility.
     Direct consequence of `BridgeAdmissibleWith`'s definition: the
@@ -340,11 +373,12 @@ theorem BridgeAdmissibleWith.depositWithFeeIdFresh
     (h : BridgeAdmissibleWith verify P d es st)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : DepositId)
+    (depositId : DepositId) (seedAmount : Amount)
     (heq : st.action = .depositWithFee r recipient poolActor userAmount
-                          poolAmount budgetGrant depositId) :
+                          poolAmount budgetGrant depositId seedAmount) :
     es.bridge.consumed.contains depositId = false :=
-  h.2.2.1 r recipient poolActor userAmount poolAmount budgetGrant depositId heq
+  h.2.2.1 r recipient poolActor userAmount poolAmount budgetGrant depositId
+    seedAmount heq
 
 /-- The first-time-registration conjunct, projected. -/
 theorem BridgeAdmissibleWith.registrationFresh
@@ -379,7 +413,23 @@ theorem BridgeAdmissibleWith.reclaimGate
     (heq : st.action = .reclaimAmmReserves r amount reserveActor poolActor) :
     reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧
     es.bridge.ammDisabled = true :=
-  h.2.2.2.2.2 r amount reserveActor poolActor heq
+  h.2.2.2.2.2.1 r amount reserveActor poolActor heq
+
+/-- The Workstream-AX kill-switch halt conjunct, projected: an
+    admissible `.reserveSwap` implies the L2 `ammDisabled` mirror is
+    unset. -/
+theorem BridgeAdmissibleWith.reserveSwapGate
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray}
+    {es : ExtendedState} {st : SignedAction}
+    (h : BridgeAdmissibleWith verify P d es st)
+    (fromResource toResource : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (reserveActor : ActorId)
+    (heq : st.action = .reserveSwap fromResource toResource user amountIn
+                          minAmountOut reserveActor) :
+    es.bridge.ammDisabled = false :=
+  h.2.2.2.2.2.2 fromResource toResource user amountIn minAmountOut
+    reserveActor heq
 
 /-- GP.11.10 headline (admission half): while the L2 kill-switch
     mirror is UNSET (`ammDisabled = false`), no `.reclaimAmmReserves`
@@ -397,6 +447,27 @@ theorem reclaim_inadmissible_while_amm_enabled
   have hgate := h.reclaimGate r amount reserveActor poolActor heq
   rw [h_enabled] at hgate
   exact Bool.false_ne_true hgate.2.2
+
+/-- Workstream-AX headline (admission half): once the L2 kill-switch
+    mirror is SET (`ammDisabled = true`), no `.reserveSwap` is
+    bridge-admissible — the sequencer's gate halts user swaps the
+    moment the disaster state is committed, freezing the pool for the
+    bridge-signed reclaim sweep. -/
+theorem reserveSwap_inadmissible_while_amm_disabled
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray}
+    {es : ExtendedState} {st : SignedAction}
+    (h_disabled : es.bridge.ammDisabled = true)
+    (fromResource toResource : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (reserveActor : ActorId)
+    (heq : st.action = .reserveSwap fromResource toResource user amountIn
+                          minAmountOut reserveActor) :
+    ¬ BridgeAdmissibleWith verify P d es st := by
+  intro h
+  have hgate := h.reserveSwapGate fromResource toResource user amountIn
+    minAmountOut reserveActor heq
+  rw [h_disabled] at hgate
+  exact Bool.false_ne_true hgate.symm
 
 /-! ## apply_bridge_admissible_with
 
@@ -506,7 +577,7 @@ def apply_bridge_admissible_with_budget
       else
       let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=
         match st.action with
-        | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
+        | .depositWithFee _ recipient _ _ _ budgetGrant _ _ =>
             ebs.topUp recipient currentEpoch freeTier budgetGrant
         | .topUpActionBudget _ _ budgetIncrement _ =>
             ebs.topUp st.signer currentEpoch freeTier budgetIncrement
@@ -571,11 +642,10 @@ binds the published value.  A sequencer therefore cannot smuggle a
 mirror flip into the middle of a committed action batch — the
 fault-proof game re-executes the batch through this very function. -/
 
-/-- The per-mirror agreement bundle: two bridge states share all six
-    GP.11.8 / GP.11.10 AMM-mirror fields. -/
+/-- The per-mirror agreement bundle: two bridge states share all four
+    GP.11.8 / GP.11.10 mirror fields (the BOLD deposit guards and the
+    kill switch; the two excised L1-AMM book mirrors are gone). -/
 def BridgeState.AmmMirrorsEq (bs₁ bs₂ : BridgeState) : Prop :=
-  bs₁.ammReserveEth = bs₂.ammReserveEth ∧
-  bs₁.ammReserveBold = bs₂.ammReserveBold ∧
   bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
   bs₁.boldTvlCap = bs₂.boldTvlCap ∧
   bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue ∧
@@ -584,7 +654,7 @@ def BridgeState.AmmMirrorsEq (bs₁ bs₂ : BridgeState) : Prop :=
 /-- `AmmMirrorsEq` is reflexive. -/
 theorem BridgeState.AmmMirrorsEq.refl (bs : BridgeState) :
     BridgeState.AmmMirrorsEq bs bs :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ⟨rfl, rfl, rfl, rfl⟩
 
 /-- `AmmMirrorsEq` is transitive. -/
 theorem BridgeState.AmmMirrorsEq.trans {bs₁ bs₂ bs₃ : BridgeState}
@@ -592,11 +662,10 @@ theorem BridgeState.AmmMirrorsEq.trans {bs₁ bs₂ bs₃ : BridgeState}
     (h₂₃ : BridgeState.AmmMirrorsEq bs₂ bs₃) :
     BridgeState.AmmMirrorsEq bs₁ bs₃ :=
   ⟨h₁₂.1.trans h₂₃.1, h₁₂.2.1.trans h₂₃.2.1, h₁₂.2.2.1.trans h₂₃.2.2.1,
-   h₁₂.2.2.2.1.trans h₂₃.2.2.2.1, h₁₂.2.2.2.2.1.trans h₂₃.2.2.2.2.1,
-   h₁₂.2.2.2.2.2.trans h₂₃.2.2.2.2.2⟩
+   h₁₂.2.2.2.trans h₂₃.2.2.2⟩
 
 /-- Per-action mirror invariance: EVERY action — bridge-mutating or
-    not — leaves all six AMM-mirror fields unchanged.  The three
+    not — leaves all four mirror fields unchanged.  The three
     mutating arms go through `markConsumed` / `appendWithdrawal`,
     both of which are `{ bs with … }` updates on the ledger triple
     only. -/
@@ -609,7 +678,7 @@ theorem applyActionToBridgeState_preserves_amm_mirrors
           BridgeState.appendWithdrawal]
 
 /-- Entry-point lift: one bridge-aware admitted step preserves all
-    six mirrors. -/
+    four mirrors. -/
 theorem apply_bridge_admissible_with_preserves_amm_mirrors
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
@@ -623,7 +692,7 @@ theorem apply_bridge_admissible_with_preserves_amm_mirrors
   exact applyActionToBridgeState_preserves_amm_mirrors es.bridge st.action idx
 
 /-- Runtime-entry lift: when the budget-gated bridge entry admits a
-    step (`= some es'`), all six mirrors carry over unchanged.  The
+    step (`= some es'`), all four mirrors carry over unchanged.  The
     budget layer wraps `apply_bridge_admissible_with` and further
     touches only `epochBudgets`. -/
 theorem apply_bridge_admissible_with_budget_preserves_amm_mirrors
@@ -689,7 +758,7 @@ inductive BridgeAdmittedTrace
         (apply_bridge_admissible_with verify P d es st idx hadm)
 
 /-- **GP.11.10 chain-level mirror constancy.**  Across ANY contiguous
-    trace of bridge-aware admitted steps, all six AMM-mirror fields —
+    trace of bridge-aware admitted steps, all four mirror fields —
     including the `ammDisabled` kill switch — are exactly their
     chain-entry values.  Together with
     `commitBridgeState_reflects_ammDisabled` (the commitment binding),
@@ -717,7 +786,7 @@ theorem ammDisabled_constant_over_admitted_trace
     (n : Nat) (es' : ExtendedState)
     (h : BridgeAdmittedTrace verify P d es0 n es') :
     es'.bridge.ammDisabled = es0.bridge.ammDisabled :=
-  (amm_mirrors_constant_over_admitted_trace verify P d es0 n es' h).2.2.2.2.2
+  (amm_mirrors_constant_over_admitted_trace verify P d es0 n es' h).2.2.2
 
 /-! ## Bridge-aware kernel agreement (§7.0a) -/
 
@@ -762,8 +831,8 @@ theorem apply_bridge_admissible_with_preserves_bridge_for_non_bridge
     (st : SignedAction) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es st)
     (hne_dep : ∀ r recipient amount d', st.action ≠ .deposit r recipient amount d')
-    (hne_dwf : ∀ r recipient poolActor ua pa bg d',
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d')
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d' sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d' sa)
     (hne_wd  : ∀ r sender amount rcp, st.action ≠ .withdraw r sender amount rcp) :
     (apply_bridge_admissible_with verify P d es st idx h).bridge = es.bridge := by
   unfold apply_bridge_admissible_with
@@ -1105,8 +1174,8 @@ theorem admission_consumes_budget_on_success_bridge
     {freeTier actionCost currentEpoch : Nat}
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (hne_bridge : st.signer ≠ Bridge.bridgeActor)
-    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa)
     (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
@@ -1150,8 +1219,8 @@ theorem bridgeActor_budget_exempt_bridge
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
     (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa)
-    (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep,
-      st.action = .depositWithFee r recipient poolActor ua pa bg dep →
+    (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action = .depositWithFee r recipient poolActor ua pa bg dep sa →
       recipient ≠ Bridge.bridgeActor)
     {es' : ExtendedState}
     (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
@@ -1171,16 +1240,19 @@ theorem depositWithFee_grants_budget_bridge
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (depositId : DepositId)
+    (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es
             ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                              budgetGrant depositId, signer, nonce, sig⟩)
+                              budgetGrant depositId seedAmount, signer, nonce,
+              sig⟩)
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     {es' : ExtendedState}
     (hsuc : apply_bridge_admissible_with_budget verify P d es
               ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                                budgetGrant depositId, signer, nonce, sig⟩ idx h
+                                budgetGrant depositId seedAmount, signer, nonce,
+                sig⟩ idx h
             = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets recipient currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + budgetGrant := by
@@ -1188,8 +1260,8 @@ theorem depositWithFee_grants_budget_bridge
     apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
   rw [← heb]
   exact depositWithFee_grants_budget verify P d es r recipient poolActor userAmount poolAmount
-    budgetGrant depositId signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch
-    hpolicy hk
+    budgetGrant depositId seedAmount signer nonce sig h.toAdmissibleWith freeTier
+    actionCost currentEpoch hpolicy hk
 
 /-- GP.3.2.g (bridge mirror) — a successful `depositWithFee` on the
     production path changes no actor's budget except the recipient's. -/
@@ -1198,17 +1270,20 @@ theorem depositWithFee_budget_locality_bridge
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (depositId : DepositId)
+    (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es
             ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                              budgetGrant depositId, signer, nonce, sig⟩)
+                              budgetGrant depositId seedAmount, signer, nonce,
+              sig⟩)
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (other : ActorId) (hne_other : other ≠ recipient)
     {es' : ExtendedState}
     (hsuc : apply_bridge_admissible_with_budget verify P d es
               ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                                budgetGrant depositId, signer, nonce, sig⟩ idx h
+                                budgetGrant depositId seedAmount, signer, nonce,
+                sig⟩ idx h
             = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
@@ -1216,8 +1291,8 @@ theorem depositWithFee_budget_locality_bridge
     apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
   rw [← heb]
   exact depositWithFee_budget_locality verify P d es r recipient poolActor userAmount poolAmount
-    budgetGrant depositId signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch
-    hpolicy other hne_other hk
+    budgetGrant depositId seedAmount signer nonce sig h.toAdmissibleWith freeTier
+    actionCost currentEpoch hpolicy other hne_other hk
 
 /-- GP.3.2.h (bridge mirror) — a successful self-`topUpActionBudget` on
     the production path produces a net budget change of
@@ -1314,8 +1389,8 @@ theorem admission_locality_in_budget_bridge
     (freeTier actionCost currentEpoch : Nat)
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (hne_bridge : st.signer ≠ Bridge.bridgeActor)
-    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep sa)
     (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)

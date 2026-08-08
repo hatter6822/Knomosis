@@ -8,47 +8,37 @@
 -/
 
 /-
-LegalKernel.FaultProof.TerminateBundle — Workstream SVC.3:
+LegalKernel.FaultProof.TerminateBundle — Workstream SVC.3 (+ SB):
 canonical bundle of inputs the off-chain observer submits to
 `KnomosisFaultProofGame.terminateOnSingleStep` on L1.
 
-The L1 contract's terminate-on-single-step entry point has the
-signature:
-
-```solidity
-function terminateOnSingleStep(
-    uint256 gameId,
-    uint8 actionKind,
-    bytes calldata actionFields,
-    uint64 signer,
-    KnomosisStepVM.CellProof[] calldata cellProofs
-) external nonReentrant
-```
-
-**Five arguments, not six.**  This block used to spell a trailing
-`bytes32 claimedPostCommit`, and the Rust submitter was built
-against that shape — a different 4-byte selector, so every honest
-terminate reverted into the unknown-selector fallback.  The
-contract's shape is also the better design: it runs the step VM
-from `g.low.commit` and compares the result against
-`g.high.commit`, both already on-chain, so the post-commit is not
-the caller's to claim.
-
-The four non-`gameId` arguments are derivable from a canonical
+The bundle's non-`gameId` inputs are derivable from a canonical
 `(ExtendedState, LogEntry)` pair via the per-variant encoders this
 module composes:
 
   * `actionKind`   := `actionKindByte action`
   * `actionFields` := `actionFieldsForL1 action`
   * `signer`       := `entry.signedAction.signer`
-  * `cellProofs`   := `buildObserverCellProofs preState action signer`
+  * `openedCells`  := the step's frontier (each cell with its proven
+                       PRE-state value, from `stepMultiBundle`)
+  * `wire`         := the deduplicating pre-root multiproof
+                       (`stepMultiBundle`'s shared sibling list)
 
-A `TerminateBundle` carries those four plus
-`expectedPostCommit := stepVMHashFromAction preState action signer`.
-The fifth is **not** calldata: it is what the observer expects the
-step VM to compute, retained so the observer can cross-check its
-own bundle against an independent oracle before broadcasting
-(`BundleCommitMismatch`).  Shipping it would change the selector.
+A `TerminateBundle` additionally carries
+`expectedPostCommit := stepMultiPostRoot preState st l2LogIndex`.
+That field is **not** calldata: the contract computes the fold from
+`g.low.commit` and compares against `g.high.commit`, both already
+on-chain, so the post-root is not the caller's to claim.  It is
+retained so the observer can cross-check its own bundle against an
+independent oracle before broadcasting.
+
+**Workstream SB — batched submission.**  Once one L1 submission
+covers a batch of actions, terminate must additionally AUTHENTICATE
+the disputed action against the batch's `actionsRoot` (the Merkle
+root the submission committed).  `BatchBinding` carries that half:
+the batch bounds, the action's SMT key, the signature the leaf
+binds, and the inclusion wire, built by `buildBatchBinding` from
+the same log the state bundle is built from.
 
 ## Wire format
 
@@ -64,18 +54,26 @@ serde-deserialize default conventions, so the Rust observer's
   "action_fields_hex": "00000000000000010000000000000002000...",
   "signer": 5,
   "expected_post_commit_hex": "abcd1234...",
-  "cell_proofs": [
+  "opened_cells": [
     {"cell_kind": 0, "key_a": "0x01", "key_b": "0x05",
-     "cell_value": "...", "witness_commit": "...",
-     "proof_data": "..."},
+     "pre_value": "..."},
     ...
-  ]
+  ],
+  "gap_mask_hex": "...",
+  "siblings_hex": "..."
 }
 ```
+
+With a `BatchBinding` supplied, the object additionally carries
+`prev_end`, `end`, `actions_root_hex`, `action_key_hex`,
+`leaf_commit_hex`, `action_sig_hex`, `action_gap_mask_hex`, and
+`action_siblings_hex` (the inclusion wire, in the same
+bitmask‖siblings shape as the state wire).
 
 This module is **not** part of the trusted computing base.
 -/
 
+import LegalKernel.FaultProof.ActionsRoot
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Coherence
 import LegalKernel.FaultProof.Commit
@@ -117,17 +115,17 @@ derived bundle). -/
       * `actionFields` is the canonical byte layout the L1's
         `_stepXX` decoder expects (per `actionFieldsForL1`). -/
 structure TerminateBundle where
-  /-- Action-variant dispatcher (0..20 post-Workstream-GP, per
-      `actionKindByte`). -/
+  /-- Action-variant dispatcher (0..25, per `actionKindByte`). -/
   actionKind        : UInt8
   /-- Canonical fields' byte layout per
       `actionFieldsForL1`. -/
   actionFields      : ByteArray
   /-- The signer's `ActorId` (= log entry's `signer`).  64-bit. -/
   signer            : ActorId
-  /-- The canonical step-VM hash for this step.  Under the
-      production keccak256 binding, this equals what
-      `KnomosisStepVM.executeStep` returns on the same inputs.
+  /-- The post-state ROOT the multiproof fold reaches — the value
+      `stepMultiPostRoot` computes, and (under the production
+      keccak256 binding) what the L1's root-computing
+      `executeStepToRootMulti` returns on the same inputs.
 
       **Not part of the calldata** — see the module docstring.  The
       contract derives both sides of its comparison from the game
@@ -165,6 +163,19 @@ structure TerminateBundle where
       step's writes cannot move it and the pre- and post-folds share
       it — `multiSiblings_congr` is the Lean statement of that. -/
   wire              : SmtMultiProof
+  /-- Workstream F-A: the SIGNER'S REGISTRY CELL at the pre-state —
+      a CBE byte string wrapping the registered public key, or EMPTY
+      when the signer is unregistered (a real, adjudicable state: no
+      key can have authorised the entry).  CALLDATA: the L1 resolves
+      the signer's key from it before verifying the committed
+      signature. -/
+  registryValue     : ByteArray
+  /-- Workstream F-A: that cell's single-cell opening against the
+      disputed range's PRE-state root.  CALLDATA.  Present for BOTH
+      the registered and unregistered cases — an absent cell opens
+      from the canonical empty leaf — so it is what decides whether a
+      bundle carries an F-A opening at all. -/
+  registryProof     : SmtCellProof
   deriving Repr
 
 /-! ## Bundle builder
@@ -178,16 +189,17 @@ The canonical builder threads the per-variant encoders together: -/
       `actionKind        := actionKindByte action`
       `actionFields      := actionFieldsForL1 action`
       `signer            := entry.signedAction.signer`
-      `expectedPostCommit := stepVMHashFromAction preState action signer`
-      `cellProofs        := buildObserverCellProofs preState action signer`
+      `expectedPostCommit := stepMultiPostRoot preState st l2LogIndex`
+      `openedCells       := (stepMultiBundle preState st).cells`
+      `wire              := (stepMultiBundle preState st).proof`
 
     Pre-conditions:
     * The entry's action must be admissible at `preState` (otherwise
-      the cell proofs may witness an absent cell that the L1's
-      `_stepXX` decoder will reject).  Admissibility is the
-      caller's responsibility; the bundle is constructed
-      unconditionally so test fixtures and debugging tools can
-      emit it for any input pair. -/
+      the fold's evaluated precondition no-ops and the expected root
+      is the pre-root).  Admissibility is the caller's
+      responsibility; the bundle is constructed unconditionally so
+      test fixtures and debugging tools can emit it for any input
+      pair. -/
 def buildTerminateBundle
     (preState : ExtendedState) (entry : LogEntry) (l2LogIndex : Nat := 0) :
     TerminateBundle :=
@@ -201,7 +213,9 @@ def buildTerminateBundle
       (stepMultiPostRoot preState entry.signedAction l2LogIndex).getD
         ByteArray.empty,
     openedCells       := (stepMultiBundle preState entry.signedAction).cells,
-    wire              := (stepMultiBundle preState entry.signedAction).proof }
+    wire              := (stepMultiBundle preState entry.signedAction).proof,
+    registryValue     := getCellValue preState (.registry signer),
+    registryProof     := buildStateCellProof preState (.registry signer) }
 
 /-! ## Well-formedness theorems -/
 
@@ -273,6 +287,121 @@ theorem buildTerminateBundle_openedCells_tags
   rw [List.map_map]
   exact List.map_id _
 
+/-! ## The batch binding (Workstream SB)
+
+Under batched submission, one L1 record covers the log range
+`[prevEnd, end)` and commits an `actionsRoot` over the per-action
+leaf commits.  `terminateOnSingleStep` then authenticates the
+disputed action by Merkle inclusion: the leaf binds
+`(kind ‖ signer ‖ fields ‖ sig)` (`actionLeafValue`), keyed at
+`actionKey idx`, and the wire opens it against the record's root.
+`BatchBinding` is the observer-facing carrier of that half. -/
+
+/-- The batch-inclusion half of a terminate bundle: the batch bounds,
+    the disputed action's SMT key and leaf commit, the SIGNATURE the
+    leaf binds (65 bytes on the wire, hashed by the L1 into the leaf
+    it verifies), and the compressed inclusion wire against the
+    batch's `actionsRoot`. -/
+structure BatchBinding where
+  /-- The batch's exclusive lower bound: the number of log entries
+      already covered by earlier submissions (= the previous record's
+      `end`).  The batch covers log indices `[prevEnd, end)`. -/
+  prevEnd     : Nat
+  /-- The batch's exclusive upper bound (= the covered entry count,
+      and the L1 record's index). -/
+  endIndex    : Nat
+  /-- The disputed log index, in `[prevEnd, endIndex)`. -/
+  idx         : Nat
+  /-- The batch's actions root — the SMT root over
+      `batchActionEntries prevEnd batch`, as the L1 record committed
+      it. -/
+  actionsRoot : ByteArray
+  /-- The disputed action's SMT key, `actionKey idx` (32 bytes). -/
+  actionKey   : ByteArray
+  /-- The leaf commit, `actionLeafValue` of the disputed entry's
+      signed action (32 bytes).  Not calldata — the L1 RE-DERIVES the
+      leaf from the `(kind, fields, signer, sig)` it is handed —
+      retained so the observer can cross-check its inclusion wire
+      before broadcasting. -/
+  leafCommit  : ByteArray
+  /-- The signature the leaf binds, verbatim from the log entry. -/
+  actionSig   : ByteArray
+  /-- The compressed inclusion wire (bitmask ‖ siblings) opening the
+      leaf at `actionKey` against `actionsRoot`. -/
+  actionProof : SmtCellProof
+  deriving Repr
+
+/-- Build the batch binding for disputed index `idx` within the batch
+    `[prevEnd, endIndex)` of `entries` (the WHOLE log, from which the
+    batch slice is taken).  Returns `none` when the bounds are
+    malformed — `idx` outside the batch, an empty or over-long
+    batch — rather than authoring a wire that cannot verify. -/
+def buildBatchBinding (entries : List LogEntry)
+    (prevEnd endIndex idx : Nat) : Option BatchBinding :=
+  if prevEnd ≤ idx ∧ idx < endIndex ∧ endIndex ≤ entries.length then
+    let batch := (entries.take endIndex).drop prevEnd
+    match entries[idx]? with
+    | none => none
+    | some entry =>
+      some
+        { prevEnd     := prevEnd
+        , endIndex    := endIndex
+        , idx         := idx
+        , actionsRoot := actionsRoot prevEnd batch
+        , actionKey   := actionKey idx
+        , leafCommit  := actionLeafValue entry.signedAction
+        , actionSig   := entry.signedAction.sig
+        , actionProof := buildActionProof prevEnd batch idx }
+  else
+    none
+
+/-- `buildBatchBinding` refuses an index outside the batch. -/
+theorem buildBatchBinding_none_of_out_of_range
+    (entries : List LogEntry) (prevEnd endIndex idx : Nat)
+    (h : ¬ (prevEnd ≤ idx ∧ idx < endIndex ∧ endIndex ≤ entries.length)) :
+    buildBatchBinding entries prevEnd endIndex idx = none := by
+  unfold buildBatchBinding
+  rw [if_neg h]
+
+/-- A built binding's root is the batch's `actionsRoot` — the value
+    the L1 record committed, recomputed from the same slice. -/
+theorem buildBatchBinding_actionsRoot
+    (entries : List LogEntry) (prevEnd endIndex idx : Nat)
+    (b : BatchBinding)
+    (h : buildBatchBinding entries prevEnd endIndex idx = some b) :
+    b.actionsRoot = actionsRoot prevEnd ((entries.take endIndex).drop prevEnd) := by
+  unfold buildBatchBinding at h
+  by_cases hb : prevEnd ≤ idx ∧ idx < endIndex ∧ endIndex ≤ entries.length
+  · rw [if_pos hb] at h
+    cases he : entries[idx]? with
+    | none => rw [he] at h; exact absurd h (by simp)
+    | some entry =>
+        rw [he] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        rfl
+  · rw [if_neg hb] at h
+    exact absurd h (by simp)
+
+/-- A built binding's key, leaf, and signature are the disputed
+    entry's own. -/
+theorem buildBatchBinding_binds_entry
+    (entries : List LogEntry) (prevEnd endIndex idx : Nat)
+    (entry : LogEntry) (b : BatchBinding)
+    (he : entries[idx]? = some entry)
+    (h : buildBatchBinding entries prevEnd endIndex idx = some b) :
+    b.actionKey = actionKey idx ∧
+    b.leafCommit = actionLeafValue entry.signedAction ∧
+    b.actionSig = entry.signedAction.sig := by
+  unfold buildBatchBinding at h
+  by_cases hb : prevEnd ≤ idx ∧ idx < endIndex ∧ endIndex ≤ entries.length
+  · rw [if_pos hb, he] at h
+    simp only [Option.some.injEq] at h
+    subst h
+    exact ⟨rfl, rfl, rfl⟩
+  · rw [if_neg hb] at h
+    exact absurd h (by simp)
+
 
 /-! ## JSON formatter
 
@@ -314,6 +443,28 @@ def formatOpenedCellsArray (cells : List (CellTag × ByteArray)) : String :=
     | x :: xs => xs.foldl (fun acc e => acc ++ "," ++ e) x
   "[" ++ joined ++ "]"
 
+/-- Format the batch-binding fields as a JSON fragment (leading
+    comma included), appended inside the terminate-bundle object when
+    a `BatchBinding` is supplied.  The inclusion wire rides the same
+    bitmask ‖ concatenated-siblings shape as the state wire. -/
+def formatBatchBindingFields (b : BatchBinding) : String :=
+  let q := "\""
+  String.join [
+    ",",
+    q ++ "prev_end" ++ q, ":", toString b.prevEnd, ",",
+    q ++ "end" ++ q, ":", toString b.endIndex, ",",
+    q ++ "batch_idx" ++ q, ":", toString b.idx, ",",
+    q ++ "actions_root_hex" ++ q, ":", q ++ bytesHex b.actionsRoot ++ q, ",",
+    q ++ "action_key_hex" ++ q, ":", q ++ bytesHex b.actionKey ++ q, ",",
+    q ++ "leaf_commit_hex" ++ q, ":", q ++ bytesHex b.leafCommit ++ q, ",",
+    q ++ "action_sig_hex" ++ q, ":", q ++ bytesHex b.actionSig ++ q, ",",
+    q ++ "action_gap_mask_hex" ++ q, ":",
+      q ++ bytesHex b.actionProof.bitmask ++ q, ",",
+    q ++ "action_siblings_hex" ++ q, ":",
+      q ++ bytesHex (b.actionProof.siblings.foldl (fun acc s => acc ++ s)
+                       (ByteArray.mk #[])) ++ q
+  ]
+
 /-- Format a `TerminateBundle` as a single line of JSON.
 
     Snake_case field names match Rust serde-deserialize defaults
@@ -323,13 +474,23 @@ def formatOpenedCellsArray (cells : List (CellTag × ByteArray)) : String :=
     The `fixture_id` argument is the operator-supplied identifier
     for the bundle (e.g., "log[7]" for the bundle at log index 7).
     It's passed through to the JSON so a multi-bundle export can
-    distinguish entries. -/
+    distinguish entries.
+
+    Workstream SB: an optional `BatchBinding` appends the
+    batch-inclusion fields (`prev_end` / `end` / `batch_idx` /
+    `actions_root_hex` / `action_key_hex` / `leaf_commit_hex` /
+    `action_sig_hex` / `action_gap_mask_hex` /
+    `action_siblings_hex`) — absent by default, so a pre-batching
+    consumer's parse is unchanged. -/
 def formatTerminateBundleJson (fixtureId : String)
-    (bundle : TerminateBundle) : String :=
+    (bundle : TerminateBundle) (batch : Option BatchBinding := none) : String :=
   let q := "\""
   let actionFieldsHex := bytesHex bundle.actionFields
   let expectedPostCommitHex := bytesHex bundle.expectedPostCommit
   let openedCellsArr := formatOpenedCellsArray bundle.openedCells
+  let batchFields := match batch with
+    | none => ""
+    | some b => formatBatchBindingFields b
   let parts : List String := [
     "{",
     q ++ "fixture_id" ++ q, ":", q ++ fixtureId ++ q, ",",
@@ -342,10 +503,70 @@ def formatTerminateBundleJson (fixtureId : String)
     q ++ "gap_mask_hex" ++ q, ":", q ++ bytesHex bundle.wire.gapMask ++ q, ",",
     q ++ "siblings_hex" ++ q, ":",
       q ++ bytesHex (bundle.wire.siblings.foldl (fun acc s => acc ++ s)
-                       (ByteArray.mk #[])) ++ q,
+                       (ByteArray.mk #[])) ++ q, ",",
+    q ++ "registry_value_hex" ++ q, ":",
+      q ++ bytesHex bundle.registryValue ++ q, ",",
+    q ++ "registry_proof_hex" ++ q, ":",
+      q ++ bytesHex (bundle.registryProof.bitmask ++
+             bundle.registryProof.siblings.foldl (fun acc s => acc ++ s)
+               (ByteArray.mk #[])) ++ q,
+    batchFields,
     "}"
   ]
   String.join parts
+
+/-! ## Batch-submission export (Workstream SB)
+
+The `export-batch` CLI emits the two values `submitStateRoot`
+consumes for a batch `[prevEnd, end)` — the post-state commit after
+the batch's last entry and the batch's actions root — plus the
+bounds, as one JSON line. -/
+
+/-- Format the `export-batch` JSON: the batch bounds, the covered
+    entry count, the post-state commit (`commitExtendedState` of the
+    state after replaying `end` entries), and the batch's actions
+    root. -/
+def formatBatchExportJson (prevEnd endIndex : Nat)
+    (stateCommit actionsRoot : ByteArray) : String :=
+  let q := "\""
+  String.join [
+    "{",
+    q ++ "prev_end" ++ q, ":", toString prevEnd, ",",
+    q ++ "end" ++ q, ":", toString endIndex, ",",
+    q ++ "count" ++ q, ":", toString (endIndex - prevEnd), ",",
+    q ++ "state_commit_hex" ++ q, ":", q ++ bytesHex stateCommit ++ q, ",",
+    q ++ "actions_root_hex" ++ q, ":", q ++ bytesHex actionsRoot ++ q,
+    "}"
+  ]
+
+/-- Format the `export-action-proof` JSON: the standalone
+    batch-inclusion proof for one log index, carrying everything an
+    L1 caller needs to authenticate the action against the record's
+    `actionsRoot` — the action's own wire data (`kind`, `fields`,
+    `signer`, `sig`) plus the inclusion wire. -/
+def formatActionProofExportJson (b : BatchBinding)
+    (entry : LogEntry) : String :=
+  let q := "\""
+  let action := entry.signedAction.action
+  String.join [
+    "{",
+    q ++ "idx" ++ q, ":", toString b.idx, ",",
+    q ++ "prev_end" ++ q, ":", toString b.prevEnd, ",",
+    q ++ "end" ++ q, ":", toString b.endIndex, ",",
+    q ++ "action_kind" ++ q, ":", formatUInt8 (actionKindByte action), ",",
+    q ++ "action_fields_hex" ++ q, ":",
+      q ++ bytesHex (actionFieldsForL1 action) ++ q, ",",
+    q ++ "signer" ++ q, ":", formatUInt64 entry.signedAction.signer, ",",
+    q ++ "action_sig_hex" ++ q, ":", q ++ bytesHex b.actionSig ++ q, ",",
+    q ++ "actions_root_hex" ++ q, ":", q ++ bytesHex b.actionsRoot ++ q, ",",
+    q ++ "action_key_hex" ++ q, ":", q ++ bytesHex b.actionKey ++ q, ",",
+    q ++ "leaf_commit_hex" ++ q, ":", q ++ bytesHex b.leafCommit ++ q, ",",
+    q ++ "gap_mask_hex" ++ q, ":", q ++ bytesHex b.actionProof.bitmask ++ q, ",",
+    q ++ "siblings_hex" ++ q, ":",
+      q ++ bytesHex (b.actionProof.siblings.foldl (fun acc s => acc ++ s)
+                       (ByteArray.mk #[])) ++ q,
+    "}"
+  ]
 
 /-! ## Smoke checks -/
 

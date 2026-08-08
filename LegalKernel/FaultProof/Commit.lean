@@ -259,8 +259,6 @@ def extendedStateExtensionallyEqual (es₁ es₂ : ExtendedState) : Prop :=
   es₁.bridge.consumed.toList = es₂.bridge.consumed.toList ∧
   es₁.bridge.pending.toList  = es₂.bridge.pending.toList ∧
   es₁.bridge.nextWdId        = es₂.bridge.nextWdId ∧
-  es₁.bridge.ammReserveEth   = es₂.bridge.ammReserveEth ∧
-  es₁.bridge.ammReserveBold  = es₂.bridge.ammReserveBold ∧
   es₁.bridge.boldCircuitClosed    = es₂.bridge.boldCircuitClosed ∧
   es₁.bridge.boldTvlCap           = es₂.bridge.boldTvlCap ∧
   es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue ∧
@@ -679,8 +677,6 @@ def ExtendedState.extEq (es₁ es₂ : ExtendedState) : Prop :=
   es₁.bridge.consumed.Equiv es₂.bridge.consumed ∧
   es₁.bridge.pending.Equiv es₂.bridge.pending ∧
   es₁.bridge.nextWdId = es₂.bridge.nextWdId ∧
-  es₁.bridge.ammReserveEth = es₂.bridge.ammReserveEth ∧
-  es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold ∧
   es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed ∧
   es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap ∧
   es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue ∧
@@ -689,15 +685,13 @@ def ExtendedState.extEq (es₁ es₂ : ExtendedState) : Prop :=
 /-- `ExtendedState.extEq` is reflexive.  Trivially derived from the
     per-sub-state `Equiv.refl` lemmas. -/
 theorem ExtendedState.extEq.refl (es : ExtendedState) : ExtendedState.extEq es es := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact State.Equiv.refl es.base
   · exact Std.TreeMap.Equiv.rfl
   · exact Std.TreeMap.Equiv.rfl
   · exact Std.TreeMap.Equiv.rfl
   · exact Std.TreeMap.Equiv.rfl
   · exact Std.TreeMap.Equiv.rfl
-  · rfl
-  · rfl
   · rfl
   · rfl
   · rfl
@@ -716,9 +710,13 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   base_outer_len : es.base.balances.toList.length < 256 ^ 8
   /-- Each inner `BalanceMap` pair-list length fits. -/
   base_inner_len : ∀ p ∈ es.base.balances.toList, p.2.toList.length < 256 ^ 8
-  /-- Each inner balance fits the 33-byte amount head's `2^128`
-      range (not the `2^64` an identifier field would impose — a
-      wei-denominated balance crosses `2^64` at ~18.45 ETH). -/
+  /-- Each inner balance fits the 33-byte amount head's `2^256`
+      range — the width of an EVM word, and the same ceiling
+      `Laws.maxAmount` enforces as a precondition conjunct on every
+      crediting law.  Not the `2^64` an identifier field would impose:
+      a wei-denominated balance crosses `2^64` at ~18.45 ETH.  This
+      field is DISCHARGED rather than assumed, by
+      `FaultProof.canonicalBounds_base_amt_of_reachable`. -/
   base_amt : ∀ p ∈ es.base.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 32
   /-- Each inner-map framed-bytes size fits. -/
   base_inner_size : ∀ p ∈ es.base.balances.toList,
@@ -760,13 +758,10 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   bs_pend_wd : ∀ p ∈ es.bridge.pending.toList,
                p.2.resource.toNat < 256 ^ 8 ∧
                p.2.amount < 256 ^ 32 ∧
-               p.2.l2LogIndex < 256 ^ 8
+               p.2.l2LogIndex < 256 ^ 8 ∧
+               p.2.wdId < 256 ^ 8
   /-- The bridge nextWdId fits. -/
   bs_nxt : es.bridge.nextWdId < 256 ^ 8
-  /-- GP.11.8: AMM ETH reserve fits. -/
-  bs_ammEth : es.bridge.ammReserveEth < 256 ^ 32
-  /-- GP.11.8: AMM BOLD reserve fits. -/
-  bs_ammBold : es.bridge.ammReserveBold < 256 ^ 32
   /-- GP.11.8: BOLD TVL cap fits. -/
   bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 32
   /-- GP.11.8: BOLD total locked value fits. -/
@@ -852,7 +847,8 @@ theorem pendingWithdrawal_bounded_of_canonicalBounds (es : ExtendedState)
     (w : Bridge.WithdrawalId) (pw : Bridge.PendingWithdrawal)
     (h_w : es.bridge.pending[w]? = some pw)
     (h : ExtendedState.CanonicalBounds es) :
-    pw.resource.toNat < 256 ^ 8 ∧ pw.amount < 256 ^ 32 ∧ pw.l2LogIndex < 256 ^ 8 :=
+    pw.resource.toNat < 256 ^ 8 ∧ pw.amount < 256 ^ 32 ∧
+      pw.l2LogIndex < 256 ^ 8 ∧ pw.wdId < 256 ^ 8 :=
   h.bs_pend_wd (w, pw) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_w)
 
 /-- An actor's epoch budget is bounded, absent entries included: the
@@ -991,11 +987,11 @@ theorem commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free
       h_b₁.lp_size h_b₂.lp_size
       h_b₁.lp_pol h_b₂.lp_pol
       h_lp_stream'
-  -- EI.7.e for bridge (nine-segment concatenation, GP.11.8 + GP.11.10).
+  -- EI.7.e for bridge (seven-segment concatenation, GP.11.8 + GP.11.10).
   have h_bridge_stream' :
       Bridge.BridgeState.encode es₁.bridge = Bridge.BridgeState.encode es₂.bridge :=
     h_bridge_stream
-  have ⟨h_consumed, h_pending, h_nextWdId, h_ammEth, h_ammBold,
+  have ⟨h_consumed, h_pending, h_nextWdId,
         h_circuit, h_tvlCap, h_totalLocked, h_ammDisabled⟩ :=
     Bridge.BridgeState.encode_injective es₁.bridge es₂.bridge
       h_b₁.bs_cons_len h_b₂.bs_cons_len
@@ -1007,36 +1003,36 @@ theorem commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free
       h_b₁.bs_pend_size h_b₂.bs_pend_size
       h_b₁.bs_pend_wd h_b₂.bs_pend_wd
       h_b₁.bs_nxt h_b₂.bs_nxt
-      h_b₁.bs_ammEth h_b₂.bs_ammEth
-      h_b₁.bs_ammBold h_b₂.bs_ammBold
       h_b₁.bs_tvlCap h_b₂.bs_tvlCap
       h_b₁.bs_totalLocked h_b₂.bs_totalLocked
       h_bridge_stream'
   -- Step 4: Assemble the per-sub-state conjuncts into ExtendedState.extEq.
   exact ⟨h_base, h_nonces, h_registry, h_lp_equiv, h_consumed, h_pending,
-         h_nextWdId, h_ammEth, h_ammBold, h_circuit, h_tvlCap, h_totalLocked,
+         h_nextWdId, h_circuit, h_tvlCap, h_totalLocked,
          h_ammDisabled⟩
 
-/-! ## GP.11.8 / GP.11.10 — AMM state-root commitment integration theorems
+/-! ## GP.11.8 / GP.11.10 — mirror state-root commitment integration theorems
 
 The following theorems ratify that the GP.11.8 extension to
 `BridgeState` (and its GP.11.10 `ammDisabled` widening) achieves its
-goal: the state-root preimage covers every AMM/BOLD governance field
-*including the disaster-recovery kill switch*, and existing states
-migrate deterministically. -/
+goal: the state-root preimage covers every surviving L1-mirror
+governance field — the BOLD deposit guards *and the disaster-recovery
+kill switch* — and genesis states commit deterministically.  (The two
+excised L1-AMM book mirrors are gone from the preimage entirely, so
+the v1.2/v1.3 layout-migration theorems that reasoned about them are
+gone too: with zero deployed contracts there is no layout to migrate
+FROM.) -/
 
 /-- GP.11.8 + GP.11.10: the state-root preimage covers
-    `ammReserveEth`, `ammReserveBold`, `boldCircuitClosed`,
-    `boldTvlCap`, `boldTotalLockedValue`, and `ammDisabled`.
-    Proof: the `BridgeState.encode` definition includes all six
+    `boldCircuitClosed`, `boldTvlCap`, `boldTotalLockedValue`, and
+    `ammDisabled`.
+    Proof: the `BridgeState.encode` definition includes all four
     fields in sequence after the v1.2 segments. -/
-theorem bridgeState_commit_includes_ammState (bs : Bridge.BridgeState) :
+theorem bridgeState_commit_includes_mirrorState (bs : Bridge.BridgeState) :
     Bridge.BridgeState.encode bs =
       Bridge.BridgeState.encodeConsumed bs ++
       Bridge.BridgeState.encodePending bs ++
       Encodable.encode (T := Nat) bs.nextWdId ++
-      encodeAmount bs.ammReserveEth ++
-      encodeAmount bs.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
       encodeAmount bs.boldTvlCap ++
       encodeAmount bs.boldTotalLockedValue ++
@@ -1050,70 +1046,64 @@ def bridgeStateEncodeBase (bs : Bridge.BridgeState) : Encoding.Stream :=
   Bridge.BridgeState.encodePending bs ++
   Encodable.encode (T := Nat) bs.nextWdId
 
-/-- GP.11.8 / GP.11.10 helper: AMM suffix — the five AMM/BOLD fields
-    appended by GP.11.8 plus the GP.11.10 `ammDisabled` kill-switch
+/-- GP.11.8 / GP.11.10 helper: mirror suffix — the three BOLD
+    deposit-guard fields plus the GP.11.10 `ammDisabled` kill-switch
     mirror.  At genesis defaults this suffix is a fixed constant,
-    which is the structural reason the v1.2→v1.4 migration is
-    deterministic (see `bridgeState_amm_genesis_suffix_const`). -/
-def bridgeStateEncodeAmmSuffix (bs : Bridge.BridgeState) : Encoding.Stream :=
-  encodeAmount bs.ammReserveEth ++
-  encodeAmount bs.ammReserveBold ++
+    which is the structural reason genesis commitments are
+    deterministic (see `bridgeState_mirror_genesis_suffix_const`). -/
+def bridgeStateEncodeMirrorSuffix (bs : Bridge.BridgeState) : Encoding.Stream :=
   Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
   encodeAmount bs.boldTvlCap ++
   encodeAmount bs.boldTotalLockedValue ++
   Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0)
 
-/-- GP.11.8: the v1.4 encoding factorizes as a v1.2 base prefix
-    appended with the AMM suffix. -/
+/-- GP.11.8: the encoding factorizes as a v1.2 base prefix appended
+    with the mirror suffix. -/
 theorem bridgeState_encode_factored (bs : Bridge.BridgeState) :
     Bridge.BridgeState.encode bs =
-    bridgeStateEncodeBase bs ++ bridgeStateEncodeAmmSuffix bs := by
+    bridgeStateEncodeBase bs ++ bridgeStateEncodeMirrorSuffix bs := by
   simp only [Bridge.BridgeState.encode, bridgeStateEncodeBase,
-             bridgeStateEncodeAmmSuffix, List.append_assoc]
+             bridgeStateEncodeMirrorSuffix, List.append_assoc]
 
-/-- GP.11.8 / GP.11.10: two bridge states whose AMM fields are all at
-    genesis defaults (reserves zero, circuit open, caps zero, kill
-    switch not fired) produce identical AMM encoding suffixes. -/
-theorem bridgeState_amm_genesis_suffix_const
+/-- GP.11.8 / GP.11.10: two bridge states whose mirror fields are all
+    at genesis defaults (circuit open, caps zero, kill switch not
+    fired) produce identical mirror encoding suffixes. -/
+theorem bridgeState_mirror_genesis_suffix_const
     (bs₁ bs₂ : Bridge.BridgeState)
-    (h₁ : bs₁.ammReserveEth = 0 ∧ bs₁.ammReserveBold = 0 ∧
-           bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
+    (h₁ : bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
            bs₁.boldTotalLockedValue = 0 ∧ bs₁.ammDisabled = false)
-    (h₂ : bs₂.ammReserveEth = 0 ∧ bs₂.ammReserveBold = 0 ∧
-           bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
+    (h₂ : bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
            bs₂.boldTotalLockedValue = 0 ∧ bs₂.ammDisabled = false) :
-    bridgeStateEncodeAmmSuffix bs₁ = bridgeStateEncodeAmmSuffix bs₂ := by
-  obtain ⟨he₁, hb₁, hc₁, ht₁, hl₁, hd₁⟩ := h₁
-  obtain ⟨he₂, hb₂, hc₂, ht₂, hl₂, hd₂⟩ := h₂
-  simp only [bridgeStateEncodeAmmSuffix, he₁, hb₁, hc₁, ht₁, hl₁, hd₁,
-             he₂, hb₂, hc₂, ht₂, hl₂, hd₂]
+    bridgeStateEncodeMirrorSuffix bs₁ = bridgeStateEncodeMirrorSuffix bs₂ := by
+  obtain ⟨hc₁, ht₁, hl₁, hd₁⟩ := h₁
+  obtain ⟨hc₂, ht₂, hl₂, hd₂⟩ := h₂
+  simp only [bridgeStateEncodeMirrorSuffix, hc₁, ht₁, hl₁, hd₁,
+             hc₂, ht₂, hl₂, hd₂]
 
-/-- GP.11.8: backwards-compatible migration.  Two `BridgeState`s that
+/-- GP.11.8: genesis-mirror determinism.  Two `BridgeState`s that
     agree on the v1.2 fields (`consumed`, `pending`, `nextWdId`) and
-    both have genesis AMM values produce the same commitment.
+    both have genesis mirror values produce the same commitment.
 
-    **Structural argument:** the v1.4 encoding factorizes as
-    `encodeBase ++ encodeAmmSuffix`.  When v1.2 fields agree the
-    base prefixes are identical; when AMM fields are at genesis the
-    suffixes are identical; therefore the full encodings agree and
+    **Structural argument:** the encoding factorizes as
+    `encodeBase ++ encodeMirrorSuffix`.  When v1.2 fields agree the
+    base prefixes are identical; when the mirror fields are at genesis
+    the suffixes are identical; therefore the full encodings agree and
     `commitBridgeState` (which hashes the encoding) agrees. -/
 theorem bridgeState_commit_extends_v1_2
     (bs₁ bs₂ : Bridge.BridgeState)
     (h_consumed : bs₁.consumed = bs₂.consumed)
     (h_pending  : bs₁.pending  = bs₂.pending)
     (h_nextWdId : bs₁.nextWdId = bs₂.nextWdId)
-    (h_genesis₁ : bs₁.ammReserveEth = 0 ∧ bs₁.ammReserveBold = 0 ∧
-                   bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
+    (h_genesis₁ : bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
                    bs₁.boldTotalLockedValue = 0 ∧ bs₁.ammDisabled = false)
-    (h_genesis₂ : bs₂.ammReserveEth = 0 ∧ bs₂.ammReserveBold = 0 ∧
-                   bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
+    (h_genesis₂ : bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
                    bs₂.boldTotalLockedValue = 0 ∧ bs₂.ammDisabled = false) :
     commitBridgeState bs₁ = commitBridgeState bs₂ := by
   have hbase : bridgeStateEncodeBase bs₁ = bridgeStateEncodeBase bs₂ := by
     simp only [bridgeStateEncodeBase, Bridge.BridgeState.encodeConsumed,
                Bridge.BridgeState.encodePending, h_consumed, h_pending, h_nextWdId]
-  have hsuffix : bridgeStateEncodeAmmSuffix bs₁ = bridgeStateEncodeAmmSuffix bs₂ :=
-    bridgeState_amm_genesis_suffix_const bs₁ bs₂ h_genesis₁ h_genesis₂
+  have hsuffix : bridgeStateEncodeMirrorSuffix bs₁ = bridgeStateEncodeMirrorSuffix bs₂ :=
+    bridgeState_mirror_genesis_suffix_const bs₁ bs₂ h_genesis₁ h_genesis₂
   have henc : Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂ := by
     rw [bridgeState_encode_factored, bridgeState_encode_factored, hbase, hsuffix]
   show commitBridgeState bs₁ = commitBridgeState bs₂
@@ -1121,41 +1111,6 @@ theorem bridgeState_commit_extends_v1_2
   rw [show Encodable.encode (T := BridgeState) bs₁ = Bridge.BridgeState.encode bs₁ from rfl,
       show Encodable.encode (T := BridgeState) bs₂ = Bridge.BridgeState.encode bs₂ from rfl,
       henc]
-
-/-- GP.11.10: backwards-compatible migration from the GP.11.8 (v1.3)
-    encoding.  Two `BridgeState`s that agree on every v1.3 field
-    (`consumed`, `pending`, `nextWdId`, and the five GP.11.8 AMM/BOLD
-    mirrors) and whose kill switches have both not fired
-    (`ammDisabled = false`, the only value a pre-GP.11.10 state can
-    represent) produce the same commitment.  This is the v1.3
-    analogue of `bridgeState_commit_extends_v1_2`: a GP.11.8-era
-    deployment migrates deterministically because the appended
-    `ammDisabled` segment is the constant `encode 0` until the L1
-    kill switch fires. -/
-theorem bridgeState_commit_extends_v1_3
-    (bs₁ bs₂ : Bridge.BridgeState)
-    (h_consumed : bs₁.consumed.toList = bs₂.consumed.toList)
-    (h_pending  : bs₁.pending.toList  = bs₂.pending.toList)
-    (h_nextWdId : bs₁.nextWdId = bs₂.nextWdId)
-    (h_ammEth   : bs₁.ammReserveEth = bs₂.ammReserveEth)
-    (h_ammBold  : bs₁.ammReserveBold = bs₂.ammReserveBold)
-    (h_circuit  : bs₁.boldCircuitClosed = bs₂.boldCircuitClosed)
-    (h_tvlCap   : bs₁.boldTvlCap = bs₂.boldTvlCap)
-    (h_totalLocked : bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue)
-    (h_disabled₁ : bs₁.ammDisabled = false)
-    (h_disabled₂ : bs₂.ammDisabled = false) :
-    commitBridgeState bs₁ = commitBridgeState bs₂ := by
-  have henc : Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂ := by
-    simp only [Bridge.BridgeState.encode, Bridge.BridgeState.encodeConsumed,
-               Bridge.BridgeState.encodePending, h_consumed, h_pending,
-               h_nextWdId, h_ammEth, h_ammBold, h_circuit, h_tvlCap,
-               h_totalLocked, h_disabled₁, h_disabled₂]
-  show commitBridgeState bs₁ = commitBridgeState bs₂
-  unfold commitBridgeState
-  rw [show Encodable.encode (T := BridgeState) bs₁ = Bridge.BridgeState.encode bs₁ from rfl,
-      show Encodable.encode (T := BridgeState) bs₂ = Bridge.BridgeState.encode bs₂ from rfl,
-      henc]
-
 
 /-- GP.11.10 headline: `ammDisabled` is *reflected in the state-root
     preimage*.  Under collision-freeness of `hashBytes` on the pre-images below, two bridge states
@@ -1167,7 +1122,7 @@ theorem bridgeState_commit_extends_v1_3
     the disabled state.
 
     **Proof.**  Equal commits lift (via collision-freedom) to equal
-    canonical encodings; the eight leading segments agree by
+    canonical encodings; the six leading segments agree by
     hypothesis, so list-append cancellation isolates the trailing
     `ammDisabled` segment; CBE-uint injectivity on the canonical 0/1
     range then forces the two flags to agree — contradiction. -/
@@ -1180,8 +1135,6 @@ theorem commitBridgeState_reflects_ammDisabled
     (h_consumed : bs₁.consumed.toList = bs₂.consumed.toList)
     (h_pending  : bs₁.pending.toList  = bs₂.pending.toList)
     (h_nextWdId : bs₁.nextWdId = bs₂.nextWdId)
-    (h_ammEth   : bs₁.ammReserveEth = bs₂.ammReserveEth)
-    (h_ammBold  : bs₁.ammReserveBold = bs₂.ammReserveBold)
     (h_circuit  : bs₁.boldCircuitClosed = bs₂.boldCircuitClosed)
     (h_tvlCap   : bs₁.boldTvlCap = bs₂.boldTvlCap)
     (h_totalLocked : bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue)
@@ -1202,31 +1155,27 @@ theorem commitBridgeState_reflects_ammDisabled
   rw [List.toList_toArray, List.toList_toArray] at h_list
   have h_enc : Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂ :=
     h_list
-  -- Step 3: the eight leading segments agree by hypothesis, so the
+  -- Step 3: the six leading segments agree by hypothesis, so the
   -- whole-encoding equality cancels down to the trailing `ammDisabled`
   -- segment.  `BridgeState.encode` is left-associated, so the term is
-  -- `(eight-segment prefix) ++ encode (if ammDisabled then 1 else 0)`.
+  -- `(six-segment prefix) ++ encode (if ammDisabled then 1 else 0)`.
   have h_prefix :
       Bridge.BridgeState.encodeConsumed bs₁ ++
       Bridge.BridgeState.encodePending bs₁ ++
       Encodable.encode (T := Nat) bs₁.nextWdId ++
-      encodeAmount bs₁.ammReserveEth ++
-      encodeAmount bs₁.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs₁.boldCircuitClosed then 1 else 0) ++
       encodeAmount bs₁.boldTvlCap ++
       encodeAmount bs₁.boldTotalLockedValue =
       Bridge.BridgeState.encodeConsumed bs₂ ++
       Bridge.BridgeState.encodePending bs₂ ++
       Encodable.encode (T := Nat) bs₂.nextWdId ++
-      encodeAmount bs₂.ammReserveEth ++
-      encodeAmount bs₂.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs₂.boldCircuitClosed then 1 else 0) ++
       encodeAmount bs₂.boldTvlCap ++
       encodeAmount bs₂.boldTotalLockedValue := by
     simp only [Bridge.BridgeState.encodeConsumed, Bridge.BridgeState.encodePending,
-               h_consumed, h_pending, h_nextWdId, h_ammEth, h_ammBold,
+               h_consumed, h_pending, h_nextWdId,
                h_circuit, h_tvlCap, h_totalLocked]
-  rw [bridgeState_commit_includes_ammState, bridgeState_commit_includes_ammState,
+  rw [bridgeState_commit_includes_mirrorState, bridgeState_commit_includes_mirrorState,
       ← h_prefix] at h_enc
   have h_last :
       Encodable.encode (T := Nat) (if bs₁.ammDisabled then 1 else 0) =
@@ -1268,8 +1217,6 @@ theorem commitExtendedStateConcat_reflects_ammDisabled
     (h_consumed : es₁.bridge.consumed.toList = es₂.bridge.consumed.toList)
     (h_pending  : es₁.bridge.pending.toList  = es₂.bridge.pending.toList)
     (h_nextWdId : es₁.bridge.nextWdId = es₂.bridge.nextWdId)
-    (h_ammEth   : es₁.bridge.ammReserveEth = es₂.bridge.ammReserveEth)
-    (h_ammBold  : es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold)
     (h_circuit  : es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed)
     (h_tvlCap   : es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap)
     (h_totalLocked : es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue)
@@ -1295,7 +1242,7 @@ theorem commitExtendedStateConcat_reflects_ammDisabled
           (List.mem_append_left _ (by simp [subStatePreimages])))
       · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
           (List.mem_append_right _ (by simp [subStatePreimages])))))
-    h_consumed h_pending h_nextWdId h_ammEth h_ammBold h_circuit
+    h_consumed h_pending h_nextWdId h_circuit
     h_tvlCap h_totalLocked h_ne h_bs
 
 /-! ## Smoke checks -/

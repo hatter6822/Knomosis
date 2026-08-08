@@ -361,13 +361,14 @@ fn fee_split_corpus_all_records_are_deposit_with_fee() {
             19,
             "record {i}: constructor tag != 19 (DepositWithFee)"
         );
-        // Total length is exactly 120 bytes: 6 × 9-byte CBE uint heads
+        // Total length is exactly 153 bytes: 6 × 9-byte CBE uint heads
         // (tag, r, recipient, poolActor, budgetGrant, depositId) +
-        // 2 × 33-byte amount heads (userAmount, poolAmount).
+        // 3 × 33-byte amount heads (userAmount, poolAmount, and the
+        // Workstream SB appended seedAmount).
         assert_eq!(
             record.expected.len(),
-            120,
-            "record {i}: expected bytes != 120 (DepositWithFee CBE length)"
+            153,
+            "record {i}: expected bytes != 153 (DepositWithFee CBE length)"
         );
     }
 }

@@ -699,17 +699,19 @@ DepositId DepositRecord compare` (DepositId is `Nat`; DepositRecord is
 `(resource, userAmount, poolAmount, budgetGrant)`), a `pending : TreeMap
 WithdrawalId PendingWithdrawal compare` (WithdrawalId is `Nat`;
 PendingWithdrawal is `(resource, recipient, amount, l2LogIndex)`),
-and `nextWdId : Nat` — plus the GP.11.8 AMM/BOLD L1-mirror fields
-(`ammReserveEth`, `ammReserveBold`, `boldCircuitClosed`, `boldTvlCap`,
-`boldTotalLockedValue`) and the GP.11.10 `ammDisabled` kill-switch
-mirror.
+and `nextWdId : Nat` — plus the GP.11.8 BOLD deposit-guard mirrors
+(`boldCircuitClosed`, `boldTvlCap`, `boldTotalLockedValue`) and the
+GP.11.10 `ammDisabled` kill-switch mirror.  (The two L1-AMM book
+mirrors GP.11.8 also carried were EXCISED with the L1 embedded AMM;
+the wire drops their segments entirely — a breaking pre-production
+CBE change, like the depositWithFee widening before it.)
 
 Encoded canonically as the concatenation of two sorted-pair-list
-maps + seven CBE uints (the two Bool fields encode as canonical 0/1):
+maps + five CBE uints (the two Bool fields encode as canonical 0/1):
 
 ```
 BridgeState  → consumed-map ++ pending-map ++ nextWdId
-               ++ ammReserveEth ++ ammReserveBold ++ boldCircuitClosed
+               ++ boldCircuitClosed
                ++ boldTvlCap ++ boldTotalLockedValue ++ ammDisabled
 ```
 
@@ -784,7 +786,8 @@ def Bridge.PendingWithdrawal.encode (wd : Bridge.PendingWithdrawal) : Stream :=
   Encodable.encode (T := Nat) wd.resource.toNat ++
   Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
   encodeAmount wd.amount ++
-  Encodable.encode (T := Nat) wd.l2LogIndex
+  Encodable.encode (T := Nat) wd.l2LogIndex ++
+  Encodable.encode (T := Nat) wd.wdId
 
 /-- Wrap a `PendingWithdrawal` as a length-prefixed CBE byte string
     for placement in the outer `pending` map's value slot.
@@ -812,10 +815,14 @@ def Bridge.PendingWithdrawal.decode (s : Stream) :
           | .ok (amount, s₃) =>
             match Encodable.decode (T := Nat) s₃ with
             | .ok (idx, s₄) =>
-              .ok ({ resource    := resN.toUInt64
-                     recipient   := rcp
-                     amount      := amount
-                     l2LogIndex  := idx }, s₄)
+              match Encodable.decode (T := Nat) s₄ with
+              | .ok (wid, s₅) =>
+                .ok ({ resource    := resN.toUInt64
+                       recipient   := rcp
+                       amount      := amount
+                       l2LogIndex  := idx
+                       wdId        := wid }, s₅)
+              | .error e => .error e
             | .error e => .error e
           | .error e => .error e
         | none =>
@@ -833,21 +840,19 @@ def Bridge.BridgeState.encodePending (bs : Bridge.BridgeState) : Stream :=
     (wid, Bridge.PendingWithdrawal.encodeAsBytes wd)))
 
 /-- Encode a `BridgeState`:
-    `[consumed; pending; nextWdId; ammReserveEth; ammReserveBold;
-      boldCircuitClosed; boldTvlCap; boldTotalLockedValue;
-      ammDisabled]`.
-    GP.11.8 extends the v1.2 three-segment encoding with five
-    AMM/BOLD state fields so the state-root commitment covers
-    the full AMM state for fault-proof adjudication; GP.11.10
+    `[consumed; pending; nextWdId; boldCircuitClosed; boldTvlCap;
+      boldTotalLockedValue; ammDisabled]`.
+    GP.11.8 extends the v1.2 three-segment encoding with the BOLD
+    deposit-guard mirrors so the state-root commitment covers the
+    L1 deposit-guard state for fault-proof adjudication; GP.11.10
     appends the `ammDisabled` kill-switch flag (as a canonical
     0/1 CBE uint, mirroring `boldCircuitClosed`) so the
-    commitment also reflects the L1 disaster-recovery state. -/
+    commitment also reflects the L1 disaster-recovery state.  (The
+    two excised L1-AMM book segments are gone from the wire.) -/
 def Bridge.BridgeState.encode (bs : Bridge.BridgeState) : Stream :=
   Bridge.BridgeState.encodeConsumed bs ++
   Bridge.BridgeState.encodePending bs ++
   Encodable.encode (T := Nat) bs.nextWdId ++
-  encodeAmount bs.ammReserveEth ++
-  encodeAmount bs.ammReserveBold ++
   Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
   encodeAmount bs.boldTvlCap ++
   encodeAmount bs.boldTotalLockedValue ++
@@ -905,31 +910,24 @@ def Bridge.BridgeState.decode (s : Stream) :
     | .ok (pending, s₂) =>
       match Encodable.decode (T := Nat) s₂ with
       | .ok (nextWdId, s₃) =>
-        match decodeAmount s₃ with
-        | .ok (ammReserveEth, s₄) =>
+        match Encodable.decode (T := Nat) s₃ with
+        | .ok (circuitN, s₄) =>
+          if circuitN > 1 then .error (.nonCanonical "boldCircuitClosed: expected 0 or 1")
+          else
+          let boldCircuitClosed := circuitN == 1
           match decodeAmount s₄ with
-          | .ok (ammReserveBold, s₅) =>
-            match Encodable.decode (T := Nat) s₅ with
-            | .ok (circuitN, s₆) =>
-              if circuitN > 1 then .error (.nonCanonical "boldCircuitClosed: expected 0 or 1")
-              else
-              let boldCircuitClosed := circuitN == 1
-              match decodeAmount s₆ with
-              | .ok (boldTvlCap, s₇) =>
-                match decodeAmount s₇ with
-                | .ok (boldTotalLockedValue, s₈) =>
-                  match Encodable.decode (T := Nat) s₈ with
-                  | .ok (ammDisabledN, s₉) =>
-                    if ammDisabledN > 1 then
-                      .error (.nonCanonical "ammDisabled: expected 0 or 1")
-                    else
-                    let ammDisabled := ammDisabledN == 1
-                    .ok ({ consumed, pending, nextWdId,
-                           ammReserveEth, ammReserveBold,
-                           boldCircuitClosed, boldTvlCap,
-                           boldTotalLockedValue, ammDisabled }, s₉)
-                  | .error e => .error e
-                | .error e => .error e
+          | .ok (boldTvlCap, s₅) =>
+            match decodeAmount s₅ with
+            | .ok (boldTotalLockedValue, s₆) =>
+              match Encodable.decode (T := Nat) s₆ with
+              | .ok (ammDisabledN, s₇) =>
+                if ammDisabledN > 1 then
+                  .error (.nonCanonical "ammDisabled: expected 0 or 1")
+                else
+                let ammDisabled := ammDisabledN == 1
+                .ok ({ consumed, pending, nextWdId,
+                       boldCircuitClosed, boldTvlCap,
+                       boldTotalLockedValue, ammDisabled }, s₇)
               | .error e => .error e
             | .error e => .error e
           | .error e => .error e
@@ -1359,21 +1357,24 @@ theorem pendingWithdrawal_roundtrip
     (wd : Bridge.PendingWithdrawal) (rest : Stream)
     (h_res : wd.resource.toNat < 256 ^ 8)
     (h_amt : wd.amount < 256 ^ 32)
-    (h_idx : wd.l2LogIndex < 256 ^ 8) :
+    (h_idx : wd.l2LogIndex < 256 ^ 8)
+    (h_wid : wd.wdId < 256 ^ 8) :
     Bridge.PendingWithdrawal.decode (Bridge.PendingWithdrawal.encode wd ++ rest) =
     .ok (wd, rest) := by
   unfold Bridge.PendingWithdrawal.encode Bridge.PendingWithdrawal.decode
-  -- Re-associate the four-segment concatenation so each segment is
+  -- Re-associate the five-segment concatenation so each segment is
   -- consumed left-to-right by its own decoder.
   rw [show
     Encodable.encode (T := Nat) wd.resource.toNat ++
       Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
       encodeAmount wd.amount ++
-      Encodable.encode (T := Nat) wd.l2LogIndex ++ rest =
+      Encodable.encode (T := Nat) wd.l2LogIndex ++
+      Encodable.encode (T := Nat) wd.wdId ++ rest =
     Encodable.encode (T := Nat) wd.resource.toNat ++
       (Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
         (encodeAmount wd.amount ++
-          (Encodable.encode (T := Nat) wd.l2LogIndex ++ rest)))
+          (Encodable.encode (T := Nat) wd.l2LogIndex ++
+            (Encodable.encode (T := Nat) wd.wdId ++ rest))))
     from by simp [List.append_assoc]]
   -- Segment 1: resource (Nat).
   rw [nat_roundtrip wd.resource.toNat _ h_res]
@@ -1396,19 +1397,25 @@ theorem pendingWithdrawal_roundtrip
   rw [amount_roundtrip wd.amount _ h_amt]
   dsimp only
   -- Segment 4: l2LogIndex (Nat).
-  rw [nat_roundtrip wd.l2LogIndex rest h_idx]
+  rw [nat_roundtrip wd.l2LogIndex _ h_idx]
+  dsimp only
+  -- Segment 5: wdId (Nat) — the leaf's own claim about the key it
+  -- occupies, which the L1 binds a submitted proof's index to.
+  rw [nat_roundtrip wd.wdId rest h_wid]
   -- Reduce the constructed record back to `wd`.
   show Except.ok ({ resource := wd.resource.toNat.toUInt64,
                     recipient := wd.recipient,
                     amount := wd.amount,
-                    l2LogIndex := wd.l2LogIndex }, rest)
+                    l2LogIndex := wd.l2LogIndex,
+                    wdId := wd.wdId }, rest)
      = .ok (wd, rest)
   congr 1
   congr 1
   cases wd with
-  | mk resource recipient amount l2LogIndex =>
-    show Bridge.PendingWithdrawal.mk resource.toNat.toUInt64 recipient amount l2LogIndex
-       = ⟨resource, recipient, amount, l2LogIndex⟩
+  | mk resource recipient amount l2LogIndex wdId =>
+    show Bridge.PendingWithdrawal.mk resource.toNat.toUInt64 recipient amount
+           l2LogIndex wdId
+       = ⟨resource, recipient, amount, l2LogIndex, wdId⟩
     have : resource.toNat.toUInt64 = resource := UInt64.ofNat_toNat
     rw [this]
 

@@ -21,6 +21,7 @@ use knomosis_faultproof_observer::game::{
 };
 use knomosis_faultproof_observer::observer::{Observer, ObserverConfig};
 use knomosis_faultproof_observer::persistence::{GameRecord, Persistence};
+use knomosis_faultproof_observer::state_reader::ObservedGame;
 use knomosis_faultproof_observer::strategy::MemoryTruthOracle;
 use knomosis_faultproof_observer::submitter::mock::MockSubmitter;
 use knomosis_faultproof_observer::watcher::WatcherConfig;
@@ -495,10 +496,13 @@ fn game_state_persists_through_sqlite() {
             challenger_bond: 1_000_000,
             status: GameStatus::InProgress,
             deployment_id: [0xDE; 32],
+            actions_root: [0u8; 32],
         },
         me: TurnSide::Challenger,
         last_updated_block: 12345,
         state_known: true,
+        turn_deadline: None,
+        disputed_log_index: Some(256),
     };
     persistence.store_game(&rec).unwrap();
     let loaded = persistence.load_game(1).unwrap().unwrap();
@@ -528,6 +532,7 @@ fn settlement_composes_with_state_machine() {
         challenger_bond: 1000,
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
+        actions_root: [0u8; 32],
     };
     let settled = apply_settlement(&state, GameStatus::SequencerWon).unwrap();
     assert_eq!(settled.status, GameStatus::SequencerWon);
@@ -731,8 +736,19 @@ fn cold_start_lifecycle_with_mark_state_known() {
         challenger_bond: 1_000_000,
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
+        actions_root: [0u8; 32],
     };
-    let updated = obs.mark_state_known(42, full_state, 150).unwrap();
+    let updated = obs
+        .mark_state_known(
+            42,
+            ObservedGame {
+                state: full_state,
+                turn_deadline: u64::MAX,
+                disputed_log_index: 256,
+            },
+            150,
+        )
+        .unwrap();
     assert!(updated);
     let rec_after_mark = obs.games().get(&42).unwrap();
     assert!(rec_after_mark.state_known);
@@ -808,10 +824,21 @@ fn integration_mark_state_known_rejects_degenerate_range() {
         challenger_bond: 0,
         status: GameStatus::InProgress,
         deployment_id: [0u8; 32],
+        actions_root: [0u8; 32],
     };
     // Unknown-game branch returns Ok(false) without hitting
     // the range check.
-    let updated = obs.mark_state_known(99, dummy_state, 100).unwrap();
+    let updated = obs
+        .mark_state_known(
+            99,
+            ObservedGame {
+                state: dummy_state,
+                turn_deadline: u64::MAX,
+                disputed_log_index: 1,
+            },
+            100,
+        )
+        .unwrap();
     assert!(!updated);
 }
 

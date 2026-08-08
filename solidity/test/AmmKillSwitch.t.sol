@@ -1,32 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.36;
 
+import {Vm} from "forge-std/Vm.sol";
+
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
+import {DepositEventDecoder} from "test/utils/DepositEventDecoder.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
 import {MockBold} from "test/utils/MockBold.sol";
 import {AmmTestBase} from "test/utils/AmmTestBase.sol";
 import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 
 /// @title AmmKillSwitchTest
-/// @notice Workstream GP.11.3 / GP.11.10 — the two emergency brakes on
-///         `ammSwap`: the one-way `emergencyDisableAmm` kill switch
-///         (GP.11.10's disaster-recovery control) and the automatic
-///         GP.5.5 BOLD circuit-breaker gating (depeg freeze).
+/// @notice Workstream GP.11.10 — the one-way `emergencyDisableAmm`
+///         kill switch, re-pointed at the LIVE L2 pool under the
+///         one-AMM topology (the excised L1 `ammSwap` and its brake
+///         interplay are gone; the switch's L2 effects — swap
+///         inadmissibility + reclaim admissibility — are proven and
+///         tested on the Lean side).
 ///
-/// @dev    Pins the three GP.11.10 theorems as tests:
-///         `emergencyDisableAmm_preserves_reserves`,
-///         `ammDisabled_implies_swap_reverts`, `ammDisabled_is_monotonic`;
-///         the access control on the disaster-recovery role; the
+/// @dev    Pins as tests: `ammDisabled_is_monotonic`; the access
+///         control on the disaster-recovery role; the
 ///         seeding-stops-when-disabled effect; the GP.11.10
 ///         "post-disable deposit + withdraw still work" degraded-mode
-///         guarantee; the breaker gating in both directions; the
-///         breaker/kill-switch independence + precedence; and the
+///         guarantee; the one-argument `AmmDisabled` event; and the
 ///         constructor `AmmRoleIsBridge` guard.  The 3-of-N multisig
 ///         hardening of the role lives in
 ///         `KnomosisAmmDisasterRecoveryMultisig.t.sol`.
-contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
+contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness, DepositEventDecoder {
     /// @dev Local copy of the contract event for `vm.expectEmit`.
-    event AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256 reserveBold);
+    event AmmDisabled(uint256 timestamp);
 
     /// @dev Attestor key for the post-disable withdrawal round trip.
     uint256 private constant ATTESTOR_PK = 0xA77E5709;
@@ -106,39 +108,23 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
     // Kill switch — semantics (the GP.11.10 theorems as tests)
     // ------------------------------------------------------------------
 
-    /// @notice `emergencyDisableAmm_preserves_reserves`: the reserves are
-    ///         UNCHANGED by the call (a graceful shutdown, not a drain), and
-    ///         the `AmmDisabled` event carries them.
-    function test_emergencyDisableAmm_preservesReserves_andEmits() public {
+    /// @notice A graceful shutdown, not a drain: the disable is a pure
+    ///         flag flip whose `AmmDisabled` event carries the block
+    ///         timestamp (the excised books' reserve arguments are gone
+    ///         with the books), and the escrow/TVL accounting is
+    ///         untouched by the call.
+    function test_emergencyDisableAmm_flagOnly_andEmits() public {
         KnomosisBridge bridge = _deploySeededReady();
-        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
+        uint256 tvlBefore = bridge.totalLockedValue();
 
         vm.expectEmit(false, false, false, true, address(bridge));
-        emit AmmDisabled(block.timestamp, rEth, rBold);
+        emit AmmDisabled(block.timestamp);
 
         vm.prank(AMM_DR);
         bridge.emergencyDisableAmm();
 
-        assertEq(bridge.ammReserveEth(), rEth, "ETH reserve preserved across disable");
-        assertEq(bridge.ammReserveBold(), rBold, "BOLD reserve preserved across disable");
-    }
-
-    /// @notice `ammDisabled_implies_swap_reverts`: once disabled, EVERY
-    ///         `ammSwap` reverts `AmmIsDisabled`, in both directions.
-    function test_ammDisabled_swapReverts_bothDirections() public {
-        KnomosisBridge bridge = _deploySeededReady();
-        _seedBothLegs(bridge);
-        vm.prank(AMM_DR);
-        bridge.emergencyDisableAmm();
-
-        vm.expectRevert(KnomosisBridge.AmmIsDisabled.selector);
-        vm.prank(swapper);
-        bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
-
-        _mintApprove(bridge, swapper, 1000 ether);
-        vm.expectRevert(KnomosisBridge.AmmIsDisabled.selector);
-        vm.prank(swapper);
-        bridge.ammSwap(BOLD_RID, 1000 ether, 0, _farDeadline());
+        assertTrue(bridge.ammDisabled(), "flag set");
+        assertEq(bridge.totalLockedValue(), tvlBefore, "escrow accounting untouched");
     }
 
     /// @notice `ammDisabled_is_monotonic`: the kill switch is one-way — a
@@ -156,22 +142,26 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         assertTrue(bridge.ammDisabled(), "still disabled (one-way)");
     }
 
-    /// @notice Once disabled, deposits STOP accruing AMM reserves (the
-    ///         `_seedAmmReserves` early-out) — the reserves freeze — while the
-    ///         deposit itself still succeeds and credits TVL (the kill switch
-    ///         touches only the AMM, not the bridge's core deposit path).
+    /// @notice Once disabled, deposits STOP seeding the L2 pool (the
+    ///         `_ammSeedSplit` early-out reports a ZERO seed in the
+    ///         `DepositWithFeeInitiated` event) — while the deposit
+    ///         itself still succeeds and credits TVL (the kill switch
+    ///         touches only the pool, not the bridge's core deposit
+    ///         path).
     function test_ammDisabled_stopsSeeding_depositStillWorks() public {
         KnomosisBridge bridge = _deploySeededReady();
-        (uint256 rEth,) = _seedBothLegs(bridge);
 
         vm.prank(AMM_DR);
         bridge.emergencyDisableAmm();
 
         uint256 tvlBefore = bridge.totalLockedValue();
+        vm.recordLogs();
         vm.prank(lp);
         bridge.depositETHWithFee{value: 10 ether}(5000); // would normally seed
 
-        assertEq(bridge.ammReserveEth(), rEth, "reserve frozen (disabled AMM stops seeding)");
+        // The canonical deposit event's ammSeedAmount slot is ZERO.
+        DepositReceipt memory r = _findDepositReceipt(vm.getRecordedLogs());
+        assertEq(r.ammSeedAmount, 0, "disabled pool receives no seed");
         assertEq(bridge.totalLockedValue(), tvlBefore + 10 ether, "deposit still credits TVL");
     }
 
@@ -188,7 +178,12 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
         args.attestor = vm.addr(ATTESTOR_PK);
         KnomosisBridge bridge = new KnomosisBridge(args);
-        _seedBothLegs(bridge); // funds the escrow on both legs
+        // Fund the escrow on both legs with ordinary deposits.
+        vm.prank(lp);
+        bridge.depositETH{value: 40 ether}();
+        _mintApprove(bridge, lp, 120_000 ether);
+        vm.prank(lp);
+        bridge.depositBoldWithFee(120_000 ether, 0);
 
         vm.prank(AMM_DR);
         bridge.emergencyDisableAmm();
@@ -214,55 +209,16 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         assertTrue(bridge.ammDisabled(), "kill switch still set after the exits");
     }
 
-    // ------------------------------------------------------------------
-    // BOLD circuit-breaker gating (automatic depeg freeze)
-    // ------------------------------------------------------------------
+    // The breaker-gates-swaps, brake-independence/precedence and
+    // migration-freeze cases died with the L1 `ammSwap` they exercised;
+    // the GP.5.5 BOLD circuit breaker keeps its own deposit-path suite
+    // (`BoldCircuitBreaker.t.sol`).
 
-    /// @notice A closed BOLD circuit (the depeg signal) freezes the AMM:
-    ///         swaps revert `AmmPausedByBoldCircuit` in both directions.
-    function test_breaker_closedHaltsSwaps_bothDirections() public {
-        KnomosisBridge bridge = _deploySeededReady();
-        _seedBothLegs(bridge);
-
-        vm.prank(BOLD_BREAKER);
-        bridge.closeBoldCircuit();
-
-        vm.expectRevert(KnomosisBridge.AmmPausedByBoldCircuit.selector);
-        vm.prank(swapper);
-        bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
-
-        _mintApprove(bridge, swapper, 1000 ether);
-        vm.expectRevert(KnomosisBridge.AmmPausedByBoldCircuit.selector);
-        vm.prank(swapper);
-        bridge.ammSwap(BOLD_RID, 1000 ether, 0, _farDeadline());
-    }
-
-    /// @notice Reopening the BOLD circuit resumes swaps (unlike the one-way
-    ///         kill switch, the breaker toggles).
-    function test_breaker_reopenedResumesSwaps() public {
-        KnomosisBridge bridge = _deploySeededReady();
-        _seedBothLegs(bridge);
-
-        vm.prank(BOLD_BREAKER);
-        bridge.closeBoldCircuit();
-        vm.prank(BOLD_BREAKER);
-        bridge.openBoldCircuit();
-
-        vm.prank(swapper);
-        uint256 out = bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
-        assertGt(out, 0, "swap resumes after the circuit reopens");
-    }
-
-    // ------------------------------------------------------------------
-    // Independence + precedence of the two brakes
-    // ------------------------------------------------------------------
-
-    /// @notice The two brakes are independent: closing the BOLD circuit does
-    ///         NOT set `ammDisabled`, and disabling the AMM does NOT close the
-    ///         BOLD circuit.
+    /// @notice The two brakes remain independent state: disabling the
+    ///         pool does NOT close the BOLD circuit, and closing the
+    ///         circuit does NOT set `ammDisabled`.
     function test_brakes_areIndependent() public {
         KnomosisBridge bridge = _deploySeededReady();
-        _seedBothLegs(bridge);
 
         vm.prank(BOLD_BREAKER);
         bridge.closeBoldCircuit();
@@ -273,64 +229,6 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         vm.prank(AMM_DR);
         bridge.emergencyDisableAmm();
         assertFalse(bridge.boldCircuitClosed(), "kill switch does not close the breaker");
-    }
-
-    /// @notice Precedence: when the AMM is BOTH disabled and the breaker is
-    ///         closed, the `ammActive` modifier fires FIRST, so the swap
-    ///         reverts `AmmIsDisabled` (not `AmmPausedByBoldCircuit`).
-    function test_brakes_killSwitchPrecedesBreaker() public {
-        KnomosisBridge bridge = _deploySeededReady();
-        _seedBothLegs(bridge);
-
-        vm.prank(BOLD_BREAKER);
-        bridge.closeBoldCircuit();
-        vm.prank(AMM_DR);
-        bridge.emergencyDisableAmm();
-
-        vm.expectRevert(KnomosisBridge.AmmIsDisabled.selector);
-        vm.prank(swapper);
-        bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
-    }
-
-    // ------------------------------------------------------------------
-    // Migration freeze (GP.11.3 review fix — the migration arm of circuitOpen)
-    // ------------------------------------------------------------------
-
-    /// @notice Once the bridge MIGRATES to a successor, `ammSwap` freezes
-    ///         (reverts `MigrationActivated`) in BOTH directions — a retired
-    ///         bridge must not keep mutating its reserves or moving real assets
-    ///         after hand-off.  The pre-migration swap succeeds under the SAME
-    ///         (non-transient) state, isolating migration as the added gate; the
-    ///         transient `circuitOpen` arms (attestation-stale / dispute-cooldown)
-    ///         are deliberately not applied to the AMM.
-    function test_swap_freezesAfterMigration() public {
-        MockToggleMigration mig = new MockToggleMigration();
-        _etchBold();
-        KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
-        args.migration = address(mig);
-        KnomosisBridge bridge = new KnomosisBridge(args);
-        _seedBothLegs(bridge);
-
-        // Pre-migration: swaps work (the migration mock is inactive).
-        vm.prank(swapper);
-        uint256 out = bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
-        assertGt(out, 0, "swap works before migration");
-
-        // Activate migration: the AMM freezes in BOTH directions.
-        mig.activate();
-
-        vm.expectRevert(KnomosisBridge.MigrationActivated.selector);
-        vm.prank(swapper);
-        bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
-
-        _mintApprove(bridge, swapper, 1000 ether);
-        vm.expectRevert(KnomosisBridge.MigrationActivated.selector);
-        vm.prank(swapper);
-        bridge.ammSwap(BOLD_RID, 1000 ether, 0, _farDeadline());
-
-        // The freeze is a gate, not a state change: reserves + kill switch
-        // are untouched.
-        assertFalse(bridge.ammDisabled(), "migration freeze does not flip the kill switch");
     }
 
     // ------------------------------------------------------------------
@@ -346,7 +244,8 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         uint64 logIdx
     ) internal {
         uint64 leafIdx = 0;
-        bytes memory leaf = _encodeWithdrawalLeaf(resourceId, recipient, wAmount, leafIdx);
+        bytes memory leaf = _encodeWithdrawalLeaf(
+            resourceId, recipient, wAmount, leafIdx + 7, leafIdx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
         bridge.submitStateRoot(root, logIdx, _signStateRootAs(ATTESTOR_PK, bridge, root, logIdx));
@@ -362,21 +261,5 @@ contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
         vm.roll(vm.getBlockNumber() + 100); // past the 100-block dispute window
         bytes memory proofBlob = _encodeWithdrawalProof(leaf, leafIdx, siblings);
         bridge.withdrawWithProof(logIdx, proofBlob, leaf);
-    }
-}
-
-/// @notice A migration mock whose `activated()` is operator-toggleable, so a
-///         test can seed the AMM while migration is inactive and then activate
-///         it to prove the swap freezes.  Matches the single `activated()`
-///         method `KnomosisBridge` reads via `IKnomosisMigration`.
-contract MockToggleMigration {
-    bool public isActivated;
-
-    function activate() external {
-        isActivated = true;
-    }
-
-    function activated() external view returns (bool) {
-        return isActivated;
     }
 }

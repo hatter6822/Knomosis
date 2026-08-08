@@ -71,12 +71,18 @@ def tests : List TestCase :=
         -- layer up, reappearing at the enumeration.
         let tags := stateCellTags populated
         let kinds := tags.map (fun t => t.kindIndex)
-        for k in List.range 15 do
+        -- Kinds 7/8 are the RETIRED book-mirror holes: nothing may
+        -- enumerate them, and every LIVE kind must appear.
+        for k in (List.range 15).filter (fun k => k ≠ 7 ∧ k ≠ 8) do
           if !(kinds.contains k) then
             throw <| IO.userError
               s!"cell kind {k} is NOT enumerated by stateCellTags — the SMT \
                  root would not bind it, so a dispute turning on it could \
                  not be adjudicated"
+        for k in [7, 8] do
+          if kinds.contains k then
+            throw <| IO.userError
+              s!"RETIRED cell kind {k} must not be enumerated"
     }
   , { name := "stateCellTags enumerates the live keyed entries"
     , body := do

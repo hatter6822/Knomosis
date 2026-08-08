@@ -402,7 +402,7 @@ theorem getCellValue_setCell_bridgeConsumed (es : ExtendedState) (d : DepositId)
 theorem getCellValue_setCell_bridgePending (es : ExtendedState) (w : WithdrawalId)
     (pw : Bridge.PendingWithdrawal)
     (h_res : pw.resource.toNat < 256 ^ 8) (h_amt : pw.amount < 256 ^ 32)
-    (h_idx : pw.l2LogIndex < 256 ^ 8) :
+    (h_idx : pw.l2LogIndex < 256 ^ 8) (h_wid : pw.wdId < 256 ^ 8) :
     getCellValue (setCell es (.bridgePending w) (withdrawalCellValue pw)) (.bridgePending w)
       = withdrawalCellValue pw := by
   have hne : ¬ (withdrawalCellValue pw).size = 0 := by
@@ -412,7 +412,7 @@ theorem getCellValue_setCell_bridgePending (es : ExtendedState) (w : WithdrawalI
   have hd : Bridge.PendingWithdrawal.decode (withdrawalCellValue pw).data.toList
       = .ok (pw, []) := by
     simpa [withdrawalCellValue] using
-      Encoding.pendingWithdrawal_roundtrip pw [] h_res h_amt h_idx
+      Encoding.pendingWithdrawal_roundtrip pw [] h_res h_amt h_idx h_wid
   simp only [setCell, hne, if_false, hd, getCellValue_bridgePending,
     LegalKernel.RBMap.find?_insert_self]
 
@@ -458,20 +458,6 @@ the value the advance gives it, and the generic round-trip law below
 (`getCellValue_setCell_getCellValue`) quantifies over EVERY cell kind.
 A law with holes at six kinds would push a case split into every
 caller for the sake of six arms that are true. -/
-
-/-- The AMM ETH reserve reads back. -/
-theorem getCellValue_setCell_bridgeAmmReserveEth (es : ExtendedState) (n : Nat)
-    (h : n < 256 ^ 32) :
-    getCellValue (setCell es .bridgeAmmReserveEth (amountCellValue n))
-        .bridgeAmmReserveEth = amountCellValue n := by
-  simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
-
-/-- The AMM BOLD reserve reads back. -/
-theorem getCellValue_setCell_bridgeAmmReserveBold (es : ExtendedState) (n : Nat)
-    (h : n < 256 ^ 32) :
-    getCellValue (setCell es .bridgeAmmReserveBold (amountCellValue n))
-        .bridgeAmmReserveBold = amountCellValue n := by
-  simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
 
 /-- The BOLD TVL cap reads back. -/
 theorem getCellValue_setCell_bridgeBoldTvlCap (es : ExtendedState) (n : Nat)

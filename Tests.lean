@@ -54,8 +54,8 @@ import LegalKernel.Test.Laws.Deposit
 import LegalKernel.Test.Laws.Withdraw
 import LegalKernel.Test.Laws.DepositWithFee
 import LegalKernel.Test.Laws.TopUpActionBudget
-import LegalKernel.Test.Laws.AmmSwap
 import LegalKernel.Test.Laws.ReclaimAmmReserves
+import LegalKernel.Test.Laws.ReserveSwap
 import LegalKernel.Test.Authority.Action
 import LegalKernel.Test.Authority.Identity
 import LegalKernel.Test.Authority.LocalPolicy
@@ -82,6 +82,8 @@ import LegalKernel.Test.Encoding.State
 import LegalKernel.Test.Encoding.SignInput
 import LegalKernel.Test.Encoding.Disputes
 import LegalKernel.Test.Encoding.LocalPolicy
+import LegalKernel.Test.Encoding.KernelStep
+import LegalKernel.Test.AxiomFootprint
 import LegalKernel.Test.Encoding.Injectivity
 import LegalKernel.Test.LocalPolicy.LawClassification
 import LegalKernel.Test.DSL.Law
@@ -151,9 +153,9 @@ import LegalKernel.Test.Bridge.CrossCheck.DepositReceiptHash
 import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit
 import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplitBold
 import LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction
+import LegalKernel.Test.Bridge.CrossCheck.SigningInput
 import LegalKernel.Test.Bridge.CrossCheck.BoldDeposit
 import LegalKernel.Test.Bridge.CrossCheck.AmmMath
-import LegalKernel.Test.Bridge.CrossCheck.AmmSwap
 import LegalKernel.Test.Bridge.CrossCheck.EventCbe
 import LegalKernel.Test.Bridge.CrossCheck.WithdrawalProof
 import LegalKernel.Test.Bridge.CrossCheck.DisputeEvidence
@@ -165,11 +167,13 @@ import LegalKernel.Test.FaultProof.Smt
 import LegalKernel.Test.FaultProof.Commit
 import LegalKernel.Test.FaultProof.AmmCommit
 import LegalKernel.Test.FaultProof.StateCells
+import LegalKernel.Test.FaultProof.ActionsRoot
 import LegalKernel.Test.FaultProof.SmtInjective
 import LegalKernel.Test.FaultProof.StateCellsInjective
 import LegalKernel.Test.FaultProof.CellWrites
 import LegalKernel.Test.FaultProof.Frontier
 import LegalKernel.Test.Bridge.CrossCheck.MultiProof
+import LegalKernel.Test.Bridge.CrossCheck.ActionsRootBatch
 import LegalKernel.Test.FaultProof.MultiProof
 import LegalKernel.Test.FaultProof.StepWriteSets
 import LegalKernel.Test.FaultProof.Terminate
@@ -208,6 +212,7 @@ import LegalKernel.Test.Integration.ReplayCliFlags
 import LegalKernel.Test.Integration.ReplayUpToCli
 import LegalKernel.Test.Integration.ExportCellProofsCli
 import LegalKernel.Test.Integration.ExportTerminateBundleCli
+import LegalKernel.Test.Integration.ExportBatchCli
 -- Workstream SVC (step-VM cross-stack coherence).
 import LegalKernel.Test.FaultProof.StepVMCoherence
 import LegalKernel.Test.FaultProof.TerminateBundle
@@ -220,7 +225,7 @@ open LegalKernel.Test
 -- LP and LX add their suites.  An alternative would be to split
 -- the chain into multiple `def`s, but the linear-chain form is
 -- clearer and the bump is harmless.
-set_option maxRecDepth 1024
+set_option maxRecDepth 2048
 
 /-- Test-driver entry point.  Returns `0` when every suite passes,
     `1` when any test fails. -/
@@ -239,8 +244,8 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "proportionalDilute"  Laws.ProportionalDiluteTests.tests)
   failed := failed + (← runAll "deposit"             Laws.DepositTests.tests)
   failed := failed + (← runAll "withdraw"            Laws.WithdrawTests.tests)
-  failed := failed + (← runAll "amm-swap"            Laws.AmmSwapTests.tests)
   failed := failed + (← runAll "reclaim-amm-reserves" Laws.ReclaimAmmReservesTests.tests)
+  failed := failed + (← runAll "laws-reserve-swap"    Laws.ReserveSwapTests.tests)
   failed := failed + (← runAll "authority-action"   Authority.ActionTests.tests)
   failed := failed + (← runAll "authority-identity" Authority.IdentityTests.tests)
   failed := failed + (← runAll "authority-localpolicy"
@@ -265,6 +270,10 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "encoding-signinput" Encoding.SignInputTests.tests)
   failed := failed + (← runAll "encoding-localpolicy"
                                     Encoding.LocalPolicyTests.tests)
+  failed := failed + (← runAll "axiom-footprint"
+                                    AxiomFootprint.tests)
+  failed := failed + (← runAll "encoding-kernelstep"
+                                    Encoding.KernelStepTests.tests)
   failed := failed + (← runAll "encoding-injectivity"
                                     Encoding.InjectivityTests.tests)
   failed := failed + (← runAll "localpolicy-lawclass"
@@ -400,12 +409,12 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.DepositFeeSplitBold.tests)
   failed := failed + (← runAll "crosscheck-deposit-with-fee-action"
                                     Bridge.CrossCheck.DepositWithFeeAction.tests)
+  failed := failed + (← runAll "crosscheck-signing-input"
+                                    Bridge.CrossCheck.SigningInput.tests)
   failed := failed + (← runAll "crosscheck-bold-deposit"
                                     Bridge.CrossCheck.BoldDeposit.tests)
   failed := failed + (← runAll "crosscheck-amm-getamountout"
                                     Bridge.CrossCheck.AmmMathCrossCheck.tests)
-  failed := failed + (← runAll "crosscheck-amm-swap"
-                                    Bridge.CrossCheck.AmmSwapCrossCheck.tests)
   failed := failed + (← runAll "crosscheck-event-cbe"
                                     Bridge.CrossCheck.EventCbe.tests)
   failed := failed + (← runAll "crosscheck-withdrawal-proof"
@@ -427,6 +436,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.AmmCommit.tests)
   failed := failed + (← runAll "faultproof-state-cells"
                                     LegalKernel.Test.FaultProof.StateCells.tests)
+  failed := failed + (← runAll "faultproof-actions-root"
+                                    LegalKernel.Test.FaultProof.ActionsRoot.tests)
   failed := failed + (← runAll "faultproof-smt-injective"
                                     LegalKernel.Test.FaultProof.SmtInjective.tests)
   failed := failed + (← runAll "faultproof-state-cells-injective"
@@ -439,6 +450,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.MultiProof.tests)
   failed := failed + (← runAll "crosscheck-smt-multi-proof"
                         LegalKernel.Test.Bridge.CrossCheck.MultiProof.tests)
+  failed := failed + (← runAll "crosscheck-actions-root-batch"
+                        LegalKernel.Test.Bridge.CrossCheck.ActionsRootBatch.tests)
   failed := failed + (← runAll "faultproof-write-sets"
                                 LegalKernel.Test.FaultProof.StepWriteSets.tests)
   failed := failed + (← runAll "faultproof-terminate"
@@ -510,6 +523,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.Integration.ExportCellProofsCli.tests)
   failed := failed + (← runAll "integration-export-terminate-bundle-cli"
                                     LegalKernel.Test.Integration.ExportTerminateBundleCli.tests)
+  failed := failed + (← runAll "integration-export-batch-cli"
+                                    LegalKernel.Test.Integration.ExportBatchCli.tests)
   -- Workstream SVC — step-VM cross-stack coherence.
   failed := failed + (← runAll "faultproof-stepvm-coherence"
                                     LegalKernel.Test.FaultProof.StepVMCoherence.tests)

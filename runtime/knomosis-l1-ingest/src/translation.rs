@@ -14,7 +14,8 @@
 //!     unsigned bridge action that the submitter will sign and
 //!     forward to `knomosis-host`.
 //!   * `None` — the L1 event has no Knomosis-side action effect
-//!     (revocations, deposits) in MVP scope.
+//!     (revocations; deposits in the default mode — see the
+//!     deposit-materialisation section below).
 //!
 //! ## The mathematical contract
 //!
@@ -51,9 +52,52 @@
 //!   3. **No-op** (event is Revoked or DepositInitiated):
 //!      - Return `None`.
 //!      - Address book unchanged.
+//!
+//! ## Deposit materialisation (Workstream SB.9; opt-in)
+//!
+//! [`preview_ingest_materialising`] is the deposit-materialising
+//! extension of case 3: it translates `DepositInitiated` →
+//! `Action::Deposit` and `DepositWithFeeInitiated` →
+//! `Action::DepositWithFee` (the seed leg lifted verbatim from the
+//! event) and delegates every other variant to [`preview_ingest`],
+//! so the Lean-mirror contract above is untouched when the watcher's
+//! `materialise_deposits` flag is off (the default; fail-closed).
+//! The emitted deposit `Action`s themselves ARE Lean-pinned — their
+//! CBE bytes ride the same `encoding::encode_action` the cross-stack
+//! corpus verifies against `Encoding.Action.encode` for tags 13/19.
+//! Lean's `Bridge.Ingest.ingest` docstring reserves exactly this
+//! translation for the deposit workstream; the Rust extension is
+//! that landing.
+//!
+//! Three load-bearing properties:
+//!
+//!   * **The deposit id is content-derived** ([`deposit_id_from_receipt`]):
+//!     the first 8 bytes of the L1 `receiptHash`, big-endian.  A
+//!     restart, a state-file wipe, or a re-org re-delivery re-derives
+//!     the SAME id from the same L1 deposit, which is the property
+//!     the kernel's replay backstop rests on — `BridgeAdmissibleWith`
+//!     conjuncts 6/6b refuse a deposit id already in
+//!     `BridgeState.consumed`, so a re-materialised duplicate is
+//!     refused at admission rather than double-credited.  (The
+//!     watcher's forwarded-set dedup is the optimisation; the
+//!     consumed-set rejection is the correctness argument.)
+//!   * **Amounts are range-checked, never truncated**
+//!     ([`amount_from_be_bytes`]): a raw `uint256` field that does
+//!     not fit the runtime's `u128` `Amount` is REFUSED with a typed
+//!     error that halts the watcher for operator intervention.
+//!   * **An unregistered depositor is assigned a fresh `ActorId`**
+//!     (the same `EmitWithAssignment` machinery registrations use),
+//!     so no deposit is ever silently dropped.  The assigned actor
+//!     has NO key in the L2 registry until its owner registers on
+//!     L1; that later registration finds the address in the book and
+//!     lands as `ReplaceKey`, whose authority-layer effect
+//!     (`applyActionToRegistry`) is the same registry insert.  The
+//!     kernel's first-time-only conjunct (7) constrains only
+//!     `registerIdentity`, which this path never emits for a
+//!     book-known address.
 
-use crate::action::{Action, ActorId, EthAddress, Nonce, PublicKey};
-use crate::address_book::{AddressBook, BRIDGE_ACTOR_ID};
+use crate::action::{Action, ActorId, DepositId, EthAddress, Nonce, PublicKey};
+use crate::address_book::{AddressBook, BRIDGE_ACTOR_ID, GAS_POOL_ACTOR_ID};
 use crate::events::IngestedEvent;
 
 /// The signer / nonce / action triple the translator emits
@@ -90,7 +134,9 @@ pub enum Translated {
     /// submission failure: replaying the same event yields the
     /// same Action.
     Emit(UnsignedAction),
-    /// Emit a `RegisterIdentity` Action AND, after submission
+    /// Emit an Action carrying a freshly-allocated `ActorId` (a
+    /// first-time `RegisterIdentity`, or a materialised deposit
+    /// whose depositor has no book entry yet) AND, after submission
     /// succeeds, commit the new `(EthAddress, ActorId)` assignment
     /// into the book.  The `pending_assignment` is the
     /// `(address, id)` pair the watcher must persist via the
@@ -156,17 +202,16 @@ pub fn preview_ingest(
             Translated::NoAction
         }
         IngestedEvent::DepositInitiated { .. } => {
-            // `Bridge.Ingest.ingest` returns `none` for deposits
-            // in MVP scope; deposit handling goes through
-            // `applyActionToBridgeState` at the kernel level.
+            // `Bridge.Ingest.ingest` returns `none` for deposits;
+            // this function IS that mirror.  The opt-in
+            // materialising mode lives in
+            // `preview_ingest_materialising` (Workstream SB.9).
             Translated::NoAction
         }
         IngestedEvent::DepositWithFeeInitiated { .. } => {
-            // Same as `DepositInitiated`: deposit materialisation is
-            // the sequencer's responsibility (chain-level follow-up),
-            // not the ingestor's, so no `Action` is emitted.  The
-            // ingestor recognises + decodes the event for observability
-            // and dedup symmetry with `DepositInitiated`.
+            // Same as `DepositInitiated`: `NoAction` in the
+            // Lean-mirror default; `preview_ingest_materialising`
+            // is the opt-in materialising path (SB.9).
             Translated::NoAction
         }
         IngestedEvent::AmmDisabled { .. } => {
@@ -178,6 +223,194 @@ pub fn preview_ingest(
             // variant's name + origin) is the operator-visible
             // disaster marker.
             Translated::NoAction
+        }
+    }
+}
+
+/// Errors surfaced by the deposit-materialising translation
+/// ([`preview_ingest_materialising`]).
+///
+/// Currently empty.  It carried one variant, `AmountOverflow`, raised
+/// when a raw `uint256` amount field exceeded the runtime's `u128`
+/// `Amount` representation — fail-closed, never truncating, which was
+/// the right posture for a limit the runtime could not lift.  Widening
+/// `Amount` to the kernel's own `2^256` bound lifted it: every L1
+/// `uint256` word is now representable, so the refusal has no
+/// remaining trigger.
+///
+/// The type is retained rather than removed because
+/// `preview_ingest_materialising` is fallible in shape and the watcher
+/// matches on it; a future materialisation check (a malformed address
+/// book, an unassignable depositor) belongs here.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum MaterialiseError {}
+
+/// Derive the L2 deposit id from an L1 deposit's `receiptHash`: the
+/// first 8 bytes, big-endian.  Content-derived and deterministic —
+/// the same L1 deposit re-derives the same id across restarts,
+/// state-file wipes and re-org re-deliveries, which is what makes
+/// the kernel's `consumed`-set replay rejection (conjuncts 6/6b of
+/// `BridgeAdmissibleWith`) a sound backstop for this pipeline.
+///
+/// The 8-byte width is forced by the frozen encoding bound
+/// (`Action.fieldsBounded` pins `depositId < 2^64`; the step-VM L1
+/// wire carries it as `uint64BE`).  The receipt hash is keccak256
+/// over the deployment-scoped deposit tuple, so the prefix behaves
+/// uniformly: an accidental collision among `N` deposits has
+/// probability ~`N²/2⁶⁵` (negligible at any realistic volume), and
+/// a collision FAILS CLOSED — the second deposit is refused
+/// admission by the consumed-set conjunct, never double-credited.
+#[must_use]
+pub fn deposit_id_from_receipt(receipt_hash: &[u8; 32]) -> DepositId {
+    let mut prefix = [0u8; 8];
+    prefix.copy_from_slice(&receipt_hash[0..8]);
+    u64::from_be_bytes(prefix)
+}
+
+/// Decode an L1 `uint256` field into an [`crate::action::Amount`].
+///
+/// TOTAL: every 32-byte big-endian word denotes a valid amount, so
+/// there is no rejection path.
+///
+/// It used to have one.  While an `Amount` was a `u128` this refused
+/// any word with a non-zero high half, returning
+/// `MaterialiseError::AmountOverflow` -- fail-closed rather than
+/// truncating, which was the right call, but it meant a legitimate L1
+/// deposit at or above `2^128` could not be materialised at all even
+/// though the kernel admits anything below `2^256`.  Widening the
+/// representation removes the refusal rather than relaxing it: the
+/// values that used to be rejected are now representable.
+///
+/// `field` is retained in the signature for call-site readability and
+/// to keep the diff at those sites empty; it no longer names anything
+/// that can fail.
+#[must_use]
+pub fn amount_from_be_bytes(bytes: &[u8; 32], field: &'static str) -> crate::action::Amount {
+    let _ = field;
+    crate::action::Amount::from_be_bytes(*bytes)
+}
+
+/// The deposit-materialising translation (Workstream SB.9).  Like
+/// [`preview_ingest`] — peek-only, never mutates the book — but the
+/// two deposit events construct bridge-signed deposit `Action`s
+/// instead of returning `NoAction`:
+///
+///   * `DepositInitiated` → `Action::Deposit { r, recipient,
+///     amount, deposit_id }`;
+///   * `DepositWithFeeInitiated` → `Action::DepositWithFee { r,
+///     recipient, pool_actor: GAS_POOL_ACTOR_ID, user_amount,
+///     pool_amount, budget_grant, deposit_id, seed_amount }` — the
+///     seed leg lifted verbatim from the event's `ammSeedAmount`
+///     (the L2 law splits the pool credit as `poolAmount −
+///     seedAmount` to the pool actor and `seedAmount` to the AMM
+///     reserve actor, matching the L1 event exactly).
+///
+/// The recipient is the book-resolved `ActorId` for the depositor;
+/// an unknown depositor gets a fresh id via the same
+/// `EmitWithAssignment` path first-time registrations use (see the
+/// module docstring for why that is sound and why no deposit is
+/// ever dropped).  Every other event variant delegates to
+/// [`preview_ingest`] unchanged.
+///
+/// # Errors
+///
+/// Returns [`MaterialiseError::AmountOverflow`] if any amount field
+/// exceeds the `u128` representation (fail-closed; never truncates).
+pub fn preview_ingest_materialising(
+    book: &AddressBook,
+    event: &IngestedEvent,
+    current_nonce: Nonce,
+) -> Result<Translated, MaterialiseError> {
+    match event {
+        IngestedEvent::DepositInitiated {
+            depositor,
+            resource_id,
+            amount,
+            receipt_hash,
+            ..
+        } => {
+            let amount = amount_from_be_bytes(amount, "DepositInitiated.amount");
+            let deposit_id = deposit_id_from_receipt(receipt_hash);
+            let r = *resource_id;
+            Ok(materialise_deposit_for(
+                book,
+                depositor,
+                current_nonce,
+                |recipient| Action::Deposit {
+                    r,
+                    recipient,
+                    amount,
+                    deposit_id,
+                },
+            ))
+        }
+        IngestedEvent::DepositWithFeeInitiated {
+            sender,
+            resource_id,
+            user_amount,
+            pool_amount,
+            amm_seed_amount,
+            budget_grant,
+            receipt_hash,
+            ..
+        } => {
+            let user_amount =
+                amount_from_be_bytes(user_amount, "DepositWithFeeInitiated.userAmount");
+            let pool_amount =
+                amount_from_be_bytes(pool_amount, "DepositWithFeeInitiated.poolAmount");
+            let seed_amount =
+                amount_from_be_bytes(amm_seed_amount, "DepositWithFeeInitiated.ammSeedAmount");
+            let deposit_id = deposit_id_from_receipt(receipt_hash);
+            let r = *resource_id;
+            let budget_grant = *budget_grant;
+            Ok(materialise_deposit_for(
+                book,
+                sender,
+                current_nonce,
+                |recipient| Action::DepositWithFee {
+                    r,
+                    recipient,
+                    pool_actor: GAS_POOL_ACTOR_ID,
+                    user_amount,
+                    pool_amount,
+                    budget_grant,
+                    deposit_id,
+                    seed_amount,
+                },
+            ))
+        }
+        other => Ok(preview_ingest(book, other, current_nonce)),
+    }
+}
+
+/// Resolve the depositor's L2 recipient and wrap the built deposit
+/// action: a book-known depositor emits directly; an unknown one
+/// rides `EmitWithAssignment` with a previewed fresh id (committed
+/// by the watcher only after submission succeeds, exactly like a
+/// first-time registration).
+fn materialise_deposit_for(
+    book: &AddressBook,
+    depositor: &EthAddress,
+    current_nonce: Nonce,
+    build: impl FnOnce(ActorId) -> Action,
+) -> Translated {
+    match book.lookup(depositor) {
+        Some(existing_id) => Translated::Emit(UnsignedAction {
+            action: build(existing_id),
+            signer: UnsignedAction::SIGNER,
+            nonce: current_nonce,
+        }),
+        None => {
+            let fresh_id = book.next_actor_id();
+            Translated::EmitWithAssignment {
+                action: UnsignedAction {
+                    action: build(fresh_id),
+                    signer: UnsignedAction::SIGNER,
+                    nonce: current_nonce,
+                },
+                address: *depositor,
+                new_actor_id: fresh_id,
+            }
         }
     }
 }
@@ -351,6 +584,7 @@ pub enum TranslationError {
 #[cfg(test)]
 mod tests {
     use super::{ingest, UnsignedAction};
+    use crate::action::Amount;
     use crate::action::{Action, EthAddress};
     use crate::address_book::{AddressBook, BRIDGE_ACTOR_ID};
     use crate::events::IngestedEvent;
@@ -440,10 +674,9 @@ mod tests {
         assert!(book.is_empty());
     }
 
-    /// `DepositInitiated` emits no Action and does not mutate
-    /// the book.  Deposit translation is reserved for
-    /// `applyActionToBridgeState` at the kernel layer (per
-    /// Lean's MVP-scope behaviour pin).
+    /// `DepositInitiated` emits no Action and does not mutate the
+    /// book in the DEFAULT (Lean-mirror) mode — the opt-in
+    /// materialising mode is tested separately below.
     #[test]
     fn deposit_emits_no_action() {
         let mut book = AddressBook::new();
@@ -464,10 +697,9 @@ mod tests {
         assert!(book.is_empty());
     }
 
-    /// `DepositWithFeeInitiated` translates to no action, exactly like
-    /// `DepositInitiated` — deposit materialisation is the sequencer's
-    /// job (chain-level follow-up), not the ingestor's (GP.5.1).  The
-    /// ingestor recognises the event for observability/dedup symmetry.
+    /// `DepositWithFeeInitiated` translates to no action in the
+    /// DEFAULT (Lean-mirror) mode, exactly like `DepositInitiated`;
+    /// the opt-in materialising mode is tested separately below.
     #[test]
     fn deposit_with_fee_emits_no_action() {
         let mut book = AddressBook::new();
@@ -840,5 +1072,256 @@ mod tests {
             log_index: 0,
         };
         assert_eq!(preview_ingest(&book, &event, 0), Translated::NoAction);
+    }
+
+    // ---- SB.9 deposit materialisation ----
+
+    use super::{
+        amount_from_be_bytes, deposit_id_from_receipt, preview_ingest_materialising, Translated,
+    };
+    use crate::address_book::GAS_POOL_ACTOR_ID;
+
+    /// A 32-byte big-endian amount holding `v` in the low 16 bytes.
+    fn be_amount(v: u128) -> [u8; 32] {
+        let mut out = [0u8; 32];
+        out[16..32].copy_from_slice(&v.to_be_bytes());
+        out
+    }
+
+    /// Build a `DepositInitiated` event for `depositor` with the
+    /// given content fields and origin metadata.
+    fn deposit_event(
+        depositor: EthAddress,
+        amount: [u8; 32],
+        receipt_hash: [u8; 32],
+        block_number: u64,
+        tx_hash: [u8; 32],
+        log_index: u64,
+    ) -> IngestedEvent {
+        IngestedEvent::DepositInitiated {
+            depositor,
+            resource_id: 0,
+            token: EthAddress::ZERO,
+            amount,
+            depositor_nonce: 0,
+            receipt_hash,
+            block_number,
+            tx_hash,
+            log_index,
+        }
+    }
+
+    /// The deposit id is the receipt hash's first 8 bytes, big-endian
+    /// (pinned against a hand-computed constant).
+    #[test]
+    fn deposit_id_is_receipt_prefix_big_endian() {
+        let mut receipt = [0u8; 32];
+        receipt[0..8].copy_from_slice(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+        receipt[8] = 0xff; // bytes past the prefix are ignored
+        assert_eq!(deposit_id_from_receipt(&receipt), 0x0102_0304_0506_0708);
+    }
+
+    /// Round-trip: a `DepositInitiated` for a book-known depositor
+    /// materialises a bridge-signed `Action::Deposit` with the exact
+    /// event-derived fields.
+    #[test]
+    fn materialised_eth_deposit_round_trip() {
+        let mut book = AddressBook::new();
+        let depositor = EthAddress::from_bytes(&[9u8; 20]).unwrap();
+        let (recipient_id, _) = book.try_assign(&depositor).unwrap();
+        let mut receipt = [0u8; 32];
+        receipt[0..8].copy_from_slice(&42u64.to_be_bytes());
+        let event = deposit_event(depositor, be_amount(1_000_000), receipt, 5, [0xaa; 32], 2);
+        match preview_ingest_materialising(&book, &event, 7).unwrap() {
+            Translated::Emit(u) => {
+                assert_eq!(u.signer, BRIDGE_ACTOR_ID);
+                assert_eq!(u.nonce, 7);
+                assert_eq!(
+                    u.action,
+                    Action::Deposit {
+                        r: 0,
+                        recipient: recipient_id,
+                        amount: Amount::from_u64(1_000_000),
+                        deposit_id: 42,
+                    }
+                );
+            }
+            other => panic!("expected Emit, got {other:?}"),
+        }
+    }
+
+    /// Round-trip: a `DepositWithFeeInitiated` materialises
+    /// `Action::DepositWithFee` with the seed leg lifted verbatim
+    /// and the canonical gas-pool actor as `pool_actor`.
+    #[test]
+    fn materialised_fee_split_deposit_round_trip() {
+        let mut book = AddressBook::new();
+        let sender = EthAddress::from_bytes(&[8u8; 20]).unwrap();
+        let (recipient_id, _) = book.try_assign(&sender).unwrap();
+        let mut receipt = [0u8; 32];
+        receipt[0..8].copy_from_slice(&99u64.to_be_bytes());
+        let event = IngestedEvent::DepositWithFeeInitiated {
+            sender,
+            resource_id: 1,
+            token: EthAddress::from_bytes(&[0x64; 20]).unwrap(),
+            user_amount: be_amount(600),
+            pool_amount: be_amount(400),
+            amm_seed_amount: be_amount(320),
+            budget_grant: 33,
+            depositor_nonce: 3,
+            receipt_hash: receipt,
+            block_number: 6,
+            tx_hash: [0xbb; 32],
+            log_index: 1,
+        };
+        match preview_ingest_materialising(&book, &event, 11).unwrap() {
+            Translated::Emit(u) => {
+                assert_eq!(u.signer, BRIDGE_ACTOR_ID);
+                assert_eq!(u.nonce, 11);
+                assert_eq!(
+                    u.action,
+                    Action::DepositWithFee {
+                        r: 1,
+                        recipient: recipient_id,
+                        pool_actor: GAS_POOL_ACTOR_ID,
+                        user_amount: Amount::from_u64(600),
+                        pool_amount: Amount::from_u64(400),
+                        budget_grant: 33,
+                        deposit_id: 99,
+                        seed_amount: Amount::from_u64(320),
+                    }
+                );
+            }
+            other => panic!("expected Emit, got {other:?}"),
+        }
+    }
+
+    /// An UNREGISTERED depositor is assigned a fresh id via the same
+    /// `EmitWithAssignment` path registrations use — the book stays
+    /// unmutated until the watcher commits post-submit, and the
+    /// deposit is never dropped.
+    #[test]
+    fn materialised_deposit_unregistered_depositor_assigns_fresh_id() {
+        let book = AddressBook::new();
+        let depositor = EthAddress::from_bytes(&[0x77; 20]).unwrap();
+        let expected_fresh = book.next_actor_id();
+        let event = deposit_event(depositor, be_amount(5), [0x11; 32], 1, [0; 32], 0);
+        match preview_ingest_materialising(&book, &event, 0).unwrap() {
+            Translated::EmitWithAssignment {
+                action,
+                address,
+                new_actor_id,
+            } => {
+                assert_eq!(address, depositor);
+                assert_eq!(new_actor_id, expected_fresh);
+                match action.action {
+                    Action::Deposit { recipient, .. } => {
+                        assert_eq!(recipient, expected_fresh);
+                    }
+                    other => panic!("expected Deposit, got {other:?}"),
+                }
+            }
+            other => panic!("expected EmitWithAssignment, got {other:?}"),
+        }
+        // Peek-only: the book is unchanged.
+        assert!(book.is_empty());
+        assert_eq!(book.next_actor_id(), expected_fresh);
+    }
+
+    /// RE-ORG / RESTART STABILITY: the deposit id is derived from the
+    /// event's CONTENT (the receipt hash), not its chain position —
+    /// the same deposit re-delivered under a different block number,
+    /// tx hash and log index materialises a byte-identical action, so
+    /// the kernel's `consumed`-set conjunct refuses the replay.
+    #[test]
+    fn materialised_deposit_id_is_reorg_stable() {
+        let mut book = AddressBook::new();
+        let depositor = EthAddress::from_bytes(&[9u8; 20]).unwrap();
+        book.try_assign(&depositor).unwrap();
+        let receipt = [0x5a; 32];
+        let before = deposit_event(depositor, be_amount(77), receipt, 10, [0x01; 32], 0);
+        let after = deposit_event(depositor, be_amount(77), receipt, 13, [0x02; 32], 4);
+        let a = preview_ingest_materialising(&book, &before, 3).unwrap();
+        let b = preview_ingest_materialising(&book, &after, 3).unwrap();
+        assert_eq!(a, b, "re-orged re-delivery derives an identical action");
+    }
+
+    /// OVERFLOW: an amount whose high 16 bytes are non-zero is
+    /// REFUSED with the offending field named — never truncated.
+    /// A deposit whose amount sits ABOVE the retired `u128` ceiling
+    /// now materialises, exactly.
+    ///
+    /// This case used to assert the opposite: that such an amount was
+    /// REFUSED with `MaterialiseError::AmountOverflow`, naming the
+    /// offending field.  Refusing was right while the runtime could
+    /// not represent the value -- truncating would have been finding
+    /// C-3 all over again -- but it meant a legitimate L1 deposit the
+    /// kernel admits could not be brought to L2 at all.  Widening
+    /// removed the refusal by removing its cause, so the assertion
+    /// inverts: the action is BUILT, and it carries the exact value.
+    #[test]
+    fn materialised_amount_above_the_retired_ceiling_is_carried_exactly() {
+        let mut book = AddressBook::new();
+        let depositor = EthAddress::from_bytes(&[9u8; 20]).unwrap();
+        book.try_assign(&depositor).unwrap();
+        let mut over = be_amount(1);
+        over[15] = 0x01; // lowest bit of the high half -> 2^128 + 1
+        let expected = Amount::from_be_bytes(over);
+        assert_eq!(expected.to_u128(), None, "the probe is out of u128 range");
+
+        let event = deposit_event(depositor, over, [0; 32], 1, [0; 32], 0);
+        let translated = preview_ingest_materialising(&book, &event, 0)
+            .expect("an amount past the retired ceiling must materialise");
+        let action = match translated {
+            Translated::Emit(u) => u.action,
+            Translated::EmitWithAssignment { action, .. } => action.action,
+            Translated::NoAction => panic!("expected a materialised deposit, got NoAction"),
+        };
+        match action {
+            crate::action::Action::Deposit { amount, .. } => {
+                assert_eq!(amount, expected, "the amount must survive intact");
+            }
+            other => panic!("expected a Deposit action, got {other:?}"),
+        }
+    }
+
+    /// BOUNDARY: exactly `u128::MAX` (high half zero, low half all
+    /// 0xff) converts losslessly.
+    #[test]
+    fn materialised_amount_u128_max_passes() {
+        assert_eq!(
+            amount_from_be_bytes(&be_amount(u128::MAX), "t"),
+            Amount::from_u128(u128::MAX)
+        );
+    }
+
+    /// The materialising preview DELEGATES non-deposit events to the
+    /// plain Lean-mirror `preview_ingest` unchanged.
+    #[test]
+    fn materialising_preview_delegates_non_deposit_events() {
+        use super::preview_ingest;
+        let book = AddressBook::new();
+        let actor = EthAddress::from_bytes(&[4u8; 20]).unwrap();
+        let registration = IngestedEvent::RegisteredEcdsa {
+            actor,
+            pubkey: vec![0x02, 0xab],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        assert_eq!(
+            preview_ingest_materialising(&book, &registration, 5).unwrap(),
+            preview_ingest(&book, &registration, 5)
+        );
+        let revoked = IngestedEvent::Revoked {
+            actor,
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 1,
+        };
+        assert_eq!(
+            preview_ingest_materialising(&book, &revoked, 5).unwrap(),
+            Translated::NoAction
+        );
     }
 }

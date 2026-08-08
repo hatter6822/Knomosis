@@ -94,6 +94,14 @@ abstract contract StepVMRootProbeHarness is CrossCheckFramework {
         KnomosisStepVMRoot.OpenedCell[] cells;
         bytes gapMask;
         bytes siblings;
+        /// @dev F-A: the signer's pre-state nonce and registry cell +
+        ///      its opening against the pre-root.  The step VM itself
+        ///      does not read these — the SIGNATURE gate lives in the
+        ///      game — but a probe carries them so a game-level
+        ///      consumer needs no second loader.
+        uint64 signerNonce;
+        bytes registryValue;
+        bytes registryProof;
     }
 
     /// @notice Load a probe's published inputs.
@@ -111,7 +119,13 @@ abstract contract StepVMRootProbeHarness is CrossCheckFramework {
             logIndex: vm.parseJsonUint(raw, string.concat(base, ".l2LogIndex")),
             cells: loadOpenedCells(raw, base),
             gapMask: probeGapMask(raw, base),
-            siblings: probeSiblings(raw, base)
+            siblings: probeSiblings(raw, base),
+            signerNonce: uint64(
+                vm.parseJsonUint(raw, string.concat(base, ".signerNonceNat"))),
+            registryValue:
+                vm.parseJsonBytes(raw, string.concat(base, ".registryValueHex")),
+            registryProof:
+                vm.parseJsonBytes(raw, string.concat(base, ".registryProofHex"))
         });
     }
 

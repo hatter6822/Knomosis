@@ -1,0 +1,24 @@
+{
+  "identifier": "knomosis/batch-chain/v1",
+  "isKeccak256Linked": true,
+  "genesisStateCommitHex": "0x0aed3427071c56b4db12691c981abbafd10fd70462fb79f951d8c211a4d0fe80",
+  "genesisSeedHex": "0x1c733de23dbb32bf502a0358969008cb5ccc53ec7c6d14d76955fd183a87759d",
+  "count": 3,
+  "steps": [
+    {
+      "stateCommitHex": "0x24fb57206aef069b0006808fcd427fb5cd2203ca47f9bf4e792832f6095af36e",
+      "actionsRootHex": "0xbb786ebe77bf94a6d88d5bc5c6e989fb74efbcc74809f6503d596bb79f45a89c",
+      "expectedNextEntryHashHex": "0x320aa368f113e820d35aed49758908d17f367e11cb1fa06e0aa5a3c518aafc80"
+    },
+    {
+      "stateCommitHex": "0x643ec2bcab653421958069d79fb3aa8ef9347796bea92b76dee723706a2473fe",
+      "actionsRootHex": "0x3e35f4c4587e0aab79a55635b6689ddf68d7d9a22eb866ce6cb50f1ceb902133",
+      "expectedNextEntryHashHex": "0xaeab7045c5dedd0a18bc916feadb6ee93f8e8a74d1ea9eef720de999e824d721"
+    },
+    {
+      "stateCommitHex": "0x24fb57206aef069b0006808fcd427fb5cd2203ca47f9bf4e792832f6095af36e",
+      "actionsRootHex": "0x935af1c618b78bf34ef0aefe4e0f36b913e504ecb5a416837e1fe83be32e9774",
+      "expectedNextEntryHashHex": "0x114ea903528138c964d60f08a1c08b2a3d2281169c5ddcb728e962247ffd0338"
+    }
+  ]
+}

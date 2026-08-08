@@ -77,7 +77,7 @@ def sampleDispute : Disputes.Dispute :=
   , evidence := ⟨#[]⟩, nonce := 0, sig := ⟨#[]⟩ }
 
 /-- A representative non-transfer Action for EVERY frozen non-transfer
-    tag (1..21 — i.e. all of 0..21 except `transfer` = 0).  Used to
+    tag (1..25 — i.e. all of 0..25 except `transfer` = 0).  Used to
     drive `gasPoolPolicy_denies_all_non_transfer` across the whole
     non-transfer Action set, with no tag skipped. -/
 def nonTransferSamples : List (Nat × Action) :=
@@ -99,35 +99,40 @@ def nonTransferSamples : List (Nat × Action) :=
   , (16, .revokeLocalPolicy)
   , (17, .faultProofChallenge ⟨#[]⟩ 0 0 ⟨#[]⟩)
   , (18, .faultProofResolution ⟨#[]⟩ 0 someUser 0)
-  , (19, .depositWithFee 0 someUser gasPoolActor 5 5 5 0)
+  , (19, .depositWithFee 0 someUser gasPoolActor 5 5 5 0 2)
   , (20, .topUpActionBudget 0 5 5 gasPoolActor)
-  , (21, .topUpActionBudgetFor someUser 0 5 5 gasPoolActor) ]
+  , (21, .topUpActionBudgetFor someUser 0 5 5 gasPoolActor)
+  , (22, .claimBudgetRefund 0 5 5 gasPoolActor)
+  -- 23 is the RETIRED `ammSwap` index — no constructor exists; the
+  -- deny-list still contains it (checked below).
+  , (24, .reclaimAmmReserves 0 5 someUser gasPoolActor)
+  , (25, .reserveSwap 0 1 someUser 5 1 someUser) ]
 
 /-! ## Test cases -/
 
 /-- All GP.7.2 test cases. -/
 def tests : List TestCase :=
   [ -- ## Deny-list shape
-    { name := "GP.7.2: gasPoolDeniedTags = [1..24]"
+    { name := "GP.7.2: gasPoolDeniedTags = [1..25]"
     , body := do
-        assertEq (expected := (List.range 25).filter (· ≠ 0))
+        assertEq (expected := (List.range 26).filter (· ≠ 0))
           (actual := gasPoolDeniedTags) "deny-list contents"
     }
-  , { name := "GP.7.2: gasPoolDeniedTags has 24 entries (1..24)"
+  , { name := "GP.7.2: gasPoolDeniedTags has 25 entries (1..25)"
     , body := do
-        assertEq (expected := 24) (actual := gasPoolDeniedTags.length) "deny-list length"
+        assertEq (expected := 25) (actual := gasPoolDeniedTags.length) "deny-list length"
     }
   , { name := "GP.7.2: 0 ∉ gasPoolDeniedTags (transfer survives)"
     , body := do
         assert (decide ((0 : Nat) ∉ gasPoolDeniedTags)) "0 should not be denied"
     }
-  , { name := "GP.7.2: every tag 1..24 ∈ gasPoolDeniedTags"
+  , { name := "GP.7.2: every tag 1..25 ∈ gasPoolDeniedTags"
     , body := do
-        for t in List.range 25 do
+        for t in List.range 26 do
           if t ≠ 0 then
             assert (decide (t ∈ gasPoolDeniedTags)) s!"tag {t} should be denied"
     }
-  , { name := "GP.7.2: 23 ∈ gasPoolDeniedTags (ammSwap denied for pool)"
+  , { name := "GP.7.2: 23 ∈ gasPoolDeniedTags (the retired tag stays denied)"
     , body := do
         -- Index 23 (`ammSwap`) is denied for gasPoolActor; the pool
         -- cannot sign an AMM swap (swaps are bridge-attested).
@@ -140,7 +145,7 @@ def tests : List TestCase :=
     }
   , { name := "GP.7.2: Action.tag_lt_denyListBound term-level API"
     , body := do
-        let _f : (a : Action) → Action.tag a < 25 := Action.tag_lt_denyListBound
+        let _f : (a : Action) → Action.tag a < 26 := Action.tag_lt_denyListBound
         pure ()
     }
   , { name := "GP.7.2: mem_gasPoolDeniedTags_of_tag_ne_zero term-level API"
@@ -150,7 +155,7 @@ def tests : List TestCase :=
         pure ()
     }
   , -- ## Only-transfer outflow: every non-transfer Action is denied.
-    { name := "GP.7.2: gasPoolPolicy denies every non-transfer Action (tags 1..21)"
+    { name := "GP.7.2: gasPoolPolicy denies every non-transfer Action (tags 1..25)"
     , body := do
         for (tag, act) in nonTransferSamples do
           -- Sanity: the fixture's stated tag matches the Action's tag.

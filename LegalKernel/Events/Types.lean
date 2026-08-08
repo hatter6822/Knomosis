@@ -250,21 +250,11 @@ inductive Event
       bridgeActor's L1-gas-gated authority makes L2 budget
       gating redundant).  Frozen index 20. -/
   | budgetConsumed         (actor : ActorId) (amount : Nat)
-  /-- An L2 AMM swap was executed (Workstream GP / GP.11.4).  Carries
-      the `fromResource` (credited to the reserve), `toResource`
-      (debited from the reserve), the `amountIn` (input amount credited
-      to the reserve at `fromResource`), the `amountOut` (output amount
-      debited from the reserve at `toResource`), and the
-      `ammReserveActor` whose balance cells were mutated.  Indexers
-      consume this event to maintain AMM reserve views and LP yield
-      accounting (every swap accrues the fee into the reserves, so
-      `k = reserveFrom × reserveTo` is monotonically non-decreasing).
-      Distinct from `balanceChanged` so subscribers can identify
-      AMM-class balance mutations without re-deriving the action's
-      intent.  Frozen index 21. -/
-  | ammSwapExecuted        (fromResource toResource : ResourceId)
-                            (amountIn amountOut : Amount)
-                            (ammReserveActor : ActorId)
+  -- Index 21 (`ammSwapExecuted`) is RETIRED.  It mirrored the L1
+  -- embedded AMM's swaps; the L1 AMM was excised under the one-AMM
+  -- L2-primary topology (the live swap event is
+  -- `reserveSwapExecuted`, index 23).  The index stays reserved —
+  -- the decoder refuses tag 21 and nothing may ever reuse it.
   /-- An `Action.reclaimAmmReserves` was applied (Workstream
       GP.11.10): the disabled AMM's frozen L2 reserve balance at
       `resource` was swept — exactly `amount`, the reserve actor's
@@ -278,6 +268,33 @@ inductive Event
       already-zero reserve).  Frozen index 22. -/
   | ammReservesReclaimed   (resource : ResourceId) (amount : Amount)
                             (reserveActor poolActor : ActorId)
+  /-- An `Action.reserveSwap` was applied (Workstream SB): `user`
+      swapped `amountIn` of `fromResource` for `amountOut` of
+      `toResource` against `reserveActor`'s live balances, priced
+      in-kernel by `Bridge.AmmMath.getAmountOut` at the fixed
+      `AmmMath.swapFeeBps`.  `amountOut` is the COMPUTED quote (the
+      value actually credited), not the action's `minAmountOut`
+      floor.  Indexers consume this event to maintain the L2 AMM
+      reserve views and per-user trade history; unlike the
+      bridge-attested `ammSwapExecuted` (21), this event has a user
+      party and its amounts were derived by the kernel, not attested.
+      Frozen index 23. -/
+  | reserveSwapExecuted    (fromResource toResource : ResourceId)
+                            (user : ActorId)
+                            (amountIn amountOut : Amount)
+                            (reserveActor : ActorId)
+  /-- The AMM reserve was seeded from a deposit's fee split
+      (Workstream SB): the `depositWithFee` seed leg credited
+      `reserveActor` by `amount` at `resource`, attributable to the
+      L1 deposit `depositId`.  Indexers consume this event to
+      attribute reserve growth to deposit seeding rather than to
+      swap flow.  The emission is wired when the `depositWithFee`
+      seed leg lands (the corpus-cutover phase); the constructor is
+      declared now so the event vocabulary is additive-stable.
+      Frozen index 24. -/
+  | reserveSeeded          (resource : ResourceId) (amount : Amount)
+                            (reserveActor : ActorId)
+                            (depositId : Bridge.DepositId)
   deriving Repr, DecidableEq
 
 /-! ## §8.9.1.bis Event constructor-index projection (AR.6)
@@ -313,8 +330,10 @@ above):
   18 — `gasPoolClaim`            (Workstream GP §15E v1.0)
   19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4)
   20 — `budgetConsumed`          (Workstream GP / GP.6.4)
-  21 — `ammSwapExecuted`         (Workstream GP / GP.11.4)
+  21 — RETIRED (`ammSwapExecuted`; the excised L1-AMM mirror — never reuse)
   22 — `ammReservesReclaimed`    (Workstream GP / GP.11.10)
+  23 — `reserveSwapExecuted`     (Workstream SB)
+  24 — `reserveSeeded`           (Workstream SB)
 
 The regression-tier pins live in `LegalKernel/Test/Events/Types.lean`. -/
 
@@ -343,8 +362,10 @@ def Event.tag : Event → Nat
   | .gasPoolClaim         _ _ _       => 18
   | .delegatedActionBudgetTopUp _ _ _ _ _ _ => 19
   | .budgetConsumed       _ _         => 20
-  | .ammSwapExecuted     _ _ _ _ _   => 21
+  -- 21 is the RETIRED `ammSwapExecuted` index — reserved, never reused.
   | .ammReservesReclaimed _ _ _ _    => 22
+  | .reserveSwapExecuted  _ _ _ _ _ _ => 23
+  | .reserveSeeded        _ _ _ _    => 24
 
 /-! ## Convenience predicates -/
 
@@ -388,12 +409,15 @@ def Event.actor : Event → Option ActorId
   | .delegatedActionBudgetTopUp recipient _ _ _ _ _ => some recipient
   -- GP.6.4: the actor whose budget was debited.
   | .budgetConsumed a _                             => some a
-  -- GP.11.4: the reserve actor whose balances were mutated.
-  | .ammSwapExecuted _ _ _ _ ra                     => some ra
   -- GP.11.10: the reserve actor whose balance was swept (indexers
   -- close out the reserve view keyed on this actor; the pool credit
   -- surfaces via the accompanying `balanceChanged`).
   | .ammReservesReclaimed _ _ ra _                  => some ra
+  -- Workstream SB: the swapping USER (indexers key trade history on
+  -- the user; the reserve legs surface via `balanceChanged`).
+  | .reserveSwapExecuted _ _ user _ _ _             => some user
+  -- Workstream SB: the reserve actor credited by the seed leg.
+  | .reserveSeeded _ _ ra _                         => some ra
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId
@@ -406,6 +430,7 @@ def Event.resource : Event → Option ResourceId
   | .gasPoolClaim r _ _            => some r
   | .delegatedActionBudgetTopUp _ _ r _ _ _ => some r
   | .ammReservesReclaimed r _ _ _  => some r
+  | .reserveSeeded r _ _ _         => some r
   | _                              => none
 
 /-- True iff `e` records a dispute-pipeline observation

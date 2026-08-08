@@ -70,6 +70,10 @@ path = "examples/gen_fee_split_fixtures.rs"
 
 [dependencies]
 knomosis-cli-common = { workspace = true }
+# `knomosis-amount` supplies the 256-bit `Amount` this crate's
+# wire-decoded value fields carry.  See that crate's docs for why
+# the width is exactly 256 bits.
+knomosis-amount = { path = "../knomosis-amount" }
 # `k256` provides the ECDSA signing primitive that bridge-actor
 # private keys feed into.  `default-features = false` (workspace
 # default) keeps the production cdylib lean; the ingestor itself
@@ -107,6 +111,12 @@ serde_json = { workspace = true }
 # tests use to read `l1_ingest.cxsf` and assert byte-equivalence
 # against the Lean reference.
 knomosis-cross-stack = { workspace = true }
+# `knomosis-verify-secp256k1` closes the signer/verifier loop in
+# tests: a `BridgeActorKey` wire signature must verify under the
+# production adaptor's `verify_signed_message` (the semantics of the
+# Lean `Verify` opaque), pinning the shared digest recipe and the
+# 65-byte `(r ‖ s ‖ v)` wire width across the two crates.
+knomosis-verify-secp256k1 = { workspace = true }
 # `hex` is the dev-only fixture / log encoding helper used by the
 # tests and the fixture generator.
 hex = { workspace = true }

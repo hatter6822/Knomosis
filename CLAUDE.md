@@ -37,7 +37,21 @@ Workstreams A – G complete (Lean side); Workstream LP (actor-scoped
 policies) complete; Workstream LX milestones M1 / M2 / M3 complete;
 Workstream H (fault-proof migration) complete (Lean + Rust RH-G),
 including the terminal step's adjudication and the deduplicating
-pre-root multiproof it folds.
+pre-root multiproof it folds.  Workstream SB (batched state-root
+submission + the user-facing L2 AMM) complete: one L1 record per
+batch `[prevEnd, end)` with a per-batch actions-root SMT, the game
+anchored inside the batch, the terminal action authenticated by
+inclusion proof (~239 gas of amortised L1 per action at B=1000);
+`Laws.reserveSwap` (Action 25, Events 23/24) priced in-kernel by
+`AmmMath` over the reserve actor's live balances, funded by the
+deposit fee-split's seed leg under the L2-primary pool topology;
+plus the R1/R3/R4 revert recovery and the R6 game-to-bridge revert
+forwarding, fixing two pre-existing defects.  Workstream AX
+(L1-AMM excision) complete: the embedded L1 AMM was excised
+entirely (pre-deployment, so nothing was stranded) — the L2 pool
+is the ONE venue, `Action` index 23 / `Event` tag 21 are permanent
+holes, and the kill-switch family is re-pointed at the L2 pool
+(`reserveSwap` admission requires `ammDisabled = false`).
 Phase 7 (Advanced Capabilities) is the next scoped work.  See
 `docs/GENESIS_PLAN.md` §12 / §15B / §15D and the relevant plan
 documents under `docs/planning/` for per-phase deliverables.
@@ -68,8 +82,10 @@ lake exe stub_audit                 # stub-detection gate
 lake exe naming_audit               # content-name discipline gate
 lake exe deferral_audit             # no-deferrals policy gate
 lake exe mock_import_audit          # no-test-import-in-production gate
+lake exe api_stability_audit        # term-level API-pin gate
 lake exe lex_lint                   # Lex registry + sidecar gate
 lake exe lex_codegen --check        # Lex codegen-consistency gate
+lake exe lex_codegen --canonical --check  # Lex canonical-manifest gate
 lake exe lex_diff <before> <after>  # Lex semantic-diff binary
 lake exe lex_format <file>          # Lex pretty-printer
 python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
@@ -208,13 +224,34 @@ After any source change, also run:
 * `lake exe count_sorries` — fails on any `sorry` in proof position
   in a kernel-adjacent module (the `Tools.Common.kernelTcbFiles`
   list).  Masks comments, block comments, and string literals.
+  Textual, and its own docstring says so; the elaborator-level check
+  is the axiom-footprint gate below, which sees any `sorry` however
+  spelled because every one introduces `sorryAx`.
+* **The axiom-footprint gate** (`LegalKernel/Test/AxiomFootprint.lean`)
+  — enforces "No custom axioms (ABSOLUTE)" mechanically.
+  `#assert_canonical_axioms` is a *command*, so it runs at
+  elaboration time and a violation is a BUILD error caught by the
+  existing `lake build`; there is no separate binary to invoke.  It
+  collects each headline theorem's real axiom footprint and fails on
+  anything outside `[propext, Classical.choice, Quot.sound]`.  Add a
+  line for every theorem promoted to the type-level-properties table.
 * `lake exe tcb_audit` — fails if a TCB-core module imports anything
   not on `tcb_allowlist.txt` or in `Tools.Common.tcbInternalImports`.
 * `lake exe stub_audit` — catches placeholder-body stubs accompanied
   by red-flag docstring tokens.  Allowlist: `tools/stub_allowlist.txt`.
-* `lake exe lex_lint` + `lake exe lex_codegen --check` — enforce
-  the Lex action-index registry's append-only discipline and the
-  byte-stability of codegen-input sidecars.
+* `lake exe api_stability_audit` — fails on any test-module
+  term-level API pin of the form `let _ := @theoremName` that lacks
+  a full type ascription (an unascribed pin elaborates against
+  *whatever* the theorem's current signature is, so it cannot catch
+  a signature change — the one job a pin exists for).  The
+  historical unascribed pins are frozen in
+  `tools/api_stability_allowlist.txt`; the allowlist must never be
+  extended — new pins state the expected type explicitly.
+* `lake exe lex_lint` + `lake exe lex_codegen --check` +
+  `lake exe lex_codegen --canonical --check` — enforce
+  the Lex action-index registry's append-only discipline, the
+  byte-stability of codegen-input sidecars, and the canonical
+  manifest's consistency with the registry.
 * `python3 scripts/regenerate_codemaps.py` — regenerates the
   per-language navigation maps under `codemaps/`; CI fails if the
   result differs from the committed tree.
@@ -243,7 +280,7 @@ knomosis/
 │   │                             deposit, withdraw, replaceKey, registerIdentity,
 │   │                             depositWithFee, topUpActionBudget,
 │   │                             topUpActionBudgetFor, claimBudgetRefund,
-│   │                             ammSwap, reclaimAmmReserves, dispute
+│   │                             reclaimAmmReserves, reserveSwap, dispute
 │   │                             pipeline, local-policy laws) plus
 │   │                             AmountBound (the shared credit ceiling)
 │   ├── Authority/             -- Crypto, Action, Identity, Nonce, LocalPolicy,
@@ -285,6 +322,7 @@ knomosis/
 │   ├── Cargo.toml             --   workspace manifest
 │   ├── rust-toolchain.toml    --   pinned Rust channel (stable 1.97)
 │   ├── knomosis-hash-fallback.c  --   AR.10 default fallback (lake-built)
+│   ├── knomosis-amount/          --   256-bit accounting scalar (Amount)
 │   ├── knomosis-cli-common/      --   shared CLI / logging helpers
 │   ├── knomosis-cross-stack/     --   dev-dep fixture loader
 │   ├── knomosis-verify-secp256k1/ --  ECDSA secp256k1 verifier (cdylib)
@@ -705,15 +743,18 @@ The Genesis Plan promises a small set of type-level guarantees
 | GP.8.5 | Receipt-verified claim double bound | `receiptVerifiedClaim_capped_and_backed` | `Bridge/ReceiptVerifiedClaim.lean` |
 | GP.8.5/OQ-GP-8b | BOLD-leg receipt double bound | `receiptVerifiedBoldClaim_capped_and_backed` | `Bridge/ReceiptVerifiedClaim.lean` |
 | GP.11.6 | AMM reserve outflow restricted | `ammReservePolicy_permits_iff` | `Bridge/AmmReservePolicy.lean` |
-| GP.11.8 | AMM state committed to bridge | `bridgeState_commit_includes_ammState` | `FaultProof/Commit.lean` |
+| GP.11.8 | Mirror state committed to bridge | `bridgeState_commit_includes_mirrorState` | `FaultProof/Commit.lean` |
 | GP.11.8 | v1.2 backward compatibility | `bridgeState_commit_extends_v1_2` | `FaultProof/Commit.lean` |
 | GP.11.8 | Encoding factoring | `bridgeState_encode_factored` | `FaultProof/Commit.lean` |
-| GP.11.8 | AMM genesis suffix const | `bridgeState_amm_genesis_suffix_const` | `FaultProof/Commit.lean` |
+| GP.11.8 | Mirror genesis suffix const | `bridgeState_mirror_genesis_suffix_const` | `FaultProof/Commit.lean` |
 | CA | Chain bridge conservation | `bridge_chain_conserves` | `Bridge/ChainAccounting.lean` |
 | CA | Chain bridge solvency | `bridgeReachable_solvent` | `Bridge/ChainAccounting.lean` |
 | CA | §7.6.4 escrow identity (unconditional) | `bridge_chain_accounting_equation` | `Bridge/ChainAccounting.lean` |
 | H | Bisection convergence | `bisection_converges_after_enough_rounds` | `FaultProof/Convergence.lean` |
 | H | Honest challenger wins | `honest_challenger_wins_against_invalid_state_root` | `FaultProof/Settlement.lean` |
+| SB | Terminate settles only authenticated actions | `terminate_ok_requires_authentication` | `FaultProof/Settlement.lean` |
+| SB | Anchored challenger wins (committed spelling) | `anchored_challenger_wins` | `FaultProof/Settlement.lean` |
+| F-A | Terminate's signature gate (model) | `signatureAdmissible` | `FaultProof/Game.lean` |
 | SC.1 | SMT cell-proof soundness | `smtCellProof_sound_under_collision_free` | `FaultProof/Smt.lean` |
 | SVC | Step-VM dispatcher coherence | `stepVMHash_<variant>_kind` | `FaultProof/StepVMCoherence.lean` |
 
@@ -762,6 +803,8 @@ work units.  Status:
 | LX-M1–M3 | Lex language (3 milestones) | Complete |
 | H | Fault-proof migration | **Complete.**  The terminal step authenticates its action against the log-entry chain AND adjudicates the state transition: `terminateOnSingleStep` calls `executeStepToRootMulti`, which returns a state ROOT computed by folding the step's derived cell writes into the pre-root from a deduplicating pre-root multiproof.  Both the bespoke `stepVMHash` recipe and the chained fold that replaced it are retired.  See the Workstream H section below |
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
+| SB | Batched submission + user-facing L2 AMM | **Complete** (SB.0–SB.12, v0.14.0).  One L1 record per batch `[prevEnd, end)`: structural prev-hash (R5), one chain-link fold per batch over the batch's actions-root SMT (R8; leaf binds the 65-byte signature, R7), revert recovery (R1/R3/R4), game anchored at the batch start (R2), terminal action authenticated by inclusion proof, settlement forwarded game→V2→bridge (R6).  Measured ~239 gas of amortised L1 per action at B=1000 (`gas_pool_runbook.md` §9.5).  `Laws.reserveSwap` (Action 25; Events 23/24) is the user-signed L2 swap priced in-kernel over the reserve actor's live balances, `user = signer` bound at the AuthorityPolicy; the deposit fee-split's seed leg is credited on L2 (`depositWithFee` gained the appended `seedAmount`); the embedded L1 AMM was subsequently EXCISED entirely (Workstream AX below), so the L2 pool is the ONE venue; `knomosis-l1-ingest` materialises deposits opt-in (`--materialise-deposits`, content-derived deposit ids).  The Lean game-model actions-root anchor follow-up is closed (audit-22 MAJOR closed at the model level: `GameState.actionsRoot` + the `actionNotInBatch` terminate guard + `terminate_ok_requires_authentication` + `anchored_challenger_wins`, amendment 1.34); on-chain signature verification at terminate is BUILT on the L1 side (Workstream F-A: `SignInput.sol` rebuilds the §8.8.5 digest, `Secp256k1.sol` resolves the signer's registered key from a registry-cell opening against the pre-root, `ecrecover` must match, and an invalid signature adjudicates as the no-op — the Lean game-model mirror is BUILT too — `applyTransitionWith` carries the verifier, the terminate arm opens the signer's registry cell against the pre-root, and an unauthorised entry adjudicates as the no-op, so F-A is complete on both stacks); the L1→L2 swap-mirror ingest is a deliberate non-goal.  See GENESIS_PLAN §15E.12 + amendments 1.33/1.34/1.35/1.36 |
+| AX | L1-AMM excision (one-AMM topology) | **Complete.**  The embedded L1 AMM was excised BEFORE any deployment existed (zero contracts live, no liquidity stranded): `KnomosisBridge.ammSwap`, the `ammReserveEth`/`ammReserveBold` books and their two `BridgeState` commitment segments (EI.7.e is 7-way again), the L2 bridge-attested mirror `Laws.ammSwap`, and every step-VM / Rust arm are gone.  Frozen `Action` index 23 and `Event` tag 21 are PERMANENT HOLES — every decoder on all three stacks refuses them like never-assigned tags, `StepWrites.isAdjudicable(23) = false`, and they must never be reused.  The kill-switch family survives re-pointed at the L2 pool: `emergencyDisableAmm` flips the committed `ammDisabled` flag only (`AmmDisabled(uint256)`), the reserveSwap admission gate requires `ammDisabled = false` (`reserveSwap_inadmissible_while_amm_disabled`), and `reclaimAmmReserves` (24) remains the post-disable sweep.  `ammReservePolicy` is deny-all on the reserve key's own signatures; the reserve moves only as the user swap's counterparty or via the bridge-signed sweep |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
 | FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B + C complete; D documented; GP.8.5 v2 receipt-verified claim **built** — both legs (Lean gate + theorems, Rust builders/verifiers) — and OQ-GP-8b closed (BOLD-leg ETH→BOLD oracle + independent-observer receipt-fetch), but **not yet wired into a production admission path**: `receiptGatedAdmissibleUnified` has no non-test caller and `ConsumedReceipts` has no home in `BridgeState`, so the `min(cap, L1 wei cost)` bound is proved and available, not enforced.  Wiring it is workstream F1 (`docs/audits/19-findings-and-followups.md`) |
@@ -769,7 +812,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only + submit + events tracks complete; G4 hardening complete (G4.1–G4.7).  **The gateway owns its WHOLE HTTP stack** — the transport-neutral `http::conn` handler over the workspace rustls 0.23, **no `tiny_http`**: one thread per connection on both the plaintext and native-TLS listeners, each with a socket-owned timeout + a per-request read deadline; this closed OQ-GW-14 (concurrent-SSE ceiling = `--sse-max-streams`) and OQ-GW-15 (the `--sse-write-timeout-ms` write deadline now honoured on both transports).  The §9.2 surface is complete incl. `--mtls-crl` (mTLS revocation), `--cors-origin` (+ OPTIONS preflight), `--log-format`, `--dev` (in-process mock upstreams), and `--upstream-subscriptions`.  G3.2c cross-stack pin shipped: the Lean `Encodable Event` (`Encoding/Event.lean`) is the byte authority, pinned byte-for-byte by `knomosis-indexer` and lifted to the gateway §6.2 envelope by `knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=22).  Only G2.1c submit pipelining deferred — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only + submit + events tracks complete; G4 hardening complete (G4.1–G4.7).  **The gateway owns its WHOLE HTTP stack** — the transport-neutral `http::conn` handler over the workspace rustls 0.23, **no `tiny_http`**: one thread per connection on both the plaintext and native-TLS listeners, each with a socket-owned timeout + a per-request read deadline; this closed OQ-GW-14 (concurrent-SSE ceiling = `--sse-max-streams`) and OQ-GW-15 (the `--sse-write-timeout-ms` write deadline now honoured on both transports).  The §9.2 surface is complete incl. `--mtls-crl` (mTLS revocation), `--cors-origin` (+ OPTIONS preflight), `--log-format`, `--dev` (in-process mock upstreams), and `--upstream-subscriptions`.  G3.2c cross-stack pin shipped: the Lean `Encodable Event` (`Encoding/Event.lean`) is the byte authority, pinned byte-for-byte by `knomosis-indexer` and lifted to the gateway §6.2 envelope by `knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=24).  Only G2.1c submit pipelining deferred — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -820,7 +863,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.13.0`) — the single
+the `lakefile.lean` `version` field (currently `0.14.0`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the
@@ -834,11 +877,15 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 200 | ~164 | `lake test` |
-| Rust | ~2 378 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~923 passed | 65 forge suites | `cd solidity && forge test` |
+| Lean | ~3 235 | 172 | `lake test` |
+| Rust | ~2 483 | across 13 crates | `cargo test --workspace` |
+| Solidity | ~909 passed | 64 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **923 passed / 0 failed / 0 skipped** — the
+(The Solidity count dropped from ~997 with the Workstream AX
+excision — the six L1-AMM swap suites and the kind-23 corpus rows
+went with the venue they exercised.)
+
+`forge test` runs **909 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -859,7 +906,11 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 923 / 0 / 0.
+reports the same 909 / 0 / 0.  It is not redundant: a bare `lake test`
+runs on the FALLBACK hash, where the hash-dependent Lean cross-stack
+assertions report `SKIPPED` rather than comparing anything.  Under the
+keccak lane that count is **zero** — every corpus is checked against
+real keccak256 on both sides.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -868,6 +919,22 @@ full catalogue):
 
 - `authority-signed-budget` — GP.3.2 admission-gate theorems +
   five-round security hardening regression tests.
+- `axiom-footprint` — the presence marker for the build-time
+  "No custom axioms (ABSOLUTE)" gate.  The gate itself is
+  `#assert_canonical_axioms` in
+  `LegalKernel/Test/AxiomFootprint.lean` and has already run by the
+  time the suite executes; the case exists so a `lake test`
+  transcript records that the check is present, since a silent gate
+  and an absent one look identical in the log.
+- `encoding-kernelstep` — the `CellTag` CBE codec, swept over every
+  constructor off an arity-pinned list rather than a sample.  It
+  exists because `CellTag.encode` emitted tags 0..14 while
+  `CellTag.decode` handled 0..6, and nothing noticed: the module's
+  only theorems were `*_encode_deterministic`
+  (`t₁ = t₂ → encode t₁ = encode t₂`, true of every function), and
+  no test called the decoder.  Carries the two negative controls
+  that stop the sweep passing vacuously — an unknown tag must be
+  refused, and no two constructors may share an encoding.
 - `faultproof-terminate` — the openings-only verifier
   (`verifierPostRootMulti`) against the sequencer's fold on nineteen
   probes, plus the forgeries it must refuse: a forged pre-value, a wire
@@ -1113,7 +1180,7 @@ subscriber, `logging.rs`), `--dev` (in-process mock upstreams, `dev.rs`), and
 ring).  The G3.2c cross-stack pin is **shipped**: the Lean `Encodable Event`
 (`Encoding/Event.lean`) is the byte authority, pinned byte-for-byte by
 `knomosis-indexer` and lifted to the gateway §6.2 envelope by
-`knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=22).
+`knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=24).
 The only remaining gateway item is the G2.1c submit pipelining (modest
 optimisation).
 Design invariants: the gateway owns its whole HTTP stack (thread per
@@ -1144,7 +1211,7 @@ Plan: `docs/planning/rust_host_runtime_plan.md`
 | RH-A.2 | `knomosis-hash-keccak256` | Complete | Keccak-256 cdylib; 51-record .cxsf corpus |
 | RH-B | `knomosis-l1-ingest` | Complete | L1 event watcher; hand-rolled ABI decoder; re-org tolerance; raw-TCP submitter with opt-in signer hints |
 | RH-C | `knomosis-host` | Complete | TCP/TLS/Unix listener; `MockKernel` + `CommandKernel`; bounded queue; two-tier DRR fair scheduler (default-OFF `--scheduler drr`); `--persistent-connections` pipelined mode |
-| RH-D | `knomosis-event-subscribe` | Complete | Log-tail reader; `SubprocessExtractor` → `knomosis extract-events`; bounded-lag subscriber eviction; event-type registry (tags 0..22) |
+| RH-D | `knomosis-event-subscribe` | Complete | Log-tail reader; `SubprocessExtractor` → `knomosis extract-events`; bounded-lag subscriber eviction; event-type registry (tags 0..24) |
 | RH-E.0 | `knomosis-storage` | Complete | `Storage` trait; `SqliteStorage` (WAL, bundled rusqlite); migration framework |
 | RH-E.1 | `knomosis-indexer` | Complete | Per-(actor, resource) balance view; budget/pool views; two-pass dispatch; epoch resets |
 | RH-F | `knomosis-bench` | Complete | Deterministic fixture; concurrent driver; histogram; JSON report + regression check; ~7.5k ops/sec observed |
@@ -1170,10 +1237,10 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.7.0–7.4 | Complete | Bridge-policy characterisation, reserved actors, `gasPoolPolicy`, inductive drain bound, genesis ratification + CLI |
 | GP.8.5 | Built, not wired (both legs) | Receipt-verified claim gate: Lean `ReceiptVerifiedClaim` (`l1GasReceiptVerifier` + `l1EthBoldRateOracle` opaques, `SequencerReimbursementVerified{,Bold}` witnesses, `receiptVerifiedClaimAdmissible` + `…Bold…` + `receiptGatedAdmissibleUnified`, the `min(cap, cost)` double-bounds + pure-strengthening theorems) + Rust `build_receipt_backed{,_bold}` / `is_{,bold_}receipt_backed_by`. OQ-GP-8b closed: BOLD leg via the floored ETH→BOLD conversion + the independent-observer receipt-fetch binding (`knomosis-l1-ingest::receipt_verifier`: tx-keyed canonical binding hash, `derive_gas_receipt`, `verify_{eth,bold}_claim_independently{,_fresh}` with observer-path no-reuse keyed on the canonical re-derived hash, confirmation-depth re-org gate, batch-keyed `RateOracle` for BOLD, fail-closed `0x`/EIP-658 receipt parsing) |
 | GP.9.1 | Complete | `claimBudgetRefund` (index 22); step-VM kind 22; Rust encoder + host gate |
-| GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
-| GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
+| GP.11.1–11.7 | Complete (L1 venue since EXCISED) | Deposit seed split + `ammSeedRatioBps` cap, `ammReserveActor` reservation, `AmmMath`, AMM reserve policy, `amm_getamountout` corpus.  The embedded L1 swap venue and its L2 `ammSwap` mirror (index 23) were excised under the one-AMM L2-primary topology — index 23 / event tag 21 are permanent holes |
+| GP.11.8 | Complete (reserve books since EXCISED) | Mirror state-root commitment: BridgeState carries the three BOLD mirror fields (the two `ammReserve*` book segments left with the L1 venue — seven segments total), EI.7.e injectivity, `bridgeState_commit_includes_mirrorState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder |
 | GP.11.9 | Complete | Gas-cost benchmarks for the v1.3 L1 operations + round-trip exit legs: 21 isolated-mode (tx-exact, refund-netted) benchmarks with exact calldata breakdowns (`solidity/test/BenchmarkGasV1_3.t.sol`, `forge test --isolate` + `vm.snapshotGasLastCall` + `vm.snapshotValue`, OZ-faithful `MockBoldOz`), committed baseline (`test/BenchmarkGasV1_3.gas-baseline.json`), one-sided >5%-increase CI gate + set-drift + runbook-sync checks (`scripts/check_gas_baseline.py`), generated runbook §9.2 table (`scripts/generate_gas_runbook_table.py`), self-tested via `make snapshot-gas-selftest` |
-| GP.11.10 | Complete | AMM disaster recovery (quad-surface): single-purpose 3-of-N reference multisig `KnomosisAmmDisasterRecoveryMultisig.sol` (constructor-enforced `MIN_DISABLE_THRESHOLD = 3`, atomic threshold-th-confirm execution, revocation, 7-day group-expiry; 100% line/branch coverage, 7-invariant stateful suite, 2 gas benchmarks, cap-gate widened to the 3 multisig governance constants) + `IKnomosisAmmDisasterRecovery`; `ammDisabled` committed to the state root (Lean `BridgeState` 9th field, EI.7.e 9-way injectivity, `bridgeState_commit_extends_v1_3` + `commitBridgeState_reflects_ammDisabled` + `commitExtendedState_reflects_ammDisabled` theorems); L2 reserve-reclamation law `Laws.reclaimAmmReserves` (frozen `Action` index 24, `Event.ammReservesReclaimed` 22, exact-sweep precondition, `IsConservative`/`LocalTo`/`FreezePreserving` instances, bridge-admissibility conjunct gating on `ammDisabled = true` + reserved actors, step-VM kind 24 tri-stack, Rust l1-ingest/event-subscribe/indexer/observer mirrors, `AmmDisabled` L1-event ingest); AMM-mirror step-invariance (`amm_mirrors_constant_over_admitted_trace`); 278-entry step-VM corpus; post-disable deposit+withdraw degraded-mode tests; operator runbook §10 (invocation conditions, firing procedure, L2 reclamation flow, recovery decision tree) |
+| GP.11.10 | Complete | AMM disaster recovery (quad-surface): single-purpose 3-of-N reference multisig `KnomosisAmmDisasterRecoveryMultisig.sol` (constructor-enforced `MIN_DISABLE_THRESHOLD = 3`, atomic threshold-th-confirm execution, revocation, 7-day group-expiry; 100% line/branch coverage, 7-invariant stateful suite, 2 gas benchmarks, cap-gate widened to the 3 multisig governance constants) + `IKnomosisAmmDisasterRecovery`; `ammDisabled` committed to the state root (Lean `BridgeState` 7th field post-excision, EI.7.e 7-way injectivity, `commitBridgeState_reflects_ammDisabled` + `commitExtendedState_reflects_ammDisabled` theorems); L2 reserve-reclamation law `Laws.reclaimAmmReserves` (frozen `Action` index 24, `Event.ammReservesReclaimed` 22, exact-sweep precondition, `IsConservative`/`LocalTo`/`FreezePreserving` instances, bridge-admissibility conjunct gating on `ammDisabled = true` + reserved actors, step-VM kind 24 tri-stack, Rust l1-ingest/event-subscribe/indexer/observer mirrors, `AmmDisabled(uint256)` L1-event ingest); mirror step-invariance (`amm_mirrors_constant_over_admitted_trace`) and the excision's new admission gate — `reserveSwap` requires `ammDisabled = false` (`reserveSwap_inadmissible_while_amm_disabled`); 278-entry step-VM corpus; post-disable deposit+withdraw degraded-mode tests; operator runbook §10 (invocation conditions, firing procedure, L2 reclamation flow, recovery decision tree) |
 
 ### Ethereum integration (Workstreams A–G)
 

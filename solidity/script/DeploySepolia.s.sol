@@ -132,6 +132,9 @@ contract DeploySepolia is Script {
         uint64 bisectionResponseTimeout;
         uint128 minChallengeBond;
         uint64 minBisectionStepInterval;
+        // Workstream SB batching parameters.
+        bytes32 genesisStateCommit;
+        uint64 maxActionsPerBatch;
         // Manifest output path.
         string outPath;
         string network;
@@ -304,6 +307,14 @@ contract DeploySepolia is Script {
             uint128(vm.envOr("KNOMOSIS_MIN_CHALLENGE_BOND", uint256(0.05 ether)));
         cfg.minBisectionStepInterval =
             uint64(vm.envOr("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL", uint256(5)));
+        // The genesis anchor's state commit is REQUIRED: the registry
+        // writes its record 0 from it, and an all-zero commit is
+        // refused at construction.  Produce it with the L2's
+        // `knomosis export-batch` genesis output (or
+        // `commitExtendedState` of the deployment's genesis state).
+        cfg.genesisStateCommit = vm.envBytes32("KNOMOSIS_GENESIS_STATE_COMMIT");
+        cfg.maxActionsPerBatch =
+            uint64(vm.envOr("KNOMOSIS_MAX_ACTIONS_PER_BATCH", uint256(65_536)));
         cfg.verifierChallengerBond = vm.envOr(
             "KNOMOSIS_VERIFIER_CHALLENGER_BOND", uint256(cfg.minChallengeBond)
         );
@@ -655,6 +666,17 @@ contract DeploySepolia is Script {
         address predV = vm.computeCreateAddress(deployer, nA + 1);
         address predS = vm.computeCreateAddress(deployer, nA + 2);
         address predM = functionalAmm ? vm.computeCreateAddress(deployer, nA + 3) : address(0);
+        // The bridge's R6 `faultProofRollbackAuthority` is the V2
+        // verifier, which deploys in Cluster B — predict its address
+        // ACROSS the cluster by counting the deployments between the
+        // bridge and V2: verifier, stake, [multisig], stepVM,
+        // submission, then V2.  The count is require-checked twice
+        // below (against Cluster B's own prediction before V2
+        // deploys, and against the deployed address after), so an
+        // inserted deployment fails the script rather than shipping
+        // a bridge whose rollback authority points at nothing.
+        address predV2FromA =
+            vm.computeCreateAddress(deployer, nA + (functionalAmm ? 6 : 5));
 
         KnomosisBridge bridge = new KnomosisBridge(
             KnomosisBridge.ConstructorArgs({
@@ -679,6 +701,7 @@ contract DeploySepolia is Script {
                 enableLiquityAutoCircuitTrigger: autoTrigger,
                 ammSeedRatioBps: cfg.ammSeedRatioBps,
                 ammDisasterRecovery: predM,
+                faultProofRollbackAuthority: predV2FromA,
                 erc20ResourceIds: new uint64[](0),
                 erc20TokenAddrs: new address[](0)
             })
@@ -736,6 +759,20 @@ contract DeploySepolia is Script {
         address predSub = vm.computeCreateAddress(deployer, nB);
         address predV2 = vm.computeCreateAddress(deployer, nB + 1);
         address predGame = vm.computeCreateAddress(deployer, nB + 2);
+        // Fail fast if Cluster A's cross-cluster V2 prediction (baked
+        // into the bridge's immutable rollback authority) has drifted
+        // from Cluster B's own — i.e. a deployment was inserted
+        // between the two prediction points.
+        require(predV2 == predV2FromA, "cross-cluster V2 prediction drift");
+
+        // The submission breaker (EG.2): may halt / resume state-root
+        // submission.  Defaults to the broadcaster so a dry-run needs no
+        // extra configuration; a production deploy sets it explicitly.
+        // The constructor refuses a breaker equal to the sequencer, so
+        // deploying with the sequencer key fails loudly rather than
+        // handing the halt to the party it exists to restrain.
+        address submissionBreaker =
+            vm.envOr("KNOMOSIS_SUBMISSION_BREAKER_ADDRESS", msg.sender);
 
         KnomosisStateRootSubmission submission = new KnomosisStateRootSubmission(
             cfg.stateRootBond,
@@ -745,8 +782,10 @@ contract DeploySepolia is Script {
             cfg.sequencer,
             predGame,
             deploymentId,
-            cfg.withdrawalFinalisationWindow
-        );
+            cfg.withdrawalFinalisationWindow,
+            cfg.genesisStateCommit,
+            cfg.maxActionsPerBatch,
+            submissionBreaker);
         require(address(submission) == predSub, "submission prediction mismatch");
 
         KnomosisDisputeVerifierV2 verifierV2 = new KnomosisDisputeVerifierV2(
@@ -767,9 +806,16 @@ contract DeploySepolia is Script {
             cfg.minBisectionStepInterval,
             cfg.treasury,
             address(stepVM),
-            address(submission)
+            address(submission),
+            address(verifierV2)
         );
         require(address(game) == predGame, "game prediction mismatch");
+        // The R6 wiring is closed end-to-end: game → V2 → bridge.
+        require(game.disputeVerifier() == address(verifierV2), "game verifier mismatch");
+        require(
+            bridge.faultProofRollbackAuthority() == address(verifierV2),
+            "bridge rollback authority mismatch"
+        );
 
         // These four revert on inconsistency (they are `view`, return nothing).
         stepVM.assertConsistent();
@@ -841,6 +887,15 @@ contract DeploySepolia is Script {
         vm.serializeAddress(a, "sequencer", cfg.sequencer);
         vm.serializeAddress(a, "treasury", cfg.treasury);
         vm.serializeAddress(a, "boldCircuitBreaker", cfg.boldCircuitBreaker);
+        // The EG.2 submission breaker.  Read back OFF THE DEPLOYED
+        // CONTRACT rather than from config: the manifest is what an
+        // operator consults to learn which key can halt the chain, and
+        // an immutable read cannot drift from what was actually
+        // constructed.
+        vm.serializeAddress(
+            a,
+            "submissionBreaker",
+            KnomosisStateRootSubmission(d.stateRootSubmission).submissionBreaker());
         string memory actorsJson = vm.serializeAddress(a, "boldAdmin", cfg.boldAdmin);
 
         // Top-level manifest.

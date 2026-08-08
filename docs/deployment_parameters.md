@@ -66,7 +66,7 @@ fixtures.
 
 `constructor(uint64 bisectionResponseTimeout, uint128 minChallengeBond,
 uint64 minBisectionStepInterval, address treasury, address stepVM,
-address stateRootSubmission)`
+address stateRootSubmission, address disputeVerifier)`
 
 | Parameter | Unit | IC | Sizing guidance |
 |-----------|------|----|-----------------|
@@ -74,20 +74,24 @@ address stateRootSubmission)`
 | `bisectionResponseTimeout` | L1 blocks | IC-2, IC-3 | The per-round response window.  Too short ⇒ an honest party with normal L1 latency loses by timeout; too long ⇒ an invalid root finalises slowly and locks bonds (capital cost).  Size to comfortably exceed honest L1-inclusion latency at the target chain's congestion, with headroom for the watchtower (IC-3). |
 | `minBisectionStepInterval` | L1 blocks | IC-2 | Anti-DoS floor on the response *rate*; bounds the defender's burst cost `G_d`.  **Constructor guard:** must be `< bisectionResponseTimeout` (`InvalidTimeoutConfig`; audit-21 finding 1.4) — otherwise the responsible party can never act before the deadline. |
 | `treasury` | address | — | Recipient of the 5 % slashed-bond skim (OQ8).  Use an address that does **not** revert on ETH receipt; settlement is pull-payment (audit-21 finding 1.3), so a reverting treasury no longer bricks the game, but it would forfeit its own share. |
+| `disputeVerifier` | address | — | The `KnomosisDisputeVerifierV2` a challenger win is forwarded to (SB ruling R6: game → V2 → `bridge.revertToPriorRoot`, so the bridge's own reverted range — the one its fund-safety gates consult — covers the invalid root).  Deploy scripts pass the PREDICTED V2 address and require-check it post-deploy (`DeploySepolia.s.sol`).  `address(0)` disables the forwarding (test-only; a production deployment without it re-opens the challenger-win-never-reaches-the-bridge defect SB closed). |
 
-## 3. KnomosisStateRootSubmission — sequencer submission bond
+## 3. KnomosisStateRootSubmission — batched submission economics
 
 `constructor(uint128 bond, uint64 disputeWindow, uint64 minSubmissionInterval,
 uint64 maxOutstandingRoots, address sequencer, address faultProofGame,
-bytes32 deploymentId, uint64 withdrawalFinalisationWindow)`
+bytes32 deploymentId, uint64 withdrawalFinalisationWindow,
+bytes32 genesisStateCommit, uint64 maxActionsPerBatch)`
 
 | Parameter | Unit | Guidance |
 |-----------|------|----------|
-| `bond` | wei | The sequencer's per-root submission bond, at risk to a successful challenge.  Size ≥ the value a sequencer could extract by submitting one invalid root (so dishonest submission is −EV given the fault-proof game). |
-| `disputeWindow` | L1 blocks | Window during which a root may be challenged before it finalises.  Must give ≥1 independent observer (IC-3) time to detect and challenge.  Coordinate with the game's `bisectionResponseTimeout`. |
-| `withdrawalFinalisationWindow` | L1 blocks | Delay before a withdrawal against a root is spendable.  Should cover `disputeWindow` plus a full game's worst-case length (`⌈log₂ N⌉ · bisectionResponseTimeout`). |
-| `minSubmissionInterval` | L1 blocks | Lower bound on submission cadence (anti-spam). |
-| `maxOutstandingRoots` | count | Cap on un-finalised roots in flight (bounds challenge surface + state). |
+| `bond` | wei | The sequencer's **per-BATCH** submission bond (Workstream SB: one record covers every action in `[prevEnd, end)`), at risk to a successful challenge.  Size ≥ the value a sequencer could extract by publishing one invalid BATCH — which scales with the value a whole batch can move, not with one action — so dishonest submission stays −EV given the fault-proof game.  A larger `maxActionsPerBatch` therefore argues for a larger bond; conversely the bond is posted once per batch rather than once per action, so the sequencer's working capital is `bond × maxOutstandingRoots` regardless of throughput.  On a challenger win the bond is slashed and the reverted batch is recoverable (rulings R1/R3/R4: resubmission at the same key needs the bond out; `reclaimRevertedBond` returns it). |
+| `disputeWindow` | L1 blocks | Window during which a batch may be challenged before it finalises.  Must give ≥1 independent observer (IC-3) time to re-execute the WHOLE batch and challenge.  Observer work per batch grows with the batch size — coordinate the window with `maxActionsPerBatch` and the game's `bisectionResponseTimeout`. |
+| `withdrawalFinalisationWindow` | L1 blocks | Delay before a withdrawal against a batch is spendable.  Should cover `disputeWindow` plus a full game's worst-case length (`⌈log₂ B⌉ · bisectionResponseTimeout` for a batch of `B` actions — the game bisects INSIDE the batch, ruling R2). |
+| `minSubmissionInterval` | L1 blocks | Lower bound on submission cadence (anti-spam).  With batching this also floors the batch DURATION: actions accumulated between submissions ride one record, so the effective batch size ≈ L2 throughput × interval. |
+| `maxOutstandingRoots` | count | Cap on un-finalised batches in flight (bounds challenge surface + the sequencer's locked capital `bond × cap`). |
+| `genesisStateCommit` | bytes32 | The chain's genesis anchor (ruling R5): the record at key 0 the first batch's structural `prevLogEntryHash` reads from.  Must equal `commitExtendedState` of the deployment's ratified genesis (`knomosis export-batch` emits it); a mismatch makes the first honest batch indefensible. |
+| `maxActionsPerBatch` | count | Operational sanity ceiling on one batch's span (default 65 536; ruling R10 — an open game already blocks finalisation, so this is not a safety parameter).  Larger batches amortise the fixed ~239k-gas submission further (`gas_pool_runbook.md` §9.5: ≈239 gas/action at B = 1 000) but delay finality (one shared dispute window), grow the observer's per-batch re-execution work, and concentrate more actions under one bond. |
 
 ## 4. KnomosisSequencerStake — sequencer slashing
 

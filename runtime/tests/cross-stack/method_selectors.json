@@ -10,6 +10,7 @@
       "activeGameForLogIndex(uint64)": "2d47ad7f",
       "assertConsistent()": "5983ff39",
       "claimTimeout(uint256)": "86e773f1",
+      "disputeVerifier()": "32ba8d07",
       "games(uint256)": "117a5b90",
       "initiateChallenge(uint64,bytes32,bytes32,uint64)": "bf4540c3",
       "nextGameId()": "b135bbb0",
@@ -18,7 +19,7 @@
       "stateRootSubmission()": "e1afd6f4",
       "stepVM()": "87a433fd",
       "submitMidpoint(uint256,bytes32)": "11d925b3",
-      "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes)[],bytes,bytes)": "6781374b",
+      "terminateOnSingleStep(uint256,uint8,bytes,uint64,bytes,bytes,(uint8,uint256,uint256,bytes)[],bytes,bytes,bytes,bytes)": "11478d82",
       "treasury()": "61d027b3",
       "withdraw()": "3ccfd60b"
     }

@@ -331,15 +331,24 @@ example (recipient signer : ActorId) (gr : ResourceId) (ga : Amount)
 example (a : ActorId) (amount : Nat) :
     Event.tag (.budgetConsumed a amount) = 20 := rfl
 
-/-- AR.6 regression pin: `ammSwapExecuted` holds frozen index 21
-    (Workstream GP.11.4). -/
-example (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
-    Event.tag (.ammSwapExecuted fr tr ai ao ra) = 21 := rfl
+-- Index 21 (`ammSwapExecuted`) is RETIRED with the excised L1
+-- embedded AMM; the pins that its NEIGHBOURS keep 20 and 22
+-- (above/below) guard the hole from silent reuse.
 
 /-- AR.6 regression pin: `ammReservesReclaimed` holds frozen index 22
     (Workstream GP.11.10). -/
 example (r : ResourceId) (amt : Amount) (ra pa : ActorId) :
     Event.tag (.ammReservesReclaimed r amt ra pa) = 22 := rfl
+
+/-- AR.6 regression pin: `reserveSwapExecuted` holds frozen index 23
+    (Workstream SB). -/
+example (fr tr : ResourceId) (user : ActorId) (ai ao : Amount) (ra : ActorId) :
+    Event.tag (.reserveSwapExecuted fr tr user ai ao ra) = 23 := rfl
+
+/-- AR.6 regression pin: `reserveSeeded` holds frozen index 24
+    (Workstream SB). -/
+example (r : ResourceId) (amt : Amount) (ra : ActorId) (d : Bridge.DepositId) :
+    Event.tag (.reserveSeeded r amt ra d) = 24 := rfl
 
 /-- All tests. -/
 def tests : List TestCase :=

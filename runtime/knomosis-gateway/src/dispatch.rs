@@ -196,6 +196,7 @@ mod tests {
     use crate::config::Config;
     use crate::http::{Route, RouteOutcome};
     use crate::state::AppState;
+    use knomosis_amount::Amount;
 
     /// Dispatch with an empty request body (the body-less common case the
     /// read / system routes use); the submit body path is covered in the
@@ -364,7 +365,8 @@ mod tests {
         let writer = SqliteStorage::open(&path).expect("open writer");
         ensure_identifier(&writer, INDEXER_IDENTIFIER).expect("seed indexer identity");
         let mut tx = writer.combined_transaction().expect("begin");
-        tx.credit_pool_eth(161, 500).expect("credit eth");
+        tx.credit_pool_eth(161, Amount::from_u64(500))
+            .expect("credit eth");
         tx.commit().expect("commit");
         writer.put(CURSOR_KEY, &7u64.to_be_bytes()).expect("cursor");
 

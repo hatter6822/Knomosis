@@ -131,6 +131,7 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
         poll_interval: cfg.poll_interval,
         play_as: cfg.play_as,
         deployment_id: cfg.deployment_id,
+        max_broadcast_attempts: cfg.max_broadcast_attempts,
     };
 
     // Build the truth oracle.  When both `--knomosis-binary` and

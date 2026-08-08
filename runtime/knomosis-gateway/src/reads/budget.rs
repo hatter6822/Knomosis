@@ -22,6 +22,7 @@
 
 use knomosis_indexer::budget_view::CURRENT_EPOCH_KEY;
 use knomosis_indexer::cursor::CURSOR_KEY;
+use knomosis_storage::budget_storage::CounterValue;
 use serde::Serialize;
 
 use crate::http::RouteOutcome;
@@ -91,7 +92,9 @@ pub fn actor_budget(
     };
     // remaining = free_tier + grants − consumed (saturating); the
     // indexer's `BudgetReadView::remaining_this_epoch` formula.
-    let remaining = free_tier.saturating_add(grants).saturating_sub(consumed);
+    let remaining = CounterValue::from(free_tier)
+        .saturating_add(grants)
+        .saturating_sub(consumed);
 
     let dto = BudgetViewDto {
         actor_id: actor.to_string(),
@@ -117,6 +120,7 @@ fn read_failed(title: &str, detail: &str) -> RouteOutcome {
 mod tests {
     use super::actor_budget;
     use crate::state::ReadState;
+    use knomosis_amount::Amount;
     use knomosis_indexer::budget_view::CURRENT_EPOCH_KEY;
     use knomosis_indexer::cursor::CURSOR_KEY;
     use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
@@ -129,8 +133,9 @@ mod tests {
         let path = dir.path().join("index.db");
         let writer = SqliteStorage::open(&path).unwrap();
         let mut tx = writer.combined_transaction().unwrap();
-        tx.credit_actor_budget_current_epoch_grants(7, 100).unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(7, 30)
+        tx.credit_actor_budget_current_epoch_grants(7, Amount::from_u64(100))
+            .unwrap();
+        tx.credit_actor_budget_current_epoch_consumed(7, Amount::from_u64(30))
             .unwrap();
         tx.commit().unwrap();
         writer.put(CURRENT_EPOCH_KEY, &3u64.to_be_bytes()).unwrap();
@@ -178,8 +183,9 @@ mod tests {
         let path = dir.path().join("index.db");
         let writer = SqliteStorage::open(&path).unwrap();
         let mut tx = writer.combined_transaction().unwrap();
-        tx.credit_actor_budget_current_epoch_grants(7, 10).unwrap();
-        tx.credit_actor_budget_current_epoch_consumed(7, 999)
+        tx.credit_actor_budget_current_epoch_grants(7, Amount::from_u64(10))
+            .unwrap();
+        tx.credit_actor_budget_current_epoch_consumed(7, Amount::from_u64(999))
             .unwrap();
         tx.commit().unwrap();
         writer.put(CURSOR_KEY, &1u64.to_be_bytes()).unwrap();

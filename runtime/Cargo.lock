@@ -315,9 +315,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "knomosis-bench"
-version = "0.13.0"
+name = "knomosis-amount"
+version = "0.14.0"
 dependencies = [
+ "crypto-bigint",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "knomosis-bench"
+version = "0.14.0"
+dependencies = [
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-host",
  "knomosis-l1-ingest",
@@ -332,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cli-common"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -342,7 +354,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cross-stack"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -350,7 +362,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-event-subscribe"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "hex",
  "knomosis-cli-common",
@@ -365,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-faultproof-observer"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "hex",
  "k256",
@@ -386,14 +398,16 @@ dependencies = [
 
 [[package]]
 name = "knomosis-gateway"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-event-subscribe",
  "knomosis-host",
  "knomosis-indexer",
  "knomosis-storage",
  "proptest",
+ "ring",
  "rustls",
  "serde",
  "serde_json",
@@ -407,8 +421,9 @@ dependencies = [
 
 [[package]]
 name = "knomosis-gateway-bench"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-bench",
  "knomosis-cli-common",
  "knomosis-gateway",
@@ -424,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-hash-keccak256"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "cc",
  "hex",
@@ -435,8 +450,9 @@ dependencies = [
 
 [[package]]
 name = "knomosis-host"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
+ "knomosis-amount",
  "knomosis-cli-common",
  "proptest",
  "rustls",
@@ -449,9 +465,10 @@ dependencies = [
 
 [[package]]
 name = "knomosis-indexer"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "hex",
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-storage",
  "proptest",
@@ -465,13 +482,15 @@ dependencies = [
 
 [[package]]
 name = "knomosis-l1-ingest"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "hex",
  "k256",
+ "knomosis-amount",
  "knomosis-cli-common",
  "knomosis-cross-stack",
  "knomosis-host",
+ "knomosis-verify-secp256k1",
  "proptest",
  "serde",
  "serde_json",
@@ -485,8 +504,9 @@ dependencies = [
 
 [[package]]
 name = "knomosis-storage"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
+ "knomosis-amount",
  "proptest",
  "rusqlite",
  "tempfile",
@@ -496,13 +516,14 @@ dependencies = [
 
 [[package]]
 name = "knomosis-verify-secp256k1"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "cc",
  "hex",
  "k256",
  "knomosis-cross-stack",
  "proptest",
+ "sha3",
  "subtle",
 ]
 

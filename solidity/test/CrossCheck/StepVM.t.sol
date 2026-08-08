@@ -5,12 +5,13 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
+import {AmmMath} from "src/lib/AmmMath.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
-///         `step_vm.json` fixture (278 entries post-GP.11.10, after the
-///         ammSwap kind-23 arm added 10; #226 / #251
+///         `step_vm.json` fixture (278 entries after the L1-AMM
+///         excision retired kind 23 and its 10 rows; #226 / #251
 ///         coherence corpus).
 ///
 /// @dev    **One commit per entry.**  Each fixture entry carries
@@ -167,19 +168,27 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 count = vm.parseJsonUint(raw, ".count");
         uint256 countTransfer = vm.parseJsonUint(raw, ".countTransfer");
         uint256 countMint = vm.parseJsonUint(raw, ".countMint");
-        // GP.11.10: the corpus widened from 268 → 278 entries
-        // (ammSwap extension: +ammSwap at 10 entries, on top of the
-        // 258 entries that already carried +claimBudgetRefund).
-        assertEq(count, 278, "GP.11.10: total corpus is 278 entries");
+        // 48 transfer/mint + 23 further variants at 10 each: the
+        // Workstream SB reserveSwap rows are in, the retired kind-23
+        // ammSwap rows are out (the L1-AMM excision).
+        assertEq(count, 278, "total corpus is 278 entries");
         assertEq(countTransfer, 24, "transfer count");
         assertEq(countMint, 24, "mint count");
+        // The ONE swap-fee constant: the Lean value the corpus's
+        // kind-25 quotes were priced with must be the L1's.
+        assertEq(
+            vm.parseJsonUint(raw, ".reserveSwapFeeBps"),
+            AmmMath.SWAP_FEE_BPS,
+            "SB: reserveSwap fee bps pinned across the stacks"
+        );
     }
 
     /// @notice GP.11.8 — verify the per-variant count fields are
     ///         the expected 10 each for the 17 SVC.5.e variants
-    ///         plus the 5 Workstream-GP variants
+    ///         plus the 4 Workstream-GP budget variants
     ///         (depositWithFee + topUpActionBudget +
-    ///         topUpActionBudgetFor + claimBudgetRefund + ammSwap).
+    ///         topUpActionBudgetFor + claimBudgetRefund), the
+    ///         GP.11.10 reclaim and the Workstream SB reserveSwap.
     function test_perVariant_counts() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             revert("fixture missing");
@@ -210,10 +219,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
             ".countTopUpActionBudgetFor",
             // GP.9.1: refund-on-exit at index 22.
             ".countClaimBudgetRefund",
-            // GP.11.7: AMM swap at index 23.
-            ".countAmmSwap",
+            // Kind 23 (the retired L1-AMM ammSwap) is a permanent hole:
+            // the corpus carries no rows and no count for it.
             // GP.11.10: post-disable reserve sweep at index 24.
-            ".countReclaimAmmReserves"
+            ".countReclaimAmmReserves",
+            // Workstream SB: user-facing L2 swap at index 25.
+            ".countReserveSwap"
         ];
         for (uint256 i = 0; i < variantKeys.length; i++) {
             beginEntry(string.concat("#", vm.toString(i)));
@@ -268,9 +279,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 adversarialCount++;
             }
         }
-        // GP.11.8: 8 adversarial transfer + 8 adversarial mint +
-        // 22 x4 = 88 adversarial new-variant entries (17 SVC.5.e +
-        // 6 GP variants) = 108 total.
+        // 8 adversarial transfer + 8 adversarial mint + 23 x4 = 92
+        // adversarial further-variant entries = 108 total (reserveSwap
+        // in, the retired kind-23 ammSwap out).
         assertEq(adversarialCount, 108, "108 adversarial entries total (16 + 23 x4)");
     }
 
@@ -298,8 +309,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 happyCount++;
             }
         }
-        // GP.11.8: 16 happy transfer + 16 happy mint + 22 x6 =
-        // 170 happy entries total (17 SVC.5.e + 6 GP variants).
+        // 16 happy transfer + 16 happy mint + 23 x6 = 138 happy
+        // further-variant entries = 170 total (reserveSwap in, the
+        // retired kind-23 ammSwap out).
         assertEq(happyCount, 170, "170 happy entries total (32 + 23 x6)");
     }
 
@@ -388,18 +400,21 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice **The log-chain action commitment is byte-identical
-    ///         across the stacks.**
+    /// @notice **The action commitment is byte-identical across the
+    ///         stacks.**
     ///
-    ///         `KnomosisStateRootSubmission` binds this value when the
-    ///         sequencer publishes a root and
-    ///         `KnomosisFaultProofGame.terminateOnSingleStep`
-    ///         re-derives it from the action it is handed, so a
-    ///         one-byte disagreement between the Lean encoder and the
-    ///         Solidity one makes every honest terminate revert
-    ///         `ActionNotInLogChain` — a liveness failure that looks
-    ///         exactly like a malicious submission.  The corpus is
-    ///         where that is caught.
+    ///         The unsigned triple commit is the shared PREFIX
+    ///         construction: the batch leaf the fault-proof game
+    ///         authenticates at terminate
+    ///         (`ActionsRoot.actionLeafCommit`, Lean
+    ///         `ActionsRoot.actionLeafValue`) extends this exact
+    ///         `kind ‖ uint64BE signer ‖ fields` pre-image by the
+    ///         fixed 65-byte signature suffix.  A one-byte
+    ///         disagreement between the Lean field encoder and the
+    ///         Solidity one therefore makes every honest terminate
+    ///         revert `ActionNotInBatch` — a liveness failure that
+    ///         looks exactly like a malicious submission.  The corpus
+    ///         is where that is caught.
     function test_perEntry_actionCommit_matches_lean() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
@@ -609,6 +624,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 vm.parseJsonBytes(raw, string.concat(base, ".targetBudgetPreHex")),
                 uint64(vm.parseJsonUint(raw, string.concat(base, ".signer"))),
                 uint64(vm.parseJsonUint(raw, string.concat(base, ".target"))),
+                vm.parseJsonBool(raw, string.concat(base, ".grants")),
                 uint64(vm.parseJsonUint(raw, string.concat(base, ".grantRecipient"))),
                 vm.parseJsonUint(raw, string.concat(base, ".grantAmount")),
                 vm.parseJsonUint(raw, string.concat(base, ".refundExtra"))
@@ -702,13 +718,6 @@ contract StepVMCrossCheck is CrossCheckFramework {
         } else if (k == keccak256("topUp")) {
             (gotX, gotY) = StepWrites.deriveTopUpBalances(
                 xPre, yPre, x, y, amountA, amountA <= xPre);
-        } else if (k == keccak256("ammSwap")) {
-            // `x` / `y` are the two RESOURCES here, not actors: the
-            // swap is the only variant whose cells sit at different
-            // resources, which is what makes them independent.
-            (gotX, gotY) = StepWrites.deriveAmmSwapBalances(
-                xPre, yPre, x, y, amountA,
-                vm.parseJsonUint(raw, string.concat(base, ".amountB")));
         } else {
             revert(string.concat("unknown balance golden kind at ", base));
         }
@@ -775,7 +784,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         } else if (k == keccak256("consumed")) {
             got = StepWrites.deriveConsumedCellValue(a, b, c, d);
         } else if (k == keccak256("pending")) {
-            got = StepWrites.derivePendingCellValue(a, payload, b, c);
+            got = StepWrites.derivePendingCellValue(a, payload, b, c, d);
         } else {
             revert(string.concat("unknown record golden kind at ", base));
         }
@@ -827,6 +836,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 string.concat(".absentValueGoldens[", vm.toString(i), "]");
             uint8 cellKind =
                 uint8(vm.parseJsonUint(raw, string.concat(base, ".cellKind")));
+            // Cell kinds 7/8 (the excised bridgeAmmReserve* books) are
+            // permanent holes — a corpus carrying one has drifted.
+            checkTrue(
+                cellKind != 7 && cellKind != 8,
+                string.concat("retired cell kind in the corpus at ", base)
+            );
             bytes memory expected =
                 vm.parseJsonBytes(raw, string.concat(base, ".absentValueHex"));
             try proxy.canonicalAbsence(cellKind) returns (
@@ -842,7 +857,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
                     string.concat("canonicalAbsentValue reverted ", describeRevert(err)));
             }
         }
-        assertEq(n, 15, "every cell kind must be covered");
+        // 15 assigned cell kinds (0..14) minus the two permanent holes
+        // left by the excised bridgeAmmReserve* books (7, 8).
+        assertEq(n, 13, "every live cell kind must be covered");
     }
 
     /// @notice A NON-marker value is not classified as absent.
@@ -1032,31 +1049,39 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice The bulk pair is refused, and only the bulk pair.
+    /// @notice The bulk pair and the retired kind 23 are refused, and
+    ///         only those.
     /// @dev    The deployment decision made executable.  A gate never
     ///         observed to fire is indistinguishable from an absent
     ///         one, so both directions are checked.
-    function test_writeSet_refuses_only_the_bulk_pair() public {
+    function test_writeSet_refuses_the_bulk_pair_and_the_retired_kind() public {
         // Long enough for EVERY adjudicable kind's `_need` floor: the
-        // widest is `depositWithFee` at 104 bytes once both amounts
-        // ride the 32-byte field.
-        bytes memory fields = new bytes(104);
+        // widest is `depositWithFee` at 136 bytes once all three
+        // amounts — the Workstream SB seed included — ride the
+        // 32-byte field.
+        bytes memory fields = new bytes(136);
         vm.expectRevert(
             abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(6)));
         proxy.deriveWriteSet(6, fields, 7, 0);
         vm.expectRevert(
             abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(7)));
         proxy.deriveWriteSet(7, fields, 7, 0);
+        // The retired kind 23 (the L1-AMM ammSwap mirror) is a
+        // permanent hole, refused exactly like a never-assigned kind.
+        vm.expectRevert(
+            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(23)));
+        proxy.deriveWriteSet(23, fields, 7, 0);
         // An unknown kind is refused too — a new `Action` constructor
         // must be considered rather than defaulting into the
-        // kernel-identity family.
+        // kernel-identity family.  26 is the first unassigned index
+        // (Workstream SB seated `reserveSwap` at 25).
         vm.expectRevert(
-            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(25)));
-        proxy.deriveWriteSet(25, fields, 7, 0);
+            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(26)));
+        proxy.deriveWriteSet(26, fields, 7, 0);
         // ...and every adjudicable kind still derives.
-        for (uint8 k = 0; k <= 24; k++) {
+        for (uint8 k = 0; k <= 25; k++) {
             beginEntry(string.concat("#", vm.toString(k)));
-            if (k == 6 || k == 7) continue;
+            if (k == 6 || k == 7 || k == 23) continue;
             checkGe(proxy.deriveWriteSet(k, fields, 7, 0).length, 2,
                 "every adjudicable kind writes at least the uniform pair");
         }
@@ -1083,11 +1108,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
     /// @notice GP.11.8 — cross-stack byte-equivalence for
     ///         the actionKind dispatch path.  Every happy fixture's
     ///         `actionKindByte` (the dispatcher byte) must be in
-    ///         0..24 (the Solidity `ActionKind` enum's valid range
-    ///         post-Workstream-GP: 0..18 SVC.5.e variants + 19
-    ///         (DepositWithFee) + 20 (TopUpActionBudget) + 21
+    ///         0..25 excluding the retired 23: 0..18 SVC.5.e variants
+    ///         + 19 (DepositWithFee) + 20 (TopUpActionBudget) + 21
     ///         (TopUpActionBudgetFor) + 22 (ClaimBudgetRefund) +
-    ///         23 (AmmSwap) + 24 (ReclaimAmmReserves)).
+    ///         24 (ReclaimAmmReserves) + 25 (ReserveSwap, Workstream
+    ///         SB); 23 is the retired L1-AMM ammSwap mirror, a
+    ///         permanent hole no happy fixture may carry.
     ///         An out-of-range dispatcher would revert in
     ///         `_toActionKind`.
     function test_perEntry_actionKindByte_in_range() public {
@@ -1108,7 +1134,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 continue;
             }
             uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            checkLe(kind, 24, string.concat("actionKindByte out of range for ", base));
+            checkLe(kind, 25, string.concat("actionKindByte out of range for ", base));
+            checkEq(
+                kind == 23 ? 1 : 0,
+                0,
+                string.concat("retired kind 23 must carry no happy fixture at ", base)
+            );
         }
     }
 

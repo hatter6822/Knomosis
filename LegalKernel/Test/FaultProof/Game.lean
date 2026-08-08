@@ -38,7 +38,8 @@ private def initialGame : LegalKernel.FaultProof.GameState := {
   sequencerBond   := 1_000,
   challengerBond  := 50,
   status          := .inProgress,
-  deploymentId    := ByteArray.empty
+  deploymentId    := ByteArray.empty,
+  actionsRoot     := ByteArray.empty
 }
 
 /-- Tests for the bisection game data types + transitions. -/

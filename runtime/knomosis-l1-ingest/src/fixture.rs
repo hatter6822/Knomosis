@@ -65,6 +65,7 @@
 use crate::action::EthAddress;
 use crate::events::IngestedEvent;
 use crate::translation::UnsignedAction;
+use knomosis_amount::Amount;
 
 /// Tag bytes for the event variants in the fixture input format.
 const EVENT_TAG_REGISTERED_ECDSA: u8 = 0;
@@ -236,20 +237,18 @@ pub fn encode_input(input: &FixtureInput) -> Result<Vec<u8>, FixtureError> {
         }
         IngestedEvent::AmmDisabled {
             timestamp,
-            reserve_eth,
-            reserve_bold,
             block_number,
             tx_hash,
             log_index,
         } => {
-            // GP.11.10: the one-way kill switch marker.
+            // GP.11.10: the one-way kill switch marker.  (The two
+            // reserve-snapshot words left with the excised L1
+            // reserve books.)
             out.push(EVENT_TAG_AMM_DISABLED);
             out.extend_from_slice(&block_number.to_be_bytes());
             out.extend_from_slice(tx_hash);
             out.extend_from_slice(&log_index.to_be_bytes());
             out.extend_from_slice(timestamp);
-            out.extend_from_slice(reserve_eth);
-            out.extend_from_slice(reserve_bold);
         }
     }
     // Address book.
@@ -440,17 +439,12 @@ fn decode_event(bytes: &[u8], cursor: &mut usize) -> Result<IngestedEvent, Fixtu
             })
         }
         EVENT_TAG_AMM_DISABLED => {
-            // GP.11.10: the one-way kill switch marker.
+            // GP.11.10: the one-way kill switch marker (timestamp
+            // only since the L1-AMM excision).
             let mut timestamp = [0u8; 32];
             timestamp.copy_from_slice(read_bytes(bytes, cursor, 32)?);
-            let mut reserve_eth = [0u8; 32];
-            reserve_eth.copy_from_slice(read_bytes(bytes, cursor, 32)?);
-            let mut reserve_bold = [0u8; 32];
-            reserve_bold.copy_from_slice(read_bytes(bytes, cursor, 32)?);
             Ok(IngestedEvent::AmmDisabled {
                 timestamp,
-                reserve_eth,
-                reserve_bold,
                 block_number,
                 tx_hash,
                 log_index,
@@ -779,10 +773,16 @@ impl FeeSplitInput {
             r: self.resource_id,
             recipient: self.recipient,
             pool_actor: self.pool_actor,
-            user_amount,
-            pool_amount,
+            user_amount: Amount::from(user_amount),
+            pool_amount: Amount::from(pool_amount),
             budget_grant,
             deposit_id: self.deposit_id,
+            // The fee-split model mirrors the L1 `DepositFeeSplit`
+            // computation, which carries no seed input; the AMM seed
+            // leg (Workstream SB) is attested separately by the
+            // deposit-materialisation path, so the corpus action is
+            // seedless.
+            seed_amount: Amount::from_u64(0),
         })
     }
 }
@@ -898,6 +898,7 @@ mod tests {
         decode_expected, decode_input, encode_expected, encode_input, FixtureError,
         FixtureExpected, FixtureInput,
     };
+    use crate::action::Amount;
     use crate::action::{Action, EthAddress, PublicKey};
     use crate::events::IngestedEvent;
     use crate::translation::UnsignedAction;
@@ -974,15 +975,9 @@ mod tests {
     fn amm_disabled_roundtrip() {
         let mut ts = [0u8; 32];
         ts[31] = 42;
-        let mut re = [0u8; 32];
-        re[30] = 1;
-        let mut rb = [0u8; 32];
-        rb[31] = 7;
         let input = FixtureInput {
             event: IngestedEvent::AmmDisabled {
                 timestamp: ts,
-                reserve_eth: re,
-                reserve_bold: rb,
                 block_number: 1234,
                 tx_hash: [0xAB; 32],
                 log_index: 5,
@@ -1377,15 +1372,18 @@ mod tests {
                 pool_amount,
                 budget_grant,
                 deposit_id,
+                seed_amount,
             } => {
                 assert_eq!(r, 0);
                 assert_eq!(recipient, 7);
                 assert_eq!(pool_actor, 2);
                 assert_eq!(deposit_id, 42);
                 let (eu, ep, eb) = input.split();
-                assert_eq!(user_amount, eu);
-                assert_eq!(pool_amount, ep);
+                assert_eq!(user_amount, Amount::from(eu));
+                assert_eq!(pool_amount, Amount::from(ep));
                 assert_eq!(budget_grant, eb);
+                // The fee-split model is seedless (see `to_action`).
+                assert_eq!(seed_amount, Amount::from_u64(0));
             }
             _ => panic!("expected DepositWithFee constructor"),
         }

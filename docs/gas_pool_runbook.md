@@ -428,7 +428,7 @@ benchmark:
   transaction target pre-warmed (EIP-2929).  Test-harness overhead is
   excluded by construction.  This is measured, not modelled — the
   isolated-vs-unisolated deltas decode to the gas as
-  `21 000 + calldata − refunds` on all 21 benchmarks (e.g.
+  `21 000 + calldata − refunds` on all 21 GP.11.9 benchmarks (e.g.
   `closeBoldCircuit` +21 064 = 21 000 + 64 calldata;
   `depositBoldWithFee` +13 816 = 21 000 + 416 − 2 800
   reentrancy-guard reset − 4 800 allowance-clear refund).
@@ -479,9 +479,9 @@ usd ≈ user-tx gas × gas-price-gwei × eth-usd × 10⁻⁹
 (To recover the execution component:
 `execution ≈ user-tx − 21 000 − calldata + refunds`.)  Worked
 examples at 30 gwei and $3 000/ETH: a first-time `depositETHWithFee`
-is a measured 66 261 gas ≈ **$6.0** of L1 gas, which the user absorbs
+is a measured 61 514 gas ≈ **$5.5** of L1 gas, which the user absorbs
 in their bridging UX; the `withdrawWithProof` exit leg is a measured
-≈ 861 000–878 000 gas ≈ **$77.5–79.0** — the dominant cost of the
+≈ 247 500–263 900 gas ≈ **$22.3–23.7** — the dominant cost of the
 round trip (see §9.3).
 
 ### 9.2 Baseline table
@@ -491,31 +491,28 @@ round trip (see §9.3).
 
 | Operation (scenario) | User tx (gas, measured) | of which calldata (gas) | $ @ 30 gwei, $3k/ETH |
 |---|---:|---:|---:|
-| `depositETH` (v1.0 reference, first deposit) | 57 815 | 64 | ~$5.2 |
-| `depositETHWithFee` (first deposit) | 66 488 | 204 | ~$6.0 |
-| `depositETHWithFee` (repeat deposit) | 49 388 | 204 | ~$4.4 |
-| `depositETHWithFee` (repeat, migration-wired bridge) | 52 493 | 204 | ~$4.7 |
-| `depositBoldWithFee` (first deposit) | 94 316 | 416 | ~$8.5 |
-| `depositBoldWithFee` (repeat deposit) | 77 216 | 416 | ~$6.9 |
+| `depositETH` (v1.0 reference, first deposit) | 57 891 | 64 | ~$5.2 |
+| `depositETHWithFee` (first deposit) | 61 514 | 204 | ~$5.5 |
+| `depositETHWithFee` (repeat deposit) | 44 414 | 204 | ~$4.0 |
+| `depositETHWithFee` (repeat, migration-wired bridge) | 47 518 | 204 | ~$4.3 |
+| `depositBoldWithFee` (first deposit) | 89 339 | 416 | ~$8.0 |
+| `depositBoldWithFee` (repeat deposit) | 72 239 | 416 | ~$6.5 |
 | BOLD `approve` (prerequisite, fresh allowance) | 45 961 | 644 | ~$4.1 |
-| `ammSwap` ETH→BOLD (first-ever BOLD recipient) | 75 826 | 684 | ~$6.8 |
-| `ammSwap` ETH→BOLD (repeat recipient) | 58 726 | 684 | ~$5.3 |
-| `ammSwap` ETH→BOLD (repeat, migration-wired bridge) | 61 831 | 684 | ~$5.6 |
-| `ammSwap` BOLD→ETH (exact approval) | 68 193 | 708 | ~$6.1 |
-| `ammSwap` BOLD→ETH (infinite approval) | 69 862 | 708 | ~$6.3 |
-| `withdrawWithProof` ETH (canonical 64-sibling proof) | 795 966 | 38 124 | ~$71.6 |
-| `withdrawWithProof` BOLD (canonical 64-sibling proof) | 812 373 | 38 148 | ~$73.1 |
-| `closeBoldCircuit` | 44 825 | 64 | ~$4.0 |
-| `openBoldCircuit` | 23 007 | 64 | ~$2.1 |
-| `setBoldTvlCap` | 28 112 | 276 | ~$2.5 |
-| `emergencyDisableAmm` | 49 623 | 64 | ~$4.5 |
+| `withdrawWithProof` ETH (canonical 64-sibling proof) | 247 504 | 38 148 | ~$22.3 |
+| `withdrawWithProof` BOLD (canonical 64-sibling proof) | 263 851 | 38 172 | ~$23.7 |
+| `closeBoldCircuit` | 44 759 | 64 | ~$4.0 |
+| `openBoldCircuit` | 22 941 | 64 | ~$2.1 |
+| `setBoldTvlCap` | 28 046 | 276 | ~$2.5 |
+| `emergencyDisableAmm` | 44 806 | 64 | ~$4.0 |
 | `confirmDisable` (3-of-N multisig, non-final confirmation) | 59 615 | 64 | ~$5.4 |
-| `confirmDisable` (3-of-N multisig, threshold-th — executes disable) | 112 612 | 64 | ~$10.1 |
-| Auto-trigger close (first branch, ETH, in shutdown) | 53 811 | 64 | ~$4.8 |
-| Auto-trigger close (last branch, rETH, in shutdown) | 69 067 | 64 | ~$6.2 |
-| Auto-trigger probe (no shutdown — reverts) | 47 271 | 64 | ~$4.3 |
-| `executeStepToRootMulti` (terminal step, 4 distinct cells + policy) | 762 618 | 9 368 | ~$68.6 |
-| `executeStepToRootMulti` (terminal step, one cell deduped to four) | 631 023 | 8 656 | ~$56.8 |
+| `confirmDisable` (3-of-N multisig, threshold-th — executes disable) | 107 795 | 64 | ~$9.7 |
+| Auto-trigger close (first branch, ETH, in shutdown) | 53 745 | 64 | ~$4.8 |
+| Auto-trigger close (last branch, rETH, in shutdown) | 69 001 | 64 | ~$6.2 |
+| Auto-trigger probe (no shutdown — reverts) | 47 205 | 64 | ~$4.2 |
+| `executeStepToRootMulti` (terminal step, 4 distinct cells + policy) | 764 861 | 9 368 | ~$68.8 |
+| `executeStepToRootMulti` (terminal step, one cell deduped to four) | 633 299 | 8 656 | ~$57.0 |
+| `submitStateRoot` (one batched record; amortise over the batch size) | 241 085 | 1 368 | ~$21.7 |
+| `terminateOnSingleStep` (action inclusion proof + adjudicated step) | 1 206 501 | 13 192 | ~$108.6 |
 <!-- END GP.11.9 GENERATED BASELINE TABLE -->
 
 ### 9.3 Cost-structure observations
@@ -539,30 +536,23 @@ the committed baseline, which is why adjacent variant rows exist):
 * **Migration-wired premium ≈ 3.1k gas per operation.**  Production
   deployments that pre-wire a predicted `KnomosisMigration` successor
   (solidity/README, "Production deployment notes") pay one external
-  `activated()` read in every `circuitOpen` operation and every
-  `ammSwap` — measured by the two "migration-wired" rows (+3 107 on
-  the deposit, +3 110 on the swap).  Initial deployments with
-  `migration = address(0)` skip it.
-* **Exact vs infinite approval: refunds invert the per-swap story.**
-  Per transaction, the exact-approval BOLD→ETH swap (68 204) is
-  ~1.7k CHEAPER than the infinite-approval one (69 870): clearing the
-  allowance to zero earns a 4 800 EIP-3529 refund that outweighs the
-  ~3.1k execution the infinite shape saves by skipping the allowance
-  write.  Per FLOW the ranking flips back: the exact shape needs a
-  fresh ~46k `approve` before every swap (~114k per swap all-in),
-  while the infinite shape pays its ~46k approve once — so infinite
-  approval wins from the second swap onward.  The same trade applies
-  to `depositBoldWithFee`.
+  `activated()` read in every `circuitOpen` operation — measured by
+  the "migration-wired" deposit row (+3 107).  Initial deployments
+  with `migration = address(0)` skip it.
+* **Exact vs infinite approval: refunds can invert a per-transaction
+  story.**  Clearing a BOLD allowance to zero earns a 4 800 EIP-3529
+  refund, but per FLOW the exact-approval shape needs a fresh ~46k
+  `approve` before every operation while the infinite shape pays its
+  ~46k approve once — so infinite approval wins from the second
+  operation onward.  The trade applies to `depositBoldWithFee`.
 * **The exit leg dominates the round trip.**  `withdrawWithProof`
-  costs a measured ~861–878k per transaction (~13× a repeat deposit),
-  of which ~37.9k is the ~2.7 kB, 64-sibling proof calldata and the
-  bulk of the execution is the byte-loop CBE decode of that blob (the
-  64-keccak SMT walk itself is a few thousand gas).  Verification gas
-  is essentially independent of tree population
-  (`SmtVerifier.recomputeRoot` always walks all 64 levels over
-  same-sized siblings).  Operators quoting "bridging cost" should
-  quote deposit + withdrawal; a future calldata-slice decoder is the
-  obvious optimisation target if exit costs ever matter commercially.
+  costs a measured ~247.5–263.9k per transaction (~5.6× a repeat
+  deposit), of which ~38.1k is the 64-sibling proof calldata and the
+  bulk of the execution is the CBE decode of that blob plus the
+  64-keccak SMT walk.  Verification gas is essentially independent
+  of tree population (`SmtVerifier.recomputeRoot` always walks all
+  64 levels over same-sized siblings).  Operators quoting "bridging
+  cost" should quote deposit + withdrawal.
 * **Keeper-probe budgeting.**  The no-shutdown probe row (a measured
   47 250 per probe ≈ $4.3 at the reference prices) is measured through
   a plain low-level call — no test cheatcode interferes with the
@@ -597,34 +587,112 @@ the committed baseline, which is why adjacent variant rows exist):
   first fee-split deposit; the no-shutdown probe "up to ~100k" vs a
   measured 47 250).
 
+### 9.5 Rollup economics: batched submission amortisation (Workstream SB)
+
+Batched state-root submission changed the L2's cost structure from
+**one L1 record per action** to **one L1 record per batch**.  A
+`submitStateRoot(end, prevEnd, stateCommit, actionsRoot)` covers every
+L2 action in `[prevEnd, end)` with one fixed-size record, one bond,
+and one chain-link fold — its gas is **batch-size-independent** (the
+measured `submitStateRoot_batch` row: 238 963 gas, of which 1 368 is
+the fixed 4-word calldata).  The amortised L1 cost per L2 action is
+therefore that constant divided by the batch size:
+
+| Batch size B | Amortised L1 gas / action | $ / action @ 30 gwei, $3k/ETH |
+|---:|---:|---:|
+| 1 (the retired per-action regime) | 238 963 | $21.51 |
+| 10 | 23 896 | $2.15 |
+| 100 | 2 390 | $0.215 |
+| 1 000 | **239** | **$0.0215** |
+| 10 000 | 23.9 | $0.00215 |
+| 65 536 (the default `MAX_ACTIONS_PER_BATCH`) | 3.6 | $0.00033 |
+
+At the reference cadence (a batch of 1 000 actions), an L2 action
+carries **≈239 gas of amortised L1 cost ≈ 2.2¢** — the same class as
+established optimistic rollups, versus ~$21.5/action under the
+retired one-record-per-action regime.  The batch size is an
+operational choice: larger batches amortise further but delay
+finalisation (the whole batch shares one dispute window) and
+concentrate more actions under one bond.
+
+**The dispute path is priced separately and paid only when a batch is
+disputed.**  The measured `terminateOnSingleStep_withInclusion` row —
+1 206 393 gas ≈ $108.6 — is the terminal transaction of a batch
+dispute: the disputed action re-derived as its signature-bound leaf,
+verified by inclusion against the batch's submitted actions root, its
+SIGNATURE verified against the signer's registered key, and the whole
+step adjudicated on the step VM's deduplicating multiproof.  Bisection
+moves before it are small fixed-cost calls (a midpoint store, an
+agree/disagree flag).  On the honest path nobody pays any of this;
+the game's bond economics (§`deployment_parameters.md`) make the
+loser fund the winner, so the expected cost of DEFENDING a correct
+batch is the bond's opportunity cost, not the gas.
+
+The row moved +187 216 gas (+18.4%) when Workstream F-A added the
+signature check, and the increase is the check itself rather than
+overhead around it: a 256-level SMT walk opening the signer's
+registry cell against the disputed range's pre-root, a MODEXP call
+decompressing the SEC1 key, `ecrecover` over the digest, and the
+canonical §8.8.5 sign-input rebuilt on-chain from the packed action
+fields.  It buys the property the fault proof was missing — before
+it, a batch could commit an action nobody signed and the terminal
+step would DEFEND it, because the step VM cannot evaluate the
+signature scheme.  The cost lands on a path taken only under dispute
+and funded by the losing party's bond, so it does not touch the
+per-action amortised figure above.
+
+### 9.6 One AMM venue: the L2 reserve swap
+
+The deployment runs **one AMM venue**: the **L2 reserve swap**
+(`Laws.reserveSwap`, Action 25) over the L2 reserve actor's live
+balances, priced in-kernel by `AmmMath.getAmountOut`
+(`swapFeeBps = 30`, corpus-pinned across all three stacks) and funded
+by the deposit fee-split's seed leg (`ammSeedAmount` credited on L2;
+the backing wei stays in the bridge's general escrow).
+
+The embedded L1 AMM that used to sit beside it — `ammSwap`, the
+`ammReserveEth` / `ammReserveBold` books, and the L2 bridge-attested
+mirror at Action 23 — was **excised before any deployment existed**
+(no contract was live, so no liquidity was stranded).  The
+excision closes what would otherwise be a standing two-venue price
+gap: one pool means one spot price, no arbitrage channel to monitor,
+and no L1→L2 swap-mirror pipeline to build.  An L2 swap costs ~239
+gas of amortised L1 (§9.5); users needing L1-side ETH↔BOLD
+conversion use an external DEX.  Action index 23 and Event tag 21
+are permanent holes: the decoders on all three stacks refuse them
+like never-assigned tags, and they must never be reused.
+
 ---
 
 ## 10. AMM disaster recovery (`emergencyDisableAmm`; WU GP.11.10)
 
-The embedded ETH↔BOLD AMM ships a **one-way kill switch**:
+The L2 AMM ships a **one-way kill switch** on the L1 bridge:
 `emergencyDisableAmm()`, callable only by the immutable
 `ammDisasterRecovery` role.  Once fired:
 
-* every `ammSwap` reverts `AmmIsDisabled` (both directions, forever
-  within this deployment);
-* deposit-time AMM seeding stops (`_seedAmmReserves` early-outs, so
-  the whole pool fee routes to sequencer-claimable free reserves);
-* the reserves are **preserved** — nothing is zeroed, moved, or paid
-  out by the disable itself.  `ammReserveEth` / `ammReserveBold`
-  freeze at their pre-disable values and remain part of the bridge's
-  escrow; their L2 representation is then re-tagged as free gas-pool
-  funds through the bridge-attested `Action.reclaimAmmReserves`
-  exact sweep (§10.4), after which the sequencer claims them through
-  the existing `gasPoolPolicy` mechanism;
+* the `ammDisabled` flag is set and committed to the state root,
+  where the L2 admission gate refuses every new `reserveSwap`
+  (Action 25) — the `BridgeAdmissibleWith` conjunct requires
+  `ammDisabled = false`;
+* deposit-time AMM seeding stops (`_ammSeedSplit` early-outs, so
+  the whole pool fee routes to sequencer-claimable free reserves
+  and the emitted `ammSeedAmount` is 0);
+* the L2 reserve actor's balances are **preserved** — nothing is
+  zeroed, moved, or paid out by the disable itself.  They are then
+  re-tagged as free gas-pool funds through the bridge-attested
+  `Action.reclaimAmmReserves` exact sweep (§10.4), which is
+  admissible only under `ammDisabled = true`, after which the
+  sequencer claims them through the existing `gasPoolPolicy`
+  mechanism;
 * everything else keeps working: deposits (both legs), withdrawals
   (`withdrawWithProof`), state-root submission, disputes, and the
-  BOLD circuit breaker are all untouched.  The bridge degrades to
-  the v1.2 "external L1 DEX" mode for ETH↔BOLD conversion.
+  BOLD circuit breaker are all untouched.  ETH↔BOLD conversion
+  degrades to external DEXes.
 
 This is a *graceful shutdown of the AMM, not a value drain*.  The
-three properties are pinned as forge tests
-(`AmmKillSwitch.t.sol`): `emergencyDisableAmm_preserves_reserves`,
-`ammDisabled_implies_swap_reverts`, `ammDisabled_is_monotonic`.
+flag-only semantics and its monotonicity are pinned as forge tests
+(`AmmKillSwitch.t.sol`), and the L2 refusal is pinned by
+`reserveSwap_inadmissible_while_amm_disabled` on the Lean side.
 
 **One-way by design.**  `ammDisabled` cannot be unset.  Reactivating
 the AMM requires a fresh `KnomosisBridge` deployment via
@@ -638,17 +706,17 @@ switch takes precedence (`AmmIsDisabled` is the revert you will see).
 
 Invoke `emergencyDisableAmm()` when any of the following holds:
 
-* **Reserve-depth pathology.**  Either reserve leg drops below
-  `MIN_VIABLE_DEPTH_USD = $10 000` (at spot prices) AND off-bridge
-  arbitrage has not restored depth within **24 hours**.  A thin leg
-  means even tiny swaps cause huge slippage — the AMM is
-  functionally stuck even though the curve has mathematically not
-  "drained" (the GP.11.3 no-drain theorem still holds).
+* **Reserve-depth pathology.**  Either leg of the L2 reserve
+  actor's balances drops below `MIN_VIABLE_DEPTH_USD = $10 000` (at
+  spot prices) AND arbitrage has not restored depth within
+  **24 hours**.  A thin leg means even tiny swaps cause huge
+  slippage — the pool is functionally stuck even though the curve
+  has mathematically not "drained" (the no-drain theorem
+  `reserveSwap_no_reserve_drain` still holds).
 * **Math bug suspected.**  Any reproducible discrepancy between the
-  Lean fixture reference (`crosscheck-amm-getamountout` /
-  `crosscheck-amm-swap` corpora) and Solidity execution output, or
-  an on-chain `AmmKInvariantViolated` revert (which should be
-  mathematically unreachable).
+  Lean fixture reference (the `crosscheck-amm-getamountout` corpus
+  or the kind-25 `step_vm.json` rows) and the Solidity step-VM
+  quote derivation.
 * **Liquity V2 unreachable.**  Persistent `LiquityV2ReadFailed`
   errors AND operator-side monitoring confirms a Liquity-V2 contract
   failure (not just an integration bug on our side).  Note: a mere
@@ -717,8 +785,8 @@ pre-wired `KnomosisMigration` successors):
    confirms.  Watch `confirmationCount()` / `DisableConfirmed`.
 3. The third (threshold-th) confirmation executes
    `emergencyDisableAmm()` atomically.  Confirm
-   `bridge.ammDisabled() == true` and that the `AmmDisabled` event
-   carries the expected frozen reserves.
+   `bridge.ammDisabled() == true` and that the `AmmDisabled(uint256)`
+   event fired with the expected timestamp.
 4. If the incident resolves before quorum: every confirmed signer
    calls `revokeConfirmation()`.  Do not rely solely on the 7-day
    expiry.
@@ -726,9 +794,9 @@ pre-wired `KnomosisMigration` successors):
 ### 10.4 Recovery decision tree (post-disable)
 
 1. **Run a post-mortem (1–7 days).**  Root-cause the trigger
-   condition; reconcile the frozen reserves against
-   `address(bridge).balance` / `BOLD.balanceOf(bridge)` and the L2
-   accounting equation.
+   condition; reconcile the L2 reserve actor's balances against the
+   bridge escrow (`address(bridge).balance` /
+   `BOLD.balanceOf(bridge)`) and the L2 accounting equation.
 2. **Commit the L2 mirror, then sweep the L2 reserves.**  The
    sequencer commits `BridgeState.ammDisabled = true` in the next
    state root (§10.5) and then materialises one bridge-signed
@@ -751,15 +819,14 @@ pre-wired `KnomosisMigration` successors):
 3. **Decide: redeploy or degraded mode.**
    * **Redeploy path:** prepare a new `KnomosisBridge` deployment
      via `KnomosisMigration` (with corrected parameters or patched
-     code).  The reserves carry over physically with the rest of
-     the escrow; the new contract's AMM is seeded fresh from
-     post-migration deposits per its `ammSeedRatioBps`.
-   * **Degraded path:** operate permanently without the embedded
-     AMM.  The sequencer converts ETH↔BOLD on external L1 DEXes
-     (the v1.2 posture); document the expected per-claim MEV/fee
-     cost increase.  All other v1.3 mechanisms (fee-split deposits,
-     budgets, gas-pool claims, circuit breaker) remain fully
-     functional.
+     code).  The escrow carries over physically; the L2 pool is
+     re-seeded from post-migration deposits per the new
+     deployment's `ammSeedRatioBps`.
+   * **Degraded path:** operate permanently without the AMM.  The
+     sequencer converts ETH↔BOLD on external L1 DEXes; document
+     the expected per-claim MEV/fee cost increase.  All other v1.3
+     mechanisms (fee-split deposits, budgets, gas-pool claims,
+     circuit breaker) remain fully functional.
 
 ### 10.5 State-root visibility (the Lean-side mirror)
 

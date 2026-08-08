@@ -11,6 +11,7 @@
 //! and the translation function across pseudo-random inputs to
 //! catch edge cases the curated unit tests miss.
 
+use knomosis_amount::Amount;
 use knomosis_l1_ingest::action::{Action, EthAddress, PublicKey};
 use knomosis_l1_ingest::address_book::AddressBook;
 use knomosis_l1_ingest::encoding::{encode_action, encode_signed_action, signing_input};
@@ -215,23 +216,26 @@ proptest! {
         pool_amount in any::<u64>(),
         budget_grant in any::<u64>(),
         deposit_id in any::<u64>(),
+        seed_amount in any::<u64>(),
     ) {
         let action = Action::DepositWithFee {
             r,
             recipient,
             pool_actor,
-            user_amount: u128::from(user_amount),
-            pool_amount: u128::from(pool_amount),
+            user_amount: Amount::from(user_amount),
+            pool_amount: Amount::from(pool_amount),
             budget_grant,
             deposit_id,
+            seed_amount: Amount::from(seed_amount),
         };
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
         prop_assert_eq!(&e1, &e2);
         // Layout invariant: 6 × 9-byte CBE uint heads (tag, r,
-        // recipient, poolActor, budgetGrant, depositId) + 2 × 33-byte
-        // amount heads (userAmount, poolAmount).
-        prop_assert_eq!(e1.len(), 120);
+        // recipient, poolActor, budgetGrant, depositId) + 3 × 33-byte
+        // amount heads (userAmount, poolAmount, and the Workstream SB
+        // appended seedAmount).
+        prop_assert_eq!(e1.len(), 153);
     }
 }
 
@@ -248,15 +252,17 @@ proptest! {
         pool_amount in any::<u64>(),
         budget_grant in any::<u64>(),
         deposit_id in any::<u64>(),
+        seed_amount in any::<u64>(),
     ) {
         let mk = |r: u64| Action::DepositWithFee {
             r,
             recipient,
             pool_actor,
-            user_amount: u128::from(user_amount),
-            pool_amount: u128::from(pool_amount),
+            user_amount: Amount::from(user_amount),
+            pool_amount: Amount::from(pool_amount),
             budget_grant,
             deposit_id,
+            seed_amount: Amount::from(seed_amount),
         };
         let eth = encode_action(&mk(0)).unwrap();
         let bold = encode_action(&mk(1)).unwrap();
@@ -285,7 +291,7 @@ proptest! {
     ) {
         let action = Action::TopUpActionBudget {
             gas_resource,
-            gas_amount: u128::from(gas_amount),
+            gas_amount: Amount::from(gas_amount),
             budget_increment,
             pool_actor,
         };
@@ -311,7 +317,7 @@ proptest! {
         let action = Action::TopUpActionBudgetFor {
             recipient,
             gas_resource,
-            gas_amount: u128::from(gas_amount),
+            gas_amount: Amount::from(gas_amount),
             budget_increment,
             pool_actor,
         };
@@ -338,14 +344,14 @@ proptest! {
     ) {
         let self_funded = Action::TopUpActionBudget {
             gas_resource,
-            gas_amount: u128::from(gas_amount),
+            gas_amount: Amount::from(gas_amount),
             budget_increment,
             pool_actor,
         };
         let delegated = Action::TopUpActionBudgetFor {
             recipient,
             gas_resource,
-            gas_amount: u128::from(gas_amount),
+            gas_amount: Amount::from(gas_amount),
             budget_increment,
             pool_actor,
         };

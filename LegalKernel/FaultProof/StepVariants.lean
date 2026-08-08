@@ -89,7 +89,7 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   -- consumed-deposit map to verify the deposit hasn't already
   -- been credited (mirroring `deposit`).  topUpActionBudget only
   -- reads the signer's registry entry.
-  | .depositWithFee _ _ _ _ _ _ d, signer =>
+  | .depositWithFee _ _ _ _ _ _ d _, signer =>
       [.registry signer, .bridgeConsumed d]
   | .topUpActionBudget _ _ _ _,    signer => [.registry signer]
   -- GP.3.4: delegated top-up reads only the signer's registry entry
@@ -101,16 +101,23 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   -- (over the signer's epoch budget + the trusted rate), not L1
   -- step-VM cell reads.
   | .claimBudgetRefund _ _ _ _,    signer => [.registry signer]
-  -- GP.11.4: L2 AMM swap.  Reads only the signer's registry entry.
-  -- The swap is bridge-attested; no deposit-id dedup is needed (the
-  -- L1 contract prevents double-execution operationally via
-  -- nonReentrant + single-atomic-swap semantics).
-  | .ammSwap _ _ _ _ _,            signer => [.registry signer]
   -- GP.11.10: post-disable reserve sweep.  Reads only the signer's
   -- registry entry; the exact-sweep + kill-switch gates are
   -- admission-layer checks (`BridgeAdmissibleWith` conjunct 9 over the
   -- L2 `ammDisabled` mirror), not L1 step-VM cell reads.
   | .reclaimAmmReserves _ _ _ _,   signer => [.registry signer]
+  -- Workstream SB: the user swap.  Reads only the signer's registry
+  -- entry — every cell the quote is priced FROM (the reserve's two
+  -- balances, the user's from-balance) is also WRITTEN, so they live
+  -- in `writeCells`, whose openings carry the pre-values the L1
+  -- verifier re-derives the quote from.  The Workstream-AX
+  -- `ammDisabled = false` halt is an admission-layer check
+  -- (`BridgeAdmissibleWith` conjunct 10 over the L2 mirror), not an
+  -- L1 step-VM cell read — the same posture as the reclaim gate
+  -- below, and the game-enforceable half of the disable story is the
+  -- post-sweep minimum-liquidity no-op the law's own precondition
+  -- carries.
+  | .reserveSwap _ _ _ _ _ _,      signer => [.registry signer]
 
 /-- The cell tags an action writes.  Per the §4.13 contract,
     every action advances the signer's nonce; the per-action
@@ -181,13 +188,19 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- contract is authoritative for game state).
   | .faultProofChallenge _ _ _ _,  signer => [.nonce signer, .epochBudget signer]
   | .faultProofResolution _ _ _ _, signer => [.nonce signer, .epochBudget signer]
-  -- Workstream GP (v1.0): depositWithFee writes the recipient's
-  -- balance, the poolActor's balance, the bridge-consumed cell,
-  -- and the signer's nonce.  The recipient's epoch-budget
-  -- update (budget grant) is an admission-layer effect; at the
-  -- L1 step-VM action-level we only declare kernel-state writes.
-  | .depositWithFee r recipient poolActor _ _ _ d, signer =>
-      [.balance r recipient, .balance r poolActor, .bridgeConsumed d,
+  -- Workstream GP (v1.0) + SB: depositWithFee writes the recipient's
+  -- balance, the poolActor's balance, the canonical AMM reserve's
+  -- balance (the seed leg — the reserve target is a COMPILE-pinned
+  -- law parameter, so the cell is `Bridge.ammReserveActor` by
+  -- construction, never an action field), the bridge-consumed cell,
+  -- and the signer's nonce.  The three balance cells lead (plan
+  -- slots 0..2 on the Solidity mirror).  The recipient's
+  -- epoch-budget update (budget grant) is an admission-layer effect;
+  -- at the L1 step-VM action-level we only declare kernel-state
+  -- writes.
+  | .depositWithFee r recipient poolActor _ _ _ d _, signer =>
+      [.balance r recipient, .balance r poolActor,
+       .balance r Bridge.ammReserveActor, .bridgeConsumed d,
        .nonce signer, .epochBudget signer, .epochBudget recipient]
   -- topUpActionBudget writes the signer's gas balance, the
   -- poolActor's gas balance, and the signer's nonce.  The
@@ -212,16 +225,20 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- step-VM's static cell declaration.
   | .claimBudgetRefund gr _ _ pa,  signer =>
       [.balance gr signer, .balance gr pa, .nonce signer, .epochBudget signer]
-  -- GP.11.4: L2 AMM swap writes the ammReserveActor's balances at
-  -- BOTH resources (credit at fromResource, debit at toResource) plus
-  -- the signer's nonce.
-  | .ammSwap fr tr _ _ ra,         signer =>
-      [.balance fr ra, .balance tr ra, .nonce signer, .epochBudget signer]
   -- GP.11.10: post-disable reserve sweep writes BOTH actors' balances
   -- at the single swept resource (debit the reserve actor to zero,
   -- credit the pool actor) plus the signer's nonce.
   | .reclaimAmmReserves r _ ra pa, signer =>
       [.balance r ra, .balance r pa, .nonce signer, .epochBudget signer]
+  -- Workstream SB: the user swap writes FOUR balance cells — the user
+  -- and the reserve each at both resources, listed in the law's write
+  -- order (user debit at `fr`, reserve credit at `fr`, reserve debit
+  -- at `tr`, user credit at `tr`) — plus the signer's nonce.  The
+  -- openings of these four cells carry exactly the pre-values the L1
+  -- verifier needs to re-derive the constant-product quote.
+  | .reserveSwap fr tr user _ _ ra, signer =>
+      [.balance fr user, .balance fr ra, .balance tr ra, .balance tr user,
+       .nonce signer, .epochBudget signer]
 
 /-- The cells an action writes whose KEY is a function of the
     pre-state rather than of the action.

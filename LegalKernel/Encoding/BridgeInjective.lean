@@ -334,11 +334,11 @@ The inner-record injectivity theorem for the 4-field
 `Encoding/State.lean`). -/
 
 /-- EI.7.b — `Bridge.PendingWithdrawal.encode_injective`.  Equal
-    canonical encodings imply structural equality on the 4-field
+    canonical encodings imply structural equality on the 5-field
     record.
 
-    **Hypotheses.**  Canonical-encoding bounds on the three `Nat`
-    fields (resource, amount, l2LogIndex).  The recipient
+    **Hypotheses.**  Canonical-encoding bounds on the four `Nat`
+    fields (resource, amount, l2LogIndex, wdId).  The recipient
     (`EthAddress`) has no explicit bound: `toBytes` always produces
     a fixed 20-byte payload that satisfies the underlying
     `byteArray_roundtrip`'s size bound unconditionally. -/
@@ -347,13 +347,15 @@ theorem Bridge.PendingWithdrawal.encode_injective
     (h_res₁ : wd₁.resource.toNat < 256 ^ 8)
     (h_amt₁ : wd₁.amount < 256 ^ 32)
     (h_idx₁ : wd₁.l2LogIndex < 256 ^ 8)
+    (h_wid₁ : wd₁.wdId < 256 ^ 8)
     (h_res₂ : wd₂.resource.toNat < 256 ^ 8)
     (h_amt₂ : wd₂.amount < 256 ^ 32)
     (h_idx₂ : wd₂.l2LogIndex < 256 ^ 8)
+    (h_wid₂ : wd₂.wdId < 256 ^ 8)
     (h : Bridge.PendingWithdrawal.encode wd₁ = Bridge.PendingWithdrawal.encode wd₂) :
     wd₁ = wd₂ := by
-  have r₁ := pendingWithdrawal_roundtrip wd₁ [] h_res₁ h_amt₁ h_idx₁
-  have r₂ := pendingWithdrawal_roundtrip wd₂ [] h_res₂ h_amt₂ h_idx₂
+  have r₁ := pendingWithdrawal_roundtrip wd₁ [] h_res₁ h_amt₁ h_idx₁ h_wid₁
+  have r₂ := pendingWithdrawal_roundtrip wd₂ [] h_res₂ h_amt₂ h_idx₂ h_wid₂
   simp at r₁ r₂
   rw [h] at r₁
   have heq : (Except.ok (wd₁, ([] : Stream))
@@ -374,9 +376,11 @@ theorem Bridge.PendingWithdrawal.encodeAsBytes_injective
     (h_res₁ : wd₁.resource.toNat < 256 ^ 8)
     (h_amt₁ : wd₁.amount < 256 ^ 32)
     (h_idx₁ : wd₁.l2LogIndex < 256 ^ 8)
+    (h_wid₁ : wd₁.wdId < 256 ^ 8)
     (h_res₂ : wd₂.resource.toNat < 256 ^ 8)
     (h_amt₂ : wd₂.amount < 256 ^ 32)
     (h_idx₂ : wd₂.l2LogIndex < 256 ^ 8)
+    (h_wid₂ : wd₂.wdId < 256 ^ 8)
     (h : Bridge.PendingWithdrawal.encodeAsBytes wd₁ =
          Bridge.PendingWithdrawal.encodeAsBytes wd₂) :
     wd₁ = wd₂ := by
@@ -389,7 +393,7 @@ theorem Bridge.PendingWithdrawal.encodeAsBytes_injective
     rw [h_arr]
   rw [List.toList_toArray, List.toList_toArray] at h_list
   exact Bridge.PendingWithdrawal.encode_injective wd₁ wd₂
-    h_res₁ h_amt₁ h_idx₁ h_res₂ h_amt₂ h_idx₂ h_list
+    h_res₁ h_amt₁ h_idx₁ h_wid₁ h_res₂ h_amt₂ h_idx₂ h_wid₂ h_list
 
 /-! ## EI.7.d — `Bridge.BridgeState.encodePending_injective`
 
@@ -424,11 +428,13 @@ theorem Bridge.BridgeState.encodePending_injective
     (h_wd₁ : ∀ p ∈ bs₁.pending.toList,
               p.2.resource.toNat < 256 ^ 8 ∧
               p.2.amount < 256 ^ 32 ∧
-              p.2.l2LogIndex < 256 ^ 8)
+              p.2.l2LogIndex < 256 ^ 8 ∧
+              p.2.wdId < 256 ^ 8)
     (h_wd₂ : ∀ p ∈ bs₂.pending.toList,
               p.2.resource.toNat < 256 ^ 8 ∧
               p.2.amount < 256 ^ 32 ∧
-              p.2.l2LogIndex < 256 ^ 8)
+              p.2.l2LogIndex < 256 ^ 8 ∧
+              p.2.wdId < 256 ^ 8)
     (h : Bridge.BridgeState.encodePending bs₁ =
          Bridge.BridgeState.encodePending bs₂) :
     bs₁.pending.Equiv bs₂.pending := by
@@ -523,8 +529,8 @@ theorem Bridge.BridgeState.encodePending_injective
       have h_wd : bs₁.pending.toList[i].2 = bs₂.pending.toList[i].2 :=
         Bridge.PendingWithdrawal.encodeAsBytes_injective
           bs₁.pending.toList[i].2 bs₂.pending.toList[i].2
-          h_wd_bounds₁.1 h_wd_bounds₁.2.1 h_wd_bounds₁.2.2
-          h_wd_bounds₂.1 h_wd_bounds₂.2.1 h_wd_bounds₂.2.2
+          h_wd_bounds₁.1 h_wd_bounds₁.2.1 h_wd_bounds₁.2.2.1 h_wd_bounds₁.2.2.2
+          h_wd_bounds₂.1 h_wd_bounds₂.2.1 h_wd_bounds₂.2.2.1 h_wd_bounds₂.2.2.2
           h_bytes
       have : (bs₁.pending.toList[i].1, bs₁.pending.toList[i].2)
            = (bs₂.pending.toList[i].1, bs₂.pending.toList[i].2) := by
@@ -591,14 +597,14 @@ private theorem bool_as_nat_injective (b₁ b₂ : Bool)
 
 /-! ## EI.7.e — `Bridge.BridgeState.encode_injective`
 
-The nine-segment concatenation injectivity headline theorem
-(GP.11.8, extended by GP.11.10).
+The seven-segment concatenation injectivity headline theorem
+(GP.11.8, extended by GP.11.10; the two excised L1-AMM book
+segments are gone from the wire).
 `Bridge.BridgeState.encode bs = encodeConsumed bs ++ encodePending bs
-++ encode_nat bs.nextWdId ++ encode_nat bs.ammReserveEth ++
-encode_nat bs.ammReserveBold ++ encode_nat (boolToNat bs.boldCircuitClosed)
+++ encode_nat bs.nextWdId ++ encode_nat (boolToNat bs.boldCircuitClosed)
 ++ encode_nat bs.boldTvlCap ++ encode_nat bs.boldTotalLockedValue ++
 encode_nat (boolToNat bs.ammDisabled)`
-is a flat concatenation of two CBE maps plus seven CBE Nat segments.
+is a flat concatenation of two CBE maps plus five CBE Nat segments.
 
 Proof structure:
 
@@ -607,7 +613,7 @@ Proof structure:
   2. Apply EI.6.c to derive `bs₁.consumed.Equiv bs₂.consumed`.
   3. Repeat step 1 on the pending segment.
   4. Apply EI.7.d to derive `bs₁.pending.Equiv bs₂.pending`.
-  5. Apply `nat_encode_suffix_split` seven times to extract the
+  5. Apply `nat_encode_suffix_split` five times to extract the
      remaining Nat fields.
   6. Apply `bool_as_nat_injective` for `boldCircuitClosed` and
      `ammDisabled`.
@@ -616,14 +622,13 @@ Proof structure:
 /-- EI.7.e — `Bridge.BridgeState.encode_injective`.  Equal canonical
     encodings of two `BridgeState`s imply (1) `Equiv` on the consumed
     map, (2) `Equiv` on the pending map, (3) `Eq` on `nextWdId`,
-    (4–8) `Eq` on the five GP.11.8 AMM/BOLD state fields, and
-    (9) `Eq` on the GP.11.10 `ammDisabled` kill-switch mirror.
+    (4–6) `Eq` on the three GP.11.8 BOLD deposit-guard fields, and
+    (7) `Eq` on the GP.11.10 `ammDisabled` kill-switch mirror.
 
     **Hypotheses.**  Inherits the bounds from EI.6.c (consumed map)
-    and EI.7.d (pending map) plus per-field `< 2^64` bounds for the
-    five trailing scalar CBE Nats (the two Bool fields' bounds are
-    discharged inline since `if b then 1 else 0 < 256^8` is
-    trivial). -/
+    and EI.7.d (pending map) plus per-field bounds for the trailing
+    scalar CBE Nats (the two Bool fields' bounds are discharged
+    inline since `if b then 1 else 0 < 256^8` is trivial). -/
 theorem Bridge.BridgeState.encode_injective
     (bs₁ bs₂ : Bridge.BridgeState)
     (h_cons_len₁ : bs₁.consumed.toList.length < 256 ^ 8)
@@ -651,17 +656,15 @@ theorem Bridge.BridgeState.encode_injective
     (h_pend_wd₁ : ∀ p ∈ bs₁.pending.toList,
                   p.2.resource.toNat < 256 ^ 8 ∧
                   p.2.amount < 256 ^ 32 ∧
-                  p.2.l2LogIndex < 256 ^ 8)
+                  p.2.l2LogIndex < 256 ^ 8 ∧
+                  p.2.wdId < 256 ^ 8)
     (h_pend_wd₂ : ∀ p ∈ bs₂.pending.toList,
                   p.2.resource.toNat < 256 ^ 8 ∧
                   p.2.amount < 256 ^ 32 ∧
-                  p.2.l2LogIndex < 256 ^ 8)
+                  p.2.l2LogIndex < 256 ^ 8 ∧
+                  p.2.wdId < 256 ^ 8)
     (h_nxt₁ : bs₁.nextWdId < 256 ^ 8)
     (h_nxt₂ : bs₂.nextWdId < 256 ^ 8)
-    (h_ammEth₁ : bs₁.ammReserveEth < 256 ^ 32)
-    (h_ammEth₂ : bs₂.ammReserveEth < 256 ^ 32)
-    (h_ammBold₁ : bs₁.ammReserveBold < 256 ^ 32)
-    (h_ammBold₂ : bs₂.ammReserveBold < 256 ^ 32)
     (h_tvlCap₁ : bs₁.boldTvlCap < 256 ^ 32)
     (h_tvlCap₂ : bs₂.boldTvlCap < 256 ^ 32)
     (h_totalLocked₁ : bs₁.boldTotalLockedValue < 256 ^ 32)
@@ -670,13 +673,11 @@ theorem Bridge.BridgeState.encode_injective
     bs₁.consumed.Equiv bs₂.consumed ∧
     bs₁.pending.Equiv bs₂.pending ∧
     bs₁.nextWdId = bs₂.nextWdId ∧
-    bs₁.ammReserveEth = bs₂.ammReserveEth ∧
-    bs₁.ammReserveBold = bs₂.ammReserveBold ∧
     bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
     bs₁.boldTvlCap = bs₂.boldTvlCap ∧
     bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue ∧
     bs₁.ammDisabled = bs₂.ammDisabled := by
-  -- Unfold encode to expose the nine-segment concatenation.
+  -- Unfold encode to expose the seven-segment concatenation.
   unfold Bridge.BridgeState.encode at h
   -- Step 1: Split the consumed prefix from the rest.
   rw [bridgeState_encodeConsumed_eq_via_consumedProj,
@@ -815,21 +816,13 @@ theorem Bridge.BridgeState.encode_injective
     Bridge.BridgeState.encodePending_injective bs₁ bs₂
       h_pend_len₁ h_pend_len₂ h_pend_id₁ h_pend_id₂
       h_pend_size₁ h_pend_size₂ h_pend_wd₁ h_pend_wd₂ h_pend_bytes
-  -- Step 3: Chain-split the seven trailing Nat encodings via
+  -- Step 3: Chain-split the five trailing Nat encodings via
   -- `nat_encode_suffix_split`.  Each application extracts one
   -- Nat equality and advances to the next segment.
   have h_nat_tail := h_split_pend.2
   -- Split nextWdId.
   have ⟨h_nxt, h_after_nxt⟩ :=
     nat_encode_suffix_split bs₁.nextWdId bs₂.nextWdId _ _ h_nxt₁ h_nxt₂ h_nat_tail
-  -- Split ammReserveEth.
-  have ⟨h_ammEth, h_after_ammEth⟩ :=
-    amount_encode_suffix_split bs₁.ammReserveEth bs₂.ammReserveEth _ _
-      h_ammEth₁ h_ammEth₂ h_after_nxt
-  -- Split ammReserveBold.
-  have ⟨h_ammBold, h_after_ammBold⟩ :=
-    amount_encode_suffix_split bs₁.ammReserveBold bs₂.ammReserveBold _ _
-      h_ammBold₁ h_ammBold₂ h_after_ammEth
   -- Split boldCircuitClosed (encoded as Nat 0/1).
   have h_circuitBound₁ : (if bs₁.boldCircuitClosed then 1 else 0 : Nat) < 256 ^ 8 := by
     have : (1 : Nat) < 256 ^ 8 := by decide
@@ -841,7 +834,7 @@ theorem Bridge.BridgeState.encode_injective
     nat_encode_suffix_split
       (if bs₁.boldCircuitClosed then 1 else 0)
       (if bs₂.boldCircuitClosed then 1 else 0)
-      _ _ h_circuitBound₁ h_circuitBound₂ h_after_ammBold
+      _ _ h_circuitBound₁ h_circuitBound₂ h_after_nxt
   have h_circuit : bs₁.boldCircuitClosed = bs₂.boldCircuitClosed :=
     bool_as_nat_injective _ _ h_circuitNat
   -- Split boldTvlCap.
@@ -869,7 +862,7 @@ theorem Bridge.BridgeState.encode_injective
       h_disabledBound₁ h_disabledBound₂ h_after_totalLocked
   have h_disabled : bs₁.ammDisabled = bs₂.ammDisabled :=
     bool_as_nat_injective _ _ h_disabledNat
-  exact ⟨h_consumed, h_pending, h_nxt, h_ammEth, h_ammBold, h_circuit,
+  exact ⟨h_consumed, h_pending, h_nxt, h_circuit,
          h_tvlCap, h_totalLocked, h_disabled⟩
 
 end Encoding

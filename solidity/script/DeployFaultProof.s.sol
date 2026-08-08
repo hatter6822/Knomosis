@@ -47,9 +47,26 @@ contract DeployFaultProof is Script {
           vm.envOr("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL",
                    uint256(5)));
         address sequencer = vm.envAddress("KNOMOSIS_SEQUENCER_ADDRESS");
+        // The submission breaker (EG.2): may halt / resume state-root
+        // submission.  Defaults to the broadcaster so devnet and
+        // dry-run flows need no extra configuration; a production
+        // deploy sets it explicitly.  The constructor refuses a
+        // breaker equal to the sequencer, so deploying with the
+        // sequencer key fails loudly rather than silently handing
+        // the halt to the party it exists to restrain.
+        address submissionBreaker =
+            vm.envOr("KNOMOSIS_SUBMISSION_BREAKER_ADDRESS", msg.sender);
         address treasury  = vm.envAddress("KNOMOSIS_TREASURY_ADDRESS");
         address bridge    = vm.envAddress("KNOMOSIS_BRIDGE_ADDRESS");
         bytes32 deploymentId = vm.envBytes32("KNOMOSIS_DEPLOYMENT_ID");
+        // Workstream SB batching parameters: the genesis anchor's
+        // state commit (REQUIRED — the registry's record 0), and the
+        // per-batch size cap (operational sanity, ruling R10).
+        bytes32 genesisStateCommit =
+          vm.envBytes32("KNOMOSIS_GENESIS_STATE_COMMIT");
+        uint64  maxActionsPerBatch = uint64(
+          vm.envOr("KNOMOSIS_MAX_ACTIONS_PER_BATCH",
+                   uint256(65_536)));
 
         vm.startBroadcast();
 
@@ -114,7 +131,10 @@ contract DeployFaultProof is Script {
             sequencer,
             predictedGame,
             deploymentId,
-            withdrawalFinalisationWindow);
+            withdrawalFinalisationWindow,
+            genesisStateCommit,
+            maxActionsPerBatch,
+            submissionBreaker);
         require(address(submission) == predictedSubmission, "AddressMismatch");
 
         // Step 6: deploy verifier.  Same discipline.
@@ -132,16 +152,20 @@ contract DeployFaultProof is Script {
 
         // Step 7: deploy game.  Its constructor checks
         // `_stateRootSubmission.code.length > 0` — state-root-sub
-        // is now deployed and has code.
+        // is now deployed and has code.  The verifier deployed in
+        // step 6, so the game's R6 bridge leg takes its REAL
+        // address (no prediction needed for this argument).
         KnomosisFaultProofGame game = new KnomosisFaultProofGame(
             bisectionTimeout,
             minChallengeBond,
             minBisectionStepInterval,
             treasury,
             address(stepVM),
-            address(submission)
+            address(submission),
+            address(verifier)
         );
         require(address(game) == predictedGame, "AddressMismatch");
+        require(game.disputeVerifier() == address(verifier), "VerifierMismatch");
 
         // Post-deploy assert.  Defence-in-depth on every contract's
         // structural invariants.

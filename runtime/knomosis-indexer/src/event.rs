@@ -10,7 +10,7 @@
 //! ## Frozen constructor indices
 //!
 //! Per `LegalKernel/Events/Types.lean` (§8.9.2) and `docs/abi.md`
-//! §5.3, the `Event` inductive has 23 constructors with frozen
+//! §5.3, the `Event` inductive has 25 constructors with frozen
 //! indices.  This module exposes the same shape as a Rust enum so
 //! the decoder can produce typed values without reaching into
 //! raw bytes everywhere.
@@ -38,15 +38,21 @@
 //! | 18  | `GasPoolClaim`                 | `resource, sequencer, amount`                                     |
 //! | 19  | `DelegatedActionBudgetTopUp`   | `recipient, signer, gas_resource, gas_amount, budget_inc, pool`   |
 //! | 20  | `BudgetConsumed`               | `actor, amount`                                                   |
-//! | 21  | `AmmSwapExecuted`              | `from_resource, to_resource, amount_in, amount_out, amm_actor`    |
+//! | 21  | RETIRED (`ammSwapExecuted`)    | the excised L1-AMM mirror's event — a permanent hole; never reuse |
 //! | 22  | `AmmReservesReclaimed`         | `resource, amount, reserve_actor, pool_actor`                     |
+//! | 23  | `ReserveSwapExecuted`          | `from_resource, to_resource, user, amount_in, amount_out, ra`     |
+//! | 24  | `ReserveSeeded`                | `resource, amount, reserve_actor, deposit_id`                     |
 //!
 //! Tags 16..=20 are the Workstream-GP "gas pool" family (per
 //! `LegalKernel/Events/Types.lean::Event.tag` 16..=20).  Tags
 //! 16..=19 enable per-actor budget views; tag 20 (added in GP.6.4)
 //! enables per-epoch consumption tracking, completing the
-//! "N actions remaining this epoch" semantics.  Tag 21 (added in
-//! GP.11.4) is the AMM swap execution event.
+//! "N actions remaining this epoch" semantics.  Tag 21 belonged to
+//! the bridge-attested L1-AMM swap mirror and was RETIRED with the
+//! L1 embedded AMM — the decoder refuses it like a never-assigned
+//! tag.  Tags 23/24 (Workstream SB) are the USER-swap execution
+//! event (with a user party and kernel-derived amounts) and the
+//! deposit-seed attribution event.
 //!
 //! ## Field types (mirrored from Lean)
 //!
@@ -54,11 +60,10 @@
 //!
 //!   * `Authority.ActorId` (UInt64) → [`ActorId`] = `u64`.
 //!   * `Authority.ResourceId` (UInt64) → [`ResourceId`] = `u64`.
-//!   * `Authority.Amount` (Nat, bounded < 2^64 per
-//!     `Encoding.fieldsBounded`) → [`Amount`] = `u128`.
-//!     Stored as u128 in Rust because the field's encoding head
-//!     is an 8-byte LE value (matching `knomosis-l1-ingest`'s
-//!     `Amount = u128` convention).
+//!   * `Authority.Amount` (Nat, bounded `< Laws.maxAmount = 2^256`)
+//!     → [`Amount`] = [`knomosis_amount::Amount`], a 256-bit
+//!     unsigned integer.  The width is the kernel's own ceiling, not
+//!     a margin: see that crate's docs.
 //!   * `Authority.Nonce` → [`Nonce`] = `u128`.
 //!   * `Authority.PublicKey` (ByteArray) → `Vec<u8>`.
 //!   * `Bridge.WithdrawalId` (UInt64) → [`WithdrawalId`] = `u64`.
@@ -72,11 +77,13 @@ pub type ActorId = u64;
 /// 64-bit ResourceId mirroring `Authority.ResourceId`.
 pub type ResourceId = u64;
 
-/// 128-bit Amount mirroring `Authority.Amount`.  The encoder's
-/// `fieldsBounded` predicate restricts encoded amounts to < 2^64,
-/// but we carry u128 in Rust to match `knomosis-l1-ingest`'s
-/// convention.
-pub type Amount = u128;
+/// 256-bit Amount mirroring `Authority.Amount`.
+///
+/// The kernel bounds a credited amount by `Laws.maxAmount = 2^256`
+/// (`Laws.AmountBounded`), so this type holds exactly what the kernel
+/// admits.  It replaced a `u128`, under which a perfectly kernel-legal
+/// balance could exceed the representation by ordinary accumulation.
+pub type Amount = knomosis_amount::Amount;
 
 /// 128-bit Nonce mirroring `Authority.Nonce`.
 pub type Nonce = u128;
@@ -355,20 +362,9 @@ pub enum Event {
         /// signers).
         amount: BudgetUnits,
     },
-    /// An AMM swap was executed (ETH↔BOLD exchange against the
-    /// gas-pool reserves; Workstream GP / GP.11.4).  Tag 21.
-    AmmSwapExecuted {
-        /// Source resource (the one the swapper pays in).
-        from_resource: ResourceId,
-        /// Destination resource (the one the swapper receives).
-        to_resource: ResourceId,
-        /// Amount paid in by the swapper.
-        amount_in: Amount,
-        /// Amount received by the swapper.
-        amount_out: Amount,
-        /// The AMM reserve actor.
-        amm_reserve_actor: ActorId,
-    },
+    // Tag 21 (the retired `ammSwapExecuted`, the excised L1-AMM
+    // mirror's event) is a permanent hole: the decoder refuses it
+    // like a never-assigned tag, and no variant may ever sit here.
     /// The disabled AMM's frozen L2 reserve balance was swept into
     /// the gas-pool actor (Workstream GP.11.10 post-disable
     /// reclamation; the exact sweep drains the reserve to zero).
@@ -382,6 +378,41 @@ pub enum Event {
         reserve_actor: ActorId,
         /// The credited gas-pool actor.
         pool_actor: ActorId,
+    },
+    /// A USER-signed L2 AMM swap was executed against the reserve
+    /// actor's live balances (Workstream SB; `Laws.reserveSwap`).
+    /// The event has a user party and `amount_out` is the
+    /// kernel-COMPUTED constant-product quote, not an attested
+    /// value.  Tag 23.
+    ReserveSwapExecuted {
+        /// Source resource (the one the user pays in).
+        from_resource: ResourceId,
+        /// Destination resource (the one the user receives).
+        to_resource: ResourceId,
+        /// The swapping user.
+        user: ActorId,
+        /// Amount paid in by the user.
+        amount_in: Amount,
+        /// The kernel-computed amount credited to the user.
+        amount_out: Amount,
+        /// The AMM reserve actor whose balances back the swap.
+        reserve_actor: ActorId,
+    },
+    /// The AMM reserve was seeded from a deposit's fee split
+    /// (Workstream SB): the `depositWithFee` seed leg credited
+    /// `reserve_actor` by `amount` at `resource`, attributable to
+    /// the L1 deposit `deposit_id`.  Indexers consume this event
+    /// to attribute reserve growth to deposit seeding rather than
+    /// to swap flow.  Tag 24.
+    ReserveSeeded {
+        /// The seeded resource.
+        resource: ResourceId,
+        /// The seed amount.
+        amount: Amount,
+        /// The credited AMM reserve actor.
+        reserve_actor: ActorId,
+        /// The originating L1 deposit id.
+        deposit_id: u64,
     },
 }
 
@@ -412,8 +443,10 @@ impl Event {
             Self::GasPoolClaim { .. } => 18,
             Self::DelegatedActionBudgetTopUp { .. } => 19,
             Self::BudgetConsumed { .. } => 20,
-            Self::AmmSwapExecuted { .. } => 21,
+            // 21 is the retired ammSwapExecuted's permanent hole.
             Self::AmmReservesReclaimed { .. } => 22,
+            Self::ReserveSwapExecuted { .. } => 23,
+            Self::ReserveSeeded { .. } => 24,
         }
     }
 
@@ -456,10 +489,13 @@ impl Event {
             Self::FaultProofGameSettled { winner, .. } => Some(*winner),
             Self::ActionBudgetTopUp { signer, .. } => Some(*signer),
             Self::GasPoolClaim { sequencer, .. } => Some(*sequencer),
-            Self::AmmSwapExecuted {
-                amm_reserve_actor, ..
-            } => Some(*amm_reserve_actor),
-            Self::AmmReservesReclaimed { reserve_actor, .. } => Some(*reserve_actor),
+            // Tags 22/24 project the reserve actor; tag 23 projects
+            // the swapping USER (per Lean's `Event.actor` — indexers
+            // key trade history on the user; the reserve legs
+            // surface via the accompanying `BalanceChanged`s).
+            Self::AmmReservesReclaimed { reserve_actor, .. }
+            | Self::ReserveSeeded { reserve_actor, .. } => Some(*reserve_actor),
+            Self::ReserveSwapExecuted { user, .. } => Some(*user),
             Self::TimeRecorded { .. }
             | Self::DisputeWithdrawn { .. }
             | Self::VerdictApplied { .. } => None,
@@ -477,7 +513,8 @@ impl Event {
             | Self::DepositCredited { resource, .. }
             | Self::DepositWithFeeCredited { resource, .. }
             | Self::GasPoolClaim { resource, .. }
-            | Self::AmmReservesReclaimed { resource, .. } => Some(*resource),
+            | Self::AmmReservesReclaimed { resource, .. }
+            | Self::ReserveSeeded { resource, .. } => Some(*resource),
             Self::ActionBudgetTopUp { gas_resource, .. }
             | Self::DelegatedActionBudgetTopUp { gas_resource, .. } => Some(*gas_resource),
             _ => None,
@@ -508,15 +545,19 @@ impl Event {
     }
 }
 
-/// The number of frozen `Event` constructors.  Bumped by amendment
-/// when a new constructor lands.  Useful for exhaustive coverage
-/// tests.  GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`;
-/// GP.11.10 widened 22 → 23 by adding `AmmReservesReclaimed`.
-pub const EVENT_TAG_COUNT: u8 = 23;
+/// The number of frozen `Event` tag SLOTS (the exclusive upper bound
+/// of the assigned range, NOT the live-constructor count).  Bumped by
+/// amendment when a new constructor lands.  Useful for exhaustive
+/// coverage tests.  GP.11.10 widened 22 → 23 by adding
+/// `AmmReservesReclaimed`; Workstream SB widened 23 → 25 by adding
+/// `ReserveSwapExecuted` and `ReserveSeeded`.  Tag 21 (the retired
+/// `ammSwapExecuted`) is a permanent hole INSIDE the range: the count
+/// stays 25 and sweeps over `0..EVENT_TAG_COUNT` must except it.
+pub const EVENT_TAG_COUNT: u8 = 25;
 
 #[cfg(test)]
 mod tests {
-    use super::{Event, EVENT_TAG_COUNT, RESOURCE_ID_BOLD, RESOURCE_ID_ETH};
+    use super::{Amount, Event, EVENT_TAG_COUNT, RESOURCE_ID_BOLD, RESOURCE_ID_ETH};
 
     /// Tag values match the frozen indices in
     /// `LegalKernel/Events/Types.lean::Event.tag`.
@@ -528,8 +569,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 0,
                 actor: 0,
-                old_value: 0,
-                new_value: 0
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(0)
             }
             .tag(),
             0
@@ -574,7 +615,7 @@ mod tests {
             Event::RewardIssued {
                 resource: 0,
                 recipient: 0,
-                amount: 0
+                amount: Amount::from_u64(0)
             }
             .tag(),
             8
@@ -583,7 +624,7 @@ mod tests {
             Event::WithdrawalRequested {
                 resource: 0,
                 sender: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 recipient_l1: [0; 20],
                 withdrawal_id: 0
             }
@@ -594,7 +635,7 @@ mod tests {
             Event::DepositCredited {
                 resource: 0,
                 recipient: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
                 deposit_id: 0
             }
             .tag(),
@@ -636,7 +677,7 @@ mod tests {
                 game_id: 0,
                 winner: 0,
                 loser: 0,
-                payout: 0
+                payout: Amount::from_u64(0)
             }
             .tag(),
             15
@@ -647,8 +688,8 @@ mod tests {
                 resource: 0,
                 recipient: 0,
                 pool_actor: 0,
-                user_amount: 0,
-                pool_amount: 0,
+                user_amount: Amount::from_u64(0),
+                pool_amount: Amount::from_u64(0),
                 budget_grant: 0,
                 deposit_id: 0,
             }
@@ -659,7 +700,7 @@ mod tests {
             Event::ActionBudgetTopUp {
                 signer: 0,
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -670,7 +711,7 @@ mod tests {
             Event::GasPoolClaim {
                 resource: 0,
                 sequencer: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
             }
             .tag(),
             18
@@ -680,7 +721,7 @@ mod tests {
                 recipient: 0,
                 signer: 0,
                 gas_resource: 0,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -696,13 +737,74 @@ mod tests {
             .tag(),
             20
         );
+        // GP.11.10: tag 22.  (Tag 21 is the retired ammSwapExecuted's
+        // permanent hole — no constructor carries it.)
+        assert_eq!(
+            Event::AmmReservesReclaimed {
+                resource: 0,
+                amount: Amount::from_u64(0),
+                reserve_actor: 3,
+                pool_actor: 1,
+            }
+            .tag(),
+            22
+        );
+        // Workstream SB: tags 23/24.
+        assert_eq!(
+            Event::ReserveSwapExecuted {
+                from_resource: 0,
+                to_resource: 1,
+                user: 7,
+                amount_in: Amount::from_u64(0),
+                amount_out: Amount::from_u64(0),
+                reserve_actor: 3,
+            }
+            .tag(),
+            23
+        );
+        assert_eq!(
+            Event::ReserveSeeded {
+                resource: 0,
+                amount: Amount::from_u64(0),
+                reserve_actor: 3,
+                deposit_id: 0,
+            }
+            .tag(),
+            24
+        );
     }
 
     /// `EVENT_TAG_COUNT` matches the number of constructors.
-    /// GP.11.4 widened 21 → 22.
+    /// GP.11.4 widened 21 → 22; Workstream SB widened 23 → 25.
     #[test]
     fn tag_count_constant() {
-        assert_eq!(EVENT_TAG_COUNT, 23);
+        assert_eq!(EVENT_TAG_COUNT, 25);
+    }
+
+    /// Workstream SB actor/resource projections: tag 23 projects
+    /// the swapping USER (not the reserve actor) and NO resource
+    /// (two resources are touched; Lean's `Event.resource` returns
+    /// `none`); tag 24 projects the reserve actor and its resource.
+    #[test]
+    fn reserve_swap_and_seed_projections() {
+        let swap = Event::ReserveSwapExecuted {
+            from_resource: 0,
+            to_resource: 1,
+            user: 42,
+            amount_in: Amount::from_u64(10),
+            amount_out: Amount::from_u64(9),
+            reserve_actor: 3,
+        };
+        assert_eq!(swap.actor(), Some(42), "tag 23 projects the user");
+        assert_eq!(swap.resource(), None, "tag 23 has no single resource");
+        let seeded = Event::ReserveSeeded {
+            resource: 1,
+            amount: Amount::from_u64(5),
+            reserve_actor: 3,
+            deposit_id: 77,
+        };
+        assert_eq!(seeded.actor(), Some(3), "tag 24 projects the reserve actor");
+        assert_eq!(seeded.resource(), Some(1));
     }
 
     /// Canonical resource-id constants pinned.
@@ -719,8 +821,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 1,
                 actor: 42,
-                old_value: 0,
-                new_value: 100,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(100),
             }
             .actor(),
             Some(42)
@@ -743,8 +845,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 99,
                 actor: 0,
-                old_value: 0,
-                new_value: 0,
+                old_value: Amount::from_u64(0),
+                new_value: Amount::from_u64(0),
             }
             .resource(),
             Some(99)
@@ -766,8 +868,8 @@ mod tests {
         assert!(Event::BalanceChanged {
             resource: 0,
             actor: 0,
-            old_value: 0,
-            new_value: 0
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(0)
         }
         .is_balance_change());
         assert!(!Event::IdentityRevoked { actor: 0 }.is_balance_change());
@@ -783,8 +885,8 @@ mod tests {
                 resource: 0,
                 recipient: 42,
                 pool_actor: 1,
-                user_amount: 100,
-                pool_amount: 10,
+                user_amount: Amount::from_u64(100),
+                pool_amount: Amount::from_u64(10),
                 budget_grant: 50,
                 deposit_id: 7,
             }
@@ -796,7 +898,7 @@ mod tests {
             Event::ActionBudgetTopUp {
                 signer: 99,
                 gas_resource: 0,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             }
@@ -808,7 +910,7 @@ mod tests {
             Event::GasPoolClaim {
                 resource: 0,
                 sequencer: 2,
-                amount: 1000,
+                amount: Amount::from_u64(1000),
             }
             .actor(),
             Some(2)
@@ -819,7 +921,7 @@ mod tests {
                 recipient: 55,
                 signer: 77,
                 gas_resource: 0,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             }
@@ -845,8 +947,8 @@ mod tests {
                 resource: 1,
                 recipient: 0,
                 pool_actor: 0,
-                user_amount: 0,
-                pool_amount: 0,
+                user_amount: Amount::from_u64(0),
+                pool_amount: Amount::from_u64(0),
                 budget_grant: 0,
                 deposit_id: 0,
             }
@@ -858,7 +960,7 @@ mod tests {
             Event::ActionBudgetTopUp {
                 signer: 0,
                 gas_resource: 7,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -869,7 +971,7 @@ mod tests {
             Event::GasPoolClaim {
                 resource: 9,
                 sequencer: 0,
-                amount: 0,
+                amount: Amount::from_u64(0),
             }
             .resource(),
             Some(9)
@@ -880,7 +982,7 @@ mod tests {
                 recipient: 0,
                 signer: 0,
                 gas_resource: 3,
-                gas_amount: 0,
+                gas_amount: Amount::from_u64(0),
                 budget_increment: 0,
                 pool_actor: 0,
             }
@@ -897,8 +999,8 @@ mod tests {
             resource: 0,
             recipient: 0,
             pool_actor: 0,
-            user_amount: 0,
-            pool_amount: 0,
+            user_amount: Amount::from_u64(0),
+            pool_amount: Amount::from_u64(0),
             budget_grant: 0,
             deposit_id: 0,
         }
@@ -906,7 +1008,7 @@ mod tests {
         assert!(Event::ActionBudgetTopUp {
             signer: 0,
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: 0,
             pool_actor: 0,
         }
@@ -914,14 +1016,14 @@ mod tests {
         assert!(Event::GasPoolClaim {
             resource: 0,
             sequencer: 0,
-            amount: 0,
+            amount: Amount::from_u64(0),
         }
         .is_gas_pool_family());
         assert!(Event::DelegatedActionBudgetTopUp {
             recipient: 0,
             signer: 0,
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: 0,
             pool_actor: 0,
         }
@@ -936,14 +1038,14 @@ mod tests {
         assert!(!Event::BalanceChanged {
             resource: 0,
             actor: 0,
-            old_value: 0,
-            new_value: 0
+            old_value: Amount::from_u64(0),
+            new_value: Amount::from_u64(0)
         }
         .is_gas_pool_family());
         assert!(!Event::DepositCredited {
             resource: 0,
             recipient: 0,
-            amount: 0,
+            amount: Amount::from_u64(0),
             deposit_id: 0,
         }
         .is_gas_pool_family());

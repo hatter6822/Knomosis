@@ -180,16 +180,17 @@ def tests : List TestCase :=
           { ExtendedState.empty with base := b2 }
         let entry : LogEntry := { exampleEntry with
           signedAction := {
-            action := .depositWithFee 1 10 99 30 20 100 42,
+            action := .depositWithFee 1 10 99 30 20 100 42 8,
             signer := LegalKernel.Bridge.bridgeActor,
             nonce := 0, sig := ByteArray.empty } }
         let bundle := buildTerminateBundle es entry
         assertEq (expected := (19 : UInt8)) (actual := bundle.actionKind)
           "depositWithFee's actionKind is 19"
-        -- 5 × uint64BE + 2 × uint256BE = 104-byte L1 field layout
-        -- (userAmount and poolAmount are wei-denominated).
-        assertEq (expected := 104) (actual := bundle.actionFields.size)
-          "depositWithFee actionFields = 104 bytes"
+        -- 5 × uint64BE + 3 × uint256BE = 136-byte L1 field layout
+        -- (userAmount, poolAmount, and the Workstream SB appended
+        -- seedAmount are wei-denominated).
+        assertEq (expected := 136) (actual := bundle.actionFields.size)
+          "depositWithFee actionFields = 136 bytes"
         let expected := commitExtendedState
           (productionApplyBudget es entry.signedAction 0)
         assertEq (expected := some expected.toList)

@@ -345,8 +345,8 @@ theorem accounting_delta_non_bridge
     (st : SignedAction) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es st)
     (hne_dep : ∀ r recipient amount d', st.action ≠ .deposit r recipient amount d')
-    (hne_dwf : ∀ r recipient poolActor ua pa bg d',
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d')
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d' sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d' sa)
     (hne_wd  : ∀ r sender amount rcp, st.action ≠ .withdraw r sender amount rcp)
     (r : ResourceId) :
     totalDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
@@ -744,7 +744,7 @@ theorem accounting_delta_transfer
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
-  · intro r' rec po ua pa bg dep heq
+  · intro r' rec po ua pa bg dep sa heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -766,7 +766,7 @@ theorem accounting_delta_freeze
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
-  · intro r' rec po ua pa bg dep heq
+  · intro r' rec po ua pa bg dep sa heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -788,7 +788,7 @@ theorem accounting_delta_replaceKey
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
-  · intro r' rec po ua pa bg dep heq
+  · intro r' rec po ua pa bg dep sa heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -810,7 +810,7 @@ theorem accounting_delta_registerIdentity
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
-  · intro r' rec po ua pa bg dep heq
+  · intro r' rec po ua pa bg dep sa heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -839,7 +839,7 @@ theorem accounting_delta_declareLocalPolicy
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
-  · intro r' rec po ua pa bg dep heq
+  · intro r' rec po ua pa bg dep sa heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -861,7 +861,7 @@ theorem accounting_delta_revokeLocalPolicy
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hact] at heq; cases heq
-  · intro r' rec po ua pa bg dep heq
+  · intro r' rec po ua pa bg dep sa heq
     rw [hact] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hact] at heq; cases heq
@@ -890,9 +890,10 @@ theorem applyActionToBridgeState_deposit
 theorem applyActionToBridgeState_depositWithFee
     (bs : BridgeState) (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (d : DepositId) (idx : Nat) :
+    (d : DepositId) (seedAmount : Amount) (idx : Nat) :
     applyActionToBridgeState bs
-      (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d) idx =
+      (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d
+        seedAmount) idx =
     bs.markConsumed d ({ resource := r, userAmount := userAmount,
                          poolAmount := poolAmount, budgetGrant := budgetGrant }) := by
   unfold applyActionToBridgeState
@@ -924,7 +925,8 @@ theorem applyActionToBridgeState_withdraw
       { resource    := r
         recipient   := rcp
         amount      := amount
-        l2LogIndex  := idx } := by
+        l2LogIndex  := idx
+        wdId        := bs.nextWdId } := by
   unfold applyActionToBridgeState
   rfl
 
@@ -969,7 +971,7 @@ theorem accounting_delta_faultProofChallenge
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
-  · intro r' rec po ua pa bg dep heq
+  · intro r' rec po ua pa bg dep sa heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -992,7 +994,7 @@ theorem accounting_delta_faultProofResolution
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
-  · intro r' rec po ua pa bg dep heq
+  · intro r' rec po ua pa bg dep sa heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -1016,14 +1018,15 @@ untouched). -/
 theorem totalUserDeposited_step_eq
     (es : ExtendedState) (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
+    (seedAmount : Amount)
     (idx : Nat) (r' : ResourceId) (hfresh : ¬ d ∈ es.bridge.consumed) :
     totalUserDeposited
       { es with bridge :=
-        applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d) idx }
+        applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d seedAmount) idx }
       r' =
     totalUserDeposited es r' + (if r = r' then userAmount else 0) := by
   rw [applyActionToBridgeState_depositWithFee es.bridge r recipient poolActor
-        userAmount poolAmount budgetGrant d idx]
+        userAmount poolAmount budgetGrant d seedAmount idx]
   rw [totalUserDeposited_markConsumed es d _ r' hfresh]
   congr 1
 
@@ -1035,14 +1038,15 @@ theorem totalUserDeposited_step_eq
 theorem totalPoolDeposited_step_eq
     (es : ExtendedState) (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
+    (seedAmount : Amount)
     (idx : Nat) (r' : ResourceId) (hfresh : ¬ d ∈ es.bridge.consumed) :
     totalPoolDeposited
       { es with bridge :=
-        applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d) idx }
+        applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d seedAmount) idx }
       r' =
     totalPoolDeposited es r' + (if r = r' then poolAmount else 0) := by
   rw [applyActionToBridgeState_depositWithFee es.bridge r recipient poolActor
-        userAmount poolAmount budgetGrant d idx]
+        userAmount poolAmount budgetGrant d seedAmount idx]
   rw [totalPoolDeposited_markConsumed es d _ r' hfresh]
   congr 1
 
@@ -1089,8 +1093,8 @@ theorem accounting_userpool_delta_non_bridge
     (st : SignedAction) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es st)
     (hne_dep : ∀ r recipient amount d', st.action ≠ .deposit r recipient amount d')
-    (hne_dwf : ∀ r recipient poolActor ua pa bg d',
-      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d')
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d' sa,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d' sa)
     (hne_wd  : ∀ r sender amount rcp, st.action ≠ .withdraw r sender amount rcp)
     (r : ResourceId) :
     totalUserDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
@@ -1153,9 +1157,11 @@ law level, independently of the (later) `gasPoolActor` reservation:
   1. **Inflow accounting** — `totalPoolDeposited` starts at `0`
      (`totalPoolDeposited_genesis`) and gains exactly `poolAmount` per
      fee-bearing deposit (`totalPoolDeposited_step_eq`).
-  2. **Credit / ledger coherence** — every wei a `depositWithFee`
-     credits to the pool actor's L2 balance is matched, wei-for-wei,
-     by the ledger's recorded pool deposit
+  2. **Credit / ledger coherence** — every wei the ledger records as
+     a pool deposit is matched, wei-for-wei, by the sum of the two L2
+     credits the pool leg funds: the gas-pool actor's net credit
+     (`poolAmount − seedAmount`) plus the AMM-reserve seed leg
+     (`seedAmount`) — Workstream SB's three-leg split
      (`depositWithFee_pool_credit_matches_ledger_delta`).
 
 The inductive promotion (that the live balance stays reconciled with
@@ -1175,47 +1181,82 @@ bounded) — is the stronger, still-open `BridgeReachable` follow-up
 half. -/
 
 /-- The L2 pool-actor balance credited by a `depositWithFee`'s kernel
-    effect: the gas-pool actor's balance increases by exactly
-    `poolAmount`, provided the user-facing recipient is a distinct
-    actor (so the user-credit write does not also land on the pool
-    actor).  This is the `Laws.depositWithFee` kernel-step reading;
-    its precondition is `True`, so `step_impl` collapses to
-    `apply_impl` and the admitted bridge step realises this credit
+    effect: the gas-pool actor's balance increases by exactly the NET
+    pool leg `poolAmount − seedAmount` (Workstream SB three-leg
+    split — the seed slice goes to the AMM reserve actor instead),
+    provided the user-facing recipient and the reserve actor are
+    distinct actors (so neither of the other two writes lands on the
+    pool actor).  This is the `Laws.depositWithFee` kernel-step
+    reading; the admitted bridge step realises this credit
     verbatim. -/
 theorem depositWithFee_credits_poolActor
     (s : State) (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
-    (hne : recipient ≠ poolActor) :
+    (seedAmount : Amount) (reserveActor : ActorId)
+    (hne : recipient ≠ poolActor) (hne_pr : poolActor ≠ reserveActor) :
     getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
-      budgetGrant d).apply_impl s) r poolActor =
-    getBalance s r poolActor + poolAmount := by
+      budgetGrant d seedAmount reserveActor).apply_impl s) r poolActor =
+    getBalance s r poolActor + (poolAmount - seedAmount) := by
   simp only [Laws.depositWithFee]
+  rw [getBalance_setBalance_other _ r r reserveActor poolActor _
+        (Or.inr (Ne.symm hne_pr))]
   rw [getBalance_setBalance_same]
   rw [getBalance_setBalance_other _ r r recipient poolActor _ (Or.inr hne)]
 
+/-- The seed-leg counterpart: the AMM reserve actor's balance
+    increases by exactly `seedAmount`, provided the recipient and the
+    pool actor are distinct from it.  Together with
+    `depositWithFee_credits_poolActor` this accounts for the whole
+    pool leg: `(poolAmount − seedAmount) + seedAmount = poolAmount`
+    whenever `seedAmount ≤ poolAmount` (a `Laws.depositWithFee`
+    precondition conjunct). -/
+theorem depositWithFee_credits_reserveActor
+    (s : State) (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
+    (seedAmount : Amount) (reserveActor : ActorId)
+    (hne_rr : recipient ≠ reserveActor) (hne_pr : poolActor ≠ reserveActor) :
+    getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
+      budgetGrant d seedAmount reserveActor).apply_impl s) r reserveActor =
+    getBalance s r reserveActor + seedAmount := by
+  simp only [Laws.depositWithFee]
+  rw [getBalance_setBalance_same]
+  rw [getBalance_setBalance_other _ r r poolActor reserveActor _ (Or.inr hne_pr)]
+  rw [getBalance_setBalance_other _ r r recipient reserveActor _ (Or.inr hne_rr)]
+
 /-- **GP.4.2 pool-credit / ledger coherence.**  For a fresh fee-bearing
-    deposit (recipient distinct from the pool actor), the amount
-    credited to the pool actor's L2 balance equals, wei-for-wei, the
-    amount the bridge ledger records as a pool deposit.  Both deltas
-    are exactly `poolAmount`.  This is the per-deposit correspondence
+    deposit (recipient, pool actor, and reserve actor pairwise
+    distinct), the amount the bridge ledger records as a pool deposit
+    equals, wei-for-wei, the SUM of the two L2 credits the pool leg
+    funds: the gas-pool actor's net credit (`poolAmount − seedAmount`)
+    plus the AMM-reserve seed leg (`seedAmount`) — the Workstream SB
+    three-leg split.  This is the per-deposit correspondence
     underpinning pool solvency: nothing is recorded in the pool ledger
     that is not actually credited on L2, and vice versa. -/
 theorem depositWithFee_pool_credit_matches_ledger_delta
     (es : ExtendedState) (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
-    (idx : Nat) (hfresh : ¬ d ∈ es.bridge.consumed) (hne : recipient ≠ poolActor) :
-    getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
-      budgetGrant d).apply_impl es.base) r poolActor - getBalance es.base r poolActor =
+    (seedAmount : Amount) (reserveActor : ActorId)
+    (idx : Nat) (hfresh : ¬ d ∈ es.bridge.consumed)
+    (hne : recipient ≠ poolActor) (hne_rr : recipient ≠ reserveActor)
+    (hne_pr : poolActor ≠ reserveActor) (hseed : seedAmount ≤ poolAmount) :
+    (getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
+      budgetGrant d seedAmount reserveActor).apply_impl es.base) r poolActor
+      - getBalance es.base r poolActor) +
+    (getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
+      budgetGrant d seedAmount reserveActor).apply_impl es.base) r reserveActor
+      - getBalance es.base r reserveActor) =
     totalPoolDeposited
       { es with bridge :=
-        applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d) idx }
+        applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d seedAmount) idx }
       r
       - totalPoolDeposited es r := by
   rw [depositWithFee_credits_poolActor es.base r recipient poolActor userAmount
-        poolAmount budgetGrant d hne]
+        poolAmount budgetGrant d seedAmount reserveActor hne hne_pr]
+  rw [depositWithFee_credits_reserveActor es.base r recipient poolActor userAmount
+        poolAmount budgetGrant d seedAmount reserveActor hne_rr hne_pr]
   rw [totalPoolDeposited_step_eq es r recipient poolActor userAmount poolAmount
-        budgetGrant d idx r hfresh]
-  simp
+        budgetGrant d seedAmount idx r hfresh]
+  simp [Nat.sub_add_cancel hseed]
 
 /-- **GP.4.2 pool-solvency invariant.**  Given the gas-pool actor's
     balance is reconciled with the ledger — its current balance plus
@@ -1302,8 +1343,8 @@ theorem totalUserDeposited_admissible_depositWithFee
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
     (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (dep : DepositId)
-    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
     (r' : ResourceId) :
     totalUserDeposited (apply_bridge_admissible_with verify P d es st idx h) r' =
     totalUserDeposited es r' + (if r = r' then ua else 0) := by
@@ -1312,9 +1353,9 @@ theorem totalUserDeposited_admissible_depositWithFee
         ({ es with bridge := applyActionToBridgeState es.bridge st.action idx }
           : ExtendedState).bridge := rfl
   rw [totalUserDeposited_unchanged_when_bridge_eq _ _ hbridge r', hst]
-  exact totalUserDeposited_step_eq es r recipient poolActor ua pa bg dep idx r'
+  exact totalUserDeposited_step_eq es r recipient poolActor ua pa bg dep sa idx r'
     (not_mem_of_consumed_contains_false _ _
-      (h.depositWithFeeIdFresh r recipient poolActor ua pa bg dep hst))
+      (h.depositWithFeeIdFresh r recipient poolActor ua pa bg dep sa hst))
 
 /-- **GP.4.2 atomic step delta (`totalPoolDeposited`).**  After the
     actual admitted bridge step on a `depositWithFee`, the pool-leg
@@ -1325,8 +1366,8 @@ theorem totalPoolDeposited_admissible_depositWithFee
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
     (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (dep : DepositId)
-    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
     (r' : ResourceId) :
     totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r' =
     totalPoolDeposited es r' + (if r = r' then pa else 0) := by
@@ -1335,14 +1376,17 @@ theorem totalPoolDeposited_admissible_depositWithFee
         ({ es with bridge := applyActionToBridgeState es.bridge st.action idx }
           : ExtendedState).bridge := rfl
   rw [totalPoolDeposited_unchanged_when_bridge_eq _ _ hbridge r', hst]
-  exact totalPoolDeposited_step_eq es r recipient poolActor ua pa bg dep idx r'
+  exact totalPoolDeposited_step_eq es r recipient poolActor ua pa bg dep sa idx r'
     (not_mem_of_consumed_contains_false _ _
-      (h.depositWithFeeIdFresh r recipient poolActor ua pa bg dep hst))
+      (h.depositWithFeeIdFresh r recipient poolActor ua pa bg dep sa hst))
 
 /-- **GP.4.2 atomic pool credit.**  After the actual admitted bridge
-    step on a `depositWithFee` (recipient distinct from the pool
-    actor), the gas-pool actor's live L2 balance increases by exactly
-    `poolAmount`.  The post-step `.base` is reduced through
+    step on a `depositWithFee` (recipient and AMM reserve actor
+    distinct from the pool actor), the gas-pool actor's live L2
+    balance increases by exactly the net pool leg
+    `poolAmount − seedAmount` (Workstream SB three-leg split; the
+    compiled law pins the seed target to `Bridge.ammReserveActor`).
+    The post-step `.base` is reduced through
     `apply_bridge_admissible_with_base_agrees` and the
     `step_impl`-collapses-to-`apply_impl` fact, so this is the genuine
     effect of the production step, not a law-level approximation.
@@ -1350,68 +1394,123 @@ theorem totalPoolDeposited_admissible_depositWithFee
     `hpre` is that collapse's side condition.  It used to be free —
     the law's precondition was `True`, so `step_impl` reduced by
     `rfl` — and is now a real hypothesis, because a `depositWithFee`
-    that would carry either leg over `Laws.maxAmount` is a no-op and
-    credits the pool nothing.  Admissibility does not supply it:
-    `BridgeAdmissibleWith` governs who may submit and with what
-    authority, not whether the transition fires. -/
+    that would carry any leg over `Laws.maxAmount` (or seed more than
+    the pool leg) is a no-op and credits the pool nothing.
+    Admissibility does not supply it: `BridgeAdmissibleWith` governs
+    who may submit and with what authority, not whether the
+    transition fires. -/
 theorem depositWithFee_admissible_credits_poolActor
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
     (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (dep : DepositId)
-    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
-    (hne : recipient ≠ poolActor)
-    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep).pre es.base) :
+    (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+    (hne : recipient ≠ poolActor) (hne_pr : poolActor ≠ ammReserveActor)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+      ammReserveActor).pre es.base) :
     getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor =
-    getBalance es.base r poolActor + pa := by
+    getBalance es.base r poolActor + (pa - sa) := by
   have hbase :
       (apply_bridge_admissible_with verify P d es st idx h).base =
-        (Laws.depositWithFee r recipient poolActor ua pa bg dep).apply_impl es.base := by
+        (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+          ammReserveActor).apply_impl es.base := by
     rw [apply_bridge_admissible_with_base_agrees]
     show step_impl es.base (Action.toTransition st.action st.signer) = _
     rw [hst]
-    show step_impl es.base (Laws.depositWithFee r recipient poolActor ua pa bg dep) = _
+    show step_impl es.base
+      (Laws.depositWithFee r recipient poolActor ua pa bg dep sa ammReserveActor) = _
     rw [step_impl]
     simp only [if_pos hpre]
   rw [hbase]
-  exact depositWithFee_credits_poolActor es.base r recipient poolActor ua pa bg dep hne
+  exact depositWithFee_credits_poolActor es.base r recipient poolActor ua pa bg dep
+    sa ammReserveActor hne hne_pr
+
+/-- **GP.4.2 atomic seed credit.**  The seed-leg counterpart: after
+    the same admitted step (recipient and pool actor distinct from
+    the AMM reserve actor), `Bridge.ammReserveActor`'s live L2 balance
+    increases by exactly `seedAmount`.  This is the on-L2 funding leg
+    of the user-facing L2 AMM (Workstream SB). -/
+theorem depositWithFee_admissible_credits_reserveActor
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+    (hne_rr : recipient ≠ ammReserveActor) (hne_pr : poolActor ≠ ammReserveActor)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+      ammReserveActor).pre es.base) :
+    getBalance (apply_bridge_admissible_with verify P d es st idx h).base r
+      ammReserveActor =
+    getBalance es.base r ammReserveActor + sa := by
+  have hbase :
+      (apply_bridge_admissible_with verify P d es st idx h).base =
+        (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+          ammReserveActor).apply_impl es.base := by
+    rw [apply_bridge_admissible_with_base_agrees]
+    show step_impl es.base (Action.toTransition st.action st.signer) = _
+    rw [hst]
+    show step_impl es.base
+      (Laws.depositWithFee r recipient poolActor ua pa bg dep sa ammReserveActor) = _
+    rw [step_impl]
+    simp only [if_pos hpre]
+  rw [hbase]
+  exact depositWithFee_credits_reserveActor es.base r recipient poolActor ua pa bg dep
+    sa ammReserveActor hne_rr hne_pr
 
 /-- **GP.4.2 atomic pool-credit / ledger coherence.**  Over the *same*
-    admitted bridge step, the gas-pool actor's L2 balance delta equals
-    the bridge ledger's recorded pool-deposit delta — both exactly
-    `poolAmount`.  This is the production-faithful solvency-inflow
-    guarantee: the live pool balance and the `totalPoolDeposited`
-    ledger move in lockstep, wei-for-wei, on every admitted
-    `depositWithFee`.  Strengthens
+    admitted bridge step, the SUM of the gas-pool actor's L2 balance
+    delta (`poolAmount − seedAmount`) and the AMM reserve actor's
+    (`seedAmount`) equals the bridge ledger's recorded pool-deposit
+    delta (`poolAmount`) — the Workstream SB three-leg split.  This is
+    the production-faithful solvency-inflow guarantee: the live pool
+    balances and the `totalPoolDeposited` ledger move in lockstep,
+    wei-for-wei, on every admitted `depositWithFee`.  Strengthens
     `depositWithFee_pool_credit_matches_ledger_delta` (which related
-    the constituent transformers) to the single atomic step. -/
+    the constituent transformers) to the single atomic step.  The
+    `seedAmount ≤ poolAmount` bound the Nat subtraction recombines
+    under is projected from `hpre` (the law's third conjunct), not
+    taken as a hypothesis. -/
 theorem depositWithFee_admissible_pool_credit_matches_ledger
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
     (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (dep : DepositId)
-    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
-    (hne : recipient ≠ poolActor)
-    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep).pre es.base) :
-    getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor -
-      getBalance es.base r poolActor =
+    (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+    (hne : recipient ≠ poolActor) (hne_rr : recipient ≠ ammReserveActor)
+    (hne_pr : poolActor ≠ ammReserveActor)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+      ammReserveActor).pre es.base) :
+    (getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor -
+      getBalance es.base r poolActor) +
+    (getBalance (apply_bridge_admissible_with verify P d es st idx h).base r
+      ammReserveActor - getBalance es.base r ammReserveActor) =
     totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r -
       totalPoolDeposited es r := by
+  have hseed : sa ≤ pa := hpre.2.2.1
   rw [depositWithFee_admissible_credits_poolActor verify P d es st idx h
-        r recipient poolActor ua pa bg dep hst hne hpre]
+        r recipient poolActor ua pa bg dep sa hst hne hne_pr hpre]
+  rw [depositWithFee_admissible_credits_reserveActor verify P d es st idx h
+        r recipient poolActor ua pa bg dep sa hst hne_rr hne_pr hpre]
   rw [totalPoolDeposited_admissible_depositWithFee verify P d es st idx h
-        r recipient poolActor ua pa bg dep hst r]
-  simp
+        r recipient poolActor ua pa bg dep sa hst r]
+  simp [Nat.sub_add_cancel hseed]
 
 /-- **GP.4.2 pool-solvency inductive step (deposit case).**  Pool
-    solvency reconciliation — `getBalance poolActor + payouts =
-    totalPoolDeposited` — is *preserved* by an admitted `depositWithFee`
-    (recipient distinct from the pool actor), with the *same* `payouts`:
-    a deposit pays nothing out, and it credits the pool balance and the
-    pool ledger by the same `poolAmount` (proved by the atomic credit /
-    delta theorems above), so the reconciliation carries over.
+    solvency reconciliation — `getBalance poolActor + payouts + seeded
+    = totalPoolDeposited` — is *preserved* by an admitted
+    `depositWithFee` (recipient and AMM reserve actor distinct from
+    the pool actor), with the *same* `payouts` and the seed
+    accumulator advanced by exactly this deposit's `seedAmount`: a
+    deposit pays nothing out, the pool balance gains the net leg
+    `poolAmount − seedAmount`, the seed accumulator gains
+    `seedAmount`, and the pool ledger gains `poolAmount` (proved by
+    the atomic credit / delta theorems above), so the reconciliation
+    carries over.  `seeded` tracks the cumulative wei the pool leg has
+    diverted into the AMM reserve actor (Workstream SB) — an
+    inflow-side transfer, not a payout.
 
     This is the genuine inductive step the full reconciliation closure
     (the still-open `BridgeReachable` follow-up, WU C.6.4 / C.6.5) builds
@@ -1427,20 +1526,31 @@ theorem pool_solvency_preserved_by_admitted_depositWithFee
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
     (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (dep : DepositId)
-    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
-    (hne : recipient ≠ poolActor) (payouts : Nat)
-    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep).pre es.base)
-    (h_recon : getBalance es.base r poolActor + payouts = totalPoolDeposited es r) :
+    (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+    (hne : recipient ≠ poolActor) (hne_pr : poolActor ≠ ammReserveActor)
+    (payouts seeded : Nat)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+      ammReserveActor).pre es.base)
+    (h_recon : getBalance es.base r poolActor + payouts + seeded =
+      totalPoolDeposited es r) :
     getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor +
-      payouts =
+      payouts + (seeded + sa) =
     totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r := by
+  have hseed : sa ≤ pa := hpre.2.2.1
   rw [depositWithFee_admissible_credits_poolActor verify P d es st idx h
-        r recipient poolActor ua pa bg dep hst hne hpre]
+        r recipient poolActor ua pa bg dep sa hst hne hne_pr hpre]
   rw [totalPoolDeposited_admissible_depositWithFee verify P d es st idx h
-        r recipient poolActor ua pa bg dep hst r]
+        r recipient poolActor ua pa bg dep sa hst r]
   rw [if_pos rfl, ← h_recon]
-  exact Nat.add_right_comm _ _ _
+  -- `omega` cannot atomise the `Amount`-typed `getBalance` term (the
+  -- abbrev defeats its frontend), so shuffle by AC and fuse the seed
+  -- slice back into the pool leg explicitly.
+  calc getBalance es.base r poolActor + (pa - sa) + payouts + (seeded + sa)
+      = getBalance es.base r poolActor + payouts + seeded + ((pa - sa) + sa) := by
+        ac_rfl
+    _ = getBalance es.base r poolActor + payouts + seeded + pa := by
+        rw [Nat.sub_add_cancel hseed]
 
 /-! ## GP.4.2 — Coherence over the literal production runtime entry
 
@@ -1457,23 +1567,28 @@ accounting is closed end-to-end (not merely at the shared sub-step). -/
 
 /-- **GP.4.2 runtime-entry pool-credit / ledger coherence.**  On a
     successful budget-gated admission of a fresh fee-bearing deposit
-    (recipient distinct from the pool actor), the gas-pool actor's L2
-    balance delta equals the bridge ledger's recorded pool-deposit
-    delta.  This is the production-path statement: the function whose
-    `some` result is `es'` is the literal runtime
+    (recipient, pool actor, and AMM reserve actor pairwise distinct),
+    the sum of the gas-pool actor's and the AMM reserve actor's L2
+    balance deltas equals the bridge ledger's recorded pool-deposit
+    delta (the Workstream SB three-leg split).  This is the
+    production-path statement: the function whose `some` result is
+    `es'` is the literal runtime
     `apply_bridge_admissible_with_budget`. -/
 theorem depositWithFee_budget_admitted_pool_credit_matches_ledger
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
     (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (dep : DepositId)
-    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
-    (hne : recipient ≠ poolActor)
-    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep).pre es.base)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+    (hne : recipient ≠ poolActor) (hne_rr : recipient ≠ ammReserveActor)
+    (hne_pr : poolActor ≠ ammReserveActor)
+    (hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+      ammReserveActor).pre es.base)
     {es' : ExtendedState}
     (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
-    getBalance es'.base r poolActor - getBalance es.base r poolActor =
+    (getBalance es'.base r poolActor - getBalance es.base r poolActor) +
+    (getBalance es'.base r ammReserveActor - getBalance es.base r ammReserveActor) =
     totalPoolDeposited es' r - totalPoolDeposited es r := by
   obtain ⟨hbase, hbridge⟩ :=
     apply_bridge_admissible_with_budget_base_bridge_eq verify P d es st idx h hsuc
@@ -1482,7 +1597,7 @@ theorem depositWithFee_budget_admitted_pool_credit_matches_ledger
     rw [hbridge]
   rw [hbase, totalPoolDeposited_unchanged_when_consumed_eq es' _ hcons r]
   exact depositWithFee_admissible_pool_credit_matches_ledger verify P d es st idx h
-    r recipient poolActor ua pa bg dep hst hne hpre
+    r recipient poolActor ua pa bg dep sa hst hne hne_rr hne_pr hpre
 
 end Bridge
 end LegalKernel

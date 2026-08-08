@@ -69,9 +69,10 @@ use crate::game::{
     GameTransition, TurnSide,
 };
 use crate::persistence::{
-    GameRecord, PersistBatch, PersistedHeader, Persistence, ResponseRecord, ResponseStatus,
+    GameRecord, MoveKind, PersistBatch, PersistedHeader, Persistence, ResponseRecord,
+    ResponseStatus,
 };
-use crate::state_reader::GameStateReader;
+use crate::state_reader::{GameStateReader, ObservedGame};
 use crate::strategy::{
     compute_next_move, HonestMove, HonestMoveError, TerminateBundleError, TerminateBundleOracle,
     TruthOracle,
@@ -99,7 +100,28 @@ pub struct ObserverConfig {
     /// Mismatched deployment-ids are silently ignored (a
     /// cross-deployment-replay defence).
     pub deployment_id: [u8; 32],
+    /// How many times a single move may be re-signed and
+    /// re-broadcast after a broadcast error before the observer
+    /// gives up on it and escalates to the operator.
+    ///
+    /// A failed broadcast does NOT consume the move's pivot — the
+    /// move was never submitted, and the dedup set exists to stop
+    /// double-submission, not to make one transient RPC error
+    /// forfeit the game.  But an error that is not transient (a
+    /// permanently malformed tx, a wallet with no funds) would
+    /// otherwise retry every iteration for the life of the daemon,
+    /// so the retries are counted per pivot and capped here.  At
+    /// the cap the pivot is retained, an `error!` line names it,
+    /// and a human decides.
+    pub max_broadcast_attempts: u32,
 }
+
+/// Default for [`ObserverConfig::max_broadcast_attempts`].  The
+/// bisection response timeout is the real deadline; this many
+/// attempts across as many poll intervals is comfortably inside it
+/// for any sane polling cadence, and is far more than a transient
+/// RPC blip needs.
+pub const DEFAULT_MAX_BROADCAST_ATTEMPTS: u32 = 8;
 
 impl ObserverConfig {
     /// Construct an observer config with defaults.
@@ -110,6 +132,7 @@ impl ObserverConfig {
             poll_interval: DEFAULT_POLL_INTERVAL,
             play_as: TurnSide::Challenger,
             deployment_id,
+            max_broadcast_attempts: DEFAULT_MAX_BROADCAST_ATTEMPTS,
         }
     }
 }
@@ -146,6 +169,14 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// [`Self::with_state_reader`].
     state_reader: Option<Box<dyn GameStateReader + Send + Sync>>,
     games: HashMap<u128, GameRecord>,
+    /// In-memory mirror of the persisted batch records (Workstream
+    /// SB ruling R9), keyed by the batch's END index — the L1
+    /// record's key.  Populated at startup from persistence and
+    /// updated from every `StateRootSubmitted` event; a
+    /// resubmission at the same key (post-revert recovery)
+    /// overwrites.  The terminate path reads the disputed game's
+    /// batch bounds here to hand the bundle oracle.
+    batches: HashMap<u64, crate::persistence::BatchRecord>,
     /// In-memory cache of `(game_id, pivot_idx)` pairs the
     /// observer has already submitted a response for.  Populated
     /// at startup from the persisted response records; updated
@@ -153,7 +184,7 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// previous O(N)-per-call `list_responses` scan with a
     /// constant-time lookup, defending against unbounded growth
     /// over the daemon's lifetime.
-    submitted_pivots: std::collections::HashSet<(u128, Option<u64>)>,
+    submitted_pivots: std::collections::HashSet<(u128, MoveKind, Option<u64>)>,
     /// Per-iteration ROLLBACK SET — pivots inserted into
     /// `submitted_pivots` during the current iteration.  If
     /// `commit_batch` fails, these entries are rolled back so
@@ -163,7 +194,15 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// pass-4-round-3 fix: previously a `commit_batch` failure
     /// cleared `pending_broadcasts` but left `submitted_pivots`
     /// populated, making the move un-retry-able in this process.
-    iteration_pivot_inserts: Vec<(u128, Option<u64>)>,
+    iteration_pivot_inserts: Vec<(u128, MoveKind, Option<u64>)>,
+    /// Per-pivot count of BROADCAST failures.  A failed broadcast
+    /// releases the pivot from `submitted_pivots` so the next
+    /// iteration's sweep retries it; this counter is what keeps
+    /// that retry bounded.  Seeded at startup from the persisted
+    /// `Failed` / `Dropped` records so a restart does not reset an
+    /// exhausted move's budget.  See
+    /// [`ObserverConfig::max_broadcast_attempts`].
+    broadcast_failures: HashMap<(u128, MoveKind, Option<u64>), u32>,
     /// Per-iteration queue of prepared transactions awaiting
     /// L1 broadcast.  `maybe_play_move` enqueues; `run_iteration`
     /// drains AFTER `commit_batch` succeeds so the persistence
@@ -186,11 +225,29 @@ struct PendingBroadcast {
     /// `#[allow(dead_code)]` because the field is read only by
     /// the structured log fields (which clippy's dead-code
     /// analyzer doesn't track through `tracing::info!` macros).
-    #[allow(dead_code)]
     pivot_idx: Option<u64>,
+    /// The move's dedup class.  Carried alongside `pivot_idx` so a
+    /// broadcast FAILURE can release the exact key
+    /// `maybe_play_move` inserted; without it the release would
+    /// have to guess the kind from the label.
+    move_kind: MoveKind,
     /// Debug string for the `HonestMove` variant — logged on
     /// broadcast for operator visibility.
-    move_kind: String,
+    move_label: String,
+}
+
+/// One L1 call the observer has decided to make, before it is
+/// signed.  See [`Observer::queue_l1_call`].
+struct QueuedCall {
+    game_id: u128,
+    /// The game's bisection depth, recorded on the response for
+    /// operator forensics.
+    depth: u32,
+    calldata: Vec<u8>,
+    move_kind: MoveKind,
+    pivot_idx: Option<u64>,
+    /// Human-readable label for the log line.
+    label: String,
 }
 
 impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
@@ -246,6 +303,16 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         for rec in game_records {
             games.insert(rec.game_id, rec);
         }
+        // Restore the in-memory batch map (Workstream SB ruling R9).
+        let batch_records = persistence.list_batches().map_err(|e| {
+            ObserverError::Storage(knomosis_storage::storage::StorageError::Other(
+                e.to_string(),
+            ))
+        })?;
+        let mut batches = HashMap::new();
+        for rec in batch_records {
+            batches.insert(rec.end_index, rec);
+        }
         // Populate the in-memory pivot-dedup cache from the
         // persisted response records.  This is the O(N) cost
         // paid once at startup; subsequent dedup checks are O(1).
@@ -254,14 +321,40 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 e.to_string(),
             ))
         })?;
-        let submitted_pivots: std::collections::HashSet<(u128, Option<u64>)> = response_records
-            .iter()
-            .map(|r| (r.game_id, r.pivot_idx))
-            .collect();
+        //
+        // A `Failed` / `Dropped` record does NOT seed the set.  Both
+        // statuses mean the transaction never made it onto L1 —
+        // `Failed` is a broadcast error, `Dropped` is the submitter
+        // observing that a broadcast tx did not survive, and its own
+        // docstring says the caller re-submits with bumped gas.
+        // Seeding either one made the pivot permanently unplayable
+        // across restarts, so a single transient RPC error at
+        // broadcast time forfeited the game.  They seed
+        // `broadcast_failures` instead, which bounds the retry
+        // without forbidding it.
+        let mut broadcast_failures: HashMap<(u128, MoveKind, Option<u64>), u32> = HashMap::new();
+        let mut submitted_pivots: std::collections::HashSet<(u128, MoveKind, Option<u64>)> =
+            std::collections::HashSet::new();
+        for r in &response_records {
+            let key = (r.game_id, r.move_kind, r.pivot_idx);
+            match r.status {
+                ResponseStatus::Failed | ResponseStatus::Dropped => {
+                    *broadcast_failures.entry(key).or_insert(0) += 1;
+                }
+                ResponseStatus::Intent | ResponseStatus::Pending | ResponseStatus::Confirmed => {
+                    submitted_pivots.insert(key);
+                }
+            }
+        }
+        // A pivot that later succeeded is submitted, whatever its
+        // earlier attempts did — drop its failure budget so a
+        // re-org-driven re-entry is not charged for history.
+        broadcast_failures.retain(|k, _| !submitted_pivots.contains(k));
         info!(
             cursor = ?cursor,
             game_count = games.len(),
             submitted_pivot_count = submitted_pivots.len(),
+            failed_pivot_count = broadcast_failures.len(),
             "observer initialised; resumed from persistence"
         );
         Ok(Self {
@@ -273,7 +366,9 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             terminate_bundle_oracle: None,
             state_reader: None,
             games,
+            batches,
             submitted_pivots,
+            broadcast_failures,
             iteration_pivot_inserts: Vec::new(),
             pending_broadcasts: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
@@ -480,9 +575,10 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
     pub fn mark_state_known(
         &mut self,
         game_id: u128,
-        full_state: GameState,
+        observed: ObservedGame,
         block_number: u64,
     ) -> Result<bool, ObserverError> {
+        let full_state = observed.state;
         let Some(rec) = self.games.get(&game_id).cloned() else {
             return Ok(false);
         };
@@ -521,6 +617,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             me: rec.me,
             last_updated_block: block_number,
             state_known: true,
+            turn_deadline: Some(observed.turn_deadline),
+            disputed_log_index: Some(observed.disputed_log_index),
         };
         self.games.insert(game_id, new_rec.clone());
         let mut batch = PersistBatch::new();
@@ -580,7 +678,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         let mut errors = 0usize;
         for game_id in cold_start_ids {
             match reader.read_and_validate(game_id, self.config.deployment_id) {
-                Ok(full_state) => match self.mark_state_known(game_id, full_state, block_number) {
+                Ok(observed) => match self.mark_state_known(game_id, observed, block_number) {
                     Ok(true) => hydrated += 1,
                     Ok(false) => {
                         // Race: game was already settled / removed
@@ -709,6 +807,15 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 EventHandling::Recorded | EventHandling::Skipped => (),
             }
         }
+        // Owed-move sweep.  Runs AFTER the event loop so a turn that
+        // changed this iteration is evaluated in its new state, and
+        // BEFORE the commit so anything it queues rides the same
+        // batch and the same intent-then-broadcast sequencing.
+        submitted_moves += self.sweep_owed_moves(&mut batch)?;
+        // ...and collect the wins the opponent has forfeited by
+        // going silent.  After the owed-move sweep, so a game we
+        // just moved on is no longer a candidate.
+        submitted_moves += self.sweep_timeout_claims(&mut batch);
         if let Some(new_cursor) = watch.new_last_confirmed {
             batch.set_cursor(new_cursor);
             // Snapshot the re-org window into the batch so it
@@ -843,7 +950,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 prepared,
                 game_id: rec.game_id,
                 pivot_idx: rec.pivot_idx,
-                move_kind: "re-broadcast".to_string(),
+                move_kind: rec.move_kind,
+                move_label: "re-broadcast".to_string(),
             };
             info!(
                 tx_hash = %rec.tx_hash_hex,
@@ -903,6 +1011,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 // the next call re-fetches from
                 // `eth_getTransactionCount`.
                 self.submitter.invalidate_nonce_cache();
+                self.release_pivot_after_broadcast_failure(pending);
                 (ResponseStatus::Failed, "broadcast failed")
             }
         };
@@ -926,7 +1035,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 })?;
                 info!(
                     game_id = %pending.game_id,
-                    move_kind = %pending.move_kind,
+                    move_kind = %pending.move_label,
                     tx_hash = %hex::encode(pending.prepared.tx_hash),
                     status = ?new_status,
                     "{log_msg}",
@@ -940,6 +1049,55 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             }
         }
         Ok(())
+    }
+
+    /// Release a pivot the observer reserved but never actually
+    /// broadcast, so the next iteration's sweep can retry it.
+    ///
+    /// `maybe_play_move` inserts the pivot into `submitted_pivots`
+    /// BEFORE the broadcast, which is correct — the insert is what
+    /// stops a second move for the same pivot inside the same
+    /// iteration, and it has to happen while the batch is still
+    /// being assembled.  But the reservation is a claim that the
+    /// move WAS submitted, and after a broadcast error it was not.
+    /// Left in place it is permanent: nothing else removes a pivot,
+    /// and the startup seed used to re-add it from the `Failed`
+    /// record, so one transient RPC error at broadcast time cost the
+    /// game — the observer would sit out its turn until the deadline
+    /// having computed the correct move.
+    ///
+    /// Bounded by [`ObserverConfig::max_broadcast_attempts`]: an
+    /// error that is not transient keeps the reservation and
+    /// escalates instead of retrying forever.
+    fn release_pivot_after_broadcast_failure(&mut self, pending: &PendingBroadcast) {
+        let key = (pending.game_id, pending.move_kind, pending.pivot_idx);
+        let failures = self.broadcast_failures.entry(key).or_insert(0);
+        *failures += 1;
+        if *failures >= self.config.max_broadcast_attempts {
+            error!(
+                game_id = %pending.game_id,
+                move_kind = %pending.move_label,
+                pivot_idx = ?pending.pivot_idx,
+                failures = *failures,
+                "broadcast failed {} times; giving up on this move — OPERATOR ACTION REQUIRED, \
+                 the observer will not retry it and may lose the game by timeout",
+                *failures,
+            );
+            return;
+        }
+        self.submitted_pivots.remove(&key);
+        // The rollback set is keyed the same way; drop the entry so a
+        // later `commit_batch` failure in the same iteration does not
+        // try to remove an already-removed key.
+        self.iteration_pivot_inserts.retain(|k| *k != key);
+        warn!(
+            game_id = %pending.game_id,
+            move_kind = %pending.move_label,
+            pivot_idx = ?pending.pivot_idx,
+            attempt = *failures,
+            max_attempts = self.config.max_broadcast_attempts,
+            "pivot released for retry on the next iteration",
+        );
     }
 
     /// Handle a single event.  Updates the in-memory game map +
@@ -984,12 +1142,32 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 block_number,
                 ..
             } => self.handle_game_settled(*game_id, *status, *block_number, batch),
-            GameEvent::StateRootSubmitted { .. } => {
-                // State-root submissions are monitored separately
-                // by the fault-detection pipeline (RH-G.4 cell-
-                // proof generator); they don't directly affect a
-                // game state.  Record only.
-                Ok(EventHandling::Skipped)
+            GameEvent::StateRootSubmitted {
+                log_index_claim,
+                state_commit,
+                prev_end_index,
+                actions_root,
+                block_number,
+                ..
+            } => {
+                // A batch submission does not affect any game's
+                // state machine, but its bounds + actions root are
+                // what the terminate path must hand the bundle
+                // oracle (Workstream SB ruling R9) — record the
+                // batch, keyed by its end index.  A resubmission at
+                // the same key (post-revert recovery) overwrites,
+                // which is exactly the registry's own overwrite
+                // rule.
+                let rec = crate::persistence::BatchRecord {
+                    end_index: *log_index_claim,
+                    prev_end_index: *prev_end_index,
+                    actions_root: *actions_root,
+                    state_commit: *state_commit,
+                    block_number: *block_number,
+                };
+                self.batches.insert(rec.end_index, rec.clone());
+                batch.upsert_batch(rec);
+                Ok(EventHandling::Recorded)
             }
         }
     }
@@ -1081,6 +1259,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             // game's deploymentId matches.  See lib.rs's
             // "Security properties" §3 for the deferral note.
             deployment_id: self.config.deployment_id,
+            actions_root: [0u8; 32],
         };
         let _ = challenger_state_root; // recorded for future use; the
                                        // honest strategy doesn't need
@@ -1091,6 +1270,11 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             me: self.config.play_as,
             last_updated_block: block_number,
             state_known: false,
+            // Unknown until the hydrating contract read lands —
+            // the event carries neither the deadline nor the
+            // disputed log index.
+            turn_deadline: None,
+            disputed_log_index: None,
         };
         self.games.insert(game_id, rec.clone());
         batch.upsert_game(rec);
@@ -1180,6 +1364,15 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 let mut new_rec = rec.clone();
                 new_rec.state = new_state;
                 new_rec.last_updated_block = block_number;
+                // Every legal move resets the contract's
+                // `turnDeadline` to `block.number +
+                // BISECTION_RESPONSE_TIMEOUT`, and that immutable is
+                // per-deployment — not derivable off-chain.  Any
+                // stored value is therefore stale-EARLY from here,
+                // which would trigger a premature timeout claim.
+                // Drop it; the next confirming read installs the
+                // real one.
+                new_rec.turn_deadline = None;
                 self.games.insert(game_id, new_rec.clone());
                 batch.upsert_game(new_rec.clone());
                 // Now it's our turn to respond (if `play_as` ==
@@ -1286,6 +1479,15 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 let mut new_rec = rec.clone();
                 new_rec.state = new_state;
                 new_rec.last_updated_block = block_number;
+                // Every legal move resets the contract's
+                // `turnDeadline` to `block.number +
+                // BISECTION_RESPONSE_TIMEOUT`, and that immutable is
+                // per-deployment — not derivable off-chain.  Any
+                // stored value is therefore stale-EARLY from here,
+                // which would trigger a premature timeout claim.
+                // Drop it; the next confirming read installs the
+                // real one.
+                new_rec.turn_deadline = None;
                 self.games.insert(game_id, new_rec.clone());
                 batch.upsert_game(new_rec.clone());
                 if let Some(submitted) = self.maybe_play_move(&new_rec, block_number, batch)? {
@@ -1337,6 +1539,15 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 let mut new_rec = rec.clone();
                 new_rec.state = new_state;
                 new_rec.last_updated_block = block_number;
+                // Every legal move resets the contract's
+                // `turnDeadline` to `block.number +
+                // BISECTION_RESPONSE_TIMEOUT`, and that immutable is
+                // per-deployment — not derivable off-chain.  Any
+                // stored value is therefore stale-EARLY from here,
+                // which would trigger a premature timeout claim.
+                // Drop it; the next confirming read installs the
+                // real one.
+                new_rec.turn_deadline = None;
                 self.games.insert(game_id, new_rec.clone());
                 batch.upsert_game(new_rec);
                 info!(game_id = %game_id, status = ?status, "game settled");
@@ -1417,7 +1628,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // this pivot?  The pivot for `Submit` is the
         // midpoint_idx; for `Respond` the pending_midpoint.idx.
         let pivot_idx = pivot_for_move(&rec.state, mv);
-        if self.has_submitted_for_pivot(rec.game_id, pivot_idx) {
+        let move_kind = move_kind_of(mv);
+        if self.has_submitted_for_pivot(rec.game_id, move_kind, pivot_idx) {
             debug!(
                 game_id = %rec.game_id,
                 pivot_idx = ?pivot_idx,
@@ -1425,20 +1637,53 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             );
             return Ok(Some(false));
         }
+        Ok(Some(self.queue_l1_call(
+            &QueuedCall {
+                game_id: rec.game_id,
+                depth: rec.state.depth,
+                calldata,
+                move_kind,
+                pivot_idx,
+                label: format!("{mv:?}"),
+            },
+            block_number,
+            batch,
+        )))
+    }
+
+    /// Sign, persist the pre-broadcast intent, reserve the pivot and
+    /// enqueue an L1 call for this iteration's broadcast drain.
+    ///
+    /// The three-phase discipline — sign, persist intent, broadcast
+    /// after the commit — is what makes a crash between any two
+    /// steps recoverable, and it is identical for every call the
+    /// observer makes.  Factored out so the honest moves and
+    /// [`Self::maybe_claim_timeout`] cannot drift into two versions
+    /// of it; the caller's only job is to decide WHAT to send and to
+    /// have checked the pivot first.
+    ///
+    /// Returns `false` if signing failed (the caller's move is
+    /// deferred to a later iteration, pivot unreserved).
+    fn queue_l1_call(
+        &mut self,
+        call: &QueuedCall,
+        block_number: u64,
+        batch: &mut PersistBatch,
+    ) -> bool {
         // Phase 1: build + sign.  No network I/O.  The
         // resulting `PreparedTx` carries the canonical
         // `tx_hash` (computable from the signed bytes, known
         // BEFORE broadcast) and the `raw_bytes` ready for
         // `eth_sendRawTransaction`.
-        let prepared = match self.submitter.build_and_sign(&calldata) {
+        let prepared = match self.submitter.build_and_sign(&call.calldata) {
             Ok(p) => p,
             Err(e) => {
                 error!(
-                    game_id = %rec.game_id,
+                    game_id = %call.game_id,
                     err = %e,
                     "build_and_sign failed; deferring move",
                 );
-                return Ok(Some(false));
+                return false;
             }
         };
         // Phase 2: persist the PRE-BROADCAST intent record.  The
@@ -1447,16 +1692,16 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // be recovered by re-broadcasting the stored
         // `raw_tx_hex` on restart.  This closes the H-1 audit
         // gap.
-        let resp = ResponseRecord {
+        batch.upsert_response(ResponseRecord {
             tx_hash_hex: hex::encode(prepared.tx_hash),
             raw_tx_hex: Some(hex::encode(&prepared.raw_bytes)),
-            game_id: rec.game_id,
+            game_id: call.game_id,
             status: ResponseStatus::Intent,
             submitted_at_block: block_number,
-            depth: rec.state.depth,
-            pivot_idx,
-        };
-        batch.upsert_response(resp);
+            depth: call.depth,
+            pivot_idx: call.pivot_idx,
+            move_kind: call.move_kind,
+        });
         // Insert into the in-memory pivot-dedup cache so a
         // subsequent move within the same iteration cannot
         // duplicate-submit.  Stored under the canonical
@@ -1465,7 +1710,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // also record the insert in `iteration_pivot_inserts`
         // so we can roll it back if `commit_batch` fails (would
         // otherwise permanently lock the pivot in this process).
-        let pivot_key = (rec.game_id, pivot_idx);
+        let pivot_key = (call.game_id, call.move_kind, call.pivot_idx);
         if self.submitted_pivots.insert(pivot_key) {
             self.iteration_pivot_inserts.push(pivot_key);
         }
@@ -1480,25 +1725,224 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // `Failed` on broadcast error).
         self.pending_broadcasts.push(PendingBroadcast {
             prepared,
-            game_id: rec.game_id,
-            pivot_idx,
-            move_kind: format!("{mv:?}"),
+            game_id: call.game_id,
+            pivot_idx: call.pivot_idx,
+            move_kind: call.move_kind,
+            move_label: call.label.clone(),
         });
         info!(
-            game_id = %rec.game_id,
-            move_kind = ?mv,
-            "honest move queued for broadcast (intent persisted)",
+            game_id = %call.game_id,
+            move_kind = %call.label,
+            "L1 call queued for broadcast (intent persisted)",
         );
-        Ok(Some(true))
+        true
     }
 
-    /// Check whether we've already submitted a response for the
-    /// given (`game_id`, `pivot_idx`) pair.  Used by the
-    /// deduplication discipline.  Constant-time lookup against
-    /// the in-memory cache, populated at startup from persisted
-    /// response records.
-    fn has_submitted_for_pivot(&self, game_id: u128, pivot_idx: Option<u64>) -> bool {
-        self.submitted_pivots.contains(&(game_id, pivot_idx))
+    /// Play every move the observer OWES on a live game but has not
+    /// yet queued.
+    ///
+    /// The event handlers are the fast path — an opponent moves, we
+    /// answer in the same iteration — but they are only half the
+    /// story, because there are two situations in which no event is
+    /// ever coming and the observer is nonetheless on the clock.
+    ///
+    /// 1. **It owes the FIRST move.**  `initiateChallenge` leaves
+    ///    the turn with the sequencer, so a sequencer-side observer
+    ///    must open the bisection with nothing to react to.
+    ///    `handle_game_opened` cannot play it even in principle: the
+    ///    event does not carry the disputed range, so the record is
+    ///    adopted `state_known = false` and hydration lands at the
+    ///    top of the NEXT iteration, by which point the event that
+    ///    would have driven the move is long consumed.  Driven by
+    ///    events alone the game simply sits there.
+    /// 2. **A move was DEFERRED.**  `maybe_play_move` returns
+    ///    `Ok(Some(false))` on an un-hydrated state, a truth oracle
+    ///    that has not caught up to the disputed index, an absent
+    ///    terminate bundle and a signing failure.  Every one of
+    ///    those is transient and resolves on its own — but the
+    ///    retry needs a trigger, and the opponent has already moved:
+    ///    it is our turn until we move or time out, so no further
+    ///    event will arrive.
+    ///
+    /// Both cases lose the game by timeout having computed the
+    /// correct move, which is the worst possible failure for an
+    /// honest party.  This sweep is the trigger.
+    ///
+    /// It is safe to run unconditionally because `maybe_play_move`
+    /// is idempotent by construction: it returns early on a settled
+    /// game, on the opponent's turn, on an un-hydrated state, and on
+    /// a pivot already in `submitted_pivots` — which is exactly the
+    /// set of reasons a sweep must not act.  So a game the event
+    /// loop just handled is re-examined here and skipped, at the
+    /// cost of one hash lookup.
+    fn sweep_owed_moves(&mut self, batch: &mut PersistBatch) -> Result<u32, ObserverError> {
+        let block = self.watcher.last_confirmed_block().unwrap_or(0);
+        // Snapshot first: `maybe_play_move` takes `&mut self`, and
+        // only the records whose turn it is are candidates, so the
+        // clone is bounded by the number of games actually owed a
+        // move rather than by the whole map.
+        let owed: Vec<GameRecord> = self
+            .games
+            .values()
+            .filter(|rec| rec.state.status.is_in_progress() && rec.state.turn == rec.me)
+            .cloned()
+            .collect();
+        let mut submitted = 0u32;
+        for rec in owed {
+            if self.maybe_play_move(&rec, block, batch)? == Some(true) {
+                submitted += 1;
+            }
+        }
+        Ok(submitted)
+    }
+
+    /// Collect the wins the opponent has forfeited by letting its
+    /// turn deadline lapse.
+    ///
+    /// `claimTimeout` is permissionless on L1, but "permissionless"
+    /// is not "automatic": until somebody calls it the game stays
+    /// `InProgress` and BOTH bonds stay locked.  The observer read
+    /// `turnDeadline` out of slot 11 and discarded it into `_`, so
+    /// it never called `claimTimeout` — `encode_claim_timeout_calldata`
+    /// was written, tested, and had no production caller.  An
+    /// adversary could open a frivolous challenge, walk away, and
+    /// leave the honest sequencer's bond escrowed and its state root
+    /// under dispute indefinitely, at the cost of its own bond
+    /// only if someone eventually noticed.
+    ///
+    /// The stored deadline is a TRIGGER, not an authority.  It is
+    /// dropped to `None` on every observed move because the contract
+    /// resets `turnDeadline` by a per-deployment `immutable` the
+    /// observer cannot compute, so acting on a stored value would
+    /// mean claiming early.  Instead a lapsed-looking game gets one
+    /// confirming `eth_call`, and only its answer authorises the
+    /// claim.  That makes the claim safe against staleness in both
+    /// directions: too-early costs a read, too-late costs a delay.
+    ///
+    /// The turn check is the load-bearing one.  `claimTimeout`
+    /// settles against WHOEVER's turn it is, so calling it on our
+    /// own lapsed turn would hand the opponent the win and both
+    /// bonds.  It is therefore checked twice — once on the cached
+    /// record to decide whether to read at all, and again on the
+    /// freshly-read state before anything is signed.
+    fn sweep_timeout_claims(&mut self, batch: &mut PersistBatch) -> u32 {
+        if self.state_reader.is_none() {
+            return 0;
+        }
+        let now = self.watcher.last_confirmed_block().unwrap_or(0);
+        // Candidates: live, hydrated, the OPPONENT is on the clock,
+        // and the deadline is either unknown or looks lapsed.  `now`
+        // is the last CONFIRMED block, so it trails the chain head —
+        // the trigger is conservative in the safe direction.
+        let candidates: Vec<u128> = self
+            .games
+            .values()
+            .filter(|rec| {
+                rec.state_known
+                    && rec.state.status.is_in_progress()
+                    && rec.state.turn != rec.me
+                    && rec.turn_deadline.is_none_or(|d| now > d)
+                    && !self.has_submitted_for_pivot(rec.game_id, MoveKind::Timeout, None)
+            })
+            .map(|rec| rec.game_id)
+            .collect();
+        if candidates.is_empty() {
+            return 0;
+        }
+        let reader = self.state_reader.take();
+        let Some(reader) = reader else {
+            return 0;
+        };
+        let mut claimed = 0u32;
+        for game_id in candidates {
+            match reader.read_and_validate(game_id, self.config.deployment_id) {
+                Ok(observed) => {
+                    // Install what we just read, whatever it says.
+                    // A confirming read that finds the deadline in
+                    // the future is not wasted: it stops the next
+                    // iteration reading again.
+                    if let Some(rec) = self.games.get_mut(&game_id) {
+                        rec.state = observed.state;
+                        rec.turn_deadline = Some(observed.turn_deadline);
+                        rec.last_updated_block = now;
+                        batch.upsert_game(rec.clone());
+                    }
+                    let Some(rec) = self.games.get(&game_id).cloned() else {
+                        continue;
+                    };
+                    if !rec.state.status.is_in_progress() {
+                        continue;
+                    }
+                    if rec.state.turn == rec.me {
+                        // The turn came back to us between the
+                        // trigger and the read.  Claiming here would
+                        // settle the game AGAINST us.
+                        continue;
+                    }
+                    if now <= observed.turn_deadline {
+                        continue;
+                    }
+                    if self.queue_l1_call(
+                        &QueuedCall {
+                            game_id,
+                            depth: rec.state.depth,
+                            calldata: crate::submitter::encode_claim_timeout_calldata(game_id),
+                            move_kind: MoveKind::Timeout,
+                            pivot_idx: None,
+                            label: "ClaimTimeout".to_string(),
+                        },
+                        now,
+                        batch,
+                    ) {
+                        claimed += 1;
+                        info!(
+                            game_id = %game_id,
+                            turn_deadline = observed.turn_deadline,
+                            block = now,
+                            "opponent let its turn deadline lapse; claiming the win",
+                        );
+                    }
+                }
+                Err(e) => {
+                    // A flaky RPC degrades one game's settlement, not
+                    // the daemon.  The candidate is re-derived from
+                    // scratch next iteration.
+                    warn!(
+                        game_id = %game_id,
+                        error = %e,
+                        "timeout-claim confirming read failed; will retry",
+                    );
+                }
+            }
+        }
+        self.state_reader = Some(reader);
+        claimed
+    }
+
+    /// Check whether we've already submitted this KIND of move for
+    /// the given (`game_id`, `pivot_idx`) pair.
+    ///
+    /// The move kind is part of the key, and that is the whole point.
+    /// Keyed on `(game_id, pivot_idx)` alone, a `Respond` and a
+    /// `TerminateOnSingleStep` collide: a response keys on the pending
+    /// midpoint `m`, and disagreeing with the lower half narrows the
+    /// range so `range.high.idx` becomes `m` — which is what the
+    /// terminal move keys on.  The honest party's terminate was
+    /// therefore skipped as a duplicate of its own preceding response,
+    /// and it lost the game by timeout having played correctly
+    /// throughout.
+    ///
+    /// Distinguishing the kinds keeps what the de-dup is FOR — never
+    /// broadcast the same move twice — without conflating two
+    /// different moves that happen to share an index.
+    fn has_submitted_for_pivot(
+        &self,
+        game_id: u128,
+        move_kind: MoveKind,
+        pivot_idx: Option<u64>,
+    ) -> bool {
+        self.submitted_pivots
+            .contains(&(game_id, move_kind, pivot_idx))
     }
 
     /// Workstream SVC.5 helper: build the L1 calldata bytes for
@@ -1542,7 +1986,53 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // For a single-step range `[low, high] = [n, n+1]`, the
         // action in dispute is `entries[n]`, i.e. `range.low.idx`.
         let pivot = rec.state.range.low.idx;
-        let bundle = match bundle_oracle.terminate_bundle_at(pivot) {
+        // The batch binding (Workstream SB ruling R7): terminate
+        // calldata must carry the disputed action's signature +
+        // inclusion proof against the DISPUTED batch record's
+        // actions root, so the oracle needs the batch bounds.  The
+        // disputed record's key is the game's immutable
+        // `disputedLogIndex` (learned at hydration), and the bounds
+        // come from the observer's own batch store (fed by the
+        // `StateRootSubmitted` events).  Without either, defer:
+        // calldata built without the binding reverts
+        // `ActionNotInBatch` on-chain.
+        let Some(disputed_end) = rec.disputed_log_index else {
+            warn!(
+                game_id = %rec.game_id,
+                pivot_idx = pivot,
+                "TerminateOnSingleStep deferred: the game's disputed \
+                 log index is not yet known (state not hydrated)",
+            );
+            return None;
+        };
+        let Some(batch_rec) = self.batches.get(&disputed_end) else {
+            warn!(
+                game_id = %rec.game_id,
+                disputed_end,
+                pivot_idx = pivot,
+                "TerminateOnSingleStep deferred: no batch record for \
+                 the disputed end index (StateRootSubmitted event not \
+                 yet observed)",
+            );
+            return None;
+        };
+        // Sanity: the disputed step must sit inside the batch —
+        // `initiateChallenge` anchored `low` at the batch's start,
+        // so a violation here means the batch store and the game
+        // disagree (e.g. a stale record from before a re-org).
+        if pivot < batch_rec.prev_end_index || pivot >= batch_rec.end_index {
+            warn!(
+                game_id = %rec.game_id,
+                pivot_idx = pivot,
+                batch_prev_end = batch_rec.prev_end_index,
+                batch_end = batch_rec.end_index,
+                "TerminateOnSingleStep deferred: disputed step index \
+                 outside the recorded batch bounds",
+            );
+            return None;
+        }
+        let bounds = (batch_rec.prev_end_index, batch_rec.end_index);
+        let bundle = match bundle_oracle.terminate_bundle_at(pivot, Some(bounds)) {
             Ok(b) => b,
             Err(TerminateBundleError::Missed { idx }) => {
                 warn!(
@@ -1669,6 +2159,18 @@ fn interruptible_sleep(duration: Duration, stop: &AtomicBool) {
 ///   * For `TerminateOnSingleStep`: `Some(range.high.idx)` —
 ///     the single-step's high index.
 ///   * For `NoMove`: `None`.
+fn move_kind_of(mv: HonestMove) -> MoveKind {
+    match mv {
+        // `NoMove` never reaches the de-dup (it returns earlier), but
+        // the match is total so a new variant is a compile error here
+        // rather than a silent `Unknown` that aliases old records.
+        HonestMove::NoMove => MoveKind::Unknown,
+        HonestMove::Submit(_) => MoveKind::Submit,
+        HonestMove::RespondAgree | HonestMove::RespondDisagree => MoveKind::Respond,
+        HonestMove::TerminateOnSingleStep { .. } => MoveKind::Terminate,
+    }
+}
+
 fn pivot_for_move(state: &GameState, mv: HonestMove) -> Option<u64> {
     match mv {
         HonestMove::NoMove => None,
@@ -1714,8 +2216,9 @@ mod tests {
     use crate::events::{GameEvent, GameEventTopic};
     use crate::game::{Claim, DisputedRange, GameState, GameStatus, StateCommit, TurnSide};
     use crate::persistence::{
-        GameRecord, PersistBatch, Persistence, ResponseRecord, ResponseStatus,
+        GameRecord, MoveKind, PersistBatch, Persistence, ResponseRecord, ResponseStatus,
     };
+    use crate::state_reader::ObservedGame;
     use crate::strategy::{HonestMove, MemoryTruthOracle};
     use crate::submitter::mock::MockSubmitter;
     use crate::watcher::WatcherConfig;
@@ -1892,10 +2395,13 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::SequencerWon, // already settled
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
                 state_known: false,
+                turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let event = GameEvent::MidpointSubmitted {
@@ -1947,10 +2453,13 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::ChallengerWon, // settled
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
                 state_known: false,
+                turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let event = GameEvent::ResponseSubmitted {
@@ -1989,6 +2498,7 @@ mod tests {
                 submitted_at_block: 100,
                 depth: 0,
                 pivot_idx: Some(32),
+                move_kind: MoveKind::Respond,
             };
             persistence.store_response(&resp).unwrap();
         }
@@ -2006,10 +2516,27 @@ mod tests {
         };
         let cfg = ObserverConfig::new(watcher_cfg, [0u8; 32]);
         let obs = Observer::new(cfg, source, submitter, oracle, persistence).unwrap();
-        // Cache populated from persistence: hit on (7, Some(32)).
-        assert!(obs.has_submitted_for_pivot(7, Some(32)));
-        assert!(!obs.has_submitted_for_pivot(7, Some(64)));
-        assert!(!obs.has_submitted_for_pivot(99, Some(32)));
+        // Cache populated from persistence: hit on
+        // (7, Respond, Some(32)).
+        assert!(obs.has_submitted_for_pivot(7, MoveKind::Respond, Some(32)));
+        assert!(!obs.has_submitted_for_pivot(7, MoveKind::Respond, Some(64)));
+        assert!(!obs.has_submitted_for_pivot(99, MoveKind::Respond, Some(32)));
+        // THE REGRESSION.  A terminate at the SAME index is a
+        // different move and must not be swallowed as a duplicate of
+        // the response above.  Keyed on `(game_id, pivot_idx)` alone
+        // this asserted `true`, and the honest party's terminal move
+        // was skipped — losing a game it had played correctly, because
+        // disagreeing with the lower half makes `range.high.idx` equal
+        // the midpoint the response already keyed on.
+        assert!(
+            !obs.has_submitted_for_pivot(7, MoveKind::Terminate, Some(32)),
+            "a terminate must not dedup against a response at the same index"
+        );
+        // ...and the converse, so the widening is not one-sided.
+        assert!(
+            !obs.has_submitted_for_pivot(7, MoveKind::Submit, Some(32)),
+            "a midpoint submission must not dedup against a response"
+        );
     }
 
     /// In-memory dedup cache is updated atomically with each
@@ -2018,12 +2545,289 @@ mod tests {
     #[test]
     fn pivot_dedup_in_memory_cache_blocks_resubmission() {
         let (mut obs, _dir) = fresh_observer();
-        assert!(!obs.has_submitted_for_pivot(42, Some(16)));
+        assert!(!obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(16)));
         // Insert directly into the in-memory cache (mirrors
         // what `maybe_play_move` does after a successful submit).
-        obs.submitted_pivots.insert((42, Some(16)));
-        assert!(obs.has_submitted_for_pivot(42, Some(16)));
-        assert!(!obs.has_submitted_for_pivot(42, Some(32)));
+        obs.submitted_pivots
+            .insert((42, MoveKind::Respond, Some(16)));
+        assert!(obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(16)));
+        assert!(!obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(32)));
+    }
+
+    /// **The `MoveKind` discriminator is load-bearing.**  Two
+    /// different moves at the SAME `(game_id, pivot)` must dedup
+    /// independently.
+    ///
+    /// The sibling case above only ever varies `pivot_idx`, so it
+    /// passes just as happily against a key collapsed to
+    /// `(game_id, pivot)`.  Under that key a `Respond` at a pivot
+    /// would mark the pivot spent and the observer would then decline
+    /// to `Terminate` at it — the terminal step is the LAST move of a
+    /// converged game, so declining it forfeits a game the observer
+    /// was winning, silently and only at the deadline.
+    ///
+    /// `Timeout` is included because it shares the same machinery
+    /// while not being a `HonestMove` at all: a claim at a pivot must
+    /// not be blocked by having already responded there.
+    #[test]
+    fn pivot_dedup_is_per_move_kind_not_per_pivot() {
+        let (mut obs, _dir) = fresh_observer();
+        obs.submitted_pivots
+            .insert((42, MoveKind::Respond, Some(16)));
+
+        assert!(
+            obs.has_submitted_for_pivot(42, MoveKind::Respond, Some(16)),
+            "the kind that was submitted is deduped"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(42, MoveKind::Terminate, Some(16)),
+            "a Respond must NOT block the Terminate at the same pivot"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(42, MoveKind::Submit, Some(16)),
+            "...nor the Submit"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(42, MoveKind::Timeout, Some(16)),
+            "...nor a timeout claim"
+        );
+        // And the game id still separates: another game's identical
+        // move is untouched.
+        assert!(
+            !obs.has_submitted_for_pivot(43, MoveKind::Respond, Some(16)),
+            "dedup is per game"
+        );
+    }
+
+    /// Install a live, hydrated game that the observer OWES a move
+    /// on, and no events at all.  `hydratable_state` has the turn
+    /// with the sequencer and a `0..1024` range, so a
+    /// sequencer-side observer owes the opening midpoint at 512.
+    fn insert_owed_game(obs: &mut Observer<InMemoryL1Source, MockSubmitter, MemoryTruthOracle>) {
+        obs.config.play_as = TurnSide::Sequencer;
+        obs.games.insert(
+            77,
+            GameRecord {
+                game_id: 77,
+                state: hydratable_state(),
+                me: TurnSide::Sequencer,
+                last_updated_block: 100,
+                state_known: true,
+                turn_deadline: None,
+                disputed_log_index: None,
+            },
+        );
+    }
+
+    /// **Liveness regression.**  A move the observer owes is played
+    /// even when no event arrives to prompt it.
+    ///
+    /// `initiateChallenge` leaves the turn with the sequencer, so a
+    /// sequencer-side observer must OPEN the bisection with nothing
+    /// to react to.  `handle_game_opened` cannot play it even in
+    /// principle — the event does not carry the disputed range, so
+    /// the record is adopted `state_known = false` and hydration
+    /// lands at the top of the NEXT iteration, by which point the
+    /// event is consumed.  Driven by events alone the game just sits
+    /// there and the honest sequencer loses on the turn deadline
+    /// without ever having moved.
+    ///
+    /// Fails against the pre-fix code: `submitted_moves` is 0,
+    /// because every call site of `maybe_play_move` was an event
+    /// handler.
+    #[test]
+    fn an_owed_move_is_played_with_no_event_to_react_to() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_owed_game(&mut obs);
+        obs.oracle.insert(512, commit(9));
+
+        let out = obs.run_iteration().expect("iteration succeeds");
+
+        assert_eq!(out.event_count, 0, "precondition: nothing to react to");
+        assert_eq!(
+            out.submitted_moves, 1,
+            "the opening midpoint must be played anyway"
+        );
+        assert_eq!(obs.submitter().submissions().len(), 1);
+        assert!(obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)));
+    }
+
+    /// **Liveness regression.**  A move DEFERRED for a transient
+    /// reason is retried on a later iteration.
+    ///
+    /// `maybe_play_move` defers on an un-hydrated state, on a truth
+    /// oracle that has not caught up, on an absent terminate bundle
+    /// and on a signing failure — every one of them transient.  But
+    /// the retry needs a trigger, and none is coming: the opponent
+    /// has already moved, so it is our turn until we move or time
+    /// out.  Here the oracle lags on the first iteration and catches
+    /// up before the second, with no event in between.
+    #[test]
+    fn a_deferred_move_is_retried_once_its_reason_clears() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_owed_game(&mut obs);
+        // Oracle has nothing at the midpoint: the move defers.
+        let out = obs.run_iteration().expect("iteration succeeds");
+        assert_eq!(out.submitted_moves, 0, "deferred while the oracle lags");
+        assert!(
+            !obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)),
+            "a deferred move must not reserve its pivot"
+        );
+
+        // The oracle catches up.  No event accompanies it.
+        obs.oracle.insert(512, commit(9));
+        let out = obs.run_iteration().expect("iteration succeeds");
+        assert_eq!(out.event_count, 0);
+        assert_eq!(out.submitted_moves, 1, "the deferred move is retried");
+    }
+
+    /// **Liveness regression.**  A move whose broadcast FAILS is
+    /// retried; it does not consume the pivot.
+    ///
+    /// `maybe_play_move` reserves the pivot before the broadcast,
+    /// which is correct — that reservation is what stops a second
+    /// move for the same pivot inside one iteration.  But it is a
+    /// claim that the move WAS submitted, and after a broadcast
+    /// error it was not.  Nothing released it and the startup seed
+    /// re-added it from the `Failed` record, so one transient RPC
+    /// error at broadcast time permanently forfeited the move: the
+    /// observer sat out its turn having computed it correctly.
+    #[test]
+    fn a_failed_broadcast_does_not_consume_the_move() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_owed_game(&mut obs);
+        obs.oracle.insert(512, commit(9));
+
+        obs.submitter().set_next_reject();
+        let out = obs.run_iteration().expect("iteration survives the failure");
+        // The move was queued, so the iteration counts it; the
+        // broadcast is what failed.
+        assert_eq!(out.submitted_moves, 1);
+        assert!(
+            obs.submitter().submissions().is_empty(),
+            "precondition: nothing actually reached L1"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)),
+            "the pivot must be released — the move was never broadcast"
+        );
+
+        // The next iteration re-signs and re-broadcasts it, with no
+        // event and no operator action.
+        let out = obs.run_iteration().expect("iteration succeeds");
+        assert_eq!(out.submitted_moves, 1);
+        assert_eq!(
+            obs.submitter().submissions().len(),
+            1,
+            "the retry reaches L1"
+        );
+    }
+
+    /// The retry above is BOUNDED.  A permanently-failing broadcast
+    /// must not spin for the life of the daemon: at
+    /// `max_broadcast_attempts` the pivot is retained and the
+    /// operator is told.
+    #[test]
+    fn the_broadcast_retry_budget_is_bounded() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_owed_game(&mut obs);
+        obs.oracle.insert(512, commit(9));
+        obs.config.max_broadcast_attempts = 2;
+
+        obs.submitter().set_next_reject();
+        obs.run_iteration().expect("iteration 1");
+        assert!(
+            !obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)),
+            "attempt 1 of 2: still retryable"
+        );
+
+        obs.submitter().set_next_reject();
+        obs.run_iteration().expect("iteration 2");
+        assert!(
+            obs.has_submitted_for_pivot(77, MoveKind::Submit, Some(512)),
+            "budget exhausted: the pivot is retained rather than retried forever"
+        );
+
+        // A third iteration submits nothing, even though the
+        // submitter would now accept it.
+        let out = obs.run_iteration().expect("iteration 3");
+        assert_eq!(out.submitted_moves, 0);
+        assert!(obs.submitter().submissions().is_empty());
+    }
+
+    /// A persisted `Failed` record must not seed the dedup set at
+    /// startup.  Both halves of the fix are needed: releasing the
+    /// pivot in-process is undone on the next restart if the seed
+    /// puts it back.
+    #[test]
+    fn startup_does_not_treat_a_failed_record_as_submitted() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("test.db");
+        {
+            let persistence = Persistence::open(&db).unwrap();
+            for (seed, status) in [
+                (0xaau8, ResponseStatus::Failed),
+                (0xbbu8, ResponseStatus::Dropped),
+                (0xccu8, ResponseStatus::Pending),
+            ] {
+                persistence
+                    .store_response(&ResponseRecord {
+                        tx_hash_hex: format!("{seed:02x}").repeat(32),
+                        raw_tx_hex: None,
+                        game_id: u128::from(seed),
+                        status,
+                        submitted_at_block: 100,
+                        depth: 0,
+                        pivot_idx: Some(32),
+                        move_kind: MoveKind::Submit,
+                    })
+                    .unwrap();
+            }
+        }
+        let persistence = Persistence::open(&db).unwrap();
+        let cfg = ObserverConfig::new(
+            WatcherConfig {
+                game_contract: make_contract_addr(1),
+                state_root_submission_contract: make_contract_addr(2),
+                confirmation_depth: 1,
+                reorg_window_capacity: 16,
+                blocks_per_iteration: 64,
+            },
+            [0u8; 32],
+        );
+        let obs = Observer::new(
+            cfg,
+            InMemoryL1Source::new(),
+            MockSubmitter::new(),
+            MemoryTruthOracle::new(),
+            persistence,
+        )
+        .unwrap();
+
+        assert!(
+            !obs.has_submitted_for_pivot(0xaa, MoveKind::Submit, Some(32)),
+            "a Failed record means the tx never reached L1"
+        );
+        assert!(
+            !obs.has_submitted_for_pivot(0xbb, MoveKind::Submit, Some(32)),
+            "a Dropped record's own docstring says the caller re-submits"
+        );
+        assert!(
+            obs.has_submitted_for_pivot(0xcc, MoveKind::Submit, Some(32)),
+            "a Pending record IS submitted and must still dedup"
+        );
+        // ...and the failures are counted, so the retry stays bounded
+        // across the restart rather than starting over.
+        assert_eq!(
+            obs.broadcast_failures
+                .get(&(0xaa, MoveKind::Submit, Some(32))),
+            Some(&1)
+        );
+        assert_eq!(
+            obs.broadcast_failures
+                .get(&(0xbb, MoveKind::Submit, Some(32))),
+            Some(&1)
+        );
     }
 
     /// A [`crate::state_reader::GameStateReader`] that answers from a
@@ -2031,11 +2835,23 @@ mod tests {
     /// test can exercise the skip-and-continue path.
     struct MapStateReader {
         states: HashMap<u128, GameState>,
+        /// The `turnDeadline` every read reports.  Defaults to
+        /// `u64::MAX` (never lapsed), so a test that does not care
+        /// about timeouts is unaffected by the deadline plumbing.
+        turn_deadline: u64,
     }
 
     impl MapStateReader {
         fn new(states: HashMap<u128, GameState>) -> Self {
-            Self { states }
+            Self {
+                states,
+                turn_deadline: u64::MAX,
+            }
+        }
+
+        fn with_turn_deadline(mut self, deadline: u64) -> Self {
+            self.turn_deadline = deadline;
+            self
         }
     }
 
@@ -2044,17 +2860,188 @@ mod tests {
             &self,
             game_id: u128,
             expected_deployment_id: [u8; 32],
-        ) -> Result<GameState, crate::state_reader::GameStateReadError> {
+        ) -> Result<ObservedGame, crate::state_reader::GameStateReadError> {
             match self.states.get(&game_id) {
-                Some(s) => Ok(GameState {
-                    deployment_id: expected_deployment_id,
-                    ..s.clone()
+                Some(s) => Ok(ObservedGame {
+                    state: GameState {
+                        deployment_id: expected_deployment_id,
+                        actions_root: [0u8; 32],
+                        ..s.clone()
+                    },
+                    turn_deadline: self.turn_deadline,
+                    // The mock hydrates games whose `high` has not
+                    // yet been reassigned by a disagree, so the
+                    // disputed record's key IS the range's high end.
+                    disputed_log_index: s.range.high.idx,
                 }),
                 None => Err(crate::state_reader::GameStateReadError::RpcTransport(
                     "no such game".to_string(),
                 )),
             }
         }
+    }
+
+    /// Wrap a bare `GameState` as the reader would return it.
+    fn observed(state: GameState) -> ObservedGame {
+        let disputed_log_index = state.range.high.idx;
+        ObservedGame {
+            state,
+            turn_deadline: u64::MAX,
+            disputed_log_index,
+        }
+    }
+
+    /// Install a live, hydrated game on which the OPPONENT is on the
+    /// clock, plus a reader that reports `deadline`.  The observer
+    /// plays challenger; `hydratable_state`'s turn is the
+    /// sequencer's.
+    fn observer_awaiting_opponent(
+        deadline: u64,
+    ) -> (
+        Observer<InMemoryL1Source, MockSubmitter, MemoryTruthOracle>,
+        tempfile::TempDir,
+    ) {
+        let (mut obs, dir) = fresh_observer();
+        obs.games.insert(
+            77,
+            GameRecord {
+                game_id: 77,
+                state: hydratable_state(),
+                me: TurnSide::Challenger,
+                last_updated_block: 100,
+                state_known: true,
+                // Not yet read — the trigger fires and the
+                // confirming read decides.
+                turn_deadline: None,
+                disputed_log_index: None,
+            },
+        );
+        let mut states = HashMap::new();
+        states.insert(77u128, hydratable_state());
+        let obs = obs.with_state_reader(Box::new(
+            MapStateReader::new(states).with_turn_deadline(deadline),
+        ));
+        (obs, dir)
+    }
+
+    /// **Liveness / economic regression.**  When the opponent lets
+    /// its turn deadline lapse, the observer claims the win.
+    ///
+    /// `claimTimeout` is permissionless on L1, but nobody calls it
+    /// by itself: until someone does, the game stays `InProgress`
+    /// and BOTH bonds stay escrowed.  The observer read
+    /// `turnDeadline` out of slot 11 and threw it away into `_`, so
+    /// `encode_claim_timeout_calldata` — written and unit-tested —
+    /// had no production caller.  An adversary could open a
+    /// frivolous challenge, walk away, and leave the honest
+    /// sequencer's bond locked and its state root disputed for as
+    /// long as nobody noticed by hand.
+    #[test]
+    fn a_lapsed_opponent_deadline_is_claimed() {
+        // The watcher has confirmed nothing, so `now` is 0; a
+        // deadline of 0 is strictly behind it... which is exactly
+        // the boundary the contract rejects.  Use a source that
+        // establishes a real confirmed block instead.
+        let (mut obs, _dir) = observer_awaiting_opponent(150);
+        obs.set_start_block(200);
+
+        let out = obs.run_iteration().expect("iteration succeeds");
+
+        assert_eq!(out.submitted_moves, 1, "the lapsed deadline is claimed");
+        assert!(obs.has_submitted_for_pivot(77, MoveKind::Timeout, None));
+        assert_eq!(obs.submitter().submissions().len(), 1);
+        // The calldata is `claimTimeout(77)`, not a bisection move.
+        assert_eq!(
+            obs.submitter().submissions()[0].calldata,
+            crate::submitter::encode_claim_timeout_calldata(77),
+        );
+    }
+
+    /// The claim is refused while the deadline is still in the
+    /// future — the trigger is a heuristic, the confirming read is
+    /// the authority.
+    #[test]
+    fn a_live_opponent_deadline_is_not_claimed() {
+        let (mut obs, _dir) = observer_awaiting_opponent(500);
+        obs.set_start_block(200);
+
+        let out = obs.run_iteration().expect("iteration succeeds");
+
+        assert_eq!(out.submitted_moves, 0);
+        assert!(obs.submitter().submissions().is_empty());
+        // The read is installed, so the next iteration does not
+        // re-read until the deadline actually passes.
+        assert_eq!(obs.games[&77].turn_deadline, Some(500));
+    }
+
+    /// **The dangerous case.**  `claimTimeout` settles against
+    /// WHOEVER's turn it is, so claiming on our OWN lapsed turn
+    /// hands the opponent the win and both bonds.  The observer must
+    /// never call it when the turn is its own.
+    #[test]
+    fn our_own_lapsed_deadline_is_never_claimed() {
+        let (mut obs, _dir) = fresh_observer();
+        // Same game, but WE are the sequencer — so `hydratable_state`'s
+        // `turn: Sequencer` is our turn, not the opponent's.
+        obs.config.play_as = TurnSide::Sequencer;
+        obs.games.insert(
+            77,
+            GameRecord {
+                game_id: 77,
+                state: hydratable_state(),
+                me: TurnSide::Sequencer,
+                last_updated_block: 100,
+                state_known: true,
+                turn_deadline: None,
+                disputed_log_index: None,
+            },
+        );
+        let mut states = HashMap::new();
+        states.insert(77u128, hydratable_state());
+        let mut obs = obs.with_state_reader(Box::new(
+            MapStateReader::new(states).with_turn_deadline(150),
+        ));
+        obs.set_start_block(200);
+        // No truth-oracle entry, so the owed-move sweep defers and
+        // cannot mask the assertion below.
+
+        let out = obs.run_iteration().expect("iteration succeeds");
+
+        assert_eq!(
+            out.submitted_moves, 0,
+            "claiming our own lapsed turn would settle the game AGAINST us"
+        );
+        assert!(!obs.has_submitted_for_pivot(77, MoveKind::Timeout, None));
+    }
+
+    /// A game that is STILL un-hydrated is not a claim candidate.
+    ///
+    /// `handle_game_opened` synthesises `turn: Sequencer` as a
+    /// placeholder because the event does not carry it, so on an
+    /// un-hydrated record the turn check — the one that decides
+    /// WHOM `claimTimeout` settles against — is reading a value the
+    /// observer made up.  Here the reader cannot answer for the
+    /// game, hydration fails, and the sweep must decline.
+    ///
+    /// (A game hydrated EARLIER in the same iteration is a
+    /// legitimate candidate: its turn is a read value by then.  That
+    /// is the case `a_lapsed_opponent_deadline_is_claimed` covers.)
+    #[test]
+    fn a_game_that_stays_unhydrated_is_not_claimed() {
+        let (mut obs, _dir) = fresh_observer();
+        insert_cold_start_game(&mut obs);
+        // Empty map: every read is an RPC failure, so the game
+        // never hydrates.
+        let mut obs = obs.with_state_reader(Box::new(
+            MapStateReader::new(HashMap::new()).with_turn_deadline(0),
+        ));
+        obs.set_start_block(200);
+
+        let out = obs.run_iteration().expect("iteration succeeds");
+
+        assert!(!obs.games[&77].state_known, "precondition: still cold");
+        assert_eq!(out.submitted_moves, 0);
+        assert!(!obs.has_submitted_for_pivot(77, MoveKind::Timeout, None));
     }
 
     /// Build a hydratable full state with a non-degenerate range.
@@ -2079,6 +3066,7 @@ mod tests {
             challenger_bond: 100_000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         }
     }
 
@@ -2111,10 +3099,13 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
                 state_known: false,
+                turn_deadline: None,
+                disputed_log_index: None,
             },
         );
     }
@@ -2213,10 +3204,13 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Challenger,
             last_updated_block: 100,
             state_known: false,
+            turn_deadline: None,
+            disputed_log_index: None,
         };
         obs.games.insert(77, cold_game);
 
@@ -2244,8 +3238,11 @@ mod tests {
             // (fresh_observer uses `[0u8; 32]`).  The audit-
             // pass-3 defensive check rejects mismatched ids.
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
-        let updated = obs.mark_state_known(77, full_state.clone(), 200).unwrap();
+        let updated = obs
+            .mark_state_known(77, observed(full_state.clone()), 200)
+            .unwrap();
         assert!(updated);
         let rec = obs.games().get(&77).unwrap();
         assert!(rec.state_known);
@@ -2281,8 +3278,11 @@ mod tests {
             challenger_bond: 0,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
-        let updated = obs.mark_state_known(99_999, dummy_state, 100).unwrap();
+        let updated = obs
+            .mark_state_known(99_999, observed(dummy_state), 100)
+            .unwrap();
         assert!(!updated);
     }
 
@@ -2319,10 +3319,13 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
                 state_known: false,
+                turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         // Attempt mark_state_known with WRONG deployment_id.
@@ -2345,9 +3348,12 @@ mod tests {
             sequencer_bond: 0,
             challenger_bond: 0,
             status: GameStatus::InProgress,
-            deployment_id: [0xDE; 32], // mismatched!
+            deployment_id: [0xDE; 32], // mismatched!,
+            actions_root: [0u8; 32],
         };
-        let err = obs.mark_state_known(77, wrong_state, 200).unwrap_err();
+        let err = obs
+            .mark_state_known(77, observed(wrong_state), 200)
+            .unwrap_err();
         assert!(matches!(err, ObserverError::Invariant(_)));
         // The in-memory record must remain UNTOUCHED.
         let rec = obs.games().get(&77).unwrap();
@@ -2385,10 +3391,13 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::ChallengerWon, // already settled
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
                 state_known: false,
+                turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let resurrect_state = GameState {
@@ -2411,8 +3420,11 @@ mod tests {
             challenger_bond: 0,
             status: GameStatus::InProgress, // tries to resurrect
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
-        let err = obs.mark_state_known(88, resurrect_state, 200).unwrap_err();
+        let err = obs
+            .mark_state_known(88, observed(resurrect_state), 200)
+            .unwrap_err();
         assert!(matches!(err, ObserverError::Invariant(_)));
         // The settled status must remain unchanged.
         let rec = obs.games().get(&88).unwrap();
@@ -2438,6 +3450,7 @@ mod tests {
             submitted_at_block: 100,
             depth: 0,
             pivot_idx: Some(16),
+            move_kind: MoveKind::Respond,
         };
         obs.persistence().store_response(&intent_rec).unwrap();
         // Run an iteration; recover_intent_records should fire
@@ -2473,6 +3486,7 @@ mod tests {
             submitted_at_block: 100,
             depth: 0,
             pivot_idx: Some(8),
+            move_kind: MoveKind::Respond,
         };
         obs.persistence().store_response(&intent_rec).unwrap();
         // Configure the mock submitter to reject the broadcast.
@@ -2512,8 +3526,10 @@ mod tests {
     fn iteration_pivot_rollback_clears_cache_on_failed_iteration() {
         let (mut obs, _dir) = fresh_observer();
         // Pre-populate the iteration rollback set + cache.
-        obs.submitted_pivots.insert((42, Some(7)));
-        obs.iteration_pivot_inserts.push((42, Some(7)));
+        obs.submitted_pivots
+            .insert((42, MoveKind::Respond, Some(7)));
+        obs.iteration_pivot_inserts
+            .push((42, MoveKind::Respond, Some(7)));
         // Simulate the run_iteration outer wrapper's error-path
         // rollback by invoking the same logic directly.
         let pivots = std::mem::take(&mut obs.iteration_pivot_inserts);
@@ -2522,7 +3538,8 @@ mod tests {
         }
         // Cache must be empty post-rollback.
         assert!(
-            !obs.submitted_pivots.contains(&(42, Some(7))),
+            !obs.submitted_pivots
+                .contains(&(42, MoveKind::Respond, Some(7))),
             "pivot should be rolled back after failed iteration",
         );
         // The rollback set is also drained.
@@ -2560,10 +3577,13 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
                 state_known: false,
+                turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let full_state = GameState {
@@ -2586,13 +3606,18 @@ mod tests {
             challenger_bond: 100_000,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         // First call: transitions to state_known = true.
-        let first = obs.mark_state_known(55, full_state.clone(), 200).unwrap();
+        let first = obs
+            .mark_state_known(55, observed(full_state.clone()), 200)
+            .unwrap();
         assert!(first);
         let rec_after_first = obs.games().get(&55).unwrap().clone();
         // Second call with identical args.
-        let second = obs.mark_state_known(55, full_state.clone(), 200).unwrap();
+        let second = obs
+            .mark_state_known(55, observed(full_state.clone()), 200)
+            .unwrap();
         assert!(second);
         let rec_after_second = obs.games().get(&55).unwrap().clone();
         // Idempotence: end states are equal.
@@ -2627,10 +3652,13 @@ mod tests {
                     challenger_bond: 0,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
                 state_known: false,
+                turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         let degenerate_state = GameState {
@@ -2653,8 +3681,11 @@ mod tests {
             challenger_bond: 0,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
-        let err = obs.mark_state_known(99, degenerate_state, 200).unwrap_err();
+        let err = obs
+            .mark_state_known(99, observed(degenerate_state), 200)
+            .unwrap_err();
         assert!(matches!(err, ObserverError::Invariant(_)));
     }
 
@@ -2720,10 +3751,13 @@ mod tests {
                     challenger_bond: 1_000,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 100,
                 state_known: true,
+                turn_deadline: None,
+                disputed_log_index: None,
             },
         );
         // Simulate a `GameSettled` event.
@@ -2797,22 +3831,51 @@ mod tests {
         assert!(matches!(outcome, super::EventHandling::Skipped));
     }
 
-    /// `StateRootSubmitted` events are skipped (recorded
-    /// separately).
+    /// `StateRootSubmitted` is RECORDED (Workstream SB ruling R9):
+    /// the batch bounds + actions root land in the in-memory map
+    /// and the persistence batch, keyed by end index — and a
+    /// resubmission at the same key (post-revert recovery)
+    /// OVERWRITES the stale record.
     #[test]
-    fn state_root_submitted_skipped() {
+    fn state_root_submitted_records_the_batch() {
         let (mut obs, _dir) = fresh_observer();
         let event = GameEvent::StateRootSubmitted {
-            log_index_claim: 1,
+            log_index_claim: 4,
             state_commit: commit(7),
             sequencer_topic: [0u8; 32],
+            prev_end_index: 1,
+            actions_root: commit(9),
             block_number: 1,
             tx_hash: [0u8; 32],
             log_index: 0,
         };
         let mut batch = PersistBatch::new();
         let outcome = obs.handle_event(&event, &mut batch).unwrap();
-        assert!(matches!(outcome, super::EventHandling::Skipped));
+        assert!(matches!(outcome, super::EventHandling::Recorded));
+        let rec = obs.batches.get(&4).expect("batch record stored");
+        assert_eq!(rec.prev_end_index, 1);
+        assert_eq!(rec.actions_root, commit(9));
+        assert_eq!(rec.state_commit, commit(7));
+        assert_eq!(batch.batches.len(), 1, "upsert queued for persistence");
+
+        // Upsert-by-end: the corrected resubmission replaces the
+        // reverted record's bounds wholesale.
+        let event2 = GameEvent::StateRootSubmitted {
+            log_index_claim: 4,
+            state_commit: commit(8),
+            sequencer_topic: [0u8; 32],
+            prev_end_index: 0,
+            actions_root: commit(10),
+            block_number: 2,
+            tx_hash: [1u8; 32],
+            log_index: 0,
+        };
+        let mut batch2 = PersistBatch::new();
+        obs.handle_event(&event2, &mut batch2).unwrap();
+        let rec2 = obs.batches.get(&4).expect("batch record still stored");
+        assert_eq!(rec2.prev_end_index, 0);
+        assert_eq!(rec2.actions_root, commit(10));
+        assert_eq!(rec2.state_commit, commit(8));
     }
 
     /// Resume-from-persistence: a fresh observer over the same
@@ -2859,10 +3922,13 @@ mod tests {
                     challenger_bond: 1_000,
                     status: GameStatus::InProgress,
                     deployment_id: [0u8; 32],
+                    actions_root: [0u8; 32],
                 },
                 me: TurnSide::Challenger,
                 last_updated_block: 50,
                 state_known: true,
+                turn_deadline: None,
+                disputed_log_index: None,
             };
             obs.persistence().store_game(&rec).unwrap();
             obs.persistence().write_cursor(123).unwrap();
@@ -2933,6 +3999,7 @@ mod tests {
             challenger_bond: 0,
             status: GameStatus::InProgress,
             deployment_id: [0u8; 32],
+            actions_root: [0u8; 32],
         };
         assert_eq!(super::pivot_for_move(&state, HonestMove::NoMove), None,);
         assert_eq!(
@@ -3006,6 +4073,19 @@ mod tests {
             }],
             gap_mask: vec![0u8; 32],
             siblings: vec![],
+            // The batch binding (Workstream SB): the batched
+            // terminate calldata cannot be built without it.
+            prev_end: Some(0),
+            end_index: Some(1),
+            batch_idx: Some(0),
+            actions_root: Some([0xAA; 32]),
+            action_key: Some([0xAB; 32]),
+            leaf_commit: Some([0xAC; 32]),
+            action_sig: Some(vec![0x11; 65]),
+            action_gap_mask: Some(vec![0u8; 32]),
+            action_siblings: Some(vec![]),
+            registry_value: Some(vec![0x02; 42]),
+            registry_proof: Some(vec![0u8; 32]),
         }
     }
 
@@ -3043,10 +4123,13 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
             state_known: true,
+            turn_deadline: None,
+            disputed_log_index: None,
         };
         let mv = HonestMove::TerminateOnSingleStep {
             expected_post_commit: [0xAB; 32],
@@ -3086,10 +4169,13 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
             state_known: true,
+            turn_deadline: None,
+            disputed_log_index: None,
         };
         let mv = HonestMove::TerminateOnSingleStep {
             expected_post_commit: [0xAB; 32],
@@ -3098,7 +4184,8 @@ mod tests {
         assert!(result.is_none(), "no bundle oracle ⇒ None (deferral)");
     }
 
-    /// With a populated bundle oracle, `build_terminate_calldata`
+    /// With a populated bundle oracle, a known disputed batch, and
+    /// a hydrated disputed log index, `build_terminate_calldata`
     /// produces calldata starting with the full-form selector.
     #[test]
     fn build_terminate_calldata_with_matching_bundle_succeeds() {
@@ -3107,7 +4194,19 @@ mod tests {
         let commit = [0xCD; 32];
         // Bundle lookup uses the action-entry index (`range.low.idx`).
         oracle.insert(0, make_terminate_bundle(commit));
-        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        let mut obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        // The disputed batch [0, 1) at end index 1 — what the
+        // StateRootSubmitted event would have recorded.
+        obs.batches.insert(
+            1,
+            crate::persistence::BatchRecord {
+                end_index: 1,
+                prev_end_index: 0,
+                actions_root: [0xAA; 32],
+                state_commit: commit,
+                block_number: 90,
+            },
+        );
 
         let rec = GameRecord {
             game_id: 42,
@@ -3128,10 +4227,13 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
             state_known: true,
+            turn_deadline: None,
+            disputed_log_index: Some(1),
         };
         let mv = HonestMove::TerminateOnSingleStep {
             expected_post_commit: commit,
@@ -3165,7 +4267,19 @@ mod tests {
         let bundle_commit = [0xCD; 32];
         let strategy_commit = [0xAB; 32]; // Disagrees.
         oracle.insert(0, make_terminate_bundle(bundle_commit));
-        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        let mut obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        // A known disputed batch + hydrated index, so the refusal
+        // below is the COMMIT MISMATCH and not an earlier deferral.
+        obs.batches.insert(
+            1,
+            crate::persistence::BatchRecord {
+                end_index: 1,
+                prev_end_index: 0,
+                actions_root: [0xAA; 32],
+                state_commit: bundle_commit,
+                block_number: 90,
+            },
+        );
 
         let rec = GameRecord {
             game_id: 42,
@@ -3189,10 +4303,13 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
             state_known: true,
+            turn_deadline: None,
+            disputed_log_index: Some(1),
         };
         let mv = HonestMove::TerminateOnSingleStep {
             expected_post_commit: strategy_commit,
@@ -3202,6 +4319,113 @@ mod tests {
             result.is_none(),
             "commit-mismatch ⇒ refusal (None) per defence-in-depth",
         );
+    }
+
+    /// The batch-record shape every deferral test below perturbs:
+    /// a single-entry disputed batch `[0, 1)` at end index 1.
+    fn terminate_record_for_batch_tests(commit: [u8; 32]) -> GameRecord {
+        GameRecord {
+            game_id: 42,
+            state: GameState {
+                sequencer: 1,
+                challenger: 2,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: 0,
+                        commit: [0u8; 32],
+                    },
+                    high: Claim { idx: 1, commit },
+                },
+                pending_midpoint: None,
+                depth: 5,
+                turn: TurnSide::Sequencer,
+                sequencer_bond: 0,
+                challenger_bond: 0,
+                status: GameStatus::InProgress,
+                deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
+            },
+            me: TurnSide::Sequencer,
+            last_updated_block: 100,
+            state_known: true,
+            turn_deadline: None,
+            disputed_log_index: Some(1),
+        }
+    }
+
+    /// Without a hydrated disputed log index the terminate is
+    /// DEFERRED — calldata built without the batch binding would
+    /// revert `ActionNotInBatch` on-chain.
+    #[test]
+    fn build_terminate_calldata_defers_without_disputed_index() {
+        let (obs, _dir) = fresh_observer();
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let commit = [0xCD; 32];
+        oracle.insert(0, make_terminate_bundle(commit));
+        let mut obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        obs.batches.insert(
+            1,
+            crate::persistence::BatchRecord {
+                end_index: 1,
+                prev_end_index: 0,
+                actions_root: [0xAA; 32],
+                state_commit: commit,
+                block_number: 90,
+            },
+        );
+        let mut rec = terminate_record_for_batch_tests(commit);
+        rec.disputed_log_index = None;
+        let mv = HonestMove::TerminateOnSingleStep {
+            expected_post_commit: commit,
+        };
+        assert!(obs.build_terminate_calldata(&rec, mv).is_none());
+    }
+
+    /// Without a recorded batch for the disputed end index
+    /// (`StateRootSubmitted` not yet observed) the terminate is
+    /// DEFERRED.
+    #[test]
+    fn build_terminate_calldata_defers_without_batch_record() {
+        let (obs, _dir) = fresh_observer();
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let commit = [0xCD; 32];
+        oracle.insert(0, make_terminate_bundle(commit));
+        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        let rec = terminate_record_for_batch_tests(commit);
+        let mv = HonestMove::TerminateOnSingleStep {
+            expected_post_commit: commit,
+        };
+        assert!(obs.build_terminate_calldata(&rec, mv).is_none());
+    }
+
+    /// A batch record whose bounds do NOT contain the disputed step
+    /// (a stale record from before a re-org) defers rather than
+    /// requesting a bundle the CLI would refuse.
+    #[test]
+    fn build_terminate_calldata_defers_on_bounds_mismatch() {
+        let (obs, _dir) = fresh_observer();
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let commit = [0xCD; 32];
+        oracle.insert(0, make_terminate_bundle(commit));
+        let mut obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        // A corrupted / stale record: its claimed bounds [2, 1) do
+        // not contain the disputed step index 0 (the shape a
+        // re-orged or hand-edited store could present).
+        obs.batches.insert(
+            1,
+            crate::persistence::BatchRecord {
+                end_index: 1,
+                prev_end_index: 2,
+                actions_root: [0xAA; 32],
+                state_commit: commit,
+                block_number: 90,
+            },
+        );
+        let rec = terminate_record_for_batch_tests(commit);
+        let mv = HonestMove::TerminateOnSingleStep {
+            expected_post_commit: commit,
+        };
+        assert!(obs.build_terminate_calldata(&rec, mv).is_none());
     }
 
     /// `build_calldata_for_move` delegates non-terminate moves to
@@ -3231,10 +4455,13 @@ mod tests {
                 challenger_bond: 0,
                 status: GameStatus::InProgress,
                 deployment_id: [0u8; 32],
+                actions_root: [0u8; 32],
             },
             me: TurnSide::Sequencer,
             last_updated_block: 100,
             state_known: true,
+            turn_deadline: None,
+            disputed_log_index: None,
         };
         let mv = HonestMove::RespondAgree;
         let result = obs.build_calldata_for_move(&rec, mv);

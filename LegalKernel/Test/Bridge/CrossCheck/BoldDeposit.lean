@@ -136,8 +136,9 @@ namespace) yields a `Stream = List UInt8`; we pack it into a
 the recipient budget cell. -/
 
 /-- Encode an `Action` with Lean's canonical `Action.encode` and return
-    the packed byte stream (120 bytes for `depositWithFee`: six 9-byte
-    uint heads plus two 33-byte amount heads). -/
+    the packed byte stream (153 bytes for `depositWithFee`: six 9-byte
+    uint heads plus three 33-byte amount heads — Workstream SB appended
+    the `seedAmount` head). -/
 def actionBytes (a : Action) : ByteArray :=
   ByteArray.mk (Encodable.encode (T := Action) a).toArray
 
@@ -148,11 +149,14 @@ def budgetBytes (b : ActorBudget) : ByteArray :=
 
 /-- Build the `depositWithFee` (index 19) `Action` for an entry.  Field
     order on the wire: `r ‖ recipient ‖ poolActor ‖ userAmount ‖
-    poolAmount ‖ budgetGrant ‖ depositId`. -/
+    poolAmount ‖ budgetGrant ‖ depositId ‖ seedAmount`.  This corpus
+    pins the budget-grant gate, which is seed-independent, so every
+    entry is seedless (`seedAmount = 0`); the seed byte-layout corners
+    live in `deposit_with_fee_action.json`. -/
 def actionFor (resourceId userAmount poolAmount budgetGrant depositId : Nat) :
     Action :=
   .depositWithFee (UInt64.ofNat resourceId) (UInt64.ofNat fixedRecipient)
-    (UInt64.ofNat fixedPoolActor) userAmount poolAmount budgetGrant depositId
+    (UInt64.ofNat fixedPoolActor) userAmount poolAmount budgetGrant depositId 0
 
 /-- The recipient `ActorBudget` after the admission gate credits
     `budgetGrant` to a genesis-empty ledger at `currentEpoch = 0`,
@@ -210,11 +214,12 @@ theorem recipientBudgetCell_matches_gate
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (r : ResourceId) (recipient poolActor : ActorId)
     (userAmount poolAmount : Amount) (budgetGrant : Nat)
-    (depositId : Bridge.DepositId)
+    (depositId : Bridge.DepositId) (seedAmount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : Signature)
     (h : AdmissibleWith verify P d es
             ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                              budgetGrant depositId, signer, nonce, sig⟩)
+                              budgetGrant depositId seedAmount, signer, nonce,
+              sig⟩)
     (actionCost : Nat)
     (hpolicy : es.budgetPolicy = .bounded 0 actionCost 0)
     -- The corpus always credits the fixed recipient (`fixedRecipient`).
@@ -225,7 +230,8 @@ theorem recipientBudgetCell_matches_gate
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es
               ⟨.depositWithFee r recipient poolActor userAmount poolAmount
-                                budgetGrant depositId, signer, nonce, sig⟩ h
+                                budgetGrant depositId seedAmount, signer, nonce,
+                sig⟩ h
             = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets recipient 0 0
       = EpochBudgetState.currentBudget (recipientBudgetLedger budgetGrant) recipient 0 0 := by
@@ -240,7 +246,7 @@ theorem recipientBudgetCell_matches_gate
   -- genesis pre-state contributes `0`.  (`subst hrecip` has replaced
   -- `recipient` by `UInt64.ofNat fixedRecipient` everywhere.)
   rw [depositWithFee_grants_budget verify P d es r (UInt64.ofNat fixedRecipient) poolActor
-        userAmount poolAmount budgetGrant depositId signer nonce sig h
+        userAmount poolAmount budgetGrant depositId seedAmount signer nonce sig h
         0 actionCost 0 hpolicy hsuc, hpre, Nat.zero_add]
 
 /-! ## Fixture entry type -/
@@ -502,8 +508,8 @@ def encodeFeeSplitInput (e : Entry) : ByteArray :=
     |>.append (beBytes e.depositId 8)
 
 /-- The `.cxsf` records: `input = 58-byte FeeSplitInput`,
-    `expected = actionCbe (120) ‖ recipientBudgetCbe (18) = 138 bytes`.
-    The Rust consumer splits `expected` at offset 72. -/
+    `expected = actionCbe (153) ‖ recipientBudgetCbe (18) = 171 bytes`.
+    The Rust consumer splits `expected` at offset 153. -/
 def cxsfRecords : List (ByteArray × ByteArray) :=
   allEntries.map (fun e => (encodeFeeSplitInput e, e.actionCbe.append e.recipientBudgetCbe))
 
@@ -661,11 +667,11 @@ def tests : List TestCase :=
           if e.recipientBudgetCbe.toList ≠ expected.toList then
             throw <| IO.userError s!"recipient cell mismatch (expected epoch 0 balance budgetGrant) in {e.category}"
     }
-  , { name := "GP.6.5: every actionCbe is 120 bytes; tag head = uint(19)"
+  , { name := "GP.6.5: every actionCbe is 153 bytes; tag head = uint(19)"
     , body := do
         for e in allEntries do
-          if e.actionCbe.size ≠ 120 then
-            throw <| IO.userError s!"actionCbe size {e.actionCbe.size} ≠ 120 in {e.category}"
+          if e.actionCbe.size ≠ 153 then
+            throw <| IO.userError s!"actionCbe size {e.actionCbe.size} ≠ 153 in {e.category}"
           let bs := e.actionCbe.toList
           -- byte[0] is the CBE uint type-tag 0x00; byte[1..9] is the
           -- constructor index 19 as an 8-byte LE Nat.
@@ -694,7 +700,7 @@ def tests : List TestCase :=
         -- BOLD leg, amount 1000 @ 500 bps @ rate 1 ⇒ pool 50, user 950,
         -- budget 50.  Anchors the Lean encoders to ground truth so the
         -- cross-stack equivalence is not circular.
-        let a : Action := .depositWithFee 1 7 2 950 50 50 42
+        let a : Action := .depositWithFee 1 7 2 950 50 50 42 0
         let actionHex := hexFromBytes (actionBytes a)
         let expectedAction :=
           -- tag 19 | r 1 | recipient 7 | poolActor 2
@@ -706,7 +712,9 @@ def tests : List TestCase :=
           "06b603000000000000000000000000000000000000000000000000000000000000" ++
           "063200000000000000000000000000000000000000000000000000000000000000" ++
           -- budgetGrant 50 | depositId 42
-          "003200000000000000" ++ "002a00000000000000"
+          "003200000000000000" ++ "002a00000000000000" ++
+          -- seedAmount 0 — the Workstream SB appended amount head
+          "060000000000000000000000000000000000000000000000000000000000000000"
         if actionHex ≠ expectedAction then
           throw <| IO.userError <|
             s!"anchor action bytes mismatch:\n  got      {actionHex}\n  expected {expectedAction}"
@@ -743,12 +751,12 @@ def tests : List TestCase :=
     , body := do
         -- Pick the canonical grid triple (amount 10^9, feeBps 1000,
         -- wpbu 10^9) and assert ETH vs BOLD action bytes differ ONLY at
-        -- the resource-field LE low byte (index 10 in the 120-byte
+        -- the resource-field LE low byte (index 10 in the 153-byte
         -- stream: 9-byte tag head + 1-byte r type-tag, then r's LE low
-        -- byte).  The resource field precedes both amount fields, so
-        -- widening the amounts to 33-byte heads moves the STREAM
-        -- LENGTH but not this offset.  ETH = 0x00, BOLD = 0x01; all
-        -- other bytes equal.
+        -- byte).  The resource field precedes every amount field, so
+        -- widening the stream (the amount heads, and Workstream SB's
+        -- appended seedAmount) moves the LENGTH but not this offset.
+        -- ETH = 0x00, BOLD = 0x01; all other bytes equal.
         let key (rid : Nat) :=
           gridEntries.find? (fun e =>
             e.resourceId == rid && e.amount == 10 ^ 9
@@ -757,9 +765,9 @@ def tests : List TestCase :=
         | some eth, some bold =>
           let eb := eth.actionCbe.toList
           let bb := bold.actionCbe.toList
-          if eb.length ≠ 120 ∨ bb.length ≠ 120 then
-            throw <| IO.userError "twin action bytes not 120 long"
-          let diffs := (List.range 120).filter (fun i =>
+          if eb.length ≠ 153 ∨ bb.length ≠ 153 then
+            throw <| IO.userError "twin action bytes not 153 long"
+          let diffs := (List.range 153).filter (fun i =>
             (eb.getD i 0) ≠ (bb.getD i 0))
           if diffs ≠ [10] then
             throw <| IO.userError s!"resourceId-flip differs at indices {diffs}, expected [10]"
@@ -767,13 +775,13 @@ def tests : List TestCase :=
             throw <| IO.userError "resourceId byte not 0x00 (ETH) / 0x01 (BOLD)"
         | _, _ => throw <| IO.userError "missing canonical ETH/BOLD twin for resourceId-flip"
     }
-  , { name := "GP.6.5: every .cxsf input is 58 bytes; expected is 138 bytes"
+  , { name := "GP.6.5: every .cxsf input is 58 bytes; expected is 171 bytes"
     , body := do
         for rec in cxsfRecords do
           if rec.1.size ≠ 58 then
             throw <| IO.userError s!".cxsf input size {rec.1.size} ≠ 58"
-          if rec.2.size ≠ 138 then
-            throw <| IO.userError s!".cxsf expected size {rec.2.size} ≠ 138"
+          if rec.2.size ≠ 171 then
+            throw <| IO.userError s!".cxsf expected size {rec.2.size} ≠ 171"
     }
   , { name := "GP.6.5: feeSplit reference anchors (reused DepositFeeSplit.feeSplit)"
     , body := do
@@ -808,7 +816,11 @@ def tests : List TestCase :=
     , body := do
         -- Term-level pin: the value-binding theorem's signature is
         -- stable.  Elaboration fails if it changes.
-        let _proof := @recipientBudgetCell_currentBudget
+        let _proof :
+            ∀ (budgetGrant : Nat),
+              EpochBudgetState.currentBudget (recipientBudgetLedger budgetGrant)
+              (UInt64.ofNat fixedRecipient) 0 0 = budgetGrant :=
+          recipientBudgetCell_currentBudget
         pure ()
     }
   , { name := "recipientBudgetCell_matches_gate API stability"
@@ -819,7 +831,29 @@ def tests : List TestCase :=
         -- depositWithFee branch is refactored away from
         -- `topUp recipient currentEpoch freeTier budgetGrant`, the
         -- theorem stops elaborating and THIS test fails the build.
-        let _proof := @recipientBudgetCell_matches_gate
+        let _proof :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (r : ResourceId) (recipient poolActor : ActorId)
+              (userAmount poolAmount : Amount) (budgetGrant : Nat)
+              (depositId : Bridge.DepositId) (seedAmount : Amount)
+              (signer : ActorId) (nonce : Nonce) (sig : Signature)
+              (h : AdmissibleWith verify P d es
+                ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                  budgetGrant depositId seedAmount, signer, nonce, sig⟩)
+              (actionCost : Nat)
+              (_hpolicy : es.budgetPolicy = .bounded 0 actionCost 0)
+              (_hrecip : recipient = UInt64.ofNat fixedRecipient)
+              (_hpre : EpochBudgetState.currentBudget es.epochBudgets recipient 0 0 = 0)
+              {es' : ExtendedState}
+              (_hsuc : apply_admissible_with_budget verify P d es
+                ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                  budgetGrant depositId seedAmount, signer, nonce, sig⟩ h
+                = some es'),
+              EpochBudgetState.currentBudget es'.epochBudgets recipient 0 0
+                = EpochBudgetState.currentBudget (recipientBudgetLedger budgetGrant)
+                    recipient 0 0 :=
+          recipientBudgetCell_matches_gate
         pure ()
     }
   , { name := "GP.6.5: write bold_deposit.json fixture file"

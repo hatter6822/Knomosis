@@ -13,20 +13,21 @@ LegalKernel.Test.Bridge.AmmReservePolicy — Workstream GP.11.6 test suite.
 Exercises the canonical `ammReservePolicy`
 (`LegalKernel/Bridge/AmmReservePolicy.lean`).  Coverage:
 
-  * **Deny-list shape.**  `ammReserveDeniedTags = [0, 1, …, 22]`
-    (every Action tag except `ammSwap`), `23 ∉` it, every non-23
-    tag in range `∈` it, and `Action.tag_lt_denyListBound`.
-  * **Only-`ammSwap` outflow.**  `ammReservePolicy_denies_all_non_ammSwap`
-    across a representative sample of EVERY non-`ammSwap` Action tag
-    (0..22), value-level via `decide` plus term-level API stability.
-  * **`ammSwap` permitted.**  The sole legitimate action is admitted.
+  * **Deny-list shape.**  `ammReserveDeniedTags = [0, 1, …, 25]`
+    (EVERY Action tag — the reserve key is inert under the one-AMM
+    topology), the retired 23 stays denied, and
+    `Action.tag_lt_denyListBound` bounds the range.
+  * **Deny-everything outflow.**  `ammReservePolicy_denies_all`
+    across a representative sample of EVERY live Action tag,
+    value-level via `decide` plus term-level API stability — the
+    reserve's own swap family included (it is a counterparty, never
+    a signer).
   * **Complete characterisation.**  `ammReservePolicy_permits_iff`
-    term-level API.
+    (`↔ False`) term-level API.
   * **LP.7 meta-action escape hatch.**  Documents the structural
     limitation and confirms the authority policy closes it.
   * **Authority policy.**  `ammReserveAuthorityPolicy` bars every
-    non-`ammSwap` action including meta-actions; admits `ammSwap`;
-    is a no-op on other actors.
+    action including meta-actions; is a no-op on other actors.
   * **Genesis wiring.**  `ammReserveGenesisState` declares the policy,
     `ammReserveGenesisPolicy` intersects the authority, the bundle is
     atomic, and composition with `gasPoolGenesis` is non-interfering.
@@ -61,11 +62,10 @@ def sampleDispute : Disputes.Dispute :=
   { challenger := someUser, claim := .preconditionFalse 0
   , evidence := ⟨#[]⟩, nonce := 0, sig := ⟨#[]⟩ }
 
-/-- A representative non-`ammSwap` Action for EVERY frozen non-ammSwap
-    tag (0..22 — all of 0..23 except `ammSwap` = 23).  Used to drive
-    `ammReservePolicy_denies_all_non_ammSwap` across the whole
-    non-ammSwap Action set, with no tag skipped. -/
-def nonAmmSwapSamples : List (Nat × Action) :=
+/-- A representative Action for EVERY live frozen tag (0..25 minus
+    the retired 23).  Used to drive `ammReservePolicy_denies_all`
+    across the whole Action set, with no live tag skipped. -/
+def allActionSamples : List (Nat × Action) :=
   [ (0,  .transfer 0 someUser someUser 5)
   , (1,  .mint 0 someUser 5)
   , (2,  .burn 0 someUser 5)
@@ -85,109 +85,93 @@ def nonAmmSwapSamples : List (Nat × Action) :=
   , (16, .revokeLocalPolicy)
   , (17, .faultProofChallenge ⟨#[]⟩ 0 0 ⟨#[]⟩)
   , (18, .faultProofResolution ⟨#[]⟩ 0 someUser 0)
-  , (19, .depositWithFee 0 someUser gasPoolActor 5 5 5 0)
+  , (19, .depositWithFee 0 someUser gasPoolActor 5 5 5 0 2)
   , (20, .topUpActionBudget 0 5 5 gasPoolActor)
   , (21, .topUpActionBudgetFor someUser 0 5 5 gasPoolActor)
-  , (22, .claimBudgetRefund 0 5 5 gasPoolActor) ]
+  , (22, .claimBudgetRefund 0 5 5 gasPoolActor)
+  -- 23 is the RETIRED `ammSwap` index — no constructor exists.
+  , (24, .reclaimAmmReserves 0 5 ammReserveActor gasPoolActor)
+  , (25, .reserveSwap 0 1 someUser 100 95 ammReserveActor) ]
 
 /-! ## Test cases -/
 
 /-- All GP.11.6 test cases. -/
 def tests : List TestCase :=
   [ -- ## Deny-list shape
-    { name := "GP.11.6: ammReserveDeniedTags = [0..22] ++ [24]"
+    { name := "GP.11.6: ammReserveDeniedTags = [0..25] (deny ALL)"
     , body := do
-        assertEq (expected := (List.range 25).filter (· ≠ 23))
+        assertEq (expected := List.range 26)
           (actual := ammReserveDeniedTags) "deny-list contents"
     }
-  , { name := "GP.11.6: ammReserveDeniedTags has 24 entries (0..22 ++ 24)"
+  , { name := "GP.11.6: ammReserveDeniedTags has 26 entries (0..25)"
     , body := do
-        assertEq (expected := 24) (actual := ammReserveDeniedTags.length) "deny-list length"
+        assertEq (expected := 26) (actual := ammReserveDeniedTags.length) "deny-list length"
     }
-  , { name := "GP.11.6: 23 ∉ ammReserveDeniedTags (ammSwap survives)"
+  , { name := "GP.11.6: 23 ∈ ammReserveDeniedTags (the RETIRED tag stays denied)"
     , body := do
-        assert (decide ((23 : Nat) ∉ ammReserveDeniedTags)) "23 should not be denied"
+        assert (decide ((23 : Nat) ∈ ammReserveDeniedTags)) "retired 23 must stay denied"
     }
-  , { name := "GP.11.6: every non-23 tag in 0..24 ∈ ammReserveDeniedTags"
+  , { name := "GP.11.6: every tag in 0..25 ∈ ammReserveDeniedTags"
     , body := do
-        for t in List.range 25 do
-          if t ≠ 23 then
-            assert (decide (t ∈ ammReserveDeniedTags)) s!"tag {t} should be denied"
+        for t in List.range 26 do
+          assert (decide (t ∈ ammReserveDeniedTags)) s!"tag {t} should be denied"
     }
   , { name := "GP.11.6: 0 ∈ ammReserveDeniedTags (transfer denied for reserve)"
     , body := do
         assert (decide ((0 : Nat) ∈ ammReserveDeniedTags)) "transfer tag denied"
     }
-  , { name := "GP.11.6: ammSwap_tag_not_mem_ammReserveDeniedTags term-level API"
+  , { name := "GP.11.6: mem_ammReserveDeniedTags term-level API"
     , body := do
-        let _f : (23 : Nat) ∉ ammReserveDeniedTags := ammSwap_tag_not_mem_ammReserveDeniedTags
+        let _f : (a : Action) → Action.tag a ∈ ammReserveDeniedTags :=
+          mem_ammReserveDeniedTags
         pure ()
     }
-  , { name := "GP.11.6: mem_ammReserveDeniedTags_of_tag_ne_ammSwap term-level API"
+  , -- ## Deny-everything outflow: EVERY Action is denied.
+    { name := "GP.11.6: ammReservePolicy denies every Action (all live tags)"
     , body := do
-        let _f : (a : Action) → Action.tag a ≠ 23 →
-                 Action.tag a ∈ ammReserveDeniedTags :=
-          mem_ammReserveDeniedTags_of_tag_ne_ammSwap
-        pure ()
-    }
-  , -- ## Only-ammSwap outflow: every non-ammSwap Action is denied.
-    { name := "GP.11.6: ammReservePolicy denies every non-ammSwap Action (tags 0..22)"
-    , body := do
-        for (tag, act) in nonAmmSwapSamples do
+        for (tag, act) in allActionSamples do
           assertEq (expected := tag) (actual := Action.tag act) s!"fixture tag {tag}"
           if decide (ammReservePolicy.permits ammReserveActor act) then
-            throw <| IO.userError s!"ammReservePolicy admitted non-ammSwap Action tag {tag}"
+            throw <| IO.userError s!"ammReservePolicy admitted Action tag {tag}"
     }
-  , { name := "GP.11.6: ammReservePolicy_denies_all_non_ammSwap term-level API"
+  , { name := "GP.11.6: ammReservePolicy_denies_all term-level API"
     , body := do
-        let _f : (a : Action) → Action.tag a ≠ 23 →
+        let _f : (a : Action) →
                  ¬ ammReservePolicy.permits ammReserveActor a :=
-          ammReservePolicy_denies_all_non_ammSwap
+          ammReservePolicy_denies_all
         pure ()
     }
-  , -- ## ammSwap is permitted
-    { name := "GP.11.6: ammReservePolicy permits ammSwap (value-level)"
+  , -- ## Even the reserve's OWN swap family is unsignable
+    { name := "GP.11.6: the reserve cannot sign a reserveSwap naming itself"
     , body := do
-        let act : Action := .ammSwap 0 1 100 95 ammReserveActor
-        assert (decide (ammReservePolicy.permits ammReserveActor act))
-          "ammSwap should be permitted"
+        -- The user swap moves the reserve's balances as a COUNTERPARTY;
+        -- the reserve key itself must not be able to sign one (a
+        -- compromised reserve key cannot trade against itself).
+        let act : Action := .reserveSwap 0 1 ammReserveActor 100 95 ammReserveActor
+        if decide (ammReservePolicy.permits ammReserveActor act) then
+          throw <| IO.userError "the reserve key must not sign its own swap"
     }
-  , { name := "GP.11.6: ammReservePolicy permits ammSwap (various params)"
+  , { name := "GP.11.6: the reserve cannot sign the reclaim sweep"
     , body := do
-        for (fr, tr, ai, ao) in [(0, 1, 1, 1), (1, 0, 999, 500), (0, 1, 0, 0)] do
-          let act : Action := .ammSwap fr tr ai ao ammReserveActor
-          assert (decide (ammReservePolicy.permits ammReserveActor act))
-            s!"ammSwap ({fr},{tr},{ai},{ao}) should be permitted"
-    }
-  , { name := "GP.11.6: ammReservePolicy_permits_ammSwap term-level API"
-    , body := do
-        let _f : (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
-                 ammReservePolicy.permits ammReserveActor (.ammSwap fr tr ai ao ra) :=
-          ammReservePolicy_permits_ammSwap
-        pure ()
+        -- The recovery sweep is BRIDGE-signed; the reserve key signing
+        -- its own sweep would bypass the bridge's attestation.
+        let act : Action := .reclaimAmmReserves 0 5 ammReserveActor gasPoolActor
+        if decide (ammReservePolicy.permits ammReserveActor act) then
+          throw <| IO.userError "the reserve key must not sign the sweep"
     }
   , -- ## Complete characterisation
     { name := "GP.11.6: ammReservePolicy_permits_iff term-level API"
     , body := do
         let _f : (action : Action) →
-                 (ammReservePolicy.permits ammReserveActor action ↔
-                  Action.tag action = 23) :=
+                 (ammReservePolicy.permits ammReserveActor action ↔ False) :=
           ammReservePolicy_permits_iff
         pure ()
     }
-  , { name := "GP.11.6: permits_iff forward (ammSwap passes)"
-    , body := do
-        let act : Action := .ammSwap 0 1 100 95 ammReserveActor
-        assertEq (expected := 23) (actual := Action.tag act) "ammSwap has tag 23"
-        assert (decide (ammReservePolicy.permits ammReserveActor act))
-          "ammSwap admitted per iff forward"
-    }
-  , { name := "GP.11.6: permits_iff backward (tag≠23 is denied)"
+  , { name := "GP.11.6: permits_iff (transfer is denied)"
     , body := do
         let act : Action := .transfer 0 ammReserveActor someUser 5
-        assert (decide (Action.tag act ≠ 23)) "transfer has tag ≠ 23"
         if decide (ammReservePolicy.permits ammReserveActor act) then
-          throw <| IO.userError "transfer should be denied per iff backward"
+          throw <| IO.userError "transfer should be denied per the iff"
     }
   , -- ## LP.7 meta-action escape hatch documentation
     { name := "GP.11.6: meta-action escape hatch (tag-value documentation)"
@@ -196,10 +180,10 @@ def tests : List TestCase :=
           "revokeLocalPolicy tag"
         assertEq (expected := 15) (actual := Action.tag (.declareLocalPolicy LocalPolicy.empty))
           "declareLocalPolicy tag"
-        assert (decide ((16 : Nat) ≠ 23)) "16 ≠ 23"
-        assert (decide ((15 : Nat) ≠ 23)) "15 ≠ 23"
+        assert (decide ((16 : Nat) ∈ ammReserveDeniedTags)) "16 denied by the list"
+        assert (decide ((15 : Nat) ∈ ammReserveDeniedTags)) "15 denied by the list"
     }
-  , -- ## Authority policy: bars non-ammSwap
+  , -- ## Authority policy: bars everything
     { name := "GP.11.6: ammReserveAuthorityPolicy rejects transfer"
     , body := do
         let act : Action := .transfer 0 ammReserveActor someUser 5
@@ -222,26 +206,18 @@ def tests : List TestCase :=
           ammReserveAuthorityPolicy_rejects_meta
         pure ()
     }
-  , { name := "GP.11.6: ammReserveAuthorityPolicy_rejects_non_ammSwap term-level API"
+  , { name := "GP.11.6: ammReserveAuthorityPolicy_rejects_all term-level API"
     , body := do
-        let _f : (action : Action) → Action.tag action ≠ 23 →
+        let _f : (action : Action) →
                  ¬ ammReserveAuthorityPolicy.authorized ammReserveActor action :=
-          ammReserveAuthorityPolicy_rejects_non_ammSwap
+          ammReserveAuthorityPolicy_rejects_all
         pure ()
     }
-  , { name := "GP.11.6: ammReserveAuthorityPolicy admits ammSwap"
+  , { name := "GP.11.6: ammReserveAuthorityPolicy rejects even a self-naming reserveSwap"
     , body := do
-        let act : Action := .ammSwap 0 1 100 95 ammReserveActor
-        assert (decide (ammReserveAuthorityPolicy.authorized ammReserveActor act))
-          "authority policy should admit ammSwap"
-    }
-  , { name := "GP.11.6: ammReserveAuthorityPolicy_authorizes_ammSwap term-level API"
-    , body := do
-        let _f : (fr tr : ResourceId) → (ai ao : Amount) →
-                 ammReserveAuthorityPolicy.authorized ammReserveActor
-                   (.ammSwap fr tr ai ao ammReserveActor) :=
-          ammReserveAuthorityPolicy_authorizes_ammSwap
-        pure ()
+        let act : Action := .reserveSwap 0 1 ammReserveActor 100 95 ammReserveActor
+        if decide (ammReserveAuthorityPolicy.authorized ammReserveActor act) then
+          throw <| IO.userError "authority policy must reject every reserve-signed action"
     }
   , { name := "GP.11.6: ammReserveAuthorityPolicy is no-op on other actors"
     , body := do
@@ -309,7 +285,7 @@ def tests : List TestCase :=
           ammReserveGenesisState_preserves_kernel_substates
         pure ()
     }
-  , { name := "GP.11.6: ammReserveGenesisPolicy rejects non-ammSwap"
+  , { name := "GP.11.6: ammReserveGenesisPolicy rejects a reserve-signed transfer"
     , body := do
         let base : AuthorityPolicy := .unrestricted
         let gp := ammReserveGenesisPolicy base
@@ -327,31 +303,20 @@ def tests : List TestCase :=
           ammReserveGenesisPolicy_rejects_meta
         pure ()
     }
-  , { name := "GP.11.6: ammReserveGenesisPolicy_rejects_non_ammSwap term-level API"
+  , { name := "GP.11.6: ammReserveGenesisPolicy_rejects_all term-level API"
     , body := do
         let _f : (P : AuthorityPolicy) → (action : Action) →
-                 Action.tag action ≠ 23 →
                  ¬ (ammReserveGenesisPolicy P).authorized ammReserveActor action :=
-          ammReserveGenesisPolicy_rejects_non_ammSwap
+          ammReserveGenesisPolicy_rejects_all
         pure ()
     }
-  , { name := "GP.11.6: ammReserveGenesisPolicy admits ammSwap (value-level)"
+  , { name := "GP.11.6: ammReserveGenesisPolicy rejects a reserve-signed reserveSwap"
     , body := do
         let base : AuthorityPolicy := .unrestricted
         let gp := ammReserveGenesisPolicy base
-        let act : Action := .ammSwap 0 1 100 95 ammReserveActor
-        assert (decide (gp.authorized ammReserveActor act))
-          "genesis policy should admit ammSwap"
-    }
-  , { name := "GP.11.6: ammReserveGenesisPolicy_authorizes_ammSwap term-level API"
-    , body := do
-        let _f : (P : AuthorityPolicy) →
-                 (fr tr : ResourceId) → (ai ao : Amount) →
-                 P.authorized ammReserveActor (.ammSwap fr tr ai ao ammReserveActor) →
-                 (ammReserveGenesisPolicy P).authorized ammReserveActor
-                   (.ammSwap fr tr ai ao ammReserveActor) :=
-          ammReserveGenesisPolicy_authorizes_ammSwap
-        pure ()
+        let act : Action := .reserveSwap 0 1 ammReserveActor 100 95 ammReserveActor
+        if decide (gp.authorized ammReserveActor act) then
+          throw <| IO.userError "genesis policy must reject every reserve-signed action"
     }
   , { name := "GP.11.6: ammReserveGenesisPolicy_other_actors_unrestricted term-level API"
     , body := do
@@ -412,14 +377,14 @@ def tests : List TestCase :=
           ammReserveGenesisState_preserves_gasPool_localPolicy
         pure ()
     }
-  , -- ## Exhaustive non-ammSwap rejection via authority policy
-    { name := "GP.11.6: authority policy rejects ALL non-ammSwap actions (tags 0..22)"
+  , -- ## Exhaustive rejection via authority policy
+    { name := "GP.11.6: authority policy rejects ALL actions (every live tag)"
     , body := do
-        for (tag, act) in nonAmmSwapSamples do
+        for (tag, act) in allActionSamples do
           assertEq (expected := tag) (actual := Action.tag act) s!"fixture tag {tag}"
           if decide (ammReserveAuthorityPolicy.authorized ammReserveActor act) then
             throw <| IO.userError
-              s!"ammReserveAuthorityPolicy admitted non-ammSwap Action tag {tag}"
+              s!"ammReserveAuthorityPolicy admitted Action tag {tag}"
     }
   , -- ## CBE encoding prerequisites
     { name := "GP.11.6: ammReservePolicy_fieldsBounded"
@@ -451,50 +416,6 @@ def tests : List TestCase :=
                    (Encoding.Encodable.encode ammReservePolicy) =
                    .ok (ammReservePolicy, []) :=
           ammReservePolicy_roundtrip
-        pure ()
-    }
-  , -- ## Sender-binding (ra = ammReserveActor defence-in-depth)
-    { name := "GP.11.6: authority policy rejects ammSwap targeting different actor"
-    , body := do
-        let act : Action := .ammSwap 0 1 100 95 someUser
-        if decide (ammReserveAuthorityPolicy.authorized ammReserveActor act) then
-          throw <| IO.userError "authority policy should reject ammSwap targeting non-reserve"
-    }
-  , { name := "GP.11.6: ammReserveAuthorityPolicy_rejects_non_reserve_target term-level API"
-    , body := do
-        let _f : (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
-                 ra ≠ ammReserveActor →
-                 ¬ ammReserveAuthorityPolicy.authorized ammReserveActor
-                     (.ammSwap fr tr ai ao ra) :=
-          ammReserveAuthorityPolicy_rejects_non_reserve_target
-        pure ()
-    }
-  , { name := "GP.11.6: ammReserveAuthorityPolicy_authorized_ammSwap_target term-level API"
-    , body := do
-        let _f : (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
-                 ammReserveAuthorityPolicy.authorized ammReserveActor
-                   (.ammSwap fr tr ai ao ra) →
-                 ra = ammReserveActor :=
-          ammReserveAuthorityPolicy_authorized_ammSwap_target
-        pure ()
-    }
-  , -- ## Genesis policy rejects non-reserve target
-    { name := "GP.11.6: genesis policy rejects ammSwap targeting different actor"
-    , body := do
-        let base : AuthorityPolicy := .unrestricted
-        let gp := ammReserveGenesisPolicy base
-        let act : Action := .ammSwap 0 1 100 95 someUser
-        if decide (gp.authorized ammReserveActor act) then
-          throw <| IO.userError "genesis policy should reject ammSwap targeting non-reserve"
-    }
-  , { name := "GP.11.6: ammReserveGenesisPolicy_rejects_non_reserve_target term-level API"
-    , body := do
-        let _f : (P : AuthorityPolicy) →
-                 (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
-                 ra ≠ ammReserveActor →
-                 ¬ (ammReserveGenesisPolicy P).authorized ammReserveActor
-                     (.ammSwap fr tr ai ao ra) :=
-          ammReserveGenesisPolicy_rejects_non_reserve_target
         pure ()
     }
   , -- ## Admission-layer theorems
@@ -539,9 +460,9 @@ def tests : List TestCase :=
     , body := do
         let base : AuthorityPolicy := .unrestricted
         let gpp := gasPoolGenesisPolicy base 1000 500
-        let act : Action := .ammSwap 0 1 100 95 ammReserveActor
+        let act : Action := .transfer 0 ammReserveActor someUser 5
         assert (decide (gpp.authorized ammReserveActor act))
-          "ammReserveActor ammSwap should still be admitted under gasPoolGenesisPolicy"
+          "gasPoolGenesisPolicy leaves the reserve's authority to the base policy"
     }
   , { name := "GP.11.6: gasPoolGenesisPolicy_preserves_ammReserve_authority term-level API"
     , body := do
@@ -560,13 +481,13 @@ def tests : List TestCase :=
           (actual := gs.localPolicies.lookup ammReserveActor)
           "none config should leave ammReserveActor policy unchanged"
     }
-  , { name := "GP.11.6: ammReserveGenesisPolicyOfConfig none admits ammSwap for reserve"
+  , { name := "GP.11.6: ammReserveGenesisPolicyOfConfig none is just the base"
     , body := do
         let base : AuthorityPolicy := .unrestricted
         let gp := ammReserveGenesisPolicyOfConfig base none
-        let act : Action := .ammSwap 0 1 100 95 ammReserveActor
+        let act : Action := .transfer 0 ammReserveActor someUser 5
         assert (decide (gp.authorized ammReserveActor act))
-          "none config policy should still admit ammSwap (it is just the base)"
+          "none config leaves the reserve unrestricted (deployment opted out)"
     }
   , { name := "GP.11.6: ammReserveGenesisStateOfConfig some declares policy"
     , body := do
@@ -648,10 +569,10 @@ def tests : List TestCase :=
     , body := do
         let base : AuthorityPolicy := bridgePolicy
         let gp := ammReserveGenesisPolicy base
-        let swapAct : Action := .ammSwap 0 1 100 95 ammReserveActor
+        let swapAct : Action := .reserveSwap 0 1 ammReserveActor 100 95 ammReserveActor
         if decide (gp.authorized ammReserveActor swapAct) then
           throw <| IO.userError
-            "ammSwap should NOT be admitted under bridgePolicy (bridge doesn't authorise reserve)"
+            "a reserve-signed swap must NOT be admitted under any base policy"
         if decide (gp.authorized ammReserveActor .revokeLocalPolicy) then
           throw <| IO.userError "meta-actions should still be barred under bridgePolicy intersect"
         let depositAct : Action := .deposit 0 bridgeActor 100 0

@@ -325,9 +325,12 @@ def tests : List TestCase :=
   , { name := "GP.4.2 step delta (depositWithFee) via applyActionToBridgeState"
     , body := do
         -- Apply a fresh fee deposit to the genesis bridge: recipient 10,
-        -- poolActor 99, userAmount 60, poolAmount 40, budgetGrant 9, id 1.
+        -- poolActor 99, userAmount 60, poolAmount 40, budgetGrant 9,
+        -- id 1, seedAmount 15.  The seed splits the pool leg on the
+        -- BALANCE side only — the consumed record (and so both ledger
+        -- folds) still carries the full poolAmount.
         let bs := applyActionToBridgeState BridgeState.empty
-                    (.depositWithFee 1 10 99 60 40 9 1) 0
+                    (.depositWithFee 1 10 99 60 40 9 1 15) 0
         assertEq (expected := (60 : Nat)) (actual := totalUserDeposited (es bs) 1) "user += 60"
         assertEq (expected := (40 : Nat)) (actual := totalPoolDeposited (es bs) 1) "pool += 40"
         -- Different resource is untouched:
@@ -373,38 +376,104 @@ def tests : List TestCase :=
     }
   , { name := "GP.4.2 bridge_accounting_equation_balanced: term-level API"
     , body := do
-        let _t := @bridge_accounting_equation_balanced
+        let _t :
+            ∀ (es : ExtendedState) (r : ResourceId) (rhs : Nat)
+              (_h_legacy : totalDeposited es r = rhs),
+              totalUserDeposited es r + totalPoolDeposited es r = rhs :=
+          bridge_accounting_equation_balanced
         pure ()
     }
   , { name := "GP.4.2 totalUserDeposited_step_eq / totalPoolDeposited_step_eq: term-level API"
     , body := do
-        let _u := @totalUserDeposited_step_eq
-        let _p := @totalPoolDeposited_step_eq
+        let _u :
+            ∀ (es : ExtendedState) (r : ResourceId) (recipient poolActor : ActorId)
+              (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
+              (seedAmount : Amount)
+              (idx : Nat) (r' : ResourceId) (_hfresh : ¬ d ∈ es.bridge.consumed),
+              totalUserDeposited
+              { es with bridge :=
+              applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d seedAmount) idx }
+              r' =
+              totalUserDeposited es r' + (if r = r' then userAmount else 0) :=
+          totalUserDeposited_step_eq
+        let _p :
+            ∀ (es : ExtendedState) (r : ResourceId) (recipient poolActor : ActorId)
+              (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
+              (seedAmount : Amount)
+              (idx : Nat) (r' : ResourceId) (_hfresh : ¬ d ∈ es.bridge.consumed),
+              totalPoolDeposited
+              { es with bridge :=
+              applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d seedAmount) idx }
+              r' =
+              totalPoolDeposited es r' + (if r = r' then poolAmount else 0) :=
+          totalPoolDeposited_step_eq
         pure ()
     }
   , { name := "GP.4.2 step_eq_deposit (user / pool legacy): term-level API"
     , body := do
-        let _u := @totalUserDeposited_step_eq_deposit
-        let _p := @totalPoolDeposited_step_eq_deposit
+        let _u :
+            ∀ (es : ExtendedState) (r : ResourceId) (recipient : ActorId)
+              (amount : Amount) (d : DepositId) (idx : Nat) (r' : ResourceId)
+              (_hfresh : ¬ d ∈ es.bridge.consumed),
+              totalUserDeposited
+              { es with bridge :=
+              applyActionToBridgeState es.bridge (.deposit r recipient amount d) idx }
+              r' =
+              totalUserDeposited es r' + (if r = r' then amount else 0) :=
+          totalUserDeposited_step_eq_deposit
+        let _p :
+            ∀ (es : ExtendedState) (r : ResourceId) (recipient : ActorId)
+              (amount : Amount) (d : DepositId) (idx : Nat) (r' : ResourceId)
+              (_hfresh : ¬ d ∈ es.bridge.consumed),
+              totalPoolDeposited
+              { es with bridge :=
+              applyActionToBridgeState es.bridge (.deposit r recipient amount d) idx }
+              r' =
+              totalPoolDeposited es r' :=
+          totalPoolDeposited_step_eq_deposit
         pure ()
     }
   , { name := "GP.4.2 accounting_userpool_delta_non_bridge: term-level API"
     , body := do
-        let _t := @accounting_userpool_delta_non_bridge
+        let _t :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat)
+              (h : BridgeAdmissibleWith verify P d es st)
+              (_hne_dep : ∀ r recipient amount d', st.action ≠ .deposit r recipient amount d')
+              (_hne_dwf : ∀ r recipient poolActor ua pa bg d' sa,
+              st.action ≠ .depositWithFee r recipient poolActor ua pa bg d' sa)
+              (_hne_wd  : ∀ r sender amount rcp, st.action ≠ .withdraw r sender amount rcp)
+              (r : ResourceId),
+              totalUserDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
+              totalUserDeposited es r ∧
+              totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
+              totalPoolDeposited es r :=
+          accounting_userpool_delta_non_bridge
         pure ()
     }
   , { name := "GP.4.2 markConsumed deltas (user / pool): term-level API"
     , body := do
-        let _u := @totalUserDeposited_markConsumed
-        let _p := @totalPoolDeposited_markConsumed
+        let _u :
+            ∀ (es : ExtendedState) (d : DepositId) (rec : DepositRecord)
+              (r : ResourceId) (_hfresh : ¬ d ∈ es.bridge.consumed),
+              totalUserDeposited { es with bridge := es.bridge.markConsumed d rec } r =
+              totalUserDeposited es r + rec.userAmountAt r :=
+          totalUserDeposited_markConsumed
+        let _p :
+            ∀ (es : ExtendedState) (d : DepositId) (rec : DepositRecord)
+              (r : ResourceId) (_hfresh : ¬ d ∈ es.bridge.consumed),
+              totalPoolDeposited { es with bridge := es.bridge.markConsumed d rec } r =
+              totalPoolDeposited es r + rec.poolAmountAt r :=
+          totalPoolDeposited_markConsumed
         pure ()
     }
   , { name := "GP.4.2 applyActionToBridgeState_depositWithFee: term-level API"
     , body := do
         let _t : ∀ (bs : BridgeState) (r : ResourceId) (recipient poolActor : ActorId)
-                   (ua pa : Amount) (bg : Nat) (d : DepositId) (idx : Nat),
+                   (ua pa : Amount) (bg : Nat) (d : DepositId) (sa : Amount) (idx : Nat),
                    applyActionToBridgeState bs
-                     (.depositWithFee r recipient poolActor ua pa bg d) idx =
+                     (.depositWithFee r recipient poolActor ua pa bg d sa) idx =
                    bs.markConsumed d
                      { resource := r, userAmount := ua, poolAmount := pa, budgetGrant := bg } :=
           applyActionToBridgeState_depositWithFee
@@ -412,30 +481,84 @@ def tests : List TestCase :=
     }
   , { name := "GP.4.2 unchanged_when_bridge_eq (user / pool): term-level API"
     , body := do
-        let _u := @totalUserDeposited_unchanged_when_bridge_eq
-        let _p := @totalPoolDeposited_unchanged_when_bridge_eq
+        let _u :
+            ∀ (es₁ es₂ : ExtendedState) (_h : es₁.bridge = es₂.bridge)
+              (r : ResourceId),
+              totalUserDeposited es₁ r = totalUserDeposited es₂ r :=
+          totalUserDeposited_unchanged_when_bridge_eq
+        let _p :
+            ∀ (es₁ es₂ : ExtendedState) (_h : es₁.bridge = es₂.bridge)
+              (r : ResourceId),
+              totalPoolDeposited es₁ r = totalPoolDeposited es₂ r :=
+          totalPoolDeposited_unchanged_when_bridge_eq
         pure ()
     }
   , { name := "GP.4.2 depositWithFee_credits_poolActor: term-level API"
     , body := do
-        let _t := @depositWithFee_credits_poolActor
+        let _t :
+            ∀ (s : State) (r : ResourceId) (recipient poolActor : ActorId)
+              (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
+              (seedAmount : Amount) (reserveActor : ActorId)
+              (_hne : recipient ≠ poolActor) (_hne_pr : poolActor ≠ reserveActor),
+              getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
+              budgetGrant d seedAmount reserveActor).apply_impl s) r poolActor =
+              getBalance s r poolActor + (poolAmount - seedAmount) :=
+          depositWithFee_credits_poolActor
         pure ()
     }
   , { name := "GP.4.2 depositWithFee_pool_credit_matches_ledger_delta: term-level API"
     , body := do
-        let _t := @depositWithFee_pool_credit_matches_ledger_delta
+        let _t :
+            ∀ (es : ExtendedState) (r : ResourceId) (recipient poolActor : ActorId)
+              (userAmount poolAmount : Amount) (budgetGrant : Nat) (d : DepositId)
+              (seedAmount : Amount) (reserveActor : ActorId)
+              (idx : Nat) (_hfresh : ¬ d ∈ es.bridge.consumed)
+              (_hne : recipient ≠ poolActor) (_hne_rr : recipient ≠ reserveActor)
+              (_hne_pr : poolActor ≠ reserveActor) (_hseed : seedAmount ≤ poolAmount),
+              (getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
+              budgetGrant d seedAmount reserveActor).apply_impl es.base) r poolActor
+              - getBalance es.base r poolActor) +
+              (getBalance ((Laws.depositWithFee r recipient poolActor userAmount poolAmount
+              budgetGrant d seedAmount reserveActor).apply_impl es.base) r reserveActor
+              - getBalance es.base r reserveActor) =
+              totalPoolDeposited
+              { es with bridge :=
+              applyActionToBridgeState es.bridge (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d seedAmount) idx }
+              r
+              - totalPoolDeposited es r :=
+          depositWithFee_pool_credit_matches_ledger_delta
         pure ()
     }
   , { name := "GP.4.2 pool_balance_eq_totalPoolDeposited_minus_payouts (+ genesis): term-level API"
     , body := do
-        let _t := @pool_balance_eq_totalPoolDeposited_minus_payouts
-        let _g := @pool_balance_eq_totalPoolDeposited_minus_payouts_genesis
+        let _t :
+            ∀ (es : ExtendedState) (r : ResourceId) (poolActor : ActorId)
+              (poolPayouts : Nat)
+              (_h_reconciled :
+              getBalance es.base r poolActor + poolPayouts = totalPoolDeposited es r),
+              getBalance es.base r poolActor = totalPoolDeposited es r - poolPayouts :=
+          pool_balance_eq_totalPoolDeposited_minus_payouts
+        let _g :
+            ∀ (r : ResourceId) (poolActor : ActorId),
+              getBalance ExtendedState.empty.base r poolActor =
+              totalPoolDeposited ExtendedState.empty r - 0 :=
+          pool_balance_eq_totalPoolDeposited_minus_payouts_genesis
         pure ()
     }
   , { name := "GP.4.2 genesis lemmas (user / pool): term-level API"
     , body := do
-        let _u := @totalUserDeposited_genesis
-        let _p := @totalPoolDeposited_genesis
+        let _u :
+            ∀ (r : ResourceId),
+              totalUserDeposited { base := genesisState, nonces := NonceState.empty,
+                                   registry := KeyRegistry.empty,
+                                   bridge := BridgeState.empty } r = 0 :=
+          totalUserDeposited_genesis
+        let _p :
+            ∀ (r : ResourceId),
+              totalPoolDeposited { base := genesisState, nonces := NonceState.empty,
+                                   registry := KeyRegistry.empty,
+                                   bridge := BridgeState.empty } r = 0 :=
+          totalPoolDeposited_genesis
         pure ()
     }
   -- --------------------------------------------------------------------
@@ -470,25 +593,93 @@ def tests : List TestCase :=
     }
   , { name := "GP.4.2 unchanged_when_consumed_eq (user / pool): term-level API"
     , body := do
-        let _u := @totalUserDeposited_unchanged_when_consumed_eq
-        let _p := @totalPoolDeposited_unchanged_when_consumed_eq
+        let _u :
+            ∀ (es₁ es₂ : ExtendedState) (_h : es₁.bridge.consumed = es₂.bridge.consumed)
+              (r : ResourceId),
+              totalUserDeposited es₁ r = totalUserDeposited es₂ r :=
+          totalUserDeposited_unchanged_when_consumed_eq
+        let _p :
+            ∀ (es₁ es₂ : ExtendedState) (_h : es₁.bridge.consumed = es₂.bridge.consumed)
+              (r : ResourceId),
+              totalPoolDeposited es₁ r = totalPoolDeposited es₂ r :=
+          totalPoolDeposited_unchanged_when_consumed_eq
         pure ()
     }
   , { name := "GP.4.2 accounting_userpool_delta_withdraw: term-level API"
     , body := do
-        let _t := @accounting_userpool_delta_withdraw
+        let _t :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat)
+              (h : BridgeAdmissibleWith verify P d es st)
+              (_hact : ∃ r₀ sender amount rcp, st.action = .withdraw r₀ sender amount rcp)
+              (r : ResourceId),
+              totalUserDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
+              totalUserDeposited es r ∧
+              totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
+              totalPoolDeposited es r :=
+          accounting_userpool_delta_withdraw
         pure ()
     }
   , { name := "GP.4.2 atomic step deltas over apply_bridge_admissible_with: term-level API"
     , body := do
-        let _u := @totalUserDeposited_admissible_depositWithFee
-        let _p := @totalPoolDeposited_admissible_depositWithFee
+        let _u :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+              (r : ResourceId) (recipient poolActor : ActorId)
+              (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+              (_hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+              (r' : ResourceId),
+              totalUserDeposited (apply_bridge_admissible_with verify P d es st idx h) r' =
+              totalUserDeposited es r' + (if r = r' then ua else 0) :=
+          totalUserDeposited_admissible_depositWithFee
+        let _p :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+              (r : ResourceId) (recipient poolActor : ActorId)
+              (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+              (_hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+              (r' : ResourceId),
+              totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r' =
+              totalPoolDeposited es r' + (if r = r' then pa else 0) :=
+          totalPoolDeposited_admissible_depositWithFee
         pure ()
     }
   , { name := "GP.4.2 atomic pool credit + ledger coherence: term-level API"
     , body := do
-        let _c := @depositWithFee_admissible_credits_poolActor
-        let _m := @depositWithFee_admissible_pool_credit_matches_ledger
+        let _c :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+              (r : ResourceId) (recipient poolActor : ActorId)
+              (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+              (_hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+              (_hne : recipient ≠ poolActor) (_hne_pr : poolActor ≠ ammReserveActor)
+              (_hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+              ammReserveActor).pre es.base),
+              getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor =
+              getBalance es.base r poolActor + (pa - sa) :=
+          depositWithFee_admissible_credits_poolActor
+        let _m :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+              (r : ResourceId) (recipient poolActor : ActorId)
+              (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+              (_hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+              (_hne : recipient ≠ poolActor) (_hne_rr : recipient ≠ ammReserveActor)
+              (_hne_pr : poolActor ≠ ammReserveActor)
+              (_hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+              ammReserveActor).pre es.base),
+              (getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor -
+              getBalance es.base r poolActor) +
+              (getBalance (apply_bridge_admissible_with verify P d es st idx h).base r
+              ammReserveActor - getBalance es.base r ammReserveActor) =
+              totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r -
+              totalPoolDeposited es r :=
+          depositWithFee_admissible_pool_credit_matches_ledger
         pure ()
     }
   -- --------------------------------------------------------------------
@@ -519,13 +710,55 @@ def tests : List TestCase :=
     }
   , { name := "GP.4.2 pool_solvency_preserved_by_admitted_depositWithFee: term-level API"
     , body := do
-        let _t := @pool_solvency_preserved_by_admitted_depositWithFee
+        let _t :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+              (r : ResourceId) (recipient poolActor : ActorId)
+              (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+              (_hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+              (_hne : recipient ≠ poolActor) (_hne_pr : poolActor ≠ ammReserveActor)
+              (payouts seeded : Nat)
+              (_hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+              ammReserveActor).pre es.base)
+              (_h_recon : getBalance es.base r poolActor + payouts + seeded =
+              totalPoolDeposited es r),
+              getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor +
+              payouts + (seeded + sa) =
+              totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r :=
+          pool_solvency_preserved_by_admitted_depositWithFee
         pure ()
     }
   , { name := "GP.4.2 runtime-entry (budget-gated) coherence + agreement lemma: term-level API"
     , body := do
-        let _m := @depositWithFee_budget_admitted_pool_credit_matches_ledger
-        let _a := @apply_bridge_admissible_with_budget_base_bridge_eq
+        let _m :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+              (r : ResourceId) (recipient poolActor : ActorId)
+              (ua pa : Amount) (bg : Nat) (dep : DepositId) (sa : Amount)
+              (_hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep sa)
+              (_hne : recipient ≠ poolActor) (_hne_rr : recipient ≠ ammReserveActor)
+              (_hne_pr : poolActor ≠ ammReserveActor)
+              (_hpre : (Laws.depositWithFee r recipient poolActor ua pa bg dep sa
+              ammReserveActor).pre es.base)
+              {es' : ExtendedState}
+              (_hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es'),
+              (getBalance es'.base r poolActor - getBalance es.base r poolActor) +
+              (getBalance es'.base r ammReserveActor - getBalance es.base r ammReserveActor) =
+              totalPoolDeposited es' r - totalPoolDeposited es r :=
+          depositWithFee_budget_admitted_pool_credit_matches_ledger
+        let _a :
+            ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+              (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+              (st : SignedAction) (idx : Nat)
+              (h : BridgeAdmissibleWith verify P d es st)
+              {refundRate : ResourceId → Nat}
+              {es' : ExtendedState}
+              (_hsuc : apply_bridge_admissible_with_budget verify P d es st idx h refundRate = some es'),
+              es'.base = (apply_bridge_admissible_with verify P d es st idx h).base ∧
+              es'.bridge = (apply_bridge_admissible_with verify P d es st idx h).bridge :=
+          apply_bridge_admissible_with_budget_base_bridge_eq
         pure ()
     }
   ]

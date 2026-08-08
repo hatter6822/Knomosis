@@ -127,6 +127,7 @@ contract BridgeFeeSplitBoldTest is
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -216,6 +217,7 @@ contract BridgeFeeSplitBoldTest is
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -418,6 +420,7 @@ contract BridgeFeeSplitBoldTest is
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -774,7 +777,11 @@ contract BridgeFeeSplitBoldTest is
         address recipient = address(0xBEEFCAFE);
         uint64 wAmount = 400_000;
         uint64 idx = 0;
-        bytes memory leaf = _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, idx);
+        bytes memory leaf = _encodeWithdrawalLeaf(
+            // l2LogIndex DELIBERATELY differs from the tree position: the
+            // two counters diverge in production, and the L1 used to
+            // bind the proof index to this one.
+            RESOURCE_BOLD, recipient, wAmount, idx + 7, idx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(idx), leaf, siblings);
 
@@ -833,25 +840,28 @@ contract BridgeFeeSplitBoldTest is
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
                 ammDisasterRecovery: AMM_DR,
+                faultProofRollbackAuthority: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
         );
     }
 
-    /// @notice GP.11.2 — the AMM reserve survives a withdrawal.  An
-    ///         AMM-enabled (80% ratio) BOLD fee-split deposit seeds
-    ///         `ammReserveBold`; a recipient then withdraws ALL non-seed
-    ///         value (`amount - seed`), draining TVL down to exactly the
-    ///         seed's backing.  `ammReserveBold <= boldTotalLockedValue <=
-    ///         totalLockedValue` holds throughout, with the seed as the
-    ///         irreducible TVL floor.  This exercises the deposit/withdraw
-    ///         interaction the deposit-only invariant suite in
-    ///         `AmmDepositSeeding.t.sol` could not reach (it needs the
-    ///         state-root + SMT-proof machinery that lives here).  Withdrawing
-    ///         exactly `amount - seed` models the realistic ceiling: a
-    ///         correct L2 never credits the seed's backing to a withdrawing
-    ///         actor until the AMM swap/redeem path lands (GP.11.3+).
+    /// @notice GP.11.2 (SB L2-primary topology) — the seed's BACKING
+    ///         survives a withdrawal.  An AMM-enabled (80% ratio) BOLD
+    ///         fee-split deposit reports `ammSeedAmount` in its event and
+    ///         keeps no L1-side book — the seed is credited to the L2
+    ///         reserve actor, and its backing stays in the bridge's
+    ///         general escrow (ordinary TVL).  A recipient then
+    ///         withdraws ALL non-seed value (`amount - seed`), draining TVL
+    ///         down to exactly the seed's backing: the irreducible escrow
+    ///         floor behind the L2 reserve actor.  This exercises the
+    ///         deposit/withdraw interaction the deposit-only invariant suite
+    ///         in `AmmDepositSeeding.t.sol` could not reach (it needs the
+    ///         state-root + SMT-proof machinery that lives here).
+    ///         Withdrawing exactly `amount - seed` models the realistic
+    ///         ceiling: a correct L2 never credits the seed's backing to a
+    ///         withdrawing actor.
     function test_e2e_ammReserveSurvivesBoldWithdrawal() public {
         KnomosisBridge bridge = _deployKeyedAttestorBold(8000);
 
@@ -865,10 +875,8 @@ contract BridgeFeeSplitBoldTest is
         (, uint256 poolAmount,) = FeeSplitMath.split(amount, feeBps, bridge.weiPerBudgetUnitBold());
         (uint256 seed,) = FeeSplitMath.ammSeedSplit(poolAmount, 8000);
         assertGt(seed, 0, "non-trivial seed");
-        assertEq(bridge.ammReserveBold(), seed, "BOLD reserve seeded on deposit");
         assertEq(bridge.totalLockedValue(), amount, "TVL == full deposit");
         assertEq(bridge.boldTotalLockedValue(), amount, "BOLD TVL == full deposit");
-        assertLe(bridge.ammReserveBold(), bridge.boldTotalLockedValue(), "reserve <= bold TVL (pre)");
 
         // Withdraw EVERYTHING except the seed's backing: amount - seed.
         address recipient = address(0xBEEFCAFE);
@@ -876,7 +884,11 @@ contract BridgeFeeSplitBoldTest is
         // forge-lint: disable-next-line(unsafe-typecast)
         uint64 wAmount = uint64(amount - seed);
         uint64 idx = 0;
-        bytes memory leaf = _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, idx);
+        bytes memory leaf = _encodeWithdrawalLeaf(
+            // l2LogIndex DELIBERATELY differs from the tree position: the
+            // two counters diverge in production, and the L1 used to
+            // bind the proof index to this one.
+            RESOURCE_BOLD, recipient, wAmount, idx + 7, idx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(idx), leaf, siblings);
 
@@ -886,17 +898,12 @@ contract BridgeFeeSplitBoldTest is
         bytes memory proofBlob = _encodeWithdrawalProof(leaf, idx, siblings);
         bridge.withdrawWithProof(atLogIndexHigh, proofBlob, leaf);
 
-        // TVL drained to exactly the seed; the reserve is the irreducible
-        // floor and is UNCHANGED by the withdrawal (GP.11.2 never decrements
-        // it — that is the GP.11.3 swap/redeem path).
+        // TVL drained to exactly the seed's backing: the escrowed value
+        // behind the L2 reserve actor is the irreducible floor, while the
+        // L1 book stays 0 throughout (the seed was never credited on L1).
         assertEq(uint256(wAmount), amount - seed, "withdrew all non-seed value");
-        assertEq(bridge.totalLockedValue(), seed, "TVL drained to the seed floor");
-        assertEq(bridge.boldTotalLockedValue(), seed, "BOLD TVL drained to the seed floor");
-        assertEq(bridge.ammReserveBold(), seed, "reserve unchanged by withdrawal");
-        assertLe(bridge.ammReserveBold(), bridge.totalLockedValue(), "reserve <= TVL (post-withdraw)");
-        assertLe(
-            bridge.ammReserveBold(), bridge.boldTotalLockedValue(), "reserve <= bold TVL (post)"
-        );
+        assertEq(bridge.totalLockedValue(), seed, "TVL drained to the seed-backing floor");
+        assertEq(bridge.boldTotalLockedValue(), seed, "BOLD TVL drained to the seed-backing floor");
     }
 
     /// @notice Sign a state-root attestation with the attestor key.

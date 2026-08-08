@@ -18,10 +18,10 @@ the unified gas pool / per-actor budgets / AMM.  Pairs with
 | Surface | Pre-GP | Post-GP |
 |---------|--------|---------|
 | **Reserved `ActorId`s** | only `bridgeActor = 0` | `+ gasPoolActor = 1`, `sequencerActor = 2`, `ammReserveActor = 3`; first *user* actor is now **4** (`AddressBook.empty.nextActorId = 4`) |
-| **`Action` indices** | 0–18 | `+ 19` depositWithFee, `20` topUpActionBudget, `21` topUpActionBudgetFor, `22` claimBudgetRefund, `23` ammSwap, `24` reclaimAmmReserves (all frozen) |
+| **`Action` indices** | 0–18 | `+ 19` depositWithFee, `20` topUpActionBudget, `21` topUpActionBudgetFor, `22` claimBudgetRefund, `24` reclaimAmmReserves, `25` reserveSwap (all frozen; 23 is the retired L1-AMM mirror's permanent hole) |
 | **Budgets** | none | bounded per-actor per-epoch budget (deny-by-default genesis `.bounded 0 1 0`) |
 | **Gas pool** | none | `gasPoolPolicy` governs `gasPoolActor` outflow (capped `transfer` to `sequencerActor` only) |
-| **Bridge state** | `consumed`/`pending` | `+` per-deposit `(userAmount, poolAmount, budgetGrant)` split, `+` 5 AMM fields, `+` `ammDisabled` |
+| **Bridge state** | `consumed`/`pending` | `+` per-deposit `(userAmount, poolAmount, budgetGrant)` split, `+` 3 BOLD mirror fields, `+` `ammDisabled` |
 
 The action-index and reserved-actor sets are **frozen** (pinned by
 `addressBook_empty_nextActorId` and the `Action`/`Event` tag regression
@@ -100,8 +100,9 @@ refund-rate) are sidecar-pinned and cross-checked before every replay.
     §10.2.6).
   * **`sequencerActor` (2)** — the sole authorised recipient of pool
     outflow; no special provisioning beyond being the claim target.
-  * **`ammReserveActor` (3)** — provisioned only if you enable the AMM
-    (seed reserves via the GP.11 deposit path); otherwise inert.
+  * **`ammReserveActor` (3)** — the L2 pool's reserve key; funded by
+    the deposit fee-split's seed leg when the AMM is enabled
+    (`ammSeedRatioBps > 0`); otherwise inert.
 
 ## 7. Step 5 — Verify the migration
 

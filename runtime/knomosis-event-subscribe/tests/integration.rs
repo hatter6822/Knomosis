@@ -983,6 +983,36 @@ fn multi_event_per_frame_atomic_under_concurrent_subscribe() {
                     Ok(_) | Err(_) => break,
                 }
             }
+            // The deadline above is wall-clock and is checked
+            // BETWEEN individual event reads, so under CI thread
+            // starvation it can land INSIDE a 3-event batch whose
+            // delivery straddles it — recording a suffix-truncated
+            // final group the atomicity assertion below cannot
+            // tell apart from the server-side partial-batch bug it
+            // exists to catch.  The server delivered the batch
+            // whole (enqueue, backfill and dispatch are all
+            // batch-atomic); only this harness clock cut it.  So:
+            // if the LAST group is incomplete, grant a bounded
+            // grace window to finish reading exactly that group.
+            let grace = Instant::now() + Duration::from_secs(2);
+            while !payloads.is_empty() && Instant::now() < grace {
+                // `frame-<N>-<letter>`: count events of the
+                // highest frame index received so far.
+                let group_of = |p: &Vec<u8>| {
+                    let t = std::str::from_utf8(p).expect("utf-8 payload");
+                    t[t.find('-').expect("frame-") + 1..t.rfind('-').expect("-x")]
+                        .parse::<usize>()
+                        .expect("frame idx")
+                };
+                let last = payloads.iter().map(&group_of).max().expect("non-empty");
+                if payloads.iter().filter(|p| group_of(p) == last).count() >= 3 {
+                    break;
+                }
+                match read_outbound(&mut s, DEFAULT_MAX_FRAME_SIZE) {
+                    Ok(OutboundFrame::Event { payload, .. }) => payloads.push(payload),
+                    Ok(_) | Err(_) => break,
+                }
+            }
             payloads
         });
         sub_handles.push(h);
@@ -1022,12 +1052,32 @@ fn multi_event_per_frame_atomic_under_concurrent_subscribe() {
             let frame_idx: usize = s[dash + 1..last_dash].parse().expect("frame idx");
             by_frame.entry(frame_idx).or_default().push(p);
         }
+        let max_frame = by_frame.keys().copied().max();
         for (frame_idx, parts) in &by_frame {
+            // Diagnostic detail for a partial group: WHICH events
+            // arrived, and whether this was the subscriber's final
+            // group.  The C-3R-1 server bug delivered a batch's
+            // SUFFIX (event[0] missing); a residual harness-clock
+            // truncation (despite the grace drain above) can only
+            // lose a suffix of the FINAL group.  A failure naming
+            // an in-order `a`/`a,b` prefix at the last frame is
+            // therefore a harness-timing signal; anything else is
+            // the server bug.
+            let letters: Vec<&str> = parts
+                .iter()
+                .map(|p| {
+                    let t = std::str::from_utf8(p).expect("utf-8 payload");
+                    &t[t.rfind('-').expect("-x") + 1..]
+                })
+                .collect();
             assert_eq!(
                 parts.len(),
                 3,
-                "subscriber {sub_idx}: frame {frame_idx} delivered {} events of 3 (PARTIAL BATCH BUG)",
-                parts.len()
+                "subscriber {sub_idx}: frame {frame_idx} delivered {} of 3 events \
+                 ({letters:?}; subscriber's last frame: {}) — a non-final or \
+                 prefix-missing partial group is the PARTIAL BATCH BUG",
+                parts.len(),
+                max_frame == Some(*frame_idx),
             );
         }
     }

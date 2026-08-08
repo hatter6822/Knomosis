@@ -22,7 +22,12 @@
 //!
 //! ### From `KnomosisStateRootSubmission.sol`
 //!
-//!   * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer)`
+//!   * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer, uint64 prevEndIndex, bytes32 actionsRoot)`
+//!     — the batched form (Workstream SB ruling R9): one record per
+//!     batch `[prevEndIndex, logIndex)`, the two batch fields
+//!     APPENDED after the retired per-action event's data layout, so
+//!     the observer reads a batch's bounds and actions root from
+//!     this event alone.
 //!
 //! ## ABI decoding discipline
 //!
@@ -54,7 +59,7 @@ pub enum GameEventTopic {
     ResponseSubmitted,
     /// `FaultProofGameSettled(uint256,uint8,address,uint128)`.
     GameSettled,
-    /// `StateRootSubmitted(uint64,bytes32,address)`.
+    /// `StateRootSubmitted(uint64,bytes32,address,uint64,bytes32)`.
     StateRootSubmitted,
 }
 
@@ -76,7 +81,7 @@ impl GameEventTopic {
             Self::MidpointSubmitted => "BisectionMidpointSubmitted(uint256,address,uint64,bytes32)",
             Self::ResponseSubmitted => "BisectionResponseSubmitted(uint256,address,bool)",
             Self::GameSettled => "FaultProofGameSettled(uint256,uint8,address,uint128)",
-            Self::StateRootSubmitted => "StateRootSubmitted(uint64,bytes32,address)",
+            Self::StateRootSubmitted => "StateRootSubmitted(uint64,bytes32,address,uint64,bytes32)",
         }
     }
 
@@ -187,16 +192,27 @@ pub enum GameEvent {
         /// Log index within the transaction.
         log_index: u64,
     },
-    /// `StateRootSubmitted` — the sequencer posted a new state
-    /// root.  Watched to detect state-root mismatches against the
-    /// local L2 replay.
+    /// `StateRootSubmitted` — the sequencer posted one BATCH record
+    /// (Workstream SB): the state root after `log_index_claim` L2
+    /// entries, covering entries `[prev_end_index, log_index_claim)`.
+    /// Watched to detect state-root mismatches against the local L2
+    /// replay, and to persist the batch bounds + actions root the
+    /// terminate path later authenticates against (ruling R9).
     StateRootSubmitted {
-        /// The log index this root claims to cover.
+        /// The batch's end index — the L2 entry count this root
+        /// publishes (the record's key on L1).
         log_index_claim: LogIndex,
         /// The sequencer's claimed state-root commit.
         state_commit: StateCommit,
         /// The sequencer's L1 address (raw topic).
         sequencer_topic: TopicHash,
+        /// The parent record's key: the batch covers L2 entries
+        /// `[prev_end_index, log_index_claim)`.
+        prev_end_index: LogIndex,
+        /// The batch's actions root — the SMT root over its
+        /// per-action signature-bound leaf commitments, which the
+        /// game's terminate authenticates by inclusion proof.
+        actions_root: StateCommit,
         /// L1 block number.
         block_number: u64,
         /// L1 transaction hash.
@@ -455,22 +471,30 @@ fn decode_game_settled(log: &RawLog) -> Result<GameEvent, EventDecodeError> {
     })
 }
 
-/// Decode `StateRootSubmitted`:
+/// Decode `StateRootSubmitted` (batched form, Workstream SB):
 ///   * topics[0] = sig hash
-///   * topics[1] = uint64 indexed logIndex
+///   * topics[1] = uint64 indexed logIndex (the batch's end index)
 ///   * topics[2] = address indexed sequencer
-///   * data: bytes32 stateCommit
+///   * data: bytes32 stateCommit ++ uint64 prevEndIndex
+///     (left-padded to 32 bytes) ++ bytes32 actionsRoot
 fn decode_state_root_submitted(log: &RawLog) -> Result<GameEvent, EventDecodeError> {
     expect_topics(log, "StateRootSubmitted", 3)?;
-    expect_data_len(log, "StateRootSubmitted", 32)?;
+    expect_data_len(log, "StateRootSubmitted", 96)?;
     let log_index_claim = decode_topic_uint64(&log.topics[1], "StateRootSubmitted.logIndex")?;
     let sequencer_topic = log.topics[2];
     let mut state_commit = [0u8; 32];
     state_commit.copy_from_slice(&log.data[0..32]);
+    let mut prev_end_word = [0u8; 32];
+    prev_end_word.copy_from_slice(&log.data[32..64]);
+    let prev_end_index = decode_word_uint64(&prev_end_word, "StateRootSubmitted.prevEndIndex")?;
+    let mut actions_root = [0u8; 32];
+    actions_root.copy_from_slice(&log.data[64..96]);
     Ok(GameEvent::StateRootSubmitted {
         log_index_claim,
         state_commit,
         sequencer_topic,
+        prev_end_index,
+        actions_root,
         block_number: log.block_number,
         tx_hash: log.tx_hash,
         log_index: log.log_index,
@@ -696,7 +720,7 @@ mod tests {
                 GameEventTopic::GameSettled,
             ),
             (
-                "StateRootSubmitted(uint64,bytes32,address)",
+                "StateRootSubmitted(uint64,bytes32,address,uint64,bytes32)",
                 GameEventTopic::StateRootSubmitted,
             ),
         ];
@@ -753,7 +777,11 @@ mod tests {
             ),
             (
                 GameEventTopic::StateRootSubmitted,
-                "92169706952d606ab265058fb8022285fd4bd0d1f44f826ccb27570e4dff2a9d",
+                // The BATCHED signature (Workstream SB) — recomputed
+                // via `cast keccak "StateRootSubmitted(uint64,bytes32,
+                // address,uint64,bytes32)"` when the two batch fields
+                // were appended.
+                "c6c0ddb4c596409329bb24891ce1798bd5d19eebcfbee5d9eeed13a9774a3d9e",
             ),
         ];
         for (variant, expected_hex) in cases {
@@ -1095,11 +1123,19 @@ mod tests {
         ));
     }
 
-    /// `StateRootSubmitted` decodes correctly.
+    /// `StateRootSubmitted` decodes correctly — the batched 96-byte
+    /// data payload: stateCommit ++ prevEndIndex ++ actionsRoot.
     #[test]
     fn decode_state_root_submitted_happy_path() {
         let sequencer = topic_from_u64(0x5E_0000);
         let commit_bytes = [0x33u8; 32];
+        let actions_root_bytes = [0x44u8; 32];
+        let mut data = commit_bytes.to_vec();
+        // prevEndIndex = 90, left-padded to a 32-byte word.
+        let mut prev_end_word = [0u8; 32];
+        prev_end_word[24..32].copy_from_slice(&90u64.to_be_bytes());
+        data.extend_from_slice(&prev_end_word);
+        data.extend_from_slice(&actions_root_bytes);
         let log = RawLog {
             address: EthAddress([0u8; 20]),
             topics: vec![
@@ -1107,7 +1143,7 @@ mod tests {
                 topic_from_u64(100),
                 sequencer,
             ],
-            data: commit_bytes.to_vec(),
+            data,
             block_number: 200,
             tx_hash: [0xae; 32],
             log_index: 11,
@@ -1118,14 +1154,46 @@ mod tests {
                 log_index_claim,
                 state_commit,
                 sequencer_topic,
+                prev_end_index,
+                actions_root,
                 ..
             } => {
                 assert_eq!(log_index_claim, 100);
                 assert_eq!(state_commit, commit_bytes);
                 assert_eq!(sequencer_topic, sequencer);
+                assert_eq!(prev_end_index, 90);
+                assert_eq!(actions_root, actions_root_bytes);
             }
             other => panic!("expected StateRootSubmitted, got {other:?}"),
         }
+    }
+
+    /// The retired per-action 32-byte data payload is REFUSED: a
+    /// pre-batching log cannot silently decode into a batch record
+    /// with garbage bounds.
+    #[test]
+    fn decode_state_root_submitted_rejects_short_data() {
+        let log = RawLog {
+            address: EthAddress([0u8; 20]),
+            topics: vec![
+                GameEventTopic::StateRootSubmitted.hash(),
+                topic_from_u64(100),
+                topic_from_u64(0x5E_0000),
+            ],
+            data: vec![0x33u8; 32],
+            block_number: 200,
+            tx_hash: [0xae; 32],
+            log_index: 11,
+        };
+        let err = decode_event(&log).unwrap_err();
+        assert!(matches!(
+            err,
+            EventDecodeError::WrongDataLength {
+                variant: "StateRootSubmitted",
+                got: 32,
+                expected: 96,
+            }
+        ));
     }
 
     /// `topic_to_actor_handle` extracts the lower 8 bytes.
@@ -1192,6 +1260,8 @@ mod tests {
             log_index_claim: 1,
             state_commit: [0u8; 32],
             sequencer_topic: [0u8; 32],
+            prev_end_index: 0,
+            actions_root: [0u8; 32],
             block_number: 0,
             tx_hash: [0u8; 32],
             log_index: 0,

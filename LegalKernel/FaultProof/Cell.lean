@@ -119,10 +119,10 @@ inductive CellTag
   /-- The bridge `nextWdId` counter (no key needed; singleton).
       Frozen tag 6. -/
   | bridgeNextWdId
-  /-- GP.11.8 L2 mirror of the L1 AMM ETH reserve.  Tag 7. -/
-  | bridgeAmmReserveEth
-  /-- GP.11.8 L2 mirror of the L1 AMM BOLD reserve.  Tag 8. -/
-  | bridgeAmmReserveBold
+  -- Kinds 7 (`bridgeAmmReserveEth`) and 8 (`bridgeAmmReserveBold`)
+  -- are RETIRED with the excised L1 embedded AMM: the book fields
+  -- they opened are gone from `BridgeState`, so the kinds stay
+  -- reserved as permanent holes and no cell may ever reuse them.
   /-- GP.11.8 BOLD circuit-breaker flag.  Tag 9. -/
   | bridgeBoldCircuitClosed
   /-- GP.11.8 per-BOLD TVL cap.  Tag 10. -/
@@ -152,7 +152,8 @@ inductive CellTag
     enum.  The frozen tag indices are:
     0 = balance, 1 = nonce, 2 = registry, 3 = localPolicy,
     4 = bridgeConsumed, 5 = bridgePending, 6 = bridgeNextWdId,
-    7 = bridgeAmmReserveEth, 8 = bridgeAmmReserveBold,
+    7 and 8 = RETIRED (the excised L1-AMM book mirrors; permanent
+    holes, never reused),
     9 = bridgeBoldCircuitClosed, 10 = bridgeBoldTvlCap,
     11 = bridgeBoldTotalLockedValue, 12 = bridgeAmmDisabled,
     13 = epochBudget, 14 = budgetPolicy.
@@ -168,8 +169,7 @@ def CellTag.kindIndex : CellTag → Nat
   | .bridgeConsumed _           => 4
   | .bridgePending _            => 5
   | .bridgeNextWdId             => 6
-  | .bridgeAmmReserveEth        => 7
-  | .bridgeAmmReserveBold       => 8
+  -- 7 and 8 are the RETIRED book-mirror kinds — reserved holes.
   | .bridgeBoldCircuitClosed    => 9
   | .bridgeBoldTvlCap           => 10
   | .bridgeBoldTotalLockedValue => 11
@@ -189,8 +189,6 @@ def CellTag.keyParts : CellTag → Nat × Nat
   | .bridgeConsumed d           => (d, 0)
   | .bridgePending w            => (w, 0)
   | .bridgeNextWdId             => (0, 0)
-  | .bridgeAmmReserveEth        => (0, 0)
-  | .bridgeAmmReserveBold       => (0, 0)
   | .bridgeBoldCircuitClosed    => (0, 0)
   | .bridgeBoldTvlCap           => (0, 0)
   | .bridgeBoldTotalLockedValue => (0, 0)

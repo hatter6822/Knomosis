@@ -8,11 +8,27 @@ import {KnomosisDisputeVerifierV2} from "src/contracts/KnomosisDisputeVerifierV2
 contract MockStateRootSubmission {
 }
 
-/// @notice A trivial mock bridge (the verifier's `bridge` field is
-///         reserved for forward-looking bridge-state queries; the
-///         actual rollback goes through `stateRootSubmission`).
+/// @notice A mock bridge recording `revertToPriorRoot` calls — the
+///         leg `finaliseFromFaultProof` drives (SB ruling R6).  The
+///         optional `refuse` flag lets a test present a mis-wired
+///         bridge (e.g. this verifier not being the bridge's
+///         `faultProofRollbackAuthority`).
 contract MockBridge {
-    function dummy() external pure returns (uint8) { return 0; }
+    bool public revertCalled;
+    uint64 public lastRevertFromIdx;
+    bool public refuse;
+
+    error MockNotAuthority();
+
+    function setRefuse(bool value) external {
+        refuse = value;
+    }
+
+    function revertToPriorRoot(uint64 disputedLogIndexHigh) external {
+        if (refuse) revert MockNotAuthority();
+        revertCalled = true;
+        lastRevertFromIdx = disputedLogIndexHigh;
+    }
 }
 
 /// @title KnomosisDisputeVerifierV2Test
@@ -151,33 +167,37 @@ contract KnomosisDisputeVerifierV2Test is Test {
         assertEq(id2, 2);
     }
 
-    /* -------- finaliseFromFaultProof -------- */
+    /* -------- finaliseFromFaultProof (SB ruling R6) -------- */
 
     function test_finaliseFromFaultProof_only_faultProofGame() public {
-        uint256 id = verifier.fileDispute(bytes32(uint256(0xAAA)));
         vm.expectRevert(KnomosisDisputeVerifierV2.NotFaultProofGame.selector);
-        verifier.finaliseFromFaultProof(id, 1, 5);
+        verifier.finaliseFromFaultProof(1, 5);
     }
 
-    function test_finaliseFromFaultProof_records_upheld_status_only() public {
-        uint256 id = verifier.fileDispute(bytes32(uint256(0xAAA)));
+    /// @notice The bridge leg: a game-driven finalisation calls the
+    ///         bridge's `revertToPriorRoot` with the revert index —
+    ///         the wiring that makes a challenger win reach the
+    ///         bridge's fund-safety gates at all.
+    function test_finaliseFromFaultProof_drives_the_bridge_revert() public {
         vm.prank(faultProofGame);
-        verifier.finaliseFromFaultProof(id, 1, 5);
+        verifier.finaliseFromFaultProof(1, 5);
+        assertTrue(bridge.revertCalled(),
+            "the bridge's revertToPriorRoot must be called");
+        assertEq(bridge.lastRevertFromIdx(), 5,
+            "the revert index is the game's disputed log index");
     }
 
-    function test_finaliseFromFaultProof_unknown_dispute_reverts() public {
+    /// @notice A refusing bridge (e.g. this verifier not being the
+    ///         bridge's `faultProofRollbackAuthority`) SURFACES: the
+    ///         call reverts rather than silently recording success.
+    ///         The GAME wraps its call in try/catch, so settlement
+    ///         is never blocked — but the failure must be visible to
+    ///         that catch arm.
+    function test_finaliseFromFaultProof_surfaces_a_refusing_bridge() public {
+        bridge.setRefuse(true);
         vm.prank(faultProofGame);
-        vm.expectRevert(KnomosisDisputeVerifierV2.UnknownDispute.selector);
-        verifier.finaliseFromFaultProof(999, 1, 5);
-    }
-
-    function test_finaliseFromFaultProof_double_call_rejected() public {
-        uint256 id = verifier.fileDispute(bytes32(uint256(0xAAA)));
-        vm.prank(faultProofGame);
-        verifier.finaliseFromFaultProof(id, 1, 5);
-        vm.prank(faultProofGame);
-        vm.expectRevert(KnomosisDisputeVerifierV2.AlreadyDecided.selector);
-        verifier.finaliseFromFaultProof(id, 1, 5);
+        vm.expectRevert(MockBridge.MockNotAuthority.selector);
+        verifier.finaliseFromFaultProof(1, 5);
     }
 
     /* -------- finaliseFromQuorum (signature-checked) -------- */

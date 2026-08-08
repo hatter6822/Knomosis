@@ -5,38 +5,41 @@
 pragma solidity 0.8.36;
 
 /// @title LogChain
-/// @notice The L1 spelling of the L2 log-entry hash chain.
+/// @notice The L1 spelling of the batched submission hash chain.
 ///
-/// @dev    Two pure functions, one definition each, shared by
+/// @dev    Pure functions, one definition each, shared by
 ///         `KnomosisStateRootSubmission` (which extends the chain on
-///         every submission) and `KnomosisFaultProofGame` (which
-///         authenticates a disputed action against it).  A second
-///         spelling in either contract would be a place for the two to
-///         drift, and the drift would be silent: the chain check would
-///         still pass for the submitter and still fail for the game.
+///         every batch submission) and `ActionsRoot` (whose
+///         signature-bound batch leaf extends `actionCommit`'s
+///         pre-image, and whose `genesisChainSeed` is the chain step
+///         at the all-zero predecessor).  A second spelling elsewhere
+///         would be a place for the constructions to drift, and the
+///         drift would be silent.
 ///
-///         **What changed and why.**  The chain used to commit to
-///         state roots alone —
-///         `keccak256(abi.encode(prevLogEntryHash, stateCommit))` —
-///         which made it a sequencing guard and nothing more.  Nothing
-///         on L1 recorded WHICH action carried root `i-1` to root `i`,
-///         so `terminateOnSingleStep` accepted any
-///         `(actionKind, actionFields, signer)` triple the responding
-///         party cared to submit.  A party losing a game could pick a
-///         different action whose step happened to reproduce the
-///         disputed root, and the game would settle in its favour on an
-///         action the L2 never executed.
-///
-///         Folding `actionCommit` into the chain closes that: the
-///         submitted triple must hash to the value the sequencer bound
-///         when it published the root, and the sequencer cannot rebind
-///         it afterwards without breaking every descendant's chain
-///         check.  This also brings the L1 chain into line with the
-///         Lean one it mirrors — `Runtime.LogFile.LogEntry.hash` has
-///         always chained `encode signedAction ++ encode prevHash`,
-///         i.e. it has always committed to the action.
+///         **The chain commits to the batch's actions** (Workstream SB
+///         ruling R8).  One `nextEntryHash` fold per BATCH: the third
+///         word — which the retired per-action registry spent on a
+///         single action's commitment — carries the batch's
+///         `actionsRoot`, the SMT root over its per-action
+///         signature-bound leaf commitments.  Nothing on L1 used to
+///         record WHICH action carried root `i-1` to root `i`, so a
+///         party losing a game could pick a different action whose
+///         step happened to reproduce the disputed root and settle in
+///         its favour on an action the L2 never executed; under the
+///         fold, the sequencer cannot rebind a batch's actions after
+///         publishing it without breaking every descendant's chain
+///         link, and `KnomosisFaultProofGame.terminateOnSingleStep`
+///         authenticates the ONE disputed action by INCLUSION PROOF
+///         against the committed root.  This keeps the L1 chain in
+///         line with the Lean log it mirrors —
+///         `Runtime.LogFile.LogEntry.hash` has always committed to
+///         the actions it covers — while paying one fold per batch
+///         instead of one per action.
 library LogChain {
-    /// @notice Commit to the L1 form of a signed action.
+    /// @notice Commit to the L1 form of an action's unsigned triple.
+    ///         The batch leaf the fault-proof game authenticates
+    ///         (`ActionsRoot.actionLeafCommit`) extends exactly this
+    ///         pre-image by the fixed 65-byte signature suffix.
     ///
     /// @dev    The dynamic field goes LAST.  `abi.encodePacked`
     ///         concatenates without length prefixes, so a leading
@@ -52,7 +55,7 @@ library LogChain {
     ///         and pinned per-entry by the `step_vm.json` cross-stack
     ///         corpus (`expectedActionCommitHex`).
     ///
-    /// @param actionKind    the `Action` variant index (0..24).
+    /// @param actionKind    the `Action` variant index (0..25).
     /// @param signer        the action's signer `ActorId`.
     /// @param actionFields  the variant's `actionFieldsForL1` bytes.
     /// @return the 32-byte action commitment.
@@ -80,21 +83,23 @@ library LogChain {
         return keccak256(abi.encodePacked(actionKind, signer, actionFields));
     }
 
-    /// @notice Extend the chain by one entry.
+    /// @notice Extend the chain by one BATCH record (SB ruling R8).
     ///
     /// @dev    `abi.encode` over three `bytes32` values is their plain
     ///         96-byte concatenation — no padding, no offsets — so the
-    ///         Lean mirror is a concatenation too.
+    ///         Lean mirror (`l1NextEntryHash`, pinned by the
+    ///         `batch_chain.json` corpus) is a concatenation too.
     ///
-    /// @param prevLogEntryHash  the predecessor entry's hash.
-    /// @param stateCommit       the state root this entry publishes.
-    /// @param actionCommit_     the action that produced it.
-    /// @return the entry hash the NEXT submission must chain to.
+    /// @param prevLogEntryHash  the parent record's stored chain value.
+    /// @param stateCommit       the state root this batch publishes.
+    /// @param actionsRoot_      the batch's actions root
+    ///                          (`bytes32(0)` at the genesis anchor).
+    /// @return the chain value the NEXT submission must extend.
     function nextEntryHash(
         bytes32 prevLogEntryHash,
         bytes32 stateCommit,
-        bytes32 actionCommit_
+        bytes32 actionsRoot_
     ) internal pure returns (bytes32) {
-        return keccak256(abi.encode(prevLogEntryHash, stateCommit, actionCommit_));
+        return keccak256(abi.encode(prevLogEntryHash, stateCommit, actionsRoot_));
     }
 }

@@ -117,10 +117,10 @@ example (bh : ByteArray) (sIdx eIdx : LegalKernel.Disputes.LogIndex)
 example (bh : ByteArray) (gid : Nat) (winner : ActorId)
     (revIdx : LegalKernel.Disputes.LogIndex) :
     Action.tag (.faultProofResolution bh gid winner revIdx) = 18 := rfl
--- 19 — Workstream GP (depositWithFee)
+-- 19 — Workstream GP (depositWithFee; Workstream SB appended seedAmount)
 example (r : ResourceId) (recipient poolActor : ActorId)
-    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) :
-    Action.tag (.depositWithFee r recipient poolActor ua pa bg d) = 19 := rfl
+    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) (sa : Amount) :
+    Action.tag (.depositWithFee r recipient poolActor ua pa bg d sa) = 19 := rfl
 -- 20 — Workstream GP (topUpActionBudget)
 example (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
     Action.tag (.topUpActionBudget gr ga bi pa) = 20 := rfl
@@ -133,9 +133,9 @@ example (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat)
 example (gr : ResourceId) (bu w : Nat) (pa : ActorId) :
     Action.tag (.claimBudgetRefund gr bu w pa) = 22 := rfl
 
-/-- AR.5 regression pin: `ammSwap` holds frozen index 23. -/
-example (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
-    Action.tag (.ammSwap fr tr ai ao ra) = 23 := rfl
+-- Index 23 (`ammSwap`) is RETIRED with the excised L1 embedded AMM;
+-- the pin that its NEIGHBOURS keep 22 and 24 (above/below) is what
+-- guards the hole from silent reuse.
 
 /-- AR.5 regression pin: `reclaimAmmReserves` holds frozen index 24
     (Workstream GP.11.10). -/

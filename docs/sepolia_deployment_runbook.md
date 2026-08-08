@@ -216,7 +216,10 @@ real BOLD token, use `make deploy-local` (a live anvil node) or
 | `KNOMOSIS_SLASH_BPS` | 5000 | sequencer-stake slash ratio |
 | `KNOMOSIS_STATE_ROOT_BOND` / `_STATE_ROOT_DISPUTE_WINDOW` / `_WITHDRAWAL_WINDOW_BLOCKS` | 1e / 216 000 / 216 000 | state-root submission |
 | `KNOMOSIS_MIN_SUBMISSION_INTERVAL` / `_MAX_OUTSTANDING_ROOTS` | 100 / 100 | submission cadence + cap |
+| `KNOMOSIS_GENESIS_STATE_COMMIT` | **required** (no default on a real deploy) | the registry's genesis anchor (SB ruling R5): `commitExtendedState` of the ratified L2 genesis — `knomosis export-batch` emits it; a mismatch makes the first honest batch indefensible |
+| `KNOMOSIS_MAX_ACTIONS_PER_BATCH` | 65 536 | operational ceiling on one batch's span (SB ruling R10; see `deployment_parameters.md` §3) |
 | `KNOMOSIS_BISECTION_TIMEOUT_BLOCKS` / `_MIN_CHALLENGE_BOND` / `_MIN_BISECTION_STEP_INTERVAL` | 21 600 / 0.05e / 5 | fault-proof game (`bond > 0`, `timeout > stepInterval`) |
+| `KNOMOSIS_SUBMISSION_BREAKER_ADDRESS` | the broadcaster | the address that may halt / resume state-root submission.  **Set it explicitly on a real deploy.**  Required non-zero and required DISTINCT from `KNOMOSIS_SEQUENCER` — the constructor reverts `BreakerIsSequencer` otherwise, because a halt is reached on suspicion of the sequencer at least as often as for its benefit, so that sequencer must not be able to clear its own halt |
 | `KNOMOSIS_MANIFEST_OUT` | `deployments/<network>.json` | manifest output path |
 
 ---
@@ -245,7 +248,7 @@ in the repo consumed contract addresses from a file before):
     "KnomosisDisputeVerifier": "0x…",
     "KnomosisSequencerStake": "0x…",
     "KnomosisAmmDisasterRecoveryMultisig": "0x…",
-    "KnomosisStepVM": "0x…",
+    "KnomosisStepVMRoot": "0x…",
     "KnomosisStateRootSubmission": "0x…",
     "KnomosisDisputeVerifierV2": "0x…",
     "KnomosisFaultProofGame": "0x…"
@@ -452,6 +455,67 @@ auth-token file perms, optional `--tls-listen` / `--cors-origin`, read-only
 `--indexer-db`, `/readyz` probes). §3.2 (F-1/F-2) is §2 above; §3.3
 (watchtower liveness) is the observer in §6; §3.5 (key custody + monitoring)
 remains an operator responsibility.
+
+---
+
+## 9A. The submission breaker (halting state-root submission)
+
+`KnomosisStateRootSubmission` carries a breaker that gates
+`submitStateRoot`.  It is **manual only** — `haltSubmissions()` /
+`resumeSubmissions()`, callable solely by the immutable
+`submissionBreaker` recorded in the manifest's
+`actors.submissionBreaker`.
+
+Use it for what a fault proof does not cover: a sequencer key suspected
+compromised, an upstream dependency found unsound, a planned migration.
+
+**Nothing trips it automatically, and a challenger win in particular
+does not.**  An earlier arrangement latched the breaker inside
+`revertStateRootsFrom`, reasoning that a proven-invalid root is the
+strongest evidence a sequencer is faulty.  The reasoning was sound and
+the mechanism was not, because of what has to happen next: the SB
+ruling-R1 recovery path IS the sequencer resubmitting the corrected
+batch after exactly that revert.  Latching there gated the REPAIR
+rather than a suspicious submission — it turned every challenger win
+into a manual intervention and stalled the chain whenever the breaker
+key was not immediately to hand.  Automatic halting and automatic
+recovery cannot both be had at that point; recovery wins.
+
+```bash
+# Is the chain halted?
+cast call "$SUBMISSION" "submissionsHalted()(bool)" --rpc-url "$SEPOLIA_RPC_URL"
+
+# Halt (breaker key only).
+cast send "$SUBMISSION" "haltSubmissions()" \
+  --rpc-url "$SEPOLIA_RPC_URL" --account "$BREAKER_ACCOUNT"
+
+# Resume, once you have established the cause is addressed.
+cast send "$SUBMISSION" "resumeSubmissions()" \
+  --rpc-url "$SEPOLIA_RPC_URL" --account "$BREAKER_ACCOUNT"
+```
+
+### What a halt does and does not stop
+
+STOPPED: `submitStateRoot` only — the frontier freezes.
+
+NOT stopped: `finaliseStateRoot`, `markDisputed`, `clearDisputed`,
+`slashSequencerBond`, `revertStateRootsFrom`, `reclaimRevertedBond`.
+Settlement of everything already submitted proceeds normally.  The
+scoping is deliberate: a safety brake that also stranded in-flight
+withdrawals would be a liveness failure wearing a safety hat.
+
+### Revert recovery is unattended
+
+The SB ruling-R1 recovery path — the sequencer re-extending from
+`canonicalTip` after a revert — needs no operator.  A challenger win
+reverts the range and the corrected chain resubmits on its own, exactly
+as it did before this breaker existed.  Pinned by
+`test_a_revert_does_not_halt_submission` and by the end-to-end
+`test_challenger_win_reverts_the_batch_then_recovery_resubmits`, both
+of which fail if a latch is reintroduced.
+
+Hold the breaker key somewhere you can reach during an incident, and
+distinctly from the sequencer's — the constructor enforces the latter.
 
 ---
 

@@ -252,7 +252,7 @@ def json_byte_pinning_revoke_local_policy : IO Unit := do
     in the TOP-LEVEL object excluding nested cell-proof
     objects.  A maintainer adding a 7th field would silently
     slip into production wire traffic otherwise. -/
-def json_exactly_eight_top_level_fields : IO Unit := do
+def json_top_level_fields_each_appear_once : IO Unit := do
   -- `revokeLocalPolicy` gives the narrowest frontier this suite can
   -- build; even then the policy, registry and nonce cells are opened,
   -- so the count is of KEYS rather than of the object's size.
@@ -274,13 +274,48 @@ def json_exactly_eight_top_level_fields : IO Unit := do
     "\"expected_post_commit_hex\":",
     "\"opened_cells\":",
     "\"gap_mask_hex\":",
-    "\"siblings_hex\":"
+    "\"siblings_hex\":",
+    -- Workstream F-A: the signer's registry cell and its opening
+    -- against the pre-root, which the L1 resolves the signing key
+    -- from before verifying the committed signature.
+    "\"registry_value_hex\":",
+    "\"registry_proof_hex\":"
   ]
   for key in topLevelKeys do
     let parts := json.splitOn key
     unless parts.length = 2 do
       throw (IO.userError
         s!"top-level key {key} should appear exactly once, found {parts.length - 1}: {json}")
+
+/-- Workstream F-A: the exported registry opening is REAL — it
+    verifies against the bundle's own pre-state root, for both a
+    registered signer and an unregistered one (whose cell is
+    canonically absent and opens from the empty leaf).
+
+    Without this the two new fields could ship well-formed bytes that
+    open against nothing, and the L1 would revert
+    `RegistryOpeningInvalid` on every honest terminate. -/
+def registry_opening_verifies_against_preRoot : IO Unit := do
+  let bundle := buildTerminateBundle exampleState exampleEntry
+  let signer := exampleEntry.signedAction.signer
+  let preRoot := commitExtendedState exampleState
+  unless verifyStateCellProof preRoot (.registry signer)
+      bundle.registryValue bundle.registryProof do
+    throw (IO.userError
+      "the exported registry opening does not verify against the pre-root")
+  -- The unregistered case: the cell is absent, and its opening must
+  -- still verify — the absence is what the L1 reads as "no key can
+  -- have authorised this entry".
+  let unregState : ExtendedState :=
+    { exampleState with registry := (∅ : KeyRegistry) }
+  let unregBundle := buildTerminateBundle unregState exampleEntry
+  let unregRoot := commitExtendedState unregState
+  unless unregBundle.registryValue.size = 0 do
+    throw (IO.userError "the unregistered signer's cell should be absent")
+  unless verifyStateCellProof unregRoot (.registry signer)
+      unregBundle.registryValue unregBundle.registryProof do
+    throw (IO.userError
+      "the absent registry cell's opening does not verify against the pre-root")
 
 /-- API stability for `buildTerminateBundle`. -/
 def build_terminate_bundle_api_stable : IO Unit := do
@@ -320,8 +355,10 @@ def tests : List TestCase := [
     json_byte_pinning_transfer_minimal⟩,
   ⟨"export-terminate-bundle: JSON byte-pinning (revokeLocalPolicy)",
     json_byte_pinning_revoke_local_policy⟩,
-  ⟨"export-terminate-bundle: JSON has exactly 8 top-level fields",
-    json_exactly_eight_top_level_fields⟩,
+  ⟨"export-terminate-bundle: every top-level field appears exactly once",
+    json_top_level_fields_each_appear_once⟩,
+  ⟨"export-terminate-bundle: the registry opening verifies vs the pre-root",
+    registry_opening_verifies_against_preRoot⟩,
   ⟨"export-terminate-bundle: buildTerminateBundle API stable",
     build_terminate_bundle_api_stable⟩,
   ⟨"export-terminate-bundle: formatTerminateBundleJson API stable",

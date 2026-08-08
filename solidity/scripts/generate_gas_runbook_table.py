@@ -90,17 +90,8 @@ ROWS: list[tuple[str, str]] = [
     ("depositBoldWithFee_firstDeposit", "`depositBoldWithFee` (first deposit)"),
     ("depositBoldWithFee_repeatDeposit", "`depositBoldWithFee` (repeat deposit)"),
     ("boldApprove_fresh", "BOLD `approve` (prerequisite, fresh allowance)"),
-    (
-        "ammSwap_ethToBold_firstBoldRecipient",
-        "`ammSwap` ETH→BOLD (first-ever BOLD recipient)",
-    ),
-    ("ammSwap_ethToBold_repeatRecipient", "`ammSwap` ETH→BOLD (repeat recipient)"),
-    (
-        "ammSwap_ethToBold_repeat_migrationWired",
-        "`ammSwap` ETH→BOLD (repeat, migration-wired bridge)",
-    ),
-    ("ammSwap_boldToEth_exactApproval", "`ammSwap` BOLD→ETH (exact approval)"),
-    ("ammSwap_boldToEth_infiniteApproval", "`ammSwap` BOLD→ETH (infinite approval)"),
+    # The `ammSwap_*` rows left with the embedded L1 AMM (the user-facing
+    # swap is the L2 `Laws.reserveSwap`, priced off-L1).
     ("withdrawWithProof_eth", "`withdrawWithProof` ETH (canonical 64-sibling proof)"),
     ("withdrawWithProof_bold", "`withdrawWithProof` BOLD (canonical 64-sibling proof)"),
     ("closeBoldCircuit", "`closeBoldCircuit`"),
@@ -128,6 +119,17 @@ ROWS: list[tuple[str, str]] = [
     (
         "executeStepToRootMulti_duplicateCell",
         "`executeStepToRootMulti` (terminal step, one cell deduped to four)",
+    ),
+    # Workstream SB — the batched rollup pipeline: one submission per
+    # batch (amortised over its actions), and the full terminal
+    # transaction of a batch dispute (inclusion proof + adjudication).
+    (
+        "submitStateRoot_batch",
+        "`submitStateRoot` (one batched record; amortise over the batch size)",
+    ),
+    (
+        "terminateOnSingleStep_withInclusion",
+        "`terminateOnSingleStep` (action inclusion proof + adjudicated step)",
     ),
 ]
 

@@ -43,6 +43,8 @@
 //!
 //! These constants mirror `knomosis-l1-ingest/src/encoding.rs`:
 
+use knomosis_amount::AMOUNT_BYTES;
+
 use crate::event::{Amount, BudgetUnits, DepositId, EthAddress, Event, Nonce, WithdrawalId};
 
 /// CBE tag byte for an unsigned integer.  Matches Lean's
@@ -62,8 +64,8 @@ pub const CBE_TAG_BYTES: u8 = 0x02;
 /// Length of a CBE uint head (1-byte tag + 8-byte LE u64).
 pub const HEAD_LEN: usize = 9;
 
-/// Length of a CBE amount head (1-byte tag + 16-byte LE u128).
-pub const AMOUNT_HEAD_LEN: usize = 33;
+/// Length of a CBE amount head (1-byte tag + 32-byte LE integer).
+pub const AMOUNT_HEAD_LEN: usize = 1 + AMOUNT_BYTES;
 
 /// 20-byte byte string is the standard EthAddress encoding (head
 /// + 20 payload bytes = 29 bytes total).
@@ -103,24 +105,6 @@ pub enum DecodeError {
         expected: u8,
         /// Tag actually read.
         actual: u8,
-    },
-    /// An amount's high 16 bytes were non-zero, so the value does not
-    /// fit this crate's `u128` `Amount`.
-    ///
-    /// The wire carries 32 bytes because the Lean state root does
-    /// (finding C-3: a narrower head makes a large balance read as the
-    /// canonically-absent value, and the root goes blind to it).  This
-    /// crate is a read-side view and represents an amount as `u128`,
-    /// so it FAILS on a value it cannot hold rather than truncating —
-    /// truncating is the exact defect the widening exists to remove,
-    /// and a read view that silently halves a balance is worse than
-    /// one that says it cannot read it.
-    ///
-    /// Unreachable in practice: `2^128` wei is ~`3.4e20` ETH.
-    #[error("amount at offset {offset} exceeds this decoder's u128 range")]
-    AmountTooWide {
-        /// Byte offset of the offending amount head.
-        offset: usize,
     },
     /// A byte-string field declared a length exceeding
     /// `HARD_MAX_BYTE_STRING_LEN`.
@@ -237,12 +221,12 @@ impl<'a> Cursor<'a> {
     /// word, so no value the L1 can hold is one the head cannot carry.
     /// `Amount` is `u128` here and `Nat` on Lean's side, so the top 16
     /// bytes are REQUIRED to be zero and an over-wide value is a
-    /// decode error, never a truncation (see `AmountTooWide`).
+    /// decode error, never a truncation.
     ///
     /// Rejects the uint tag rather than accepting either width — one
     /// logical value must have exactly one byte form, or the state
     /// root it feeds stops binding.
-    fn read_amount(&mut self) -> Result<u128, DecodeError> {
+    fn read_amount(&mut self) -> Result<Amount, DecodeError> {
         let head_offset = self.offset;
         let buf = self.read_bytes(AMOUNT_HEAD_LEN)?;
         let tag = buf[0];
@@ -253,15 +237,13 @@ impl<'a> Cursor<'a> {
                 actual: tag,
             });
         }
-        // Little-endian: bytes 1..17 are the low half, 17..33 the high.
-        if buf[17..AMOUNT_HEAD_LEN].iter().any(|&b| b != 0) {
-            return Err(DecodeError::AmountTooWide {
-                offset: head_offset,
-            });
-        }
-        let mut n_buf = [0u8; 16];
-        n_buf.copy_from_slice(&buf[1..17]);
-        Ok(u128::from_le_bytes(n_buf))
+        // Every 32-byte payload denotes a valid amount, which is why
+        // this path has no error branch: the retired `u128` reader had
+        // to reject a value whose high half was non-zero, and that
+        // rejection is exactly what the widening removes.
+        let mut le = [0u8; AMOUNT_BYTES];
+        le.copy_from_slice(&buf[1..AMOUNT_HEAD_LEN]);
+        Ok(Amount::from_le_bytes(le))
     }
 
     /// Read a CBE uint and re-cast to `BudgetUnits` (= `u128`).
@@ -467,18 +449,29 @@ pub fn decode_event(payload: &[u8]) -> Result<Event, DecodeError> {
             actor: cursor.read_uint()?,
             amount: cursor.read_budget_units()?,
         },
-        21 => Event::AmmSwapExecuted {
-            from_resource: cursor.read_uint()?,
-            to_resource: cursor.read_uint()?,
-            amount_in: cursor.read_amount()?,
-            amount_out: cursor.read_amount()?,
-            amm_reserve_actor: cursor.read_uint()?,
-        },
+        // Tag 21 (the retired ammSwapExecuted, the excised L1-AMM
+        // mirror's event) is a permanent hole: it falls through to
+        // `UnknownTag` below, exactly like a never-assigned tag,
+        // mirroring the Lean decoder's refusal.
         22 => Event::AmmReservesReclaimed {
             resource: cursor.read_uint()?,
             amount: cursor.read_amount()?,
             reserve_actor: cursor.read_uint()?,
             pool_actor: cursor.read_uint()?,
+        },
+        23 => Event::ReserveSwapExecuted {
+            from_resource: cursor.read_uint()?,
+            to_resource: cursor.read_uint()?,
+            user: cursor.read_uint()?,
+            amount_in: cursor.read_amount()?,
+            amount_out: cursor.read_amount()?,
+            reserve_actor: cursor.read_uint()?,
+        },
+        24 => Event::ReserveSeeded {
+            resource: cursor.read_uint()?,
+            amount: cursor.read_amount()?,
+            reserve_actor: cursor.read_uint()?,
+            deposit_id: cursor.read_uint()?,
         },
         other => return Err(DecodeError::UnknownTag { tag: other }),
     };
@@ -501,12 +494,14 @@ fn write_uint(out: &mut Vec<u8>, n: u64) {
 
 /// Encode a CBE amount head (tag 0x06 + 32-byte LE value) into `out`.
 ///
-/// `n` is a `u128`, so the high 16 bytes are always zero — the encoder
-/// cannot produce a value its own decoder would reject.
-fn write_amount_head(out: &mut Vec<u8>, n: u128) {
+/// The payload is the full [`AMOUNT_BYTES`]-byte little-endian value.
+/// Since the encoder and the decoder now share `Amount`'s range, the
+/// encoder cannot produce a value its own decoder would reject -- and
+/// unlike the retired `u128` form, it does not have to zero-fill a
+/// high half it could never populate.
+fn write_amount_head(out: &mut Vec<u8>, n: Amount) {
     out.push(CBE_TAG_AMOUNT);
     out.extend_from_slice(&n.to_le_bytes());
-    out.extend_from_slice(&[0u8; 16]);
 }
 
 /// Encode a CBE byte string into `out`.
@@ -786,19 +781,6 @@ pub fn encode_event(event: &Event) -> Vec<u8> {
             write_uint(&mut out, *actor);
             write_budget_units(&mut out, *amount);
         }
-        Event::AmmSwapExecuted {
-            from_resource,
-            to_resource,
-            amount_in,
-            amount_out,
-            amm_reserve_actor,
-        } => {
-            write_uint(&mut out, *from_resource);
-            write_uint(&mut out, *to_resource);
-            write_amount(&mut out, *amount_in);
-            write_amount(&mut out, *amount_out);
-            write_uint(&mut out, *amm_reserve_actor);
-        }
         Event::AmmReservesReclaimed {
             resource,
             amount,
@@ -809,6 +791,32 @@ pub fn encode_event(event: &Event) -> Vec<u8> {
             write_amount(&mut out, *amount);
             write_uint(&mut out, *reserve_actor);
             write_uint(&mut out, *pool_actor);
+        }
+        Event::ReserveSwapExecuted {
+            from_resource,
+            to_resource,
+            user,
+            amount_in,
+            amount_out,
+            reserve_actor,
+        } => {
+            write_uint(&mut out, *from_resource);
+            write_uint(&mut out, *to_resource);
+            write_uint(&mut out, *user);
+            write_amount(&mut out, *amount_in);
+            write_amount(&mut out, *amount_out);
+            write_uint(&mut out, *reserve_actor);
+        }
+        Event::ReserveSeeded {
+            resource,
+            amount,
+            reserve_actor,
+            deposit_id,
+        } => {
+            write_uint(&mut out, *resource);
+            write_amount(&mut out, *amount);
+            write_uint(&mut out, *reserve_actor);
+            write_uint(&mut out, *deposit_id);
         }
     }
     out
@@ -1013,19 +1021,6 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_uint(&mut out, *actor);
             write_budget_units_checked(&mut out, *amount)?;
         }
-        Event::AmmSwapExecuted {
-            from_resource,
-            to_resource,
-            amount_in,
-            amount_out,
-            amm_reserve_actor,
-        } => {
-            write_uint(&mut out, *from_resource);
-            write_uint(&mut out, *to_resource);
-            write_amount(&mut out, *amount_in);
-            write_amount(&mut out, *amount_out);
-            write_uint(&mut out, *amm_reserve_actor);
-        }
         Event::AmmReservesReclaimed {
             resource,
             amount,
@@ -1037,6 +1032,32 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_uint(&mut out, *reserve_actor);
             write_uint(&mut out, *pool_actor);
         }
+        Event::ReserveSwapExecuted {
+            from_resource,
+            to_resource,
+            user,
+            amount_in,
+            amount_out,
+            reserve_actor,
+        } => {
+            write_uint(&mut out, *from_resource);
+            write_uint(&mut out, *to_resource);
+            write_uint(&mut out, *user);
+            write_amount(&mut out, *amount_in);
+            write_amount(&mut out, *amount_out);
+            write_uint(&mut out, *reserve_actor);
+        }
+        Event::ReserveSeeded {
+            resource,
+            amount,
+            reserve_actor,
+            deposit_id,
+        } => {
+            write_uint(&mut out, *resource);
+            write_amount(&mut out, *amount);
+            write_uint(&mut out, *reserve_actor);
+            write_uint(&mut out, *deposit_id);
+        }
     }
     Ok(out)
 }
@@ -1047,15 +1068,15 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
 /// format; this is a stable on-disk representation of an Amount
 /// for storage purposes only.
 #[must_use]
-pub fn amount_to_be_bytes(amount: Amount) -> [u8; 16] {
+pub fn amount_to_be_bytes(amount: Amount) -> [u8; AMOUNT_BYTES] {
     amount.to_be_bytes()
 }
 
-/// Reverse of [`amount_to_be_bytes`].  Decodes a 16-byte BE u128
-/// back to an Amount.  Returns the value (any 16-byte input is a
-/// valid u128, so no error path).
+/// Reverse of [`amount_to_be_bytes`].  Decodes a
+/// [`AMOUNT_BYTES`]-byte BE integer back to an Amount.  Total: every
+/// such array is a valid amount, so there is no error path.
 #[must_use]
-pub fn amount_from_be_bytes(bytes: &[u8; 16]) -> Amount {
+pub fn amount_from_be_bytes(bytes: &[u8; AMOUNT_BYTES]) -> Amount {
     Amount::from_be_bytes(*bytes)
 }
 
@@ -1081,6 +1102,7 @@ mod tests {
         CBE_TAG_UINT, ETH_ADDRESS_BYTES, HARD_MAX_BYTE_STRING_LEN, HEAD_LEN,
     };
     use crate::event::Event;
+    use knomosis_amount::Amount;
 
     /// Constants pinned (no silent drift).
     #[test]
@@ -1096,8 +1118,8 @@ mod tests {
         let e = Event::BalanceChanged {
             resource: 7,
             actor: 42,
-            old_value: 100,
-            new_value: 250,
+            old_value: Amount::from_u64(100),
+            new_value: Amount::from_u64(250),
         };
         let bytes = encode_event(&e);
         let decoded = decode_event(&bytes).unwrap();
@@ -1173,7 +1195,7 @@ mod tests {
         let e = Event::RewardIssued {
             resource: 2,
             recipient: 5,
-            amount: 1_000_000,
+            amount: Amount::from_u64(1_000_000),
         };
         let bytes = encode_event(&e);
         assert_eq!(decode_event(&bytes).unwrap(), e);
@@ -1184,7 +1206,7 @@ mod tests {
         let e = Event::WithdrawalRequested {
             resource: 4,
             sender: 7,
-            amount: 50_000,
+            amount: Amount::from_u64(50_000),
             recipient_l1: [0x11; 20],
             withdrawal_id: 42,
         };
@@ -1197,7 +1219,7 @@ mod tests {
         let e = Event::DepositCredited {
             resource: 4,
             recipient: 7,
-            amount: 100_000,
+            amount: Amount::from_u64(100_000),
             deposit_id: 42,
         };
         let bytes = encode_event(&e);
@@ -1253,7 +1275,7 @@ mod tests {
             game_id: 1,
             winner: 2,
             loser: 3,
-            payout: 1000,
+            payout: Amount::from_u64(1000),
         };
         let bytes = encode_event(&e);
         assert_eq!(decode_event(&bytes).unwrap(), e);
@@ -1266,8 +1288,8 @@ mod tests {
             resource: 0,
             recipient: 42,
             pool_actor: 1,
-            user_amount: 900,
-            pool_amount: 100,
+            user_amount: Amount::from_u64(900),
+            pool_amount: Amount::from_u64(100),
             budget_grant: 50,
             deposit_id: 7,
         };
@@ -1281,7 +1303,7 @@ mod tests {
         let e = Event::ActionBudgetTopUp {
             signer: 99,
             gas_resource: 0,
-            gas_amount: 10,
+            gas_amount: Amount::from_u64(10),
             budget_increment: 100,
             pool_actor: 1,
         };
@@ -1295,7 +1317,7 @@ mod tests {
         let e = Event::GasPoolClaim {
             resource: 0,
             sequencer: 2,
-            amount: 5000,
+            amount: Amount::from_u64(5000),
         };
         let bytes = encode_event(&e);
         assert_eq!(decode_event(&bytes).unwrap(), e);
@@ -1308,7 +1330,7 @@ mod tests {
             recipient: 55,
             signer: 77,
             gas_resource: 0,
-            gas_amount: 10,
+            gas_amount: Amount::from_u64(10),
             budget_increment: 100,
             pool_actor: 1,
         };
@@ -1325,6 +1347,65 @@ mod tests {
         };
         let bytes = encode_event(&e);
         assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Workstream SB tag 23: `ReserveSwapExecuted` round-trips.
+    #[test]
+    fn round_trip_reserve_swap_executed() {
+        let e = Event::ReserveSwapExecuted {
+            from_resource: 0,
+            to_resource: 1,
+            user: 7,
+            amount_in: Amount::from_u64(500),
+            amount_out: Amount::from_u64(480),
+            reserve_actor: 3,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Workstream SB tag 24: `ReserveSeeded` round-trips.
+    #[test]
+    fn round_trip_reserve_seeded() {
+        let e = Event::ReserveSeeded {
+            resource: 1,
+            amount: Amount::from_u64(400),
+            reserve_actor: 3,
+            deposit_id: 42,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// SB tag-23 wire-layout: tag(9), fromResource(9), toResource(9),
+    /// user(9), amountIn(33), amountOut(33), reserveActor(9) — 111
+    /// bytes total; the two wei-denominated amounts ride the 33-byte
+    /// amount head, everything else the 9-byte uint head.
+    #[test]
+    fn reserve_swap_executed_byte_layout() {
+        let e = Event::ReserveSwapExecuted {
+            from_resource: 0,
+            to_resource: 1,
+            user: 7,
+            amount_in: Amount::from_u64(500),
+            amount_out: Amount::from_u64(480),
+            reserve_actor: 3,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(bytes.len(), 111);
+        // Tag head: 0x00 + 8-byte LE 23.
+        assert_eq!(bytes[0], CBE_TAG_UINT);
+        assert_eq!(&bytes[1..9], &23u64.to_le_bytes());
+        // user at 27..36 on the uint head.
+        assert_eq!(bytes[27], CBE_TAG_UINT);
+        assert_eq!(&bytes[28..36], &7u64.to_le_bytes());
+        // amountIn at 36..69 on the amount head.
+        assert_eq!(bytes[36], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[37..53], &500u128.to_le_bytes());
+        assert_eq!(&bytes[53..69], &[0u8; 16], "amount high half is zero");
+        // reserveActor at 102..111 on the uint head.
+        assert_eq!(bytes[102], CBE_TAG_UINT);
+        assert_eq!(&bytes[103..111], &3u64.to_le_bytes());
     }
 
     /// GP tag-20 wire-layout: `BudgetConsumed` has 2 fields × 9
@@ -1358,8 +1439,8 @@ mod tests {
             resource: 1,
             recipient: 2,
             pool_actor: 3,
-            user_amount: 4,
-            pool_amount: 5,
+            user_amount: Amount::from_u64(4),
+            pool_amount: Amount::from_u64(5),
             budget_grant: 6,
             deposit_id: 7,
         };
@@ -1403,7 +1484,7 @@ mod tests {
             recipient: 55,
             signer: 77,
             gas_resource: 0,
-            gas_amount: 10,
+            gas_amount: Amount::from_u64(10),
             budget_increment: 100,
             pool_actor: 1,
         };
@@ -1439,7 +1520,7 @@ mod tests {
         let e17 = Event::ActionBudgetTopUp {
             signer: 77,
             gas_resource: 0,
-            gas_amount: 10,
+            gas_amount: Amount::from_u64(10),
             budget_increment: 100,
             pool_actor: 1,
         };
@@ -1449,7 +1530,7 @@ mod tests {
             recipient: 77,
             signer: 77,
             gas_resource: 0,
-            gas_amount: 10,
+            gas_amount: Amount::from_u64(10),
             budget_increment: 100,
             pool_actor: 1,
         };
@@ -1470,28 +1551,28 @@ mod tests {
                 resource: 0,
                 recipient: 42,
                 pool_actor: 1,
-                user_amount: 900,
-                pool_amount: 100,
+                user_amount: Amount::from_u64(900),
+                pool_amount: Amount::from_u64(100),
                 budget_grant: 50,
                 deposit_id: 7,
             },
             Event::ActionBudgetTopUp {
                 signer: 99,
                 gas_resource: 0,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             },
             Event::GasPoolClaim {
                 resource: 0,
                 sequencer: 2,
-                amount: 5000,
+                amount: Amount::from_u64(5000),
             },
             Event::DelegatedActionBudgetTopUp {
                 recipient: 55,
                 signer: 77,
                 gas_resource: 0,
-                gas_amount: 10,
+                gas_amount: Amount::from_u64(10),
                 budget_increment: 100,
                 pool_actor: 1,
             },
@@ -1512,8 +1593,8 @@ mod tests {
             resource: 0,
             recipient: 0,
             pool_actor: 0,
-            user_amount: 0,
-            pool_amount: 0,
+            user_amount: Amount::from_u64(0),
+            pool_amount: Amount::from_u64(0),
             budget_grant: 1u128 << 64, // exactly 2^64 — out of range
             deposit_id: 0,
         };
@@ -1532,7 +1613,7 @@ mod tests {
         let e = Event::ActionBudgetTopUp {
             signer: 0,
             gas_resource: 0,
-            gas_amount: 0,
+            gas_amount: Amount::from_u64(0),
             budget_increment: u128::MAX,
             pool_actor: 0,
         };
@@ -1604,8 +1685,8 @@ mod tests {
         let e = Event::BalanceChanged {
             resource: 1,
             actor: 2,
-            old_value: 3,
-            new_value: 4,
+            old_value: Amount::from_u64(3),
+            new_value: Amount::from_u64(4),
         };
         let bytes = encode_event(&e);
         // Truncate the last byte.
@@ -1681,7 +1762,7 @@ mod tests {
         let e = Event::DepositCredited {
             resource: 7,
             recipient: 42,
-            amount: 100,
+            amount: Amount::from_u64(100),
             deposit_id: 1,
         };
         let a = encode_event(&e);
@@ -1696,8 +1777,8 @@ mod tests {
         let e = Event::BalanceChanged {
             resource: 1,
             actor: 2,
-            old_value: 3,
-            new_value: 4,
+            old_value: Amount::from_u64(3),
+            new_value: Amount::from_u64(4),
         };
         let bytes = encode_event(&e);
         // 3 identifier fields on the 9-byte uint head (tag, resource,
@@ -1731,8 +1812,8 @@ mod tests {
         let e = Event::BalanceChanged {
             resource: 1,
             actor: 2,
-            old_value: 1u128 << 64,
-            new_value: (1u128 << 100) + 7,
+            old_value: Amount::from_u128(1u128 << 64),
+            new_value: Amount::from_u128((1u128 << 100) + 7),
         };
         let bytes = encode_event(&e);
         assert_eq!(decode_event(&bytes).unwrap(), e);
@@ -1745,8 +1826,8 @@ mod tests {
         let mut bytes = encode_event(&Event::BalanceChanged {
             resource: 1,
             actor: 2,
-            old_value: 3,
-            new_value: 4,
+            old_value: Amount::from_u64(3),
+            new_value: Amount::from_u64(4),
         });
         // Rewrite old_value as a 9-byte uint head, shortening the frame.
         bytes.truncate(27);
@@ -1791,8 +1872,8 @@ mod tests {
         let e = Event::BalanceChanged {
             resource: 1,
             actor: 2,
-            old_value: 100,
-            new_value: 200,
+            old_value: Amount::from_u64(100),
+            new_value: Amount::from_u64(200),
         };
         let bytes = encode_event_checked(&e).unwrap();
         // Round-trip via the regular decoder.
@@ -1811,8 +1892,8 @@ mod tests {
         let e = Event::BalanceChanged {
             resource: 1,
             actor: 2,
-            old_value: 0,
-            new_value: u128::MAX,
+            old_value: Amount::from_u64(0),
+            new_value: Amount::MAX,
         };
         let bytes = encode_event_checked(&e).expect("full-width amount must encode");
         assert_eq!(decode_event(&bytes).unwrap(), e);
@@ -1826,7 +1907,7 @@ mod tests {
         let e = Event::ActionBudgetTopUp {
             signer: 1,
             gas_resource: 0,
-            gas_amount: 10,
+            gas_amount: Amount::from_u64(10),
             budget_increment: 1u128 << 64,
             pool_actor: 2,
         };
@@ -1847,7 +1928,7 @@ mod tests {
         let e = Event::RewardIssued {
             resource: 0,
             recipient: 0,
-            amount: 1u128 << 64,
+            amount: Amount::from_u128(1u128 << 64),
         };
         let bytes = encode_event_checked(&e).expect("2^64 must encode");
         assert_eq!(decode_event(&bytes).unwrap(), e);
@@ -1860,7 +1941,7 @@ mod tests {
         let e = Event::RewardIssued {
             resource: 0,
             recipient: 0,
-            amount: u128::from(u64::MAX),
+            amount: Amount::from(u64::MAX),
         };
         let bytes = encode_event_checked(&e).unwrap();
         let decoded = decode_event(&bytes).unwrap();
@@ -1875,8 +1956,8 @@ mod tests {
             Event::BalanceChanged {
                 resource: 1,
                 actor: 2,
-                old_value: 100,
-                new_value: 200,
+                old_value: Amount::from_u64(100),
+                new_value: Amount::from_u64(200),
             },
             Event::NonceAdvanced {
                 actor: 1,
@@ -1886,13 +1967,13 @@ mod tests {
             Event::RewardIssued {
                 resource: 0,
                 recipient: 0,
-                amount: u128::from(u64::MAX),
+                amount: Amount::from(u64::MAX),
             },
             Event::FaultProofGameSettled {
                 game_id: 1,
                 winner: 2,
                 loser: 3,
-                payout: u128::from(u64::MAX),
+                payout: Amount::from(u64::MAX),
             },
         ];
         for e in &events {

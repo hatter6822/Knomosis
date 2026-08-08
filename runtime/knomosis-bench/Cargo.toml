@@ -61,6 +61,9 @@ knomosis-host = { path = "../knomosis-host" }
 # cross-stack-equivalent primitives.  The benchmark uses them to
 # build realistic SignedAction payloads.
 knomosis-l1-ingest = { path = "../knomosis-l1-ingest" }
+# `knomosis-amount` supplies the `Amount` the fixture's transfer knob
+# and the JSON report carry.
+knomosis-amount = { path = "../knomosis-amount" }
 # `sha3` provides the Keccak-256 primitive used by the fixture
 # generator for deterministic actor-scalar derivation
 # (`fixture::actor_private_scalar`).  Workspace-default

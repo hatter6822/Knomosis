@@ -15,22 +15,39 @@
 //!
 //! ## Wire-format contract
 //!
-//! Mirrors `LegalKernel/Bridge/VerifyAdaptor.lean`'s documented
-//! constants (with one strictness narrowing per the engineering
-//! plan §RH-A.1.b):
+//! Two verification surfaces, one crate:
+//!
+//! **The WIRE path** ([`verify_signed_message`]) — what the Lean
+//! entry point `knomosis_verify_ecdsa` routes to, i.e. the
+//! production semantics of `Authority.Crypto.Verify`:
+//!
+//! | Argument | Length     | Format                                        |
+//! |----------|------------|-----------------------------------------------|
+//! | `pk`     | 33 bytes   | SEC1-compressed pubkey (`0x02`/`0x03` prefix) |
+//! | `msg`    | any length | RAW signing-input bytes (keccak256'd here)    |
+//! | `sig`    | 65 bytes   | Ethereum `(r ‖ s ‖ v)`, `v ∈ {27, 28}`        |
+//!
+//! The adaptor hashes the raw signing-input bytes itself and
+//! verifies by RECOVERY (`recover(digest, r, s, v) == pk`), so the
+//! Lean admission conjunct `Verify pk (signingInput …) sig`, the
+//! production signer's `keccak256`-then-sign, the batch actions-root
+//! leaf's fixed 65-byte signature suffix (Workstream SB ruling R7)
+//! and L1 `ecrecover` adjudication all share ONE convention.  (The
+//! v1 entry point delegated to the strict prehash core below, whose
+//! 32-byte-`msg` / 64-byte-`sig` lengths the admission conjunct
+//! never produces — a production-linked deployment rejected every
+//! signed action.  The "bridge-level adapters strip `v` upstream"
+//! layer the v1 docs referred to never existed; v2 implements the
+//! described behaviour in the adaptor itself.)
+//!
+//! **The strict prehash core** ([`verify`]) — the RH-A.1 primitive,
+//! unchanged, exercised by the 210-record cross-stack corpus:
 //!
 //! | Argument | Length     | Format                                       |
 //! |----------|------------|----------------------------------------------|
 //! | `pk`     | 33 bytes   | SEC1-compressed pubkey (`0x02`/`0x03` prefix)|
-//! | `msg`    | 32 bytes   | Pre-hashed message (keccak256 typical)       |
+//! | `msg`    | 32 bytes   | Pre-hashed message                           |
 //! | `sig`    | 64 bytes   | Raw `(r ‖ s)`, big-endian, 32+32             |
-//!
-//! The Lean-side `Bridge/VerifyAdaptor.lean` additionally
-//! documents 65-byte Ethereum signatures (`r ‖ s ‖ v`); the
-//! adaptor's contract is "strip v upstream" — the production
-//! Rust core enforces 64-byte signatures.  Bridge-level adapters
-//! at the deployment layer perform the `v`-stripping before
-//! calling `knomosis_verify_ecdsa`.
 //!
 //! ## Security properties
 //!
@@ -60,7 +77,7 @@
 //! `LegalKernel/Bridge/VerifyAdaptor.lean`:
 //!
 //! ```text
-//! verifyAdaptorIdentifier := "ecdsa-secp256k1-low-s/EVM-compatible/v1"
+//! verifyAdaptorIdentifier := "ecdsa-secp256k1-low-s/EVM-compatible/v2"
 //! ```
 //!
 //! The same string is published as [`ADAPTOR_IDENTIFIER`] in this
@@ -109,8 +126,9 @@
 pub mod verify;
 
 pub use verify::{
-    knomosis_verify_ecdsa_raw, verify, MESSAGE_LEN, PUBKEY_LEN, SEC1_TAG_EVEN, SEC1_TAG_ODD,
-    SIGNATURE_LEN,
+    knomosis_verify_ecdsa_raw, knomosis_verify_signed_message_raw, verify, verify_signed_message,
+    ETH_V_EVEN_Y, ETH_V_ODD_Y, MESSAGE_LEN, PUBKEY_LEN, SEC1_TAG_EVEN, SEC1_TAG_ODD, SIGNATURE_LEN,
+    WIRE_SIGNATURE_LEN,
 };
 
 /// Crate name, mirrored from `Cargo.toml`.
@@ -128,7 +146,7 @@ pub const CRATE_NAME: &str = "knomosis-verify-secp256k1";
 /// `knomosis_hash_identifier`) can return this string to let
 /// operators distinguish which verify adaptor is linked into a
 /// running deployment.
-pub const ADAPTOR_IDENTIFIER: &str = "ecdsa-secp256k1-low-s/EVM-compatible/v1";
+pub const ADAPTOR_IDENTIFIER: &str = "ecdsa-secp256k1-low-s/EVM-compatible/v2";
 
 /// True iff the build script located `lean.h` and compiled the
 /// Lean ABI shim.  Used by integration tests that need to know
@@ -145,7 +163,9 @@ pub const fn lean_ffi_built() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{ADAPTOR_IDENTIFIER, CRATE_NAME, MESSAGE_LEN, PUBKEY_LEN, SIGNATURE_LEN};
+    use super::{
+        ADAPTOR_IDENTIFIER, CRATE_NAME, MESSAGE_LEN, PUBKEY_LEN, SIGNATURE_LEN, WIRE_SIGNATURE_LEN,
+    };
 
     /// Crate-name constant doesn't drift silently.
     #[test]
@@ -161,7 +181,7 @@ mod tests {
     fn adaptor_identifier_matches_lean_constant() {
         assert_eq!(
             ADAPTOR_IDENTIFIER,
-            "ecdsa-secp256k1-low-s/EVM-compatible/v1"
+            "ecdsa-secp256k1-low-s/EVM-compatible/v2"
         );
     }
 
@@ -174,5 +194,6 @@ mod tests {
         assert_eq!(PUBKEY_LEN, 33);
         assert_eq!(MESSAGE_LEN, 32);
         assert_eq!(SIGNATURE_LEN, 64);
+        assert_eq!(WIRE_SIGNATURE_LEN, 65);
     }
 }

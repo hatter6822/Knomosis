@@ -208,23 +208,26 @@ instance BridgeAdmissibleWith.dec_depositIdFresh
 instance BridgeAdmissibleWith.dec_depositWithFeeIdFresh
     (es : ExtendedState) (st : SignedAction) :
     Decidable
-      (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId,
+      (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId
+          seedAmount,
          st.action = .depositWithFee r recipient poolActor userAmount poolAmount
-                       budgetGrant depositId →
+                       budgetGrant depositId seedAmount →
          es.bridge.consumed.contains depositId = false) := by
   generalize _h_eq : st.action = a
   cases a with
-  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant
+      depositId seedAmount =>
     by_cases hcon : es.bridge.consumed.contains depositId = false
     · apply isTrue
-      intro _ _ _ _ _ _ _ heq
-      injection heq with _ _ _ _ _ _ hd
+      intro _ _ _ _ _ _ _ _ heq
+      injection heq with _ _ _ _ _ _ hd _
       subst hd
       exact hcon
     · apply isFalse
       intro h
-      exact hcon (h r recipient poolActor userAmount poolAmount budgetGrant depositId rfl)
-  | _ => apply isTrue; intro _ _ _ _ _ _ _ heq; cases heq
+      exact hcon (h r recipient poolActor userAmount poolAmount budgetGrant
+        depositId seedAmount rfl)
+  | _ => apply isTrue; intro _ _ _ _ _ _ _ _ heq; cases heq
 
 /-- RB.1.b — Decidable instance for the registration-freshness
     obligation (`BridgeAdmissibleWith` conjunct 7).  Reduces to
@@ -279,6 +282,30 @@ instance BridgeAdmissibleWith.dec_reclaimGate
       intro h
       exact hcon (h r amount reserveActor poolActor rfl)
   | _ => apply isTrue; intro _ _ _ _ heq; cases heq
+
+/-- Decidable instance for the Workstream-AX kill-switch halt
+    (`BridgeAdmissibleWith` conjunct 10).  Reduces to the decidable
+    Bool equality "the L2 `ammDisabled` mirror is unset" when the
+    action is a `.reserveSwap`, and to `Decidable True` for every
+    other constructor.  Same `generalize` rationale as conjunct 6. -/
+instance BridgeAdmissibleWith.dec_reserveSwapGate
+    (es : ExtendedState) (st : SignedAction) :
+    Decidable
+      (∀ fromResource toResource user amountIn minAmountOut reserveActor,
+         st.action = .reserveSwap fromResource toResource user amountIn
+                       minAmountOut reserveActor →
+         es.bridge.ammDisabled = false) := by
+  generalize _h_eq : st.action = a
+  cases a with
+  | reserveSwap fr tr user amountIn minAmountOut reserveActor =>
+    by_cases hcon : es.bridge.ammDisabled = false
+    · apply isTrue
+      intro _ _ _ _ _ _ _
+      exact hcon
+    · apply isFalse
+      intro h
+      exact hcon (h fr tr user amountIn minAmountOut reserveActor rfl)
+  | _ => apply isTrue; intro _ _ _ _ _ _ heq; cases heq
 
 /-- RB.1.c — Umbrella `Decidable` instance for `BridgeAdmissibleWith`.
     Composes the kernel-level `AdmissibleWith.decidable` with the

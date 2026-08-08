@@ -79,7 +79,8 @@ def genPropInput : Gen PropInput := fun st =>
       sequencerBond   := 1_000,
       challengerBond  := 50,
       status          := .inProgress,
-      deploymentId    := ByteArray.empty }
+      deploymentId    := ByteArray.empty
+      actionsRoot     := ByteArray.empty }
   ({ gs := gs, mp := mp }, st₃)
 
 /-! ## Properties

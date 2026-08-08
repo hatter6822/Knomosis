@@ -45,6 +45,7 @@
 
 use std::path::PathBuf;
 
+use knomosis_amount::Amount;
 use knomosis_l1_ingest::action::Action;
 use knomosis_l1_ingest::encoding::encode_action;
 use knomosis_l1_ingest::fixture::MAX_BUDGET_PER_DEPOSIT;
@@ -55,7 +56,7 @@ use serde::Deserialize;
 /// updating this value is a deliberate schema-version change; the
 /// `lean_action_corpus_identifier_matches` test fails fast so the
 /// drift is impossible to miss.
-const EXPECTED_FIXTURE_IDENTIFIER: &str = "knomosis-l1-ingest/deposit-with-fee-action/v2";
+const EXPECTED_FIXTURE_IDENTIFIER: &str = "knomosis-l1-ingest/deposit-with-fee-action/v3";
 
 /// Fixture header — mirrors the Lean generator's `header` object.
 ///
@@ -117,6 +118,8 @@ struct Entry {
     pool_amount: Option<u64>,
     budget_grant: Option<u64>,
     deposit_id: Option<u64>,
+    /// The Workstream SB appended AMM seed leg (depositWithFee only).
+    seed_amount: Option<u64>,
     // ── topUpActionBudget(For) fields (None for depositWithFee) ──
     gas_resource: Option<u64>,
     gas_amount: Option<u64>,
@@ -254,10 +257,11 @@ fn entry_to_action(e: &Entry) -> Action {
                 r: req(e.r, "r"),
                 recipient: req(e.recipient, "recipient"),
                 pool_actor: req(e.pool_actor, "poolActor"),
-                user_amount: u128::from(req(e.user_amount, "userAmount")),
-                pool_amount: u128::from(req(e.pool_amount, "poolAmount")),
+                user_amount: Amount::from(req(e.user_amount, "userAmount")),
+                pool_amount: Amount::from(req(e.pool_amount, "poolAmount")),
                 budget_grant: req(e.budget_grant, "budgetGrant"),
                 deposit_id: req(e.deposit_id, "depositId"),
+                seed_amount: Amount::from(req(e.seed_amount, "seedAmount")),
             }
         }
         "topUpActionBudget" => {
@@ -269,9 +273,10 @@ fn entry_to_action(e: &Entry) -> Action {
             forbid(e.pool_amount, "poolAmount");
             forbid(e.budget_grant, "budgetGrant");
             forbid(e.deposit_id, "depositId");
+            forbid(e.seed_amount, "seedAmount");
             Action::TopUpActionBudget {
                 gas_resource: req(e.gas_resource, "gasResource"),
-                gas_amount: u128::from(req(e.gas_amount, "gasAmount")),
+                gas_amount: Amount::from(req(e.gas_amount, "gasAmount")),
                 budget_increment: req(e.budget_increment, "budgetIncrement"),
                 pool_actor: req(e.pool_actor, "poolActor"),
             }
@@ -285,10 +290,11 @@ fn entry_to_action(e: &Entry) -> Action {
             forbid(e.pool_amount, "poolAmount");
             forbid(e.budget_grant, "budgetGrant");
             forbid(e.deposit_id, "depositId");
+            forbid(e.seed_amount, "seedAmount");
             Action::TopUpActionBudgetFor {
                 recipient: req(e.recipient, "recipient"),
                 gas_resource: req(e.gas_resource, "gasResource"),
-                gas_amount: u128::from(req(e.gas_amount, "gasAmount")),
+                gas_amount: Amount::from(req(e.gas_amount, "gasAmount")),
                 budget_increment: req(e.budget_increment, "budgetIncrement"),
                 pool_actor: req(e.pool_actor, "poolActor"),
             }
@@ -303,17 +309,18 @@ fn entry_to_action(e: &Entry) -> Action {
             forbid(e.pool_amount, "poolAmount");
             forbid(e.budget_grant, "budgetGrant");
             forbid(e.deposit_id, "depositId");
+            forbid(e.seed_amount, "seedAmount");
             forbid(e.gas_amount, "gasAmount");
             forbid(e.budget_increment, "budgetIncrement");
             Action::ClaimBudgetRefund {
                 gas_resource: req(e.gas_resource, "gasResource"),
                 budget_units: req(e.budget_units, "budgetUnits"),
-                wei_per_budget_unit: e.wei_per_budget_unit.unwrap_or_else(|| {
+                wei_per_budget_unit: Amount::from(e.wei_per_budget_unit.unwrap_or_else(|| {
                     panic!(
                         "entry {} (kind {}): missing required field weiPerBudgetUnit",
                         e.category, e.kind
                     )
-                }),
+                })),
                 pool_actor: req(e.pool_actor, "poolActor"),
             }
         }

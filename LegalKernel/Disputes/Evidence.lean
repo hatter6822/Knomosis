@@ -157,7 +157,7 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- For topUpActionBudget, the signer-aware kernel effect is
   -- handled by the `let t := match action with ...` arm above; no
   -- further mutation at this point.
-  | .depositWithFee _ _ _ _ _ _ _  => es''
+  | .depositWithFee _ _ _ _ _ _ _ _  => es''
   | .topUpActionBudget _ _ _ _     => es''
   -- Workstream GP (GP.3.4): delegated top-up.  Like
   -- `topUpActionBudget`, the signer-aware kernel effect
@@ -175,19 +175,15 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- this layer (the refund's budget DEBIT is an admission-layer effect
   -- that `kernelOnlyApply` deliberately doesn't model).
   | .claimBudgetRefund _ _ _ _     => es''
-  -- Workstream GP (GP.11.4): L2 AMM swap.  The swap is NOT signer-
-  -- aware; `Action.compileTransition` (and thus `Action.toTransition`)
-  -- maps it directly to `Laws.ammSwap`.  No registry / local-policy
-  -- mutation.
-  | .ammSwap _ _ _ _ _             => es''
-  -- Workstream GP (GP.11.10): post-disable reserve sweep.  Like
-  -- `ammSwap`, the sweep is NOT signer-aware; `Action.compileTransition`
+  -- Workstream GP (GP.11.10): post-disable reserve sweep.  The sweep
+  -- is NOT signer-aware; `Action.compileTransition`
   -- maps it directly to `Laws.reclaimAmmReserves` (handled by the
   -- kernel step above).  No registry / local-policy mutation; the
   -- kill-switch admission gate (`BridgeAdmissibleWith` conjunct 9) is
   -- an admission-layer effect `kernelOnlyApply` deliberately doesn't
   -- model.
   | .reclaimAmmReserves _ _ _ _    => es''
+  | .reserveSwap _ _ _ _ _ _       => es''
 
 /-- **Bridge-scope invariant.**  `kernelOnlyApply` leaves the bridge
     sub-state (`consumed` / `pending` / `nextWdId`) completely
@@ -645,7 +641,7 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- both `apply_admissible_with` and `kernelOnlyApply` use the
   -- same `(Action.compile st.action).transition`, so they agree
   -- by `rfl`.
-  | depositWithFee _ _ _ _ _ _ _  => rfl
+  | depositWithFee _ _ _ _ _ _ _ _  => rfl
   -- topUpActionBudget compiles to `Laws.freezeResource 0` at the
   -- signer-unaware level, but both `apply_admissible_with` and
   -- `kernelOnlyApply` post-GP.2.3 dispatch on the action and use
@@ -658,11 +654,11 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- `Action.toTransition`, wrapped in `step_impl`.
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
-  | ammSwap _ _ _ _ _             => rfl
   -- GP.11.10: the reserve sweep is signer-unaware (it compiles
   -- directly to `Laws.reclaimAmmReserves`); both paths wrap the same
   -- transition in `step_impl`, so they stay byte-identical.
   | reclaimAmmReserves _ _ _ _    => rfl
+  | reserveSwap _ _ _ _ _ _       => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 

@@ -82,8 +82,8 @@ def sign (a : Authority.Action) : SignedAction :=
 def probes : List CellTag :=
   [ .balance 5 20, .balance 5 7, .balance 1 21
   , .nonce 20, .nonce 21, .registry 20, .localPolicy 20
-  , .bridgeConsumed 77, .bridgePending 99, .bridgeAmmReserveEth
-  , .bridgeAmmReserveBold, .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
+  , .bridgeConsumed 77, .bridgePending 99
+  , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
   , .epochBudget 20, .budgetPolicy ]
 
@@ -125,11 +125,10 @@ def tests : List TestCase :=
                  , .revokeLocalPolicy
                  , .faultProofChallenge ByteArray.empty 0 1 ByteArray.empty
                  , .faultProofResolution ByteArray.empty 0 1 1
-                 , .depositWithFee 1 8 9 4 1 2 3
+                 , .depositWithFee 1 8 9 4 1 2 3 1
                  , .topUpActionBudget 1 5 2 9
                  , .topUpActionBudgetFor 8 1 5 2 9
                  , .claimBudgetRefund 1 2 1 9
-                 , .ammSwap 1 2 5 1 8
                  , .reclaimAmmReserves 1 5 8 9 ] do
           checkComplete a
     }
@@ -485,13 +484,12 @@ def tests : List TestCase :=
         check (.deposit 1 8 5 3) (deriveDepositBalance read 1 8 5)
         check (.withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero)
           (deriveWithdrawBalance read 1 7 5)
-        check (.depositWithFee 1 8 9 5 1 1 3)
-          (deriveDepositWithFeeBalances read 1 8 9 5 1)
+        check (.depositWithFee 1 8 9 5 1 1 3 1)
+          (deriveDepositWithFeeBalances read 1 8 9 5 1 1 Bridge.ammReserveActor)
         check (.topUpActionBudget 1 5 2 9) (deriveTopUpBalances read 1 7 9 5)
         check (.topUpActionBudgetFor 8 1 5 2 9)
           (deriveDelegatedTopUpBalances read 1 7 9 8 5)
         check (.claimBudgetRefund 1 2 3 9) (deriveRefundBalances read 1 9 7 (2 * 3))
-        check (.ammSwap 1 2 5 4 9) (deriveAmmSwapBalances read 1 2 5 4 9)
         check (.reclaimAmmReserves 1 25 9 8) (deriveReclaimBalances read 1 9 8 25)
     }
   , { name := "a partial reader derives nothing"
@@ -503,7 +501,7 @@ def tests : List TestCase :=
         let blind : BalanceReader := fun _ _ => none
         assert (deriveTransferBalances blind 1 7 8 30 |>.isNone)
           "a blind reader must derive nothing"
-        assert (deriveAmmSwapBalances blind 1 2 5 4 9 |>.isNone)
+        assert (deriveReserveSwapBalances blind 1 2 7 5 4 9 |>.isNone)
           "...on the cross-resource variant too"
         -- Half-blind: the sender opens, the receiver does not.
         let partial_ : BalanceReader := fun r a =>
@@ -541,7 +539,7 @@ def tests : List TestCase :=
         check (.deposit 1 8 5 3) (CellTag.bridgeConsumed 3)
           (deriveConsumedCellValue
             { resource := 1, userAmount := 5, poolAmount := 0, budgetGrant := 0 })
-        check (.depositWithFee 1 8 9 5 1 1 4) (CellTag.bridgeConsumed 4)
+        check (.depositWithFee 1 8 9 5 1 1 4 1) (CellTag.bridgeConsumed 4)
           (deriveConsumedCellValue
             { resource := 1, userAmount := 5, poolAmount := 1, budgetGrant := 1 })
         -- `withdraw`'s pending cell is keyed by the PRE-state's
@@ -550,7 +548,14 @@ def tests : List TestCase :=
           (CellTag.bridgePending base.bridge.nextWdId)
           (derivePendingCellValue
             { resource := 1, recipient := LegalKernel.Bridge.EthAddress.zero
-            , amount := 5, l2LogIndex := 0 })
+            , amount := 5, l2LogIndex := 0
+              -- The leaf's own claim about the key it occupies, which
+              -- IS the cell key above.  Not defaultable here: `wdId`
+              -- defaults to 0 because the allocator owns it at an
+              -- `appendWithdrawal`, but a VERIFIER-side derivation has
+              -- to state it, and the advance's value is the pre-state
+              -- counter.
+            , wdId := base.bridge.nextWdId })
         match deriveNextWdIdCellValue (getCellValue base CellTag.bridgeNextWdId) with
         | some derived =>
           check (.withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero)
@@ -564,7 +569,7 @@ def tests : List TestCase :=
         -- so both directions are exercised on real actions.
         for a in [Authority.Action.transfer 1 7 8 30, .mint 1 8 5,
                   .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero,
-                  .deposit 1 8 5 3, .ammSwap 1 2 5 4 9,
+                  .deposit 1 8 5 3,
                   .reclaimAmmReserves 1 25 9 8] do
           assert (FaultProofAdjudicable a)
             s!"{repr a} must be adjudicable"

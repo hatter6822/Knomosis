@@ -77,7 +77,7 @@ def tests : List TestCase :=
         let untouched : List CellTag :=
           [ .balance 1 9, .balance 2 7, .nonce 8, .registry 7, .localPolicy 7
           , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
-          , .bridgeAmmReserveEth, .bridgeAmmDisabled, .epochBudget 7
+          , .bridgeBoldTvlCap, .bridgeAmmDisabled, .epochBudget 7
           , .budgetPolicy ]
         for t in untouched do
           assertEq (expected := (getCellValue base t).toList)
@@ -203,7 +203,7 @@ def tests : List TestCase :=
           "and adds exactly one cell"
         -- Every OTHER variant pays nothing for the split.
         for a in [Authority.Action.transfer 1 7 8 5, .mint 1 7 5, .freezeResource 1,
-                  .deposit 1 7 5 3, .ammSwap 1 2 5 1 9] do
+                  .deposit 1 7 5 3, .reserveSwap 1 2 7 5 1 3] do
           assertEq (expected := (Authority.Action.writeCells a 7).map (fun t => repr t |>.pretty))
             (actual := (Authority.Action.writeCellsAt seeded a 7).map (fun t => repr t |>.pretty))
             s!"writeCellsAt widened a non-withdraw action: {repr a}"

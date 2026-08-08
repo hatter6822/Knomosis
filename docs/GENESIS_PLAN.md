@@ -5186,81 +5186,87 @@ conclusion is behavioural rather than `extEq`, deliberately —
 map from a resource absent entirely, and no cell read, hence no
 step, can tell those apart.
 
-The step VM has NOT yet been rewritten to exploit it, so §15B.2's
-open critical finding still stands.
-`docs/planning/state_root_merkleisation_plan.md` §4 is the spec for
-that half.
+The step VM HAS been rewritten to exploit it
+(`KnomosisStepVMRoot.executeStepToRootMulti`; see §15B.2 — the
+finding that section used to carry is closed), per
+`docs/planning/state_root_merkleisation_plan.md` §4.
 
 ### 15B.2 Step semantics
 
 A `KernelStep` (`LegalKernel.FaultProof.Step.KernelStep`) carries
-the inputs and outputs of one kernel step:
+the inputs of one kernel step — the pre-state commit, the signed
+action, the L2 log index and a deduplicating pre-root `MultiBundle`
+(the step's frontier plus one shared sibling wire).
 
-```
-structure KernelStep where
-  preStateCommit  : StateCommit
-  signedAction    : SignedAction
-  postStateCommit : StateCommit
-  cellProofs      : CellProofBundle
-```
+The L1 step VM (`KnomosisStepVMRoot.executeStepToRootMulti`)
+consumes the same tuple: a pre-ROOT, the action, the signer, the log
+index and one deduplicating multiproof.  It re-derives the step's
+cell list, re-derives every cell's post-value from proven pre-values
+alone, and folds to the post-state ROOT — so both sides of the
+game's terminal comparison are `commitExtendedState`-shaped state
+roots.  (This section used to carry an **open critical**: the
+retired `KnomosisStepVM.executeStep` returned a bespoke
+"step-VM-specific 32-byte hash" that could never equal a submitted
+state root, so an honest sequencer lost every game it correctly
+defended.  That recipe, its contract, and the 37 theorems pinning it
+are deleted; `docs/fault_proof_runbook.md` §0 records the closure
+and the residue.)
 
-The L1 step VM (`KnomosisStepVM.executeStep`) consumes a
-`KernelStep` plus per-cell proofs.
+The four modelling gaps that sat behind the old recipe are all
+resolved, each pinned as a test rather than left as prose:
 
-**Open critical — it does not compute a state commit.**  Its own
-header says the value it returns is "a step-VM-specific 32-byte
-hash" that "is NOT byte-identical to" a `commitExtendedState` value,
-and `KnomosisFaultProofGame.terminateOnSingleStep` tests that value
-against `g.high.commit`, a submitted state root.  The two sides are
-different constructions, so the comparison never succeeds and an
-honest sequencer loses every game it correctly defends.  The
-per-entry byte-equivalence assertion in
-`solidity/test/CrossCheck/StepVM.t.sol` is skipped for exactly this
-reason, which is why no suite reports it.
+  * **The semantic core is production-faithful.**  It IS
+    `productionApplyBudget` (`LegalKernel.FaultProof.ProductionApply`),
+    proved faithful to `apply_bridge_admissible_with_budget` on both
+    legs, and the per-variant coherence theorems are stated against
+    it.
+  * **Every cell kind is derived, not just balances.**
+    `LegalKernel.FaultProof.VerifierWrites` supplies each writable
+    cell's derivation from its proven pre-value — the nonce and
+    epoch-budget cells uniform across all twenty-five variants, the
+    balances of the twelve variants that write one, and the
+    registry / local-policy / bridge cells of the eight that write
+    those — each with a `*_correct` theorem against
+    `getCellValue (productionApplyBudget …)`, mirrored byte-for-byte
+    by `StepWrites` / `StepPlan` on the L1.
+  * **The bulk pair is resolved by exclusion.**
+    `FaultProof.FaultProofAdjudicable` is decidable and false on
+    exactly `distributeOthers` / `proportionalDilute`
+    (`faultProofAdjudicable_eq_false_iff`); a deployment leaning on
+    the fault proof must not authorise them, and the contract
+    refuses them before verifying any opening.
+  * **A failing precondition is a no-op, not a revert.**  Every
+    derivation EVALUATES its law's precondition and returns the
+    pre-values when it fails, so the fold lands on the unchanged
+    root — a verdict — rather than reverting the terminal call the
+    responsible party alone can make.
 
-Theorem #225 (`recomputeCommitment_coherent_with_kernelOnlyApply`)
-does not close this and was never able to: `recomputeCommitment` is
-*defined* as `commitExtendedState ∘ kernelOnlyApply`, so the theorem
-is definitional and says nothing about the Solidity side.
+Workstream SB extends the terminal step's authentication: the
+disputed action (its kind, fields, signer AND 65-byte signature) is
+verified by INCLUSION PROOF against the disputed batch's submitted
+actions root (§15B.5) before adjudication, so the responding party
+executes the action the sequencer committed to, not an action of its
+choosing.
 
-Four modelling gaps sit behind it, each read from source and pinned as
-a test rather than left as prose.  One is closed; three are open and
-are what the step VM's rewrite owes.
-
-  * **Closed.**  The semantic core `applyCellWrites_to_state` was
-    `kernelOnlyApply`, which models neither bridge nor budget effects,
-    while the runtime advances through
-    `apply_bridge_admissible_with_budget`.  It IS
-    `productionApplyBudget` now (`LegalKernel.FaultProof.ProductionApply`),
-    proved faithful on both legs, and the per-variant coherence
-    theorems were restated against it.
-  * the 25 per-variant step functions read and write `.balance` cells
-    only, while `Action.writeCells` correctly declares that every
-    action advances the signer's nonce (plus registry / local-policy /
-    bridge cells for eight variants).  Harmless while the dispatcher's
-    output is compared only against another dispatcher output; wrong
-    for every action once it is compared against a state root.
-    `LegalKernel.FaultProof.VerifierWrites` has begun supplying what
-    the handlers owe — the nonce cell's derivation from its proven
-    pre-value, uniform across all twenty-five, and the concrete
-    epoch-budget equation.
-  * **A bulk write set is complete but not verifiable.**  A verifier
-    holding only the pre-root cannot distinguish a complete recipient
-    set from one missing an entry: the missing cell's opening is simply
-    absent, the short bundle folds, and the resulting root is one where
-    that recipient was never credited.  Non-bulk variants re-derive
-    their tag list and are immune.  A deployment leaning on the fault
-    proof should not admit `distributeOthers` / `proportionalDilute`
-    until this is closed.
-  * **A revert is not a verdict.**  `step_impl` is `if pre then
-    apply_impl else id`; the L1 handlers revert where it no-ops, and
-    the terminal step is callable only by whoever's turn it is, so any
-    reverting input costs the responsible party the game by timeout.
-
-Until the state-root Merkleisation lands, the fault-proof game must
-not be treated as an adjudicating backstop; the bisection narrowing
-is proved and unaffected.  `docs/fault_proof_runbook.md` §0 carries
-the operator consequences.
+Workstream F-A closes the remaining half of that question.  Inclusion
+answers "is this the action the batch committed?"; it says nothing
+about whether the action was AUTHORISED, and the step VM cannot
+evaluate the signature scheme — so a batch could commit an action
+nobody signed and the terminal step would defend it.  The terminal
+step now VERIFIES the committed signature: the signer's registered
+public key is resolved by a single-cell opening of its registry cell
+against the disputed range's pre-state root, the canonical §8.8.5
+sign-input is rebuilt on-chain from the packed action fields (under
+the game's own deployment id, over the nonce read from the frontier
+the step VM has already verified against that same root), and
+`ecrecover` must land on that key's address — with the EIP-2 low-s
+gate mirrored from the L2 adaptor, since the precompile accepts
+high-s and an L1 that did would defend a signature the L2 admission
+gate refused.  An entry whose signature does not verify is
+INADMISSIBLE, so its truthful post-state is the pre-state: the
+adjudicated root is `low.commit`, the full no-op including the nonce,
+which is what makes a fabricated endpoint indefensible without also
+making an honest no-op endpoint unwinnable.
 
 ### 15B.3 Bisection game
 
@@ -5322,23 +5328,68 @@ single composite statement at the settlement boundary:
 
 Combined with the per-step coherence (#225) and the convergence
 chain (#231), an honest challenger always wins against a
-sequencer who has published an invalid state root — **in the Lean
-model**.  The deployed game does not yet deliver it, because its
-terminal step compares two different hash constructions (§15B.2).
-The bisection narrowing is unaffected; the settlement boundary is
-not reached.
+sequencer who has published an invalid state root — in the Lean
+model AND in the deployed game: since the terminal step computes a
+state root (§15B.2), the settlement boundary is reached, and the
+end-to-end challenger-win path is exercised on the real contract
+quadruple (`solidity/test/CrossCheck/BatchGame.t.sol`, driven by a
+corpus probe, with the R6 forwarding landing the revert on the
+bridge's own reverted range).  Turn parity is additionally proved:
+the reachable turn/pending set is exactly
+`{(sequencer, no pending), (challenger, pending)}`
+(`turnAlignedWithPending` + `turn_aligned_preserved`), so the
+challenger is NEVER the terminate-obligated party
+(`terminate_owner_is_sequencer`), pinned by a Solidity fuzzed
+move-sequence test.
+
+The Workstream-SB batch authentication (§15B.2) is anchored in the
+Lean model itself, not only on L1: `GameState.actionsRoot` carries
+the disputed batch's actions root (the model of
+`roots[disputedLogIndex].actionsRoot`, immutable while the game is
+open since `markDisputed` blocks the overwrite-of-reverted path),
+the `terminateOnSingleStep` transition takes the responder's
+inclusion proof, and the arm refuses an unauthenticated step
+(`.error .actionNotInBatch` — the model of the L1 revert, retryable
+rather than a loss).  `terminate_ok_requires_authentication`
+inverts the arm, and the upgraded composite
+`anchored_challenger_wins` derives the responder's action spelling
+from the batch-committed one via `actionProof_binds_action`, so
+kernel-truthfulness is hypothesised about the COMMITTED
+`(kind, signer, fields, sig)` tuple rather than about a step of the
+responder's choosing — the action-substitution attack the audit-22
+MAJOR described is unprovable in the anchored model.
 
 ### 15B.5 L1 contract surface
 
-Five Solidity contracts (per Workstream-H plan §3.1):
+Five Solidity contracts (per Workstream-H plan §3.1, as amended by
+Workstream SB's batching cutover):
 
-  * `KnomosisStateRootSubmission` — sequencer state-root submission
-    + bond + dispute-window + hash-chain integrity.
-  * `KnomosisStepVM` — per-step VM that executes one kernel step.
+  * `KnomosisStateRootSubmission` — BATCHED sequencer submission
+    (Workstream SB): one record per batch `[prevEnd, end)`, keyed by
+    `end`, with the previous chain hash read structurally from the
+    parent record (R5), the batch's actions root folded into the
+    chain link (R8), a genesis anchor written by the constructor,
+    revert recovery (`lastRevertAtBlock` + a monotone-down
+    `canonicalTip`, R1), overwrite-of-reverted (R3) and
+    `reclaimRevertedBond` (R4).
+  * `KnomosisStepVMRoot` — the root-computing per-step VM: verifies
+    the deduplicating pre-root multiproof, re-derives every cell's
+    post-value, folds to the post-state root (replaced the retired
+    `KnomosisStepVM` and its bespoke hash recipe).
   * `KnomosisFaultProofGame` — bisection game state machine + bond
-    redistribution.
+    redistribution; anchored at the disputed batch's start (R2),
+    the terminal action authenticated by inclusion against the
+    batch's actions root (R7, `src/lib/ActionsRoot.sol`) and its
+    SIGNATURE verified against the signer's registered key
+    (Workstream F-A: `src/lib/SignInput.sol` rebuilds the §8.8.5
+    digest, `src/lib/Secp256k1.sol` decompresses the registry cell's
+    SEC1 key to an `ecrecover` address), the settlement forwarded to
+    the dispute verifier (R6).
   * `KnomosisDisputeVerifierV2` — dual-path verifier (fault-proof
-    + adjudicator quorum for oracle disputes).
+    + adjudicator quorum for oracle disputes); its
+    `finaliseFromFaultProof(gameId, revertFromIdx)` carries a
+    challenger win to `bridge.revertToPriorRoot` (the bridge's
+    `faultProofRollbackAuthority`, R6).
   * `KnomosisFaultProofMigration` — V1 → V2 handoff.
 
 All contracts immutable per Workstream-E §20 discipline.
@@ -5393,14 +5444,16 @@ weaker because:
 The headline theorem #232 family establishes the trust-model
 upgrade at the type level.
 
-**Not yet in force operationally.**  The upgrade is contingent on
-the game adjudicating, and §15B.2 records why it does not.  Until
-the state-root Merkleisation lands, a deployment's operative
-backstop remains the Phase-6 adjudicator quorum
-(`KnomosisDisputeVerifier`) and the trust assumption remains M-of-N
-adjudicators honest.  Claiming the weaker assumption before then
-would overstate what is deployed, which is the one direction a trust
-model must not err in.
+**In force operationally**, with one carve-out.  The upgrade was
+contingent on the game adjudicating; the state-root Merkleisation
+landed and the terminal step computes a state root (§15B.2), so a
+deployment routing its deterministic claims to the fault-proof path
+holds the 1-honest-challenger assumption.  The carve-out is the
+bulk pair: `distributeOthers` / `proportionalDilute` are not
+fault-proof-adjudicable (`FaultProofAdjudicable` is false on
+exactly those two), so a deployment that authorises them keeps the
+M-of-N adjudicator-quorum backstop for those actions — or does not
+authorise them at all.
 
 ### 15B.9 Deviation block
 
@@ -6067,10 +6120,12 @@ Action.depositWithFee       := 19 -- Workstream GP (GP.2.3)
 Action.topUpActionBudget    := 20 -- Workstream GP (GP.2.3)
 Action.topUpActionBudgetFor := 21 -- Workstream GP (GP.3.4 delegated)
 Action.claimBudgetRefund    := 22 -- Workstream GP (GP.9.1 refund-on-exit)
-Action.ammSwap              := 23 -- Workstream GP (GP.11.4 AMM swap)
+-- 23 is RETIRED (Workstream AX: the excised L1-AMM ammSwap mirror)
+-- — a permanent hole the decoder refuses; never reuse.
 Action.reclaimAmmReserves   := 24 -- Workstream GP (GP.11.10 reserve reclamation)
+Action.reserveSwap          := 25 -- Workstream SB (user-signed L2 AMM swap)
 
--- Event constructors (frozen indices 0..22)
+-- Event constructors (frozen indices 0..24)
 Event.balanceChanged       := 0
 Event.nonceAdvanced        := 1
 Event.identityRegistered   := 2
@@ -6092,8 +6147,11 @@ Event.actionBudgetTopUp          := 17 -- Workstream GP (GP.2.3)
 Event.gasPoolClaim               := 18 -- Workstream GP (GP.2.3)
 Event.delegatedActionBudgetTopUp := 19 -- Workstream GP (GP.3.4)
 Event.budgetConsumed             := 20 -- Workstream GP (GP.6.4 per-action debit)
-Event.ammSwapExecuted            := 21 -- Workstream GP (GP.11.4 swap)
+-- 21 is RETIRED (Workstream AX: the excised L1-AMM mirror's event)
+-- — a permanent hole the decoder refuses; never reuse.
 Event.ammReservesReclaimed       := 22 -- Workstream GP (GP.11.10 reclamation)
+Event.reserveSwapExecuted        := 23 -- Workstream SB (user L2 swap)
+Event.reserveSeeded              := 24 -- Workstream SB (deposit seed leg)
 ```
 
 Per-constructor field shapes are recorded in `docs/abi.md`
@@ -6164,7 +6222,16 @@ structure PendingWithdrawal where
   recipient   : EthAddress       -- Fin (2^160)
   amount      : Amount
   l2LogIndex  : Nat
+  wdId        : WithdrawalId     -- the key this leaf occupies
 ```
+
+`wdId` records the leaf's own key in `pending`, and therefore its
+position in the withdrawal SMT.  It is what the L1's
+`withdrawWithProof` binds a submitted proof's index to; without it
+the L1 had nothing in the leaf to check the index against and bound
+it to `l2LogIndex`, a counter the tree is not keyed by.
+`appendWithdrawal` overwrites the field with the key it inserts at,
+so the two cannot disagree at the allocation site.
 
 `DepositId` is the canonical big-endian numeric form of the
 32-byte L1 deposit-receipt hash; `WithdrawalId` is an
@@ -6756,6 +6823,12 @@ For a deposit amount `V` and `chosenFeeBps`:
 * `userAmount = V - poolAmount`
 * `minFeeBps ≤ chosenFeeBps ≤ maxFeeBps`
 * `budgetGrant = min(MAX_BUDGET_PER_DEPOSIT, poolAmount / weiPerBudgetUnit[resource])`
+* `seedAmount = poolAmount * ammSeedRatioBps / 10000` (Workstream SB:
+  computed and event-bound on L1, CREDITED on L2 — the
+  `depositWithFee` law's three-leg apply is
+  `recipient += userAmount`, `poolActor += poolAmount − seedAmount`,
+  `ammReserveActor += seedAmount`, matching the L1 event exactly;
+  §15E.12)
 
 The bounds check is mandatory. The budget clamp is non-reverting.
 
@@ -7174,10 +7247,11 @@ makes available.  In `LegalKernel/Bridge/Accounting.lean`:
   parameterised so it does not depend on the concrete id; its inductive
   maintenance across a trace — bounding the pool actor's outflows to
   the sequencer-payout path — is the `gasPoolPolicy` drain bound
-  (§15E.6), shipped with the GP.7 pool-governance work; the
-  **strong-conservation / AMM-aware** extension depends on
-  `Action.ammSwap` (§15E embedded-AMM amendment) and lands with that
-  workstream.
+  (§15E.6), shipped with the GP.7 pool-governance work.  (The
+  **strong-conservation / AMM-aware** extension that was scoped
+  against `Action.ammSwap` retired with that mirror under
+  Workstream AX; the live swap, `Laws.reserveSwap`, is
+  `IsConservative` outright.)
 
 * **Atomic admitted-step forms.**  The deltas and the pool-credit /
   ledger coherence are additionally lifted onto the *actual* admitted
@@ -7206,6 +7280,63 @@ makes available.  In `LegalKernel/Bridge/Accounting.lean`:
 
 All GP.4.2 theorems depend only on `propext`, `Classical.choice`,
 `Quot.sound`; no new opaque, no new axiom, no kernel-TCB delta.
+
+### 15E.12 Workstream SB: batched submission + the user-facing L2 AMM
+
+Workstream SB rebuilt the L1 submission pipeline and made the AMM
+user-facing on the L2; Workstream AX (amendment 1.39) then excised
+the embedded L1 venue entirely, leaving the L2 pool as the ONE AMM.
+Design record (rulings R1–R10 and A–E live in the workstream plan;
+this section is the architectural summary):
+
+**Batched state-root submission.**  One
+`submitStateRoot(end, prevEnd, stateCommit, actionsRoot)` record
+covers every L2 action in `[prevEnd, end)` — the chain link is
+folded once per batch from the batch's ACTIONS ROOT, a cell-SMT over
+per-action signature-bound leaf commitments
+(`hash(kind ‖ uint64BE signer ‖ fields ‖ 65-byte sig)` at key
+`hash("knomosis.actionsRoot" ‖ uint64BE n)`;
+`LegalKernel.FaultProof.ActionsRoot`, with completeness/soundness
+and the `actionProof_binds_action` authentication lemma).  The
+bisection game anchors at the batch start and bisects INSIDE the
+batch; the terminal step authenticates the disputed action by
+inclusion proof before adjudicating it (§15B.2/§15B.5).  Measured
+economics: an L2 action carries ≈239 gas of amortised L1 at a batch
+of 1 000 (`gas_pool_runbook.md` §9.5), versus ~239k under the
+retired one-record-per-action regime.  Two pre-existing defects were
+fixed in scope: the revert path's dead end (R1/R3/R4 recovery) and
+the challenger win that never reached the bridge (R6:
+game → `KnomosisDisputeVerifierV2.finaliseFromFaultProof` →
+`bridge.revertToPriorRoot`).
+
+**The user-signed L2 swap.**  `Laws.reserveSwap`
+(`Action.reserveSwap` at frozen index 25) prices in-kernel via the
+proved `AmmMath.getAmountOut` over the reserve actor's LIVE
+balances (`swapFeeBps = 30`, corpus-pinned against Solidity's
+constant); the precondition enforces funds, non-empty reserves and
+the `minAmountOut` floor; conservation, k-non-decrease and
+no-reserve-drain are theorems.  Fund safety binds at the
+`AuthorityPolicy` (`reserveSwapUserBinding`: `user = signer` for
+tag 25) and both deny lists keep the pool/reserve keys unable to
+SIGN it.  Events 23/24 (`reserveSwapExecuted` / `reserveSeeded`)
+carry the trade and seed-attribution observables.
+
+**The funding loop (one-AMM L2-primary topology).**  The deposit
+fee-split's seed leg is credited on the L2: `Action.depositWithFee`
+gained the appended `seedAmount` field (§15E.3), the L1
+`_ammSeedSplit` computes and event-binds the split (the backing wei
+stays in general escrow — there are no L1 reserve books to accrue;
+Workstream AX excised the embedded L1 AMM entirely, pre-deployment),
+and the `knomosis-l1-ingest` daemon materialises deposits opt-in
+(`--materialise-deposits`; content-derived deposit ids make the
+kernel's `consumed`-set conjuncts a sound replay backstop —
+`docs/abi.md` §16.7).  The L2 pool is the ONE venue
+(`gas_pool_runbook.md` §9.6): one spot price, no protocol-internal
+arbitrage channel, and no swap-mirror pipeline to build.  The kill
+switch is admission-enforced — a committed `ammDisabled = true`
+refuses every new `reserveSwap`
+(`reserveSwap_inadmissible_while_amm_disabled`) and unlocks the
+`reclaimAmmReserves` sweep.
 
 ---
 
@@ -7514,6 +7645,13 @@ one-line summary, and a link to the amending discussion.
 | 1.30     | 2026-06-10 | Workstream GP.11.9 (gas-cost benchmarks for the v1.3 L1 operations) lands on the Solidity surface.  `solidity/test/BenchmarkGasV1_3.t.sol` adds 21 deterministic gas benchmarks across 9 scenario contracts (34 tests incl. the `test_sanity_*` companions pinning every scenario assumption — first-time vs repeat depositor nonces, the 15 ETH : 45 000 BOLD seeded reserve depth, staged exact / infinite approvals, migration wiring, Liquity branch shutdown states, finalised withdrawal roots — and every benchmarked operation's effects).  **Measurement architecture:** the suite runs under forge's ISOLATED mode (`--isolate`, enforced by the make targets) — foundry's documented-accurate mode for the `snapshotGas*` cheatcodes — so each benchmark's `vm.snapshotGasLastCall` value is the FULL user-transaction gas (21k intrinsic + EIP-2028 calldata + execution, EIP-3529 refunds netted, target pre-warmed per EIP-2929); the isolated-vs-unisolated deltas decode to the gas as `21 000 + calldata − refunds` on all 21 benchmarks, verifying the semantics, and deltas land exactly on EVM constants (the first-interaction premium measures precisely the 17 100-gas zero→non-zero SSTORE surcharge in both the deposit and swap pairs).  Each benchmark also records the exact EIP-2028 calldata cost of its canonical calldata via `vm.snapshotValue` (`<name>.calldata_gas`) as a breakdown, with BOLD modelled by the new OZ-faithful `test/utils/MockBoldOz.sol` (the real vendored OpenZeppelin v5 ERC-20, so production BOLD's `_spendAllowance` max-allowance skip carries its true cost — and the refund-netted measurement surfaces that per transaction the EXACT-approval swap is ~1.7k cheaper than the infinite one, its 4 800 allowance-clear refund outweighing the ~3.1k execution saving, while per flow infinite approval wins from the second swap onward).  **Coverage (measured user-tx gas):** `depositETHWithFee` / `depositBoldWithFee` (first 66 261 / 94 242, repeat 49 161 / 77 142), the BOLD `approve` prerequisite (45 992), `ammSwap` ETH→BOLD (75 726 first-recipient / 58 626 repeat) and BOLD→ETH (68 204 exact / 69 870 infinite approval), migration-wired deposit + swap variants (+3 107 / +3 110 for the external `activated()` read production deployments pay when pre-wiring a successor), `closeBoldCircuit` 44 825 / `openBoldCircuit` 22 985 / `setBoldTvlCap` 28 090 / `emergencyDisableAmm` 49 623, the Liquity auto-trigger's fast 53 834 / worst 69 037 / no-shutdown keeper-probe 47 250 paths (the probe measured through a plain low-level call, no `expectRevert` interference), the `withdrawWithProof` exit legs (861 392 ETH / 877 759 BOLD incl. ~37.9k calldata for the canonical 64-sibling proof — the round trip's dominant cost, dominated by the CBE byte-loop decode and flagged for a future calldata-slice decoder), and a plain-`depositETH` v1.0 reference row (57 655).  **Gate + automation:** the committed baseline `solidity/test/BenchmarkGasV1_3.gas-baseline.json` and the runbook §9.2 table generated from it (`solidity/scripts/generate_gas_runbook_table.py`) are regenerated together by `make snapshot-gas`; the CI gate `make snapshot-gas-check` (`solidity/scripts/check_gas_baseline.py`, run after `forge test` in `.github/workflows/ci-solidity.yml` on every `solidity/**` PR) fails on any per-benchmark gas INCREASE beyond 5% (ONE-SIDED, per the GP.11.9 plan rule), on benchmark-set drift (added / removed / renamed benchmarks without a regenerated baseline), and on a runbook table out of sync with the baseline, while improvements beyond 5% warn with a ratchet nudge; both scripts carry behavioural self-tests (8 cases each, `make snapshot-gas-selftest`, run in the fast `caps-audit` CI job), and every gate behaviour was verified end-to-end through the real make pipeline.  Operator-facing table (generated; the user-tx column is measured, not modelled), $-cost methodology ("a typical first fee-split deposit is a measured 66 261 gas ≈ $6.0 at 30 gwei and $3 000/ETH; the exit leg ≈ $77.5–79.0 dominates the round trip"), cost-structure observations, and mock-fidelity caveats land in `docs/gas_pool_runbook.md` §9.  Post-review hardening on the same PR: the runbook-table sync check also runs in the fast `caps-audit` job and `docs/gas_pool_runbook.md` is a trigger path for `ci-solidity.yml`, so a docs-only hand-edit of the generated table cannot bypass the gate.  `forge test` 825 passed / 0 failed / 12 skipped (34 new tests); no Lean / Rust source delta; no kernel TCB delta; no new axioms.  Version v0.5.8. |
 | 1.31     | 2026-06-10 | Workstream GP.11.10 (AMM disaster recovery) completes the three obligations the GP.11.3 v1.24 pull-forward deferred (the kill-switch *mechanism* — one-way `emergencyDisableAmm()`, the immutable `ammDisasterRecovery` role + constructor guards, the `ammActive` modifier, the `_seedAmmReserves` early-out, and the three GP.11.10 theorems as `AmmKillSwitch.t.sol` tests — was already live).  **(1) 3-of-N multisig hardening (Solidity):** new single-purpose reference contract `KnomosisAmmDisasterRecoveryMultisig.sol` + minimal `IKnomosisAmmDisasterRecovery` interface.  An M-of-N confirm-to-execute multisig whose ONLY capability is calling `emergencyDisableAmm()` on its immutable `bridge` — no generic execute, no value transfer, no signer rotation, no upgradability.  The GP.11.10 3-of-N floor is CONSTRUCTOR-ENFORCED (`MIN_DISABLE_THRESHOLD = 3`, `ThresholdBelowMinimum` otherwise) alongside full signer-set hygiene (`ZeroSigner` / `DuplicateSigner` / `SignerIsBridge` / `SignerIsSelf` / `ThresholdExceedsSignerCount` / `MAX_SIGNERS = 32`).  The threshold-th `confirmDisable()` fires the bridge call atomically in the same transaction (checks-effects-interactions; no separate front-runnable execute step); `revokeConfirmation()` lets a signer stand down; and stale approvals expire AS A GROUP (`CONFIRMATION_WINDOW = 7 days` anchored at the round's first confirmation, O(1) round-roll via round-scoped confirmation ledgers) so approvals gathered during one incident can never silently combine with a later signature to fire the one-way switch out of context — fail-safe direction: an expired round costs a re-confirmation, a stale-quorum disable would cost a full redeploy.  Deployment wiring uses the predicted-CREATE-address pattern already established for pre-wired `KnomosisMigration` successors.  21 new forge cases (`KnomosisAmmDisasterRecoveryMultisig.t.sol`): thresholds 0/1/2 each rejected + 3-of-3 minimum valid (the constructor half of "3-of-N enforced"); a TWO-signature quorum provably does NOT disable while a live swap still succeeds (the runtime half); the third confirmation disables end-to-end against a real `KnomosisBridge` (reserves preserved + both events); revoke-blocks-then-reconfirm-fires; expiry resets instead of executing + boundary-instant execution; lone signers cannot bypass the multisig; a full quorum's blast radius leaves every other bridge control untouched.  Plus the GP.11.10 degraded-mode test `AmmKillSwitch.t.sol::test_ammDisabled_withdrawStillWorks_bothLegs`: post-disable `withdrawWithProof` pays out on BOTH legs through finalised state roots — the kill switch can never trap user funds ("deposits halted" does not even apply here; only swaps halt).  **(2) `ammDisabled` in the state-root preimage (Lean):** per the WU decision there is NO `Action.disableAmm` — the flag is a passive L1 mirror like the five GP.11.8 fields.  `BridgeState` gains `ammDisabled : Bool := false`; `BridgeState.encode/decode` append it as the ninth segment (canonical 0/1 with strict `nonCanonical` rejection, mirroring `boldCircuitClosed`); EI.7.e (`BridgeState.encode_injective`) extends 8-way → 9-way; `ExtendedState.extEq` / `extendedStateExtensionallyEqual` widen 12 → 13 conjuncts; the GP.11.8 factoring/migration theorems extend (`bridgeStateEncodeAmmSuffix` 5 → 6 fields; `bridgeState_amm_genesis_suffix_const` + `bridgeState_commit_extends_v1_2` gain the `ammDisabled = false` genesis conjunct — mathematically forced: without it the v1.2-compat statement would be FALSE for a fired switch).  Two NEW theorems: `bridgeState_commit_extends_v1_3` (a GP.11.8-era state migrates deterministically while the switch has not fired) and the headline `commitBridgeState_reflects_ammDisabled` (under `CollisionFree hashBytes`, two bridge states agreeing on every other field but differing on `ammDisabled` have DIFFERENT commitments — a sequencer cannot publish a state root that misrepresents the kill-switch state, and the fault-proof game can adjudicate disputes that turn on it; proof: collision-freedom lifts equal commits to equal canonical encodings, list-append cancellation isolates the trailing segment, CBE-uint injectivity on the canonical 0/1 range forces the flags equal).  All `#print axioms`-verified ⊆ `{propext, Classical.choice, Quot.sound}`.  `faultproof-amm-commit` 19 → 26 cases (disable flips the bridge commit + the top-level root on genesis AND populated states; `ammDisabled=2` rejected as non-canonical; `ammDisabled=true` round-trips; API pins for the two new theorems and the three extended signatures); `bridge-state` + `encoding-injectivity` suites extend to match (EI.7.e pin 9-way; extEq pin 13-way; a new encode-distinguishes case).  The 268-entry step-VM cross-stack corpus is REGENERATED (every `commitExtendedState` shifts with the widened encoding); the Solidity step VM and the Rust runtime need NO code change — neither consumes `BridgeState.encode` bytes (the step-VM commit recipe is unchanged), verified by a cross-stack consumer sweep.  `docs/abi.md` §16.3 rewritten to the full nine-segment wire format (it had been stale at the v1.2 three-segment form since GP.11.8) + an append-only wire-format/migration note.  **(3) Operator runbook:** `docs/gas_pool_runbook.md` §10 — the four invocation conditions with thresholds (reserve depth < `MIN_VIABLE_DEPTH_USD` for > 24 h, reproducible Lean↔Solidity math discrepancy or an `AmmKInvariantViolated`, confirmed Liquity-V2 contract failure, audit-flagged critical), the 3-of-N custody + reference-multisig semantics + predicted-address deployment wiring + post-deploy verification, the firing procedure, the recovery decision tree (redeploy-via-`KnomosisMigration` vs degraded v1.2 mode; frozen reserves remain gasPoolPolicy-capped — the switch loosens NO outflow discipline), the state-root-visibility note, and the measured cost; §1 roles table (now three immutable roles), §6 monitoring (reserve-depth / `AmmDisabled` / `DisableConfirmed` alerts), and §7 quick reference extend to match; §1's stale `closeBoldCircuitIfRedeemingHeavily` reference fixed to the shipped `closeBoldCircuitIfAnyLiquityBranchShutdown`.  `lake test` 2 997 (149 suites) green; all seven Lean audit gates green; full `cargo` gates green (lockstep bump inert); `forge test` 847 passed / 0 failed / 12 skipped across 56 suites (+22); the GP.5.2 cap-audit gate + self-test (45) green and the GP.11.9 gas gate unchanged (`KnomosisBridge.sol` itself is UNTOUCHED — the multisig is additive, so no benchmark moves).  No kernel TCB delta, no new axioms.  Version v0.5.9. |
 | 1.32     | 2026-06-11 | Workstream GP.11.10 **expansion — the L2 reserve-reclamation law** (user-directed amendment: v1.31's "there is NO `Action.disableAmm` / no new Action variant" decision is SUPERSEDED for the *reclamation* leg — the `ammDisabled` flag itself remains a passive L1 mirror, but the post-disable sweep of the frozen L2 reserves is now a real proof-carrying action rather than an operational convention).  **(1) The law (Lean):** `LegalKernel/Laws/ReclaimAmmReserves.lean` — `Laws.reclaimAmmReserves r amount reserveActor poolActor` with the EXACT-SWEEP precondition `getBalance s r reserveActor = amount ∧ reserveActor ≠ poolActor ∧ amount > 0`: the only admissible `amount` is the reserve actor's ENTIRE balance at `r`, so a partial drain is unrepresentable, the post-state reserve is definitionally zero (`reclaimAmmReserves_zeroes_reserve`), and a replay is self-defeating (a second sweep would need `amount = 0`, rejected by `amount > 0`).  `decPre := fun _ => inferInstance` (§13.6 decidability discipline); theorems `_credits_pool` / `_conserves_at` / `_other_actor_untouched` / `_other_resource_untouched`; `IsConservative` + `LocalTo` + `FreezePreserving` instances; Lex re-expression `reserved_gp_reclaimAmmReserves` (registry index 21) satisfying [conservative, monotonic, local, freeze_preserving, nonce_advances, registry_preserving].  **(2) Frozen wiring:** `Action.reclaimAmmReserves` at FROZEN index 24 (tag projection, CBE codec + round-trip + injectivity arms, `tag_lt_denyListBound` < 25, every exhaustive-match forcing function extended); `Event.ammReservesReclaimed` at FROZEN tag 22 (extraction emits it alongside the kernel `balanceChanged` pair; CBE codec; streamer + indexer registries widen to 0..=22); bridge admissibility gains the conjunct `BridgeAdmissibleWith.reclaimGate`: a reclaim admits ONLY with `reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧ es.bridge.ammDisabled = true` — `reclaim_inadmissible_while_amm_enabled` is the headline negative (while the kill switch has not fired, NO reclaim is admissible, so the law cannot touch a live AMM); `Action.isBridgeOnly` covers index 24 (bridge-signed only); the `gasPoolPolicy` / `ammReservePolicy` deny-lists and the GP.7.3 `PoolDrainBound` extend (a reclaim CREDITS the pool — the drain bound is untouched).  **(3) AMM-mirror step-invariance (new formal surface):** `BridgeState.AmmMirrorsEq` + `applyActionToBridgeState_preserves_amm_mirrors` (NO L2 action mutates the six L1-mirror fields — exhaustive over all 25 constructors) + `apply_bridge_admissible_with(_budget)_preserves_amm_mirrors` + the `BridgeAdmittedTrace` inductive + `amm_mirrors_constant_over_admitted_trace` / `ammDisabled_constant_over_admitted_trace` (chain-level: over ANY admitted trace the mirrors are constant, so they change only at attested-snapshot boundaries — exactly the runbook's sequencer-ingest obligation, now a theorem) + `commitExtendedState_reflects_ammDisabled` (the v1.31 bridge-level reflects theorem lifted to the FULL extended-state root).  **(4) Step-VM kind 24 (tri-stack):** Lean dispatcher arm (fields `uint64BE r ‖ amount ‖ reserveActor ‖ poolActor`; cells read `[registry signer]`, write `[balance r reserveActor, balance r poolActor, nonce signer]`; `stepCommitReclaimAmmReserves`; `stepVMHash_reclaimAmmReserves_kind`; unknown-kind boundary → 25) ↔ Solidity `KnomosisStepVM._stepReclaimAmmReserves` (revert-on-divergence: `SweepAmountMismatch(reserveBalance, amount)` enforces the exact-sweep equation on-chain; `SameActorSweep` rejects the degenerate self-sweep; 7 new unit cases + the kind-25 boundary) ↔ the step-VM cross-stack corpus widened 268 → 278 entries (170 happy / 108 adversarial, incl. the sweep-mismatch + same-actor adversarial paths).  **(5) Rust lockstep:** `knomosis-l1-ingest` encodes Action 24 (known-byte-vector pin) and decodes the L1 `AmmDisabled(uint256,uint256,uint256)` event (pinned topic `0x627d75ba…ad58`) into `IngestedEvent::AmmDisabled` with `Translated::NoAction` materialisation + `.cxsf` tag-5 codec; `knomosis-event-subscribe` tag 22 (`EVENT_TYPE_COUNT` 23); `knomosis-indexer` typed decode/encode of tag 22 (dispatch no-op — the paired `balanceChanged` stays authoritative) and the Lean↔indexer round-trip corpus grows 28 → 29 entries covering ALL tags 0..22; `knomosis-faultproof-observer` `ActionKind` 24.  **(6) Disaster-recovery hardening round 2 (Solidity):** shared `test/utils/WithdrawalFlowHarness.sol` (CBE + EIP-712 state-root attestation helpers) + `DisasterRecoveryTestBase.sol` (predicted-CREATE `_deployWired` / `_deployMiswired`) consolidate four suites; the multisig unit suite grows 21 → 24 cases (mis-wiring negatives); NEW `KnomosisAmmDisasterRecoveryMultisigInvariants.t.sol` — 7 stateful invariants × 128 000 randomised confirm/revoke/warp calls (sub-threshold never executes; disable is monotone one-way; round-scoped ledgers never leak across expiry; signer-set immutability; …); `forge coverage --ir-minimum` reports the multisig at 100% lines (51/51) / statements (62/62) / branches (16/16) / functions (8/8); the GP.5.2 cap gate now audits the 3 multisig governance constants (`MIN_DISABLE_THRESHOLD = 3`, `MAX_SIGNERS = 32`, `CONFIRMATION_WINDOW = 7 days`) — selftest 45 → 51 cases; 2 new isolated-mode gas benchmarks (`confirmDisable` non-final 59 629 / threshold-th-executes 112 582 — a full 3-of-N firing ≈ $21 at 30 gwei/$3k) land in the regenerated baseline + the generated runbook §9.2 table (23 rows) + the measured §10.6 cost table.  **(7) Documentation:** `docs/abi.md` — Action table 0..24 with the six GP field layouts, Event table 0..22 with per-tag semantics, streamer/indexer registry + dispatch tables, `executeStep` kind range; the GP plan's Quick Reference frozen-index tables corrected to SHIPPED indices + the GP.11.10 status block rewritten (quad-surface, with the supersession amendment); runbook §10.4 (the sequencer materialises one bridge-signed reclaim per funded leg) + §10.5 (mirror trace-constancy + top-level reflects); `deferred_work_index.md` GP row refreshed.  Every new theorem `#print axioms`-verified ⊆ `{propext, Classical.choice, Quot.sound}`; zero sorries.  Gates: `lake test` 3 039 (150 suites) green incl. the new `reclaim-amm-reserves` suite (33 cases); all seven Lean audit gates green; `cargo test` 1 956 + clippy `-D warnings` + fmt green; `forge test` 867 passed / 0 failed / 12 keccak-gated skips across 58 suites; the keccak-linked cross-stack verification runs ALL 879 (0 skipped, 0 failed) under real keccak256; cap gate + 51-case selftest green; GP.11.9 gas gate green (46 entries / 23 rows); codemaps regenerated.  No kernel TCB delta, no new axioms.  Version v0.6.0. |
+| 1.33     | 2026-08-06 | Workstream SB (batched state-root submission + the user-facing L2 AMM; one combined workstream, phases SB.0–SB.12).  **(1) Batched submission:** `KnomosisStateRootSubmission` cut over to one record per batch `[prevEnd, end)` keyed by `end` — structural prev-hash (R5, genesis anchor written by the constructor), one chain-link fold per batch over the batch's ACTIONS ROOT (R8, `l1NextEntryHash(prev, stateCommit, actionsRoot)`), revert recovery (R1 `lastRevertAtBlock` + monotone-down `canonicalTip`; R3 overwrite-of-reverted requires bond out; R4 `reclaimRevertedBond`), `MAX_ACTIONS_PER_BATCH` operational ceiling (R10).  The actions root is the cell-SMT family verbatim (key `hash("knomosis.actionsRoot" ‖ uint64BE n)`, leaf `hash(kind ‖ uint64BE signer ‖ fields ‖ 65-byte sig)` — the signature BOUND in the leaf, R7): `LegalKernel/FaultProof/ActionsRoot.lean` (completeness, soundness, `actionProof_binds_action`) + `solidity/src/lib/ActionsRoot.sol`.  The game anchors at the batch start (R2), bisects inside the batch, and `terminateOnSingleStep` authenticates the disputed action by INCLUSION PROOF before adjudicating; turn parity proved (`turnAlignedWithPending`, `terminate_owner_is_sequencer`) + Solidity fuzz.  Measured: 238 963 gas per batch submission ⇒ ≈239 gas/action amortised at B=1000 (runbook §9.5).  **(2) Two pre-existing defects fixed in scope** with regression tests on the real contract quadruple (`BatchGame.t.sol`): the revert dead end (reverted indices were permanently unresubmittable) and the challenger win that never reached the bridge (R6: bridge gains the `faultProofRollbackAuthority` immutable; V2's `finaliseFromFaultProof(gameId, revertFromIdx)` becomes real; the game forwards settlements).  **(3) The user-facing L2 AMM:** `Laws.reserveSwap` (`Action.reserveSwap`, frozen 25; Events 23/24) prices in-kernel via `AmmMath.getAmountOut` over the reserve actor's live balances; `reserveSwapUserBinding` (`user = signer`) + deny-list bumps; fault-proof adjudicable (6-cell write set, tri-stack kind-25 arms).  The funding loop: `Action.depositWithFee` gains the APPENDED `seedAmount` (three-leg apply, §15E.3), the L1 seed leg stops accruing `ammReserve*` (L2-primary topology, §15E.12), and `knomosis-l1-ingest` materialises deposits opt-in (`--materialise-deposits`, content-derived deposit ids, §16.7 of `abi.md`).  §15B.2/.4/.5/.8 rewritten to the post-Workstream-H + SB reality; §15E.12 added.  Version v0.14.0 (breaking CBE change: the `depositWithFee` widening). |
+| 1.34     | 2026-08-06 | Workstream SB **follow-up — the Lean game-model actions-root anchor** (closes the audit-22 MAJOR at the model level).  `GameState` gains `actionsRoot : ByteArray` — the model of `roots[disputedLogIndex].actionsRoot`, populated at challenge time and immutable while the game is open (`markDisputed` blocks the R3 overwrite) — and `GameTransition.terminateOnSingleStep` gains the responder's `actionProof : SmtCellProof`.  The terminate arm refuses (new `GameError.actionNotInBatch`, the model of the L1 `ActionNotInBatch` revert — an `.error`, hence retryable, NOT a loss, matching the L1 semantics where a revert leaves the game open) any step whose signature is not the fixed 65 bytes (R7) or whose signature-bound leaf does not open at `gs.range.low.idx` against the anchor; the Lean-model-only mismatches (pre-state commit, `l2LogIndex` — the L1 supplies both from game state) remain responder losses.  Two new theorems (`FaultProof/Settlement.lean`, both on the axiom-footprint gate): `terminate_ok_requires_authentication` (inversion — any `.ok` outcome implies the 65-byte width and a verifying opening) and the upgraded composite `anchored_challenger_wins`, which chains the inversion with `actionProof_binds_action` to derive the responder's `(kind, signer, fields, sig)` spelling from the batch-COMMITTED one, so kernel-truthfulness is hypothesised about the committed spelling rather than the responder's step — the action-substitution attack is unprovable in the anchored model (§15B.4).  The six pre-existing settlement theorems gain the authentication hypotheses; the `GameState` CBE codec appends the anchor as the final field; the observer's Rust `GameState` mirrors it (shape parity — the port never evaluates terminates); the `observer_game_traces.json` corpus is regenerated.  Value-level pins: a substituted action, a re-signed action and a mis-width signature all refuse with `actionNotInBatch`; an authenticated step at a caller-chosen log index still loses.  Residual interface, recorded in the audit-22 annotation: `anchored_challenger_wins`' truthfulness hypothesis quantifies over the responder's bundle (verifier proof-independence is not itself a theorem; discharged per-variant by `VerifierWrites.*_correct`).  On-chain signature VERIFICATION at terminate remains the separately-recorded follow-up.  No kernel TCB delta, no new axioms.  Rides v0.14.0. |
+| 1.35     | 2026-08-06 | Workstream F-A **— on-chain signature verification at terminate** (the last SB-recorded follow-up; L1 side).  Phase FA.0 first corrected a LATENT PRODUCTION DEFECT found while scoping it: the three legs of the signature pipeline did not compose — the Lean admission conjunct passes RAW `signingInput` bytes and the L2 wire / batch leaf carry 65-byte signatures (ruling R7), while the linked `knomosis-verify-secp256k1` adaptor demanded a 32-byte pre-hashed message and a 64-byte `(r ‖ s)`, so a production-linked deployment REJECTED EVERY SIGNED ACTION and the 'bridge-level adapters strip v upstream' layer the v1 docs described never existed.  The v2 convention (`docs/abi.md` §7.1) is one recipe across every stack: `digest = keccak256(signInput …)`, `sig = (r ‖ s ‖ v)` 65 bytes, low-s, `v ∈ {27,28}`, VALIDATED BY RECOVERY so the off-chain verdict always agrees with L1 `ecrecover`; the adaptor gained `verify_signed_message` (the strict prehash core and its 210-record corpus unchanged), the signer emits the wire form with the low-s parity flip, the observer's EIP-1559 path reads `v` off the wire and cross-checks it by recovery, and the `verify-check` self-test vector was regenerated and is now re-derived and pinned from the Rust side.  Phase FA.1 added `solidity/src/lib/SignInput.sol` — the packed→CBE transcoder over all 26 frozen action kinds plus the sign-input assembly and digest — pinned byte-for-byte against Lean by the new 30-entry `signing_input.json` corpus (every kind 0..25 plus boundary rows; hash-independent, so both consumers run unconditionally).  Phase FA.2 added `solidity/src/lib/Secp256k1.sol` (SEC1 decompression via the p ≡ 3 mod 4 MODEXP shortcut with the candidate VERIFIED against the curve equation, plus non-reverting `try*` variants) and wired the gate into `KnomosisFaultProofGame.terminateOnSingleStep`, which gained `bytes registryValue, bytes registryProof`: the signer's registered key is resolved by a single-cell opening against `g.low.commit` (absent ⇒ unregistered ⇒ invalid), the nonce is read from the frontier the step VM has ALREADY verified against that same root (so a responder cannot sign over a nonce of its choosing), the §8.8.5 digest is recomputed on-chain under the game's own `deploymentId`, and `ecrecover` must land on the key's address — with low-s mirrored from the L2 adaptor because the precompile has no opinion and the L1 must never DEFEND a signature the L2 refused.  **Semantics:** an invalid signature makes the disputed entry INADMISSIBLE, so its truthful post-state is the PRE-state and the adjudicated root becomes `g.low.commit` — the full no-op — rather than a revert or an automatic responder loss; the only revert is a registry opening that does not verify, which is a calldata defect the responsible party retries.  Five verdict tests pin exactly that: a forged signature LOSES against a state-change endpoint and WINS against a pre-root endpoint (the no-op pinned from both sides), an unregistered signer loses via a PROVEN absent cell (the new `transferUnregistered` corpus probe), a forged registry opening reverts, and a high-s mate is refused though `ecrecover` would accept it.  The multiproof corpus's probe pre-state now registers the verify-check key for the probe signer so the game suites sign in-test with the same library the contract verifies with.  Cost: the terminate benchmark moves 1 019 177 → 1 206 393 gas (+18.4%), regenerated into the committed baseline with the rationale in `gas_pool_runbook.md` §9.5 — a dispute-path-only cost funded by the losing party's bond, buying the property the fault proof was missing (before it, a batch could commit an action nobody signed and the terminal step would DEFEND it).  Observer lockstep in the same commit per the selector-drift rule: ABI string, `HEAD_WORDS` 9→11, the two bundle fields, a fail-closed `MissingRegistryOpening`, and `method_selectors.json` regenerated from the compiled ABI.  The Lean game-model mirror of the gate is the remaining piece.  No kernel TCB delta, no new axioms.  Rides v0.14.0, and is what makes that bump a MINOR rather than a patch: the 65-byte `(r ‖ s ‖ v)` wire signature and the two-parameter-wider `terminateOnSingleStep` ABI are both breaking, so a v0.14.0 signer, observer or deployed game does not interoperate with a v0.14.0 one. |
+| 1.36     | 2026-08-07 | Workstream F-A **phase 3 — the Lean game-model mirror of the terminate signature gate** (completes F-A on both stacks).  `applyTransitionWith (verify) …` carries the deployment-supplied verifier and `applyTransition` is its instance at the opaque `Authority.Verify` — the same `AdmissibleWith`/`Admissible` shape the authority layer already uses, so the ~100 bisection call sites and every theorem about them read unchanged while a test can drive the honest signature path with a stub.  `GameTransition.terminateOnSingleStep` gains `registryValue` / `registryProof` (the signer's registry cell at the pre-state and its single-cell opening), `GameError` gains `registryOpeningInvalid`, and three helpers land in `Game.lean`: `registryCellKey` (CBE bytes decode; an ABSENT cell yields `none`, so an unregistered signer is refused before any verifier is consulted), `frontierNonce` (the nonce read from the step's own frontier — root-checked by `kernelStepApply`, so a responder cannot sign over a nonce of its choosing) and `signatureAdmissible`.  The arm gates in the L1's order: authentication, the Lean-only pre-state/index refusal, then the registry-opening check (`.error .registryOpeningInvalid`, mirroring the L1 revert — a calldata defect the responder retries, NOT a verdict), then the fold, whose result is replaced by `gs.range.low.commit` when the signature does not verify.  All eight settlement theorems are restated over `applyTransitionWith verify`, each carrying only the hypotheses it consumes — the wrong-pre-state branch needs neither (it returns before the registry guard), the invalid-proofs branch needs the opening, and the two endpoint branches plus both composites need the opening AND the signature; `anchored_challenger_wins` needs the signature but NOT the opening (the guard's fired branch is `.error`, which contradicts its `.ok` hypothesis), and `h_sig_ok`'s necessity there was verified by deletion — removing it breaks the proof.  Four value-level cases mirror the Solidity verdict tests: a forged signature loses against a state-change endpoint and WINS against a pre-root endpoint (the no-op pinned from both sides), an unregistered signer loses through a PROVEN absent cell, and a mismatched opening is refused rather than lost.  The terminate-bundle exporter ships `registry_value_hex` / `registry_proof_hex` (feeding the observer fields F-A phase 2b added), with a test proving the emitted opening VERIFIES against the bundle's own pre-root in both the registered and absent cases.  The observer's Rust game port needs no parity change — it never evaluates terminates (a documented non-goal), and the trace corpus emits none, so it is byte-unchanged.  No kernel TCB delta, no new axioms.  Version v0.14.0 (the bump for amendments 1.34–1.36 as a body; see 1.35 for why it is a minor rather than a patch). |
+| 1.37     | 2026-08-07 | Workstream AM **— the 256-bit accounting scalar** (the standing `u128`-widening item).  `knomosis-amount` wraps `crypto_bigint::U256` as the workspace's `Amount`: the width is not a safety margin but the kernel's OWN ceiling, since `Laws.maxAmount = 256^32 = 2^256` and `Laws.AmountBounded` is exactly `< Laws.maxAmount`.  That exact fit is load-bearing — an overflow becomes UNREACHABLE under a truthful event stream, which is what lets consumers treat one as proof the source disagrees with the kernel rather than as a condition to absorb.  **Three defects closed, each of a different kind.**  (1) `knomosis-indexer`'s balance `credit` SATURATED at `u128::MAX` and published the clamped number; that traded accuracy for availability correctly at 128 bits (where a kernel-legal balance could outgrow the type by ordinary accumulation) and wrongly at 256, so it now leaves the cell unchanged and errors.  (2) `knomosis-host`'s GP.9.1 refund gate computed pool solvency as an UNCHECKED `u128` product of two WIRE-DECODED operands; a `u64` count times a `u128` rate spans `2^192`, so `wei_per_budget_unit = 2^127` with `budget_units = 4` wrapped to exactly ZERO and the gate admitted a refund against an empty pool in any release build.  At 256 bits the wrap is unreachable (`2^192 < 2^256`).  (3) Two fail-closed REFUSALS — `translation::amount_from_be_bytes` rejecting an L1 `uint256` above `2^128`, and the indexer's / host's `AmountTooWide` — were right while the runtime could not hold the value but blocked legitimate deposits the kernel admits; all three are now TOTAL, their error variants deleted rather than left unreachable.  Storage migrates via `migration_003_widen_amount_cells` (schema 3), which zero-extends big-endian — lossless by construction — in Rust rather than SQL, because SQLite's `||` coerces blobs to TEXT and a balance cell is mostly NUL bytes; it matches `kv` cells by the `b/` prefix so neighbouring keyspaces are untouched.  Two stale claims corrected on the way: both `knomosis-l1-ingest` and `knomosis-bench` asserted a CBE bound of `< 2^64`, where `Encoding.Action.fieldsBounded` actually reads `a < 256 ^ 32`.  Every inverted test is a regression test — a `2^128` deposit must now materialise exactly, a watcher iteration that used to HALT must now submit, and the refund case rebuilds the retired wrapping expression in-test so it cannot pass merely because the numbers are large.  `crypto-bigint` was already in the lock transitively via `k256`, so the promotion to a direct pinned dependency adds no code and no cargo-deny exposure (`docs/audits/gateway_dependency_audit.md`).  Rust-only: no kernel TCB delta, no new axioms, Lean and Solidity byte-untouched.  Rides v0.14.0.  Note for an upgrading deployment: the indexer's on-disk cell width changed (schema 3, migrated automatically) and the workspace's public `Amount` type changed with it. |
+| 1.38     | 2026-08-07 | Workstream EG **— economic guards, the submission breaker, and two coverage corrections**.  (1) `Laws.reserveSwap`'s precondition gains the minimum-liquidity floor `Bridge.AmmMath.minimumLiquidity = 1000`, closing an L1/L2 ASYMMETRY rather than adding a new guard: `KnomosisBridge.ammSwap` had enforced it on both entry legs and post-swap since the L1 AMM shipped, while the L2 law asked only `0 < reserve` — and under the L2-primary topology (§15E.12) the L2 reserve actor is the pool users actually trade against, so the unguarded side was the one that mattered.  A breach is a NO-OP, the kernel's own semantics for an inadmissible action, which is what makes tightening a frozen law (index 25) safe.  The `StepWrites` kind-25 arm and `VerifierWrites` carry the same three conjuncts: had the fault-proof replay kept `preResTo > 0` while the law gained a floor, the two stacks would disagree about which swaps are ADMISSIBLE — the one disagreement a fault proof cannot survive.  (2) `KnomosisStateRootSubmission` gains a MANUAL submission breaker: `haltSubmissions` / `resumeSubmissions`, gated on a new immutable `submissionBreaker` role — required non-zero and required DISTINCT from `sequencer`, so the party a halt most often restrains cannot clear it.  Scoped to `submitStateRoot` alone: finalisation, slashing, reversion and bond reclamation stay open, so a halt freezes the frontier without stranding settlement already in flight.  **Nothing trips it automatically, and a challenger win in particular does not.**  A first cut latched it inside `revertStateRootsFrom`, reasoning that a proven-invalid root is the strongest evidence a sequencer is faulty; the reasoning was sound and the mechanism was not, because the SB ruling-R1 recovery path IS the sequencer resubmitting after exactly that revert.  Latching there gated the REPAIR rather than a suspicious submission — it made every challenger win a manual intervention and stalled the chain whenever the breaker key was not to hand.  Automatic halting and automatic recovery cannot both be had at that point; recovery wins, and two tests fail if a latch returns.  (3) The gateway's `/readyz` is exempt from BOTH auth and the rate limiter, and each call opened two TCP connections to internal upstreams plus an indexer read — an unauthenticated 1:3 amplification, worse because the 2 s blocking probe pins a thread per request on a thread-per-connection server, and worst exactly when an upstream is down.  Now cached for 1 s, with the bound measured at the listener (25 calls, 1 connection).  (4) Two register entries CORRECTED rather than re-fixed: all four observer-liveness items and three of four gateway items were already closed by the SB.6 cutover and the G4 track; the surviving gaps were a missing test for the dedup key's `MoveKind` discriminator (without which a `Respond` blocks the `Terminate` at the same pivot and the observer forfeits a game it was winning) and the `/readyz` amplification above.  Every new test mutation-verified.  Rides v0.14.0. |
+| 1.39     | 2026-08-07 | Workstream AX **— the L1-AMM excision (one-AMM L2-primary topology)**.  With zero contracts deployed, the embedded L1 AMM was excised ENTIRELY rather than left as a second venue: `KnomosisBridge.ammSwap`, the `ammReserveEth` / `ammReserveBold` books, the swap-only constants and error surface, the L2 bridge-attested mirror `Laws.ammSwap` (frozen `Action` index 23) and its execution event (frozen `Event` tag 21), the step-VM kind-23 arms on both stacks, and every Rust mirror (the l1-ingest `Action`/encoder arms, the host budget-gate arm, the observer `ActionKind`, the indexer / event-subscribe / gateway tag-21 event arms, the `amm_swap` cross-stack corpus and its `FixtureKind` tag 8).  **Retire-in-place discipline:** the freed indices are PERMANENT HOLES, never renumbered and never reusable — every decoder refuses them exactly like never-assigned tags (`Encoding.Action.decode` on 23; the event decoders on 21; `StepWrites.isAdjudicable(23) = false`; the host surfaces `Verdict::ParseError`), each refusal pinned by a negative control, and the assigned-range bounds (`EVENT_TAG_COUNT` / `KNOWN_EVENT_TAG_COUNT` = 25) are documented as exclusive bounds of the ASSIGNED range rather than live-constructor counts.  `BridgeState` drops the two book segments (nine → seven; EI.7.e is a 7-way injectivity again; `bridgeState_commit_includes_mirrorState` / `bridgeState_mirror_genesis_suffix_const` replace the `ammState` spellings; `bridgeState_commit_extends_v1_3` is deleted with the layout it described) — a BREAKING wire change riding the pre-deployment v0.14.0, so nothing existed to migrate.  The kill-switch family survives re-pointed at the L2 pool: `emergencyDisableAmm` flips the committed `ammDisabled` flag only and `AmmDisabled` narrows to `(uint256 timestamp)` (the Rust topic pin follows), the 3-of-N multisig is untouched, and — the excision's one NEW obligation — `BridgeAdmissibleWith` gains conjunct 10: a `reserveSwap` is admissible only under `ammDisabled = false` (`reserveSwap_inadmissible_while_amm_disabled`), an ADMISSION-layer gate by design since `productionApplyBudget` replays only the law's `pre` (the same enforcement boundary the reclaim gate already sits at); the game-enforceable half of the disable story remains the law's minimum-liquidity floor over opened balances.  `ammReservePolicy` re-points to DENY-ALL over the reserve key's own signatures (`List.range 26`): the reserve moves only as the user swap's counterparty or via the bridge-signed sweep.  The corpus follows in one regeneration (`step_vm.json` back to 278 entries — the ten kind-23 rows out, `countAmmSwap` gone from the header — and the event corpus covers exactly the live tags), and the cap gate / gas baseline / runbook table drop their swap rows, ratcheting `emergencyDisableAmm`'s −9.8% (it no longer snapshots reserves).  Removes what would otherwise be a standing two-venue price gap: one pool, one spot price, no protocol-internal arbitrage channel, no L1→L2 swap-mirror pipeline.  No kernel TCB delta, no new axioms.  Rides v0.14.0 (pre-deployment; the wire breaks are why it could). |
 
 ---
 

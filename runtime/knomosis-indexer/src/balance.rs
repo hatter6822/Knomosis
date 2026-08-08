@@ -9,7 +9,7 @@
 //!
 //! ## Storage layout
 //!
-//! Each balance cell is stored as a 16-byte BE u128 value under
+//! Each balance cell is stored as a 32-byte BE [`Amount`] value under
 //! the key `b"b/" + actor(8BE) + resource(8BE)`:
 //!
 //! ```text
@@ -18,7 +18,7 @@
 //! └──────┴──────────────┴────────────────┘
 //!
 //! ┌──────────────────────────────────────┐
-//! │       amount (16 BE u128)            │   value (16 bytes)
+//! │       amount (32 BE Amount)          │   value (32 bytes)
 //! └──────────────────────────────────────┘
 //! ```
 //!
@@ -35,11 +35,11 @@
 //! `debit`) that wrap [`crate::storage::Storage`] operations.
 //! All arithmetic is **checked**:
 //!
-//!   * `credit(actor, resource, delta)` saturates at `u128::MAX`
-//!     and returns [`BalanceError::CreditOverflow`].  The
-//!     overflow is logged but the saturation means the balance
-//!     cell still gets the maximum representable value (defence
-//!     against an indexer halt on a malformed event source).
+//!   * `credit(actor, resource, delta)` refuses on overflow: the
+//!     cell is left UNCHANGED and
+//!     [`BalanceError::CreditOverflow`] is returned.  See that
+//!     variant for why the predecessor's saturation was right at
+//!     128 bits and is wrong at 256.
 //!   * `debit(actor, resource, delta)` rejects with
 //!     [`BalanceError::DebitUnderflow`] if the current balance
 //!     is less than `delta`.  No saturation — an event source
@@ -68,8 +68,12 @@ pub const BALANCE_KEY_PREFIX: &[u8] = b"b/";
 /// resource = 18 bytes.
 pub const BALANCE_KEY_LEN: usize = 2 + 8 + 8;
 
-/// Fixed-width value length: 16-byte BE u128.
-pub const BALANCE_VALUE_LEN: usize = 16;
+/// Fixed-width value length: 32-byte BE [`Amount`].
+///
+/// Widened from the retired 16 bytes by
+/// `knomosis_storage::migration::migration_003_widen_amount_cells`,
+/// which zero-extends every existing cell.
+pub const BALANCE_VALUE_LEN: usize = knomosis_amount::AMOUNT_BYTES;
 
 /// Balance-view errors.
 #[derive(Debug, thiserror::Error)]
@@ -77,11 +81,23 @@ pub enum BalanceError {
     /// The underlying storage failed.
     #[error("storage error: {0}")]
     Storage(#[from] StorageError),
-    /// `credit` would overflow `u128::MAX`.  The balance is
-    /// saturated to `u128::MAX` even when this fires; the error
-    /// carries the (actor, resource, delta) for diagnostics.
+    /// `credit` would overflow [`Amount::MAX`].  The cell is left
+    /// UNCHANGED; the error carries the (actor, resource, delta) for
+    /// diagnostics.
+    ///
+    /// The predecessor representation saturated here — it wrote
+    /// `u128::MAX` into the cell so a malformed event source could not
+    /// halt the indexer, trading accuracy for availability.  That was
+    /// the right trade at 128 bits, where a perfectly kernel-legal
+    /// balance could exceed the representation by ordinary
+    /// accumulation, and it is the wrong one at 256: `Amount`'s
+    /// ceiling IS the kernel's `Laws.maxAmount`, so an overflow here
+    /// cannot arise from a truthful event stream and instead proves
+    /// the source disagrees with the kernel.  Writing a saturated
+    /// value would mean knowingly publishing a wrong balance, which is
+    /// worse than refusing to publish one.
     #[error(
-        "credit overflow for actor {actor} resource {resource}: balance + {delta} > u128::MAX"
+        "credit overflow for actor {actor} resource {resource}: balance + {delta} exceeds 2^256 - 1"
     )]
     CreditOverflow {
         /// Actor whose balance would overflow.
@@ -203,8 +219,8 @@ impl<'a, S: Storage + ?Sized> BalanceView<'a, S> {
     /// Credit `delta` to the balance for `(actor, resource)`.
     /// Used by `RewardIssued` and `DepositCredited` events.
     ///
-    /// Saturating: on overflow, the cell is set to `u128::MAX`
-    /// and [`BalanceError::CreditOverflow`] is returned.
+    /// Fail-closed: on overflow the cell is left unchanged and
+    /// [`BalanceError::CreditOverflow`] is returned.
     ///
     /// # Errors
     ///
@@ -221,17 +237,11 @@ impl<'a, S: Storage + ?Sized> BalanceView<'a, S> {
                 self.set(actor, resource, sum)?;
                 Ok(sum)
             }
-            None => {
-                // Saturate: write u128::MAX so the indexer doesn't
-                // halt on bad data; return the typed error so the
-                // caller can log it.
-                self.set(actor, resource, Amount::MAX)?;
-                Err(BalanceError::CreditOverflow {
-                    actor,
-                    resource,
-                    delta,
-                })
-            }
+            None => Err(BalanceError::CreditOverflow {
+                actor,
+                resource,
+                delta,
+            }),
         }
     }
 
@@ -344,7 +354,7 @@ impl<'a> BalanceTxView<'a> {
         Ok(())
     }
 
-    /// Stage a credit (saturating).
+    /// Stage a credit (fail-closed on overflow).
     ///
     /// # Errors
     ///
@@ -361,14 +371,11 @@ impl<'a> BalanceTxView<'a> {
                 self.set(actor, resource, sum)?;
                 Ok(sum)
             }
-            None => {
-                self.set(actor, resource, Amount::MAX)?;
-                Err(BalanceError::CreditOverflow {
-                    actor,
-                    resource,
-                    delta,
-                })
-            }
+            None => Err(BalanceError::CreditOverflow {
+                actor,
+                resource,
+                delta,
+            }),
         }
     }
 
@@ -407,7 +414,7 @@ fn decode_cell(
     cell: Option<&[u8]>,
 ) -> Result<Amount, BalanceError> {
     match cell {
-        None => Ok(0),
+        None => Ok(Amount::ZERO),
         Some(bytes) if bytes.len() == BALANCE_VALUE_LEN => {
             let mut buf = [0u8; BALANCE_VALUE_LEN];
             buf.copy_from_slice(bytes);
@@ -425,8 +432,8 @@ fn decode_cell(
 #[cfg(test)]
 mod tests {
     use super::{
-        balance_key, parse_balance_key, BalanceError, BalanceTxView, BalanceView, BALANCE_KEY_LEN,
-        BALANCE_KEY_PREFIX, BALANCE_VALUE_LEN,
+        balance_key, parse_balance_key, Amount, BalanceError, BalanceTxView, BalanceView,
+        BALANCE_KEY_LEN, BALANCE_KEY_PREFIX, BALANCE_VALUE_LEN,
     };
     use knomosis_storage::sqlite::SqliteStorage;
     use knomosis_storage::storage::Storage;
@@ -436,7 +443,7 @@ mod tests {
     fn constants_stable() {
         assert_eq!(BALANCE_KEY_PREFIX, b"b/");
         assert_eq!(BALANCE_KEY_LEN, 18);
-        assert_eq!(BALANCE_VALUE_LEN, 16);
+        assert_eq!(BALANCE_VALUE_LEN, 32);
     }
 
     /// `balance_key` produces a fixed-width key with prefix +
@@ -486,7 +493,7 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
         let v = view.get(1, 2).unwrap();
-        assert_eq!(v, 0);
+        assert_eq!(v, Amount::from_u64(0));
     }
 
     /// `set` then `get` round-trips a value.
@@ -494,8 +501,8 @@ mod tests {
     fn set_then_get() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
-        view.set(1, 2, 100).unwrap();
-        assert_eq!(view.get(1, 2).unwrap(), 100);
+        view.set(1, 2, Amount::from_u64(100)).unwrap();
+        assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(100));
     }
 
     /// `credit` adds to existing balance.
@@ -503,9 +510,9 @@ mod tests {
     fn credit_accumulates() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
-        view.set(1, 2, 50).unwrap();
-        view.credit(1, 2, 30).unwrap();
-        assert_eq!(view.get(1, 2).unwrap(), 80);
+        view.set(1, 2, Amount::from_u64(50)).unwrap();
+        view.credit(1, 2, Amount::from_u64(30)).unwrap();
+        assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(80));
     }
 
     /// `credit` from a missing cell starts from 0.
@@ -513,17 +520,28 @@ mod tests {
     fn credit_from_zero() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
-        view.credit(1, 2, 100).unwrap();
-        assert_eq!(view.get(1, 2).unwrap(), 100);
+        view.credit(1, 2, Amount::from_u64(100)).unwrap();
+        assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(100));
     }
 
-    /// `credit` overflow saturates + returns typed error.
+    /// `credit` overflow returns the typed error and leaves the cell
+    /// UNCHANGED.
+    ///
+    /// This case used to assert the opposite — that the cell was
+    /// saturated to the representation ceiling — which was the right
+    /// behaviour while an `Amount` was a `u128` and a kernel-legal
+    /// balance could outgrow it.  At 256 bits the ceiling IS the
+    /// kernel's, so an overflow proves the event source is wrong and
+    /// writing a clamped value would publish a number the kernel never
+    /// produced.  The unchanged-cell assertion is the load-bearing
+    /// half: it is what distinguishes refusing from clamping.
     #[test]
-    fn credit_overflow_saturates() {
+    fn credit_overflow_refuses_and_leaves_the_cell_unchanged() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
-        view.set(1, 2, u128::MAX - 5).unwrap();
-        let result = view.credit(1, 2, 100);
+        let seeded = Amount::MAX.checked_sub(Amount::from_u64(5)).unwrap();
+        view.set(1, 2, seeded).unwrap();
+        let result = view.credit(1, 2, Amount::from_u64(100));
         match result {
             Err(BalanceError::CreditOverflow {
                 actor,
@@ -532,12 +550,33 @@ mod tests {
             }) => {
                 assert_eq!(actor, 1);
                 assert_eq!(resource, 2);
-                assert_eq!(delta, 100);
+                assert_eq!(delta, Amount::from_u64(100));
             }
             other => panic!("expected CreditOverflow, got {other:?}"),
         }
-        // Saturated to u128::MAX.
-        assert_eq!(view.get(1, 2).unwrap(), u128::MAX);
+        assert_eq!(
+            view.get(1, 2).unwrap(),
+            seeded,
+            "a refused credit must not move the cell"
+        );
+    }
+
+    /// A credit that fits at 256 bits but would have overflowed a
+    /// `u128` succeeds.
+    ///
+    /// The negative control for the case above: without it, a
+    /// `credit` that refused EVERY large sum would pass the overflow
+    /// test while being useless.
+    #[test]
+    fn credit_across_the_retired_u128_ceiling_succeeds() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let view = BalanceView::new(&s);
+        let near = Amount::from_u128(u128::MAX);
+        view.set(1, 2, near).unwrap();
+        let sum = view.credit(1, 2, Amount::from_u64(100)).unwrap();
+        assert_eq!(sum, near.checked_add(Amount::from_u64(100)).unwrap());
+        assert_eq!(sum.to_u128(), None, "the sum is past the retired ceiling");
+        assert_eq!(view.get(1, 2).unwrap(), sum);
     }
 
     /// `debit` subtracts.
@@ -545,9 +584,9 @@ mod tests {
     fn debit_subtracts() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
-        view.set(1, 2, 100).unwrap();
-        view.debit(1, 2, 40).unwrap();
-        assert_eq!(view.get(1, 2).unwrap(), 60);
+        view.set(1, 2, Amount::from_u64(100)).unwrap();
+        view.debit(1, 2, Amount::from_u64(40)).unwrap();
+        assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(60));
     }
 
     /// `debit` underflow rejects and leaves the cell unchanged.
@@ -555,8 +594,8 @@ mod tests {
     fn debit_underflow_rejects() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
-        view.set(1, 2, 50).unwrap();
-        let result = view.debit(1, 2, 100);
+        view.set(1, 2, Amount::from_u64(50)).unwrap();
+        let result = view.debit(1, 2, Amount::from_u64(100));
         match result {
             Err(BalanceError::DebitUnderflow {
                 actor,
@@ -566,13 +605,13 @@ mod tests {
             }) => {
                 assert_eq!(actor, 1);
                 assert_eq!(resource, 2);
-                assert_eq!(current, 50);
-                assert_eq!(delta, 100);
+                assert_eq!(current, Amount::from_u64(50));
+                assert_eq!(delta, Amount::from_u64(100));
             }
             other => panic!("expected DebitUnderflow, got {other:?}"),
         }
         // Cell unchanged.
-        assert_eq!(view.get(1, 2).unwrap(), 50);
+        assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(50));
     }
 
     /// `scan_all` returns entries in (actor, resource) lex order.
@@ -581,15 +620,15 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
         // Insert in mixed order.
-        view.set(2, 5, 200).unwrap();
-        view.set(1, 5, 100).unwrap();
-        view.set(2, 3, 150).unwrap();
+        view.set(2, 5, Amount::from_u64(200)).unwrap();
+        view.set(1, 5, Amount::from_u64(100)).unwrap();
+        view.set(2, 3, Amount::from_u64(150)).unwrap();
         let rows = view.scan_all().unwrap();
         assert_eq!(rows.len(), 3);
         // Sorted by (actor, resource): (1, 5), (2, 3), (2, 5).
-        assert_eq!(rows[0], (1, 5, 100));
-        assert_eq!(rows[1], (2, 3, 150));
-        assert_eq!(rows[2], (2, 5, 200));
+        assert_eq!(rows[0], (1, 5, Amount::from_u64(100)));
+        assert_eq!(rows[1], (2, 3, Amount::from_u64(150)));
+        assert_eq!(rows[2], (2, 5, Amount::from_u64(200)));
     }
 
     /// `BalanceTxView`: transaction sees its own staged updates.
@@ -599,15 +638,15 @@ mod tests {
         let mut tx = s.transaction().unwrap();
         {
             let mut view = BalanceTxView::new(&mut *tx);
-            view.set(1, 2, 100).unwrap();
-            assert_eq!(view.get(1, 2).unwrap(), 100);
-            view.credit(1, 2, 50).unwrap();
-            assert_eq!(view.get(1, 2).unwrap(), 150);
+            view.set(1, 2, Amount::from_u64(100)).unwrap();
+            assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(100));
+            view.credit(1, 2, Amount::from_u64(50)).unwrap();
+            assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(150));
         }
         tx.commit().unwrap();
         // After commit, the canonical view sees the same value.
         let view = BalanceView::new(&s);
-        assert_eq!(view.get(1, 2).unwrap(), 150);
+        assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(150));
     }
 
     /// `BalanceTxView`: rollback discards staged updates.
@@ -615,17 +654,17 @@ mod tests {
     fn tx_view_rollback() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let view = BalanceView::new(&s);
-        view.set(1, 2, 100).unwrap();
+        view.set(1, 2, Amount::from_u64(100)).unwrap();
         {
             let mut tx = s.transaction().unwrap();
             {
                 let mut tx_view = BalanceTxView::new(&mut *tx);
-                tx_view.set(1, 2, 999).unwrap();
+                tx_view.set(1, 2, Amount::from_u64(999)).unwrap();
             }
             tx.rollback().unwrap();
         }
         // Canonical view unchanged.
-        assert_eq!(view.get(1, 2).unwrap(), 100);
+        assert_eq!(view.get(1, 2).unwrap(), Amount::from_u64(100));
     }
 
     /// Corrupt cell (wrong length) is surfaced as `CorruptCell`.
@@ -634,7 +673,7 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         // Manually write a wrong-length value.
         let k = balance_key(1, 2);
-        s.put(&k, &[0xAA; 8]).unwrap(); // 8 bytes, expected 16
+        s.put(&k, &[0xAA; 8]).unwrap(); // 8 bytes, expected 32
         let view = BalanceView::new(&s);
         match view.get(1, 2) {
             Err(BalanceError::CorruptCell {
@@ -645,7 +684,7 @@ mod tests {
             }) => {
                 assert_eq!(actor, 1);
                 assert_eq!(resource, 2);
-                assert_eq!(expected, 16);
+                assert_eq!(expected, 32);
                 assert_eq!(actual, 8);
             }
             other => panic!("expected CorruptCell, got {other:?}"),

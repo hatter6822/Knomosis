@@ -243,13 +243,23 @@ theorem balancesBounded_apply_impl (a : Action) (signer : ActorId) (s : State)
       exact balancesBounded_setBalance (balancesBounded_setBalance_sub hs) hpre.2
   | reclaimAmmReserves r amount reserveActor poolActor =>
       exact balancesBounded_setBalance (balancesBounded_setBalance_sub hs) hpre.2.2.2
-  -- Two credits, the second reading the first's write.
-  | depositWithFee r recipient poolActor ua pa bg d =>
-      exact balancesBounded_setBalance (balancesBounded_setBalance hs hpre.1) hpre.2
-  -- Credit at one resource, debit at another.
-  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
-      exact balancesBounded_setBalance_sub
-        (balancesBounded_setBalance hs hpre.2.2.2)
+  -- Three chained credits (Workstream SB added the seed leg), each
+  -- bounded by its own precondition conjunct.
+  | depositWithFee r recipient poolActor ua pa bg d sa =>
+      exact balancesBounded_setBalance
+        (balancesBounded_setBalance (balancesBounded_setBalance hs hpre.1)
+          hpre.2.1)
+        hpre.2.2.2
+  -- Workstream SB: the four-write user swap — debit, credit, debit,
+  -- credit; each credit's bound is its own precondition conjunct,
+  -- stated over exactly the chained intermediate state the law's
+  -- apply reads.
+  | reserveSwap fromResource toResource user amountIn minAmountOut reserveActor =>
+      exact balancesBounded_setBalance
+        (balancesBounded_setBalance_sub
+          (balancesBounded_setBalance (balancesBounded_setBalance_sub hs)
+            hpre.2.2.2.2.2.2.2.2.1))
+        hpre.2.2.2.2.2.2.2.2.2.1
   -- The bulk pair: one fold, distinct recipients.
   | distributeOthers r excluded amount =>
       exact balancesBounded_bulk_foldl r (fun _ => amount) _ s hs
@@ -312,18 +322,60 @@ theorem admissibleReachable_of_bridgeReachable
 
 /-! ## The `2^64` fields are bounded by trace length, not by a conjunct
 
-`nonces_val` and `eb_val` sit on the 8-byte head, and the decision
-NOT to widen them rests on a reachability argument: both advance by a
-bounded increment per action — a nonce by exactly one, a budget by at
-most `Authority.MAX_TOPUP_BUDGET_PER_ACTION` — so `2^64` needs on the
-order of `10^13` actions.
+`nonces_val` and `eb_val` sit on the 8-byte head, and the decision NOT
+to widen them rests on a reachability argument: each advances by a
+bounded increment per action, so `2^64` is out of reach of any real
+trace.  That argument is load-bearing, so it is stated where it can be
+checked rather than left in a comment.
 
-That argument is load-bearing, so it is stated here where it can be
-checked rather than left in a comment.  What it yields is weaker than
-`base_amt`'s unconditional bound, and deliberately so: the conclusion
-is `expectsNonce es' a ≤ expectsNonce es a + n`, and turning that into
+**The nonce half is proved here.**  `expectsNonce_admissible_step_le`
+gives `≤ +1` per step and `expectsNonce_le_of_reachableIn` composes it
+along a trace.  What that yields is weaker than `base_amt`'s
+unconditional bound, and deliberately so: the conclusion is
+`expectsNonce es' a ≤ expectsNonce es a + n`, and turning it into
 `< 2^64` needs a hypothesis about `n`.  A theorem claiming otherwise
-would be false. -/
+would be false.
+
+**The budget half is NOT the same argument, and an earlier draft of
+this docstring stated it wrongly.**  It read "a budget by at most
+`Authority.MAX_TOPUP_BUDGET_PER_ACTION`", which is false on two
+independent counts, and it claimed to be checked here while no theorem
+about `budgetBalance` existed anywhere:
+
+  * `ActorBudget.normalise` floors a stale cell at the policy's
+    `freeTier` (`max b.budgetBalance freeTier`) BEFORE the credit
+    lands, so one step can lift a balance of `0` to `freeTier + amount`
+    however small the grant.  `BudgetPolicy.bounded` takes `freeTier`
+    as an unbounded `Nat` and `mkBounded` clamps only `actionCost`, so
+    nothing caps that term;
+  * `depositWithFee`'s `budgetGrant` is not covered by the cap.
+    `topUpActionBudget_gasCheck` bounds `budgetIncrement` for
+    `.topUpActionBudget` and `topUpActionBudgetFor_gate` for the
+    delegated variant, but `depositWithFee` reaches `applyGrant`
+    through `depositWithFee_signerCheck`, which constrains the SIGNER
+    (`= bridgeActor`) and not the amount.
+
+The true per-step statement is `max stored freeTier + grant`, and it
+is now proved rather than asserted:
+`Authority.EpochBudgetState.storedBalance_topUp_le` and
+`…_consume_le` bound every actor's stored cell across the two
+operations `applyGrant` and the consume step are built from.  Those
+are stated over `storedBalance` — the raw number
+`FaultProof.budgetCellValue` encodes — rather than `currentBudget`,
+which folds the free-tier floor in and so cannot be transported to the
+cell.
+
+**Why the residual matters more here than for the nonce.**  Lean's
+`Encodable Nat` is total and truncating, so a stored balance at or
+above `2^64` encodes as its residue and the published root goes blind
+to it — the C-3 shape.  The Solidity mirror does not truncate: it
+REVERTS (`CBEEncode._leBytes` → `CBEValueTooWide`).  The two stacks
+therefore disagree at the ceiling rather than merely losing precision,
+and by this file's own "a revert is not a verdict" reasoning the party
+whose turn it is would lose by timeout.  Reaching the ceiling needs a
+`freeTier` at `2^64`, a bridge-signed grant that large, or ~1.8·10^13
+capped top-ups; the first is a configuration a deployment controls and
+nothing currently rejects. -/
 
 /-- One admissible step raises any actor's expected nonce by at most
     one — exactly one at the signer, and not at all elsewhere. -/

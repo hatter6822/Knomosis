@@ -44,10 +44,8 @@ def tests : List TestCase :=
         assertEq (expected := 4) (actual := (CellTag.bridgeConsumed 100).kindIndex) "bridgeConsumed"
         assertEq (expected := 5) (actual := (CellTag.bridgePending 50).kindIndex) "bridgePending"
         assertEq (expected := 6) (actual := CellTag.bridgeNextWdId.kindIndex) "bridgeNextWdId"
-        assertEq (expected := 7) (actual := CellTag.bridgeAmmReserveEth.kindIndex)
-          "bridgeAmmReserveEth"
-        assertEq (expected := 8) (actual := CellTag.bridgeAmmReserveBold.kindIndex)
-          "bridgeAmmReserveBold"
+        -- Kinds 7/8 are the RETIRED book-mirror cells — permanent
+        -- holes; the neighbouring pins (6 above, 9 below) guard them.
         assertEq (expected := 9) (actual := CellTag.bridgeBoldCircuitClosed.kindIndex)
           "bridgeBoldCircuitClosed"
         assertEq (expected := 10) (actual := CellTag.bridgeBoldTvlCap.kindIndex)
@@ -161,8 +159,6 @@ def tests : List TestCase :=
           [ (.balance 1 7, amt9)
           , (.nonce 7, nat9)
           , (.bridgeNextWdId, nat9)
-          , (.bridgeAmmReserveEth, amt9)
-          , (.bridgeAmmReserveBold, amt9)
           , (.bridgeBoldTvlCap, amt9)
           , (.bridgeBoldTotalLockedValue, amt9) ]
         for (t, v) in cases do
@@ -201,7 +197,7 @@ def tests : List TestCase :=
         let others : List CellTag :=
           [ .balance 1 8, .balance 2 7, .nonce 7, .registry 7, .localPolicy 7
           , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
-          , .bridgeAmmReserveEth, .bridgeAmmDisabled, .epochBudget 7
+          , .bridgeBoldTvlCap, .bridgeAmmDisabled, .epochBudget 7
           , .budgetPolicy ]
         for t in others do
           assertEq (expected := (getCellValue es t).toList)
@@ -239,7 +235,6 @@ def tests : List TestCase :=
           , .nonce 5, .registry 5, .localPolicy 5, .epochBudget 5
           , .bridgeConsumed 9, .bridgePending 9
           , .bridgeNextWdId
-          , .bridgeAmmReserveEth, .bridgeAmmReserveBold
           , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
           , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
           , .budgetPolicy ]
