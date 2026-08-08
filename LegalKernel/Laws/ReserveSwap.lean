@@ -202,6 +202,14 @@ def reserveSwap (fromResource toResource : ResourceId)
                 (getBalance s2 toResource reserveActor - out)
     setBalance s3 toResource user (getBalance s3 toResource user + out)
 
+/-- Decidability sanity check: `reserveSwap`'s precondition is
+    decidable on every state. -/
+example (fromResource toResource : ResourceId) (user : ActorId)
+    (amountIn minAmountOut : Amount) (reserveActor : ActorId) (s : State) :
+    Decidable ((reserveSwap fromResource toResource user amountIn minAmountOut
+      reserveActor).pre s) :=
+  inferInstance
+
 /-! ## Safety corollaries (the `AmmMath` theorems, finally consumed) -/
 
 /-- No-drain at the law level: on any state satisfying the

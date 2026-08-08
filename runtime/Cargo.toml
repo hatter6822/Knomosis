@@ -91,7 +91,7 @@ members = [
 # nightly toolchain + the LLVM sanitizer runtime and are driven ONLY by
 # `cargo +nightly fuzz` (the dedicated `ci-fuzz.yml` lane).  Keeping it
 # out of `--workspace` is what lets `cargo build/test/clippy --workspace`
-# stay green on pinned stable 1.83.
+# stay green on the pinned stable channel (rust-toolchain.toml).
 exclude = [
     "fuzz",
 ]
@@ -107,7 +107,7 @@ exclude = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.14.0"
+version = "0.14.1"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -190,10 +190,11 @@ cc = "1.0"
 #     are runtime deps of the L1 ingestor (and the future fault-
 #     proof observer).
 #   * `tempfile` — dev-only; used across the workspace for isolated
-#     tempdir creation.  Pinned at `~3.14` to retain Rust 1.83
-#     compatibility (newer versions require Rust 1.85 for
-#     `edition2024`).  Workspace-shared so every dev-dep tempfile
-#     stays in sync.
+#     tempdir creation.  Pinned at `~3.14`, chosen when the workspace
+#     MSRV was 1.83 (newer tempfile needs Rust >= 1.85 for
+#     `edition2024`); the 1.97 pin now satisfies that, so the range
+#     can widen whenever a bump is otherwise warranted.
+#     Workspace-shared so every dev-dep tempfile stays in sync.
 zeroize = { version = "1.8", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
@@ -232,15 +233,6 @@ rustls-pki-types = { version = "1.10", default-features = false, features = ["st
 #     `min_sqlite_version_3_14_0`) intentionally kept; we rely on
 #     `WAL` mode (3.7+) and `BEGIN DEFERRED` (any version).
 rusqlite = { version = "0.31", default-features = false, features = ["bundled"] }
-
-# Workstream GW (gateway) HTTP layer.  `tiny_http` is the vetted
-# synchronous HTTP/1.1 server chosen by the G1.0 spike (OQ-GW-8; see
-# `docs/audits/gateway_http_spike.md`): pure std threads, no tokio.
-# `default-features = false` keeps its optional TLS (which depends on
-# an older rustls than the workspace's pinned 0.23) out of the tree —
-# HTTPS termination is the G4.2 hardening unit.  Pinned to a minor
-# version per the §7 risk register.
-tiny_http = { version = "0.12", default-features = false }
 
 # Workspace-internal crates (other members depend on these via the
 # `workspace = true` shorthand).

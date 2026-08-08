@@ -139,8 +139,8 @@ grep -nE 'decPre\s*:=' LegalKernel/Laws/*.lean \
 ```
 
 The §14.8 security-review template will fold this check into a
-mandatory item as the law set grows.  As of the current build tag
-(through Workstream GP), the following laws all satisfy the
+mandatory item as the law set grows.  As of the current version
+(through Workstream SB), the following laws all satisfy the
 discipline (every `decPre` is `fun _ => inferInstance`).  Laws marked **kernel-
 identity** have `pre := True` and a no-op `apply_impl` at the
 kernel level — their action-layer effects (registry mutation,
@@ -150,30 +150,41 @@ layer.
 
 | Law                  | Module                                      | Precondition shape                                                     |
 |----------------------|---------------------------------------------|------------------------------------------------------------------------|
-| `transfer`           | `LegalKernel/Laws/Transfer.lean`            | `getBalance s r sender ≥ amount ∧ amount > 0`                          |
-| `mint`               | `LegalKernel/Laws/Mint.lean`                | `amount > 0`                                                           |
+| `transfer`           | `LegalKernel/Laws/Transfer.lean`            | `getBalance s r sender ≥ amount ∧ amount > 0 ∧ AmountBounded (setBalance …) r receiver amount` |
+| `mint`               | `LegalKernel/Laws/Mint.lean`                | `amount > 0 ∧ AmountBounded s r to amount`                             |
 | `burn`               | `LegalKernel/Laws/Burn.lean`                | `getBalance s r fromActor ≥ amount ∧ amount > 0`                       |
 | `freezeResource`     | `LegalKernel/Laws/Freeze.lean`              | `True`                                                                 |
-| `reward`             | `LegalKernel/Laws/Reward.lean`              | `amount > 0`                                                           |
-| `distributeOthers`   | `LegalKernel/Laws/DistributeOthers.lean`    | `amount > 0 ∧ BulkBounded s r excluded`                                |
-| `proportionalDilute` | `LegalKernel/Laws/ProportionalDilute.lean`  | `totalReward > 0 ∧ sumOthers s r excluded > 0 ∧ BulkBounded s r excluded` |
-| `deposit`            | `LegalKernel/Laws/Deposit.lean`             | `True` (deposit-id uniqueness lives at the bridge admissibility layer) |
-| `withdraw`           | `LegalKernel/Laws/Withdraw.lean`            | `getBalance s r sender ≥ amount`                                       |
+| `reward`             | `LegalKernel/Laws/Reward.lean`              | `amount > 0 ∧ AmountBounded s r to amount`                             |
+| `distributeOthers`   | `LegalKernel/Laws/DistributeOthers.lean`    | `amount > 0 ∧ BulkBounded s r excluded ∧ AmountBoundedAll s r (bulkRecipients s r excluded) (fun _ => amount)` |
+| `proportionalDilute` | `LegalKernel/Laws/ProportionalDilute.lean`  | `totalReward > 0 ∧ sumOthers s r excluded > 0 ∧ BulkBounded s r excluded ∧ AmountBoundedAll s r (bulkRecipients s r excluded) (fun kv => totalReward * kv.2 / sumOthers s r excluded)` |
+| `deposit`            | `LegalKernel/Laws/Deposit.lean`             | `AmountBounded s r recipient amount` (deposit-id uniqueness lives at the bridge admissibility layer) |
+| `withdraw`           | `LegalKernel/Laws/Withdraw.lean`            | `0 < amount ∧ getBalance s r sender ≥ amount`                          |
 | `replaceKey`         | `LegalKernel/Laws/ReplaceKey.lean`          | `True` (kernel-identity; registry mutation in `applyActionToRegistry`) |
 | `registerIdentity`   | `LegalKernel/Laws/RegisterIdentity.lean`    | `True` (kernel-identity)                                               |
 | `dispute` × 4        | `LegalKernel/Laws/Dispute.lean`             | `True` (kernel-identity; dispute pipeline runs outside `apply_admissible`) |
 | `declareLocalPolicy` | `LegalKernel/Laws/LocalPolicy.lean`         | `True` (kernel-identity; LP mutation in `applyActionToLocalPolicies`)  |
 | `revokeLocalPolicy`  | `LegalKernel/Laws/LocalPolicy.lean`         | `True` (kernel-identity)                                               |
-| `depositWithFee`       | `LegalKernel/Laws/DepositWithFee.lean`      | `True` (fee-split + budget grant enforced at the bridge admissibility layer) |
-| `topUpActionBudget`    | `LegalKernel/Laws/TopUpActionBudget.lean`   | `getBalance s gasResource a ≥ gasAmount`                               |
-| `topUpActionBudgetFor` | `LegalKernel/Laws/TopUpActionBudgetFor.lean`| `getBalance s gasResource signer ≥ gasAmount ∧ recipient ≠ signer`     |
-| `claimBudgetRefund`    | `LegalKernel/Laws/ClaimBudgetRefund.lean`   | `getBalance s gasResource poolActor ≥ refundAmount`                    |
-| `reclaimAmmReserves`   | `LegalKernel/Laws/ReclaimAmmReserves.lean`  | `getBalance s r reserveActor = amount ∧ reserveActor ≠ poolActor ∧ amount > 0` |
-| `reserveSwap`          | `LegalKernel/Laws/ReserveSwap.lean`         | `getBalance s fromResource user ≥ amountIn ∧ fromResource ≠ toResource ∧ amountIn > 0` (+ the quote/floor conjuncts) |
+| `depositWithFee`       | `LegalKernel/Laws/DepositWithFee.lean`      | `AmountBounded` on each of the three credit legs (user / pool / seed) `∧ seedAmount ≤ poolAmount` (fee-split + budget grant enforced at the bridge admissibility layer) |
+| `topUpActionBudget`    | `LegalKernel/Laws/TopUpActionBudget.lean`   | `getBalance s gasResource a ≥ gasAmount ∧ AmountBounded (setBalance …) gasResource poolActor gasAmount` |
+| `topUpActionBudgetFor` | `LegalKernel/Laws/TopUpActionBudgetFor.lean`| `getBalance s gasResource signer ≥ gasAmount ∧ recipient ≠ signer ∧ AmountBounded (setBalance …) gasResource poolActor gasAmount` |
+| `claimBudgetRefund`    | `LegalKernel/Laws/ClaimBudgetRefund.lean`   | `getBalance s gasResource poolActor ≥ refundAmount ∧ AmountBounded (setBalance …) gasResource claimant refundAmount` |
+| `reclaimAmmReserves`   | `LegalKernel/Laws/ReclaimAmmReserves.lean`  | `getBalance s r reserveActor = amount ∧ reserveActor ≠ poolActor ∧ amount > 0 ∧ AmountBounded (setBalance …) r poolActor amount` |
+| `reserveSwap`          | `LegalKernel/Laws/ReserveSwap.lean`         | `amountIn > 0 ∧ fromResource ≠ toResource ∧ user ≠ reserveActor ∧ getBalance s fromResource user ≥ amountIn` (+ the quote/floor, `AmountBounded`, and quote-domain conjuncts) |
 
-Each module ships an `example : Decidable ((law …).pre s) :=
-inferInstance` smoke-test that fails at compile time if the
-underlying `Decidable` instance is ever lost.
+The `AmountBounded` / `AmountBoundedAll` conjuncts are the shared
+credit ceiling (`LegalKernel/Laws/AmountBound.lean`); both are
+decidable by construction, and the elided `(setBalance …)` argument
+is the post-debit state the credit reads, so every `decPre` above
+stays `fun _ => inferInstance`.
+
+Every law module that defines its own `Transition` ships an
+`example : Decidable ((law …).pre s) := inferInstance` smoke-test
+that fails at compile time if the underlying `Decidable` instance
+is ever lost.  The remaining tabled laws (`registerIdentity`,
+`replaceKey`, the dispute-pipeline laws, the local-policy laws)
+compile to the identity `Transition` (`Laws.freezeResource 0`), so
+they have no per-module `Transition` to probe — the identity's own
+smoke-test in `Laws/Freeze.lean` covers them.
 
 The Lex-side `lexlaw` macro takes the discipline a step further:
 clauses are parsed from a structured `lex_pre := <expr>` field, and

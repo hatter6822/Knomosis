@@ -66,7 +66,9 @@ lemma lives.
 | `Std.TreeMap.getElem?_insert_self` | `Std.Data.TreeMap.Lemmas` | `find?_insert_self` (WU 1.1) | `@[simp]`, post-rename name; was `Std.RBMap.find?_insert_self` in std4. |
 | `Std.TreeMap.getElem?_insert` | `Std.Data.TreeMap.Lemmas` | `find?_insert_other` (WU 1.1) | `@[grind =]`; used together with `LawfulEqCmp.compare_eq_iff_eq` to discharge the "different key" branch. |
 | `Std.LawfulEqCmp.eq_of_compare` | `Init.Data.Order.Ord` | `find?_insert_other` (WU 1.1) | core, very stable |
+| `Std.LawfulEqCmp.compare_eq_iff_eq` | `Init.Data.Order.Ord` | `find?_insert_other` (WU 1.1) | core, `@[simp]`; the `cmp a b = .eq ↔ a = b` characterisation the "different key" branch reduces through (named in the proof's docstring; applied by the closing `simp`). |
 | `Std.TreeMap.foldl_eq_foldl_toList` | `Std.Data.TreeMap.Lemmas` | `sumValues_eq_toList_sum` (WU 1.4 bridge) | first-stable form; equivalent in spirit to "fold respects toList order". |
+| `List.map_cons` | `Init.Data.List.Basic` | `sumValues_eq_toList_sum` (WU 1.4 bridge) | core, `@[simp]`; named in the `simp only [List.foldl, List.map_cons]` set that steps the `cons` case of the fold/map induction. |
 | `List.sum_eq_foldl_nat` | `Init.Data.List.Nat.Sum` | `sumValues_eq_values_sum` (WU 1.4) | core; `xs.sum = xs.foldl 0 (· + ·)` for `Nat`-lists.  Bridges between the kernel's `foldl`-based `sumValues` and Lean core's standard `List.sum` for `Nat`-permutation theorems. |
 | `Std.TreeMap.toList_insert_perm` | `Std.Data.TreeMap.Lemmas` | `sumValues_insert_absent` (WU 1.2) | core property; permutation form chosen to match `List.Perm.sum_nat`. |
 | `Std.TreeMap.mem_iff_isSome_getElem?` | `Std.Data.TreeMap.Lemmas` | `sumValues_insert_absent`, `not_mem_erase_self` | API-stable |
@@ -77,6 +79,7 @@ lemma lives.
 | `Std.TreeMap.Equiv.foldl_eq` | `Std.Data.TreeMap.Lemmas` | `sumValues_of_equiv` (WU 1.3 helper) | the bridge from `~m` equivalence to fold equality. |
 | `Std.DTreeMap.Equiv.of_forall_constGet?_eq` | `Std.Data.DTreeMap.Lemmas` | `equiv_of_getElem_eq` (WU 1.3 helper) | the "extensionality at the `getElem?` map" lemma; constructs a `DTreeMap.Equiv` that the `TreeMap.Equiv` constructor wraps. |
 | `List.Perm.sum_nat` | `Init.Data.List.Perm` | `sumValues_insert_absent` (WU 1.2) | permutation invariance of `Nat`-sum; core. |
+| `List.sum_cons` | `Init.Data.List.Basic` | `sumValues_insert_absent` (WU 1.2) | core, `@[simp]`; named in the closing `simp [List.sum_cons]` that peels the inserted value off the permuted value column's sum. |
 | `List.Perm.map` | `Init.Data.List.Perm` | `sumValues_insert_absent` (WU 1.2) | core; used to lift `Perm` from key-value pairs to value-only lists. |
 | `List.filter_eq_self` | `Init.Data.List.Lemmas` | `sumValues_insert_absent` (WU 1.2) | core; characterises identity filtering. |
 | `LawfulBEq.eq_of_beq` | `Init.Core` | `sumValues_insert_absent` (WU 1.2) | core; `(a == b) → (a = b)` for lawful BEq. |
@@ -260,11 +263,12 @@ respective module headers and not re-tabulated here:
   `Authority/LocalPolicySemantics.lean`)** — reuses
   `Std.Data.TreeMap` over `ActorId` for the `LocalPolicies` table;
   no new TreeMap lemmas.
-* **Workstream LX (`DSL/LexLaw.lean`, `DSL/LexDeployment.lean`,
-  `Tools/Lex*.lean`)** — pure macro / IO / parsing infrastructure
-  using `Lean.Syntax`, `Lean.Json`, `IO.FS.*` from Lean core.  No
-  new `Std.TreeMap` lemmas.  The macro pipeline does not touch the
-  TCB allowlist surface.
+* **Workstream LX (`Lex/DSL/Law.lean`, `Lex/DSL/Deployment.lean`,
+  `Lex/Tools/*.lean` + the `Lex/Bin/*.lean` entry points)** — pure
+  macro / IO / parsing infrastructure using `Lean.Syntax`,
+  `Lean.Json`, `IO.FS.*` from Lean core.  No new `Std.TreeMap`
+  lemmas.  The macro pipeline does not touch the TCB allowlist
+  surface.
 
 A toolchain bump that touches the post-Phase-1 modules is checked
 by `lake build` directly; this audit document tracks the *TCB*

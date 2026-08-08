@@ -2042,10 +2042,12 @@ End-to-end test scenarios using the `mockVerify` fixture from
 
 **Files modified:**
 
-  * `LegalKernel.lean` — bump `kernelBuildTag` to
-    `"knomosis-parameterized-laws"`; add new module imports.
+  * `lakefile.lean` + `LegalKernel.lean` — bump the package
+    `version` and its `kernelVersion` mirror in lockstep (a
+    minor bump: new backwards-compatible functionality) per the
+    CLAUDE.md patch-version-bump table; add new module imports
+    to `LegalKernel.lean`.
   * `Tests.lean` — register new test suites.
-  * `Test/Umbrella.lean` — update build-tag literal.
   * `CLAUDE.md` — add Workstream-PA changelog entry; extend
     the type-level properties table; update source-layout
     listing.
@@ -2069,7 +2071,8 @@ End-to-end test scenarios using the `mockVerify` fixture from
   * `lake exe tcb_audit` passes (no TCB changes).
   * `lake exe stub_audit` passes.
   * `scripts/axiom_audit.sh` passes.
-  * `kernelBuildTag` bumped; Umbrella test verifies.
+  * `lakefile.lean` `version` + `kernelVersion` bumped in
+    lockstep; `knomosis info` reports the new value.
   * `CLAUDE.md` source-layout listing updated.
 
 ## §12 Test plan
@@ -2189,7 +2192,7 @@ Post-PA snapshot         ──── ► Post-PA build: decoded verbatim
 ```
 
 No pre-PA build can read a post-PA snapshot; this is acceptable
-because `kernelBuildTag` mismatch at handshake prevents
+because `kernelVersion` mismatch at handshake prevents
 mixed-version networks.
 
 ### 13.3 Genesis governance bootstrap
@@ -2231,7 +2234,7 @@ The new `Action.applyParameterChange` constructor at index 17
 extends the existing CBE codec.  Old log files containing only
 constructors 0..16 decode unchanged.  New log files containing
 the new constructor cannot decode under pre-PA builds, but
-`kernelBuildTag` mismatch surfaces at handshake time.
+`kernelVersion` mismatch surfaces at handshake time.
 
 ### 13.5 Snapshot format
 
@@ -2470,8 +2473,9 @@ landing branch, all of the following hold:
       development status" section names PA as complete; the
       source-layout listing reflects the new modules; the
       type-level properties table gains the new entries; the
-      `kernelBuildTag` literal is bumped to
-      `"knomosis-parameterized-laws"`.
+      `lakefile.lean` `version` and its `kernelVersion` mirror
+      are bumped in lockstep (a minor bump: new
+      backwards-compatible functionality).
 
 The workstream is **not** complete (and the PR is not
 landable) until every gate above passes simultaneously.

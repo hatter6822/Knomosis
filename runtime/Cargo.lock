@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-amount"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "crypto-bigint",
  "proptest",
@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-bench"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "knomosis-amount",
  "knomosis-cli-common",
@@ -344,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cli-common"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -354,7 +354,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cross-stack"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -362,7 +362,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-event-subscribe"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "hex",
  "knomosis-cli-common",
@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-faultproof-observer"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "hex",
  "k256",
@@ -398,7 +398,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-gateway"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "knomosis-amount",
  "knomosis-cli-common",
@@ -421,7 +421,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-gateway-bench"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "knomosis-amount",
  "knomosis-bench",
@@ -439,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-hash-keccak256"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "cc",
  "hex",
@@ -450,7 +450,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-host"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "knomosis-amount",
  "knomosis-cli-common",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-indexer"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "hex",
  "knomosis-amount",
@@ -482,7 +482,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-l1-ingest"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "hex",
  "k256",
@@ -504,7 +504,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-storage"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "knomosis-amount",
  "proptest",
@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-verify-secp256k1"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "cc",
  "hex",

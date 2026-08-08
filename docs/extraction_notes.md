@@ -73,7 +73,7 @@ placeholder body.  Two such declarations exist in the Phase-5 build:
     emits real CBE-encoded bytes (no longer a stub).  See
     `Authority/SignedAction.lean` for the post-audit body.
 
-### 2.5 Hash-implementation extern discipline (Audit-3.1)
+### 2.4 Hash-implementation extern discipline (Audit-3.1)
 
 The runtime's content-hash function (`Runtime.Hash.hashBytes` /
 `hashStream`) is declared as a regular `def` with documented C
@@ -92,7 +92,7 @@ production targets are recognised:
     opcode for cross-stack verification.  This is the adaptor that
     actually ships in-repo (`runtime/knomosis-hash-keccak256`,
     Workstream RH-A.2; opt-in via `KNOMOSIS_HASH_BACKEND=keccak256`);
-    identifier `"keccak256/EVM-compatible/v1"`.  See TA-2.2 in §2.6.
+    identifier `"keccak256/EVM-compatible/v1"`.  See TA-2.2 in §2.5.
 
 The substitution discipline is identical to `Verify`'s:
 
@@ -120,7 +120,7 @@ post-Audit-3 binaries.  For research-stage software this is
 acceptable; the migration path is "throw away the old log,
 bootstrap fresh".
 
-### 2.6 Trust Assumption Catalogue
+### 2.5 Trust Assumption Catalogue
 
 This subsection (added by Workstream WG.4) enumerates the five
 operational trust assumptions the **Ethereum integration**
@@ -170,7 +170,7 @@ name the precise swap-points and consuming theorems.
     (`def` with `@[extern "knomosis_hash_bytes"]`) — linked via
     `@[extern]` to the production keccak256 binding.  The
     fallback FNV-1a-64 implementation is the test-build default
-    (per §2.5); production deployments override at link time.
+    (per §2.4); production deployments override at link time.
   * **Production runtime adaptor.**
     `runtime/knomosis-hash-keccak256` (Workstream RH-A.2).
     Built on `sha3 = "0.10"`; Ethereum-flavoured Keccak-256
@@ -252,10 +252,16 @@ name the precise swap-points and consuming theorems.
     (SC.3) mechanically ratify byte-for-byte agreement
     between the Lean references and the Solidity
     implementations on every covered surface.  The
-    `foundry.toml` pins `solc_version = "0.8.36"` with
-    `evm_version = "shanghai"` and `via_ir = true`; any
-    deployment that diverges from the pin must re-run the
-    cross-stack suite under the new toolchain.
+    `foundry.toml` pins the solc binary path
+    (`solc = "/usr/local/bin/solc"`) with
+    `evm_version = "shanghai"` and `via_ir = true`; the
+    0.8.36 compiler version itself is enforced by
+    `scripts/setup.sh` and CI installing exactly that
+    SHA-256-verified static binary at the pinned path,
+    plus the `pragma solidity 0.8.36` lines in the
+    sources.  Any deployment that diverges from the pin
+    must re-run the cross-stack suite under the new
+    toolchain.
   * **Pre-deployment audit bar.**  Higher than for
     upgradeable contracts because every contract is
     `immutable`: no proxy, no `initialize`, no admin role
@@ -311,7 +317,7 @@ name the precise swap-points and consuming theorems.
     cross-contract auth) is explicitly out of scope
     (§15D.10 #4).
 
-### 2.7 Cross-references for TA-2.X
+### 2.6 Cross-references for TA-2.X
 
 The five TAs above are also documented in:
 
@@ -369,8 +375,8 @@ startup.
 
 ## 4. Spot-check: what the binary does
 
-The following observations were made on a debug build of the
-Phase-5 `knomosis` binary:
+The following observations were re-verified against a debug build
+of the `knomosis` binary at the current version:
 
 ```bash
 $ file .lake/build/bin/knomosis
@@ -378,7 +384,7 @@ $ file .lake/build/bin/knomosis
 
 $ .lake/build/bin/knomosis info
 knomosis: legal-kernel runtime
-  version:   0.8.4
+  version:   0.14.1
   proof-carrying state-transition kernel (see CLAUDE.md for milestone status)
   hash:        fnv1a64-padded-32
   hash-grade:  fallback (FNV-1a-64 padded to 32, NOT FOR PRODUCTION)
@@ -469,21 +475,34 @@ binaries, but all touched modules that are shipped to production:
 
 ## 8. Limitations
 
-Phase 5's Lean-only implementation does *not* ship:
+Phase 5's Lean-only implementation did *not* ship the host-side
+interop deliverables.  Workstream RH (the Rust host runtime;
+`docs/planning/rust_host_runtime_plan.md`) has since closed all
+four as crates in the `runtime/` workspace, with their own CI
+lane (`ci-rust.yml`):
 
-  * **Rust network adaptor (WU 5.4)** — would accept `SignedAction`
-    payloads over TCP/QUIC and forward them to the Lean runtime via
-    a Unix socket.  Documented in `docs/abi.md` (the on-wire
-    contract).
-  * **Rust event subscription protocol (WU 5.7)** — depends on
-    Rust as the host language.
-  * **SQLite indexer (WU 5.8)** — depends on a real DB layer.
-  * **10k tx/sec benchmark suite (WU 5.11)** — depends on the
-    network adaptor for end-to-end measurement.
+  * **Rust network adaptor (WU 5.4)** — shipped as
+    `knomosis-host` (RH-C): a TCP / TLS-on-TCP / Unix-socket
+    listener that accepts length-prefixed CBE-encoded
+    `SignedAction` frames and forwards them to a `Kernel`
+    implementation (`CommandKernel` spawning the `knomosis`
+    binary; `MockKernel` for tests).  The on-wire contract is
+    `docs/abi.md` §10.  QUIC, named in the original WU sketch,
+    was not pursued.
+  * **Rust event subscription protocol (WU 5.7)** — shipped as
+    `knomosis-event-subscribe` (RH-D); wire format in
+    `docs/abi.md` §11.
+  * **SQLite indexer (WU 5.8)** — shipped as `knomosis-indexer`
+    (RH-E.1) over the `knomosis-storage` abstraction (RH-E.0).
+  * **Benchmark suite (WU 5.11)** — shipped as `knomosis-bench`
+    (RH-F).  The one target still open from the original list:
+    the §RH-F goal of ≥ 10 000 tx/sec is not yet met — observed
+    ~7 000-7 500 ops/sec at the default workload, bottlenecked
+    by the host's RPC pipeline rather than the kernel (see the
+    plan's §RH-F gap analysis).
 
-These are *interop* deliverables: the in-Lean kernel + runtime is
-fully functional and end-to-end-tested without them.  Future work
-will land them as a separate PR with their own CI infrastructure.
+These remain *interop* deliverables: the in-Lean kernel + runtime
+is fully functional and end-to-end-tested without them.
 
 ## 9. Phase-6 dispute pipeline notes
 
@@ -580,14 +599,15 @@ under the new build.  No new `opaque` declarations.
 infrastructure*.  The `lexlaw` and `deployment` macros run at
 elaboration time, emitting standard Lean `def`s that compile
 through the same pipeline as hand-written declarations.  The
-`Tools/Lex*.lean` audit binaries (`lex_lint`, `lex_codegen`,
-`lex_diff`, `lex_format`) are standalone CLI executables built
-by Lake; they do not contribute to the runtime binary's
-behaviour.  None of the Lex tooling is `opaque`-bearing or
-introduces new axioms.  The `_lex_inputs/*.json` codegen-input
-sidecars are the cross-pass medium between the macro and the
-codegen binary; they are checked into the repository for
-deterministic CI behaviour.
+audit binaries (`lex_lint`, `lex_codegen`, `lex_diff`,
+`lex_format`) are standalone CLI executables built by Lake —
+entry points at `Lex/Bin/{Lint,Codegen,Diff,Format}.lean`,
+logic in `Lex/Tools/` (see `lakefile.lean`); they do not
+contribute to the runtime binary's behaviour.  None of the Lex
+tooling is `opaque`-bearing or introduces new axioms.  The
+`Lex/Inputs/*.json` codegen-input sidecars are the cross-pass
+medium between the macro and the codegen binary; they are
+checked into the repository for deterministic CI behaviour.
 
 ## 12. References
 

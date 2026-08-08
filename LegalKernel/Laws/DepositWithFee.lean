@@ -53,6 +53,16 @@ def depositWithFee (r : ResourceId) (recipient poolActor : ActorId)
                 (getBalance s1 r poolActor + (poolAmount - seedAmount))
     setBalance s2 r reserveActor (getBalance s2 r reserveActor + seedAmount)
 
+/-- Decidability sanity check: `depositWithFee`'s precondition is
+    decidable on every state. -/
+example (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (depositId : Bridge.DepositId) (seedAmount : Amount)
+    (reserveActor : ActorId) (s : State) :
+    Decidable ((depositWithFee r recipient poolActor userAmount poolAmount
+      budgetGrant depositId seedAmount reserveActor).pre s) :=
+  inferInstance
+
 /-- Per-resource map at `r' ≠ r` is unchanged by `depositWithFee`. -/
 theorem depositWithFee_other_resource_untouched
     (r r' : ResourceId) (recipient poolActor : ActorId)

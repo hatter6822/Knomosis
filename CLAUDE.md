@@ -41,7 +41,7 @@ pre-root multiproof it folds.  Workstream SB (batched state-root
 submission + the user-facing L2 AMM) complete: one L1 record per
 batch `[prevEnd, end)` with a per-batch actions-root SMT, the game
 anchored inside the batch, the terminal action authenticated by
-inclusion proof (~239 gas of amortised L1 per action at B=1000);
+inclusion proof (~241 gas of amortised L1 per action at B=1000);
 `Laws.reserveSwap` (Action 25, Events 23/24) priced in-kernel by
 `AmmMath` over the reserve actor's live balances, funded by the
 deposit fee-split's seed leg under the L2-primary pool topology;
@@ -238,7 +238,8 @@ After any source change, also run:
 * `lake exe tcb_audit` — fails if a TCB-core module imports anything
   not on `tcb_allowlist.txt` or in `Tools.Common.tcbInternalImports`.
 * `lake exe stub_audit` — catches placeholder-body stubs accompanied
-  by red-flag docstring tokens.  Allowlist: `tools/stub_allowlist.txt`.
+  by red-flag docstring tokens.  Allowlist: `tools/stub_allowlist.txt`
+  (absent by default; a missing file is an empty allowlist).
 * `lake exe api_stability_audit` — fails on any test-module
   term-level API pin of the form `let _ := @theoremName` that lacks
   a full type ascription (an unascribed pin elaborates against
@@ -268,6 +269,8 @@ knomosis/
 ├── Main.lean                  -- `knomosis` runtime CLI
 ├── Replay.lean                -- `knomosis-replay` audit binary
 ├── Tests.lean                 -- @[test_driver]; imports every test module
+├── ApiStabilityAudit.lean / CountSorries.lean / DeferralAudit.lean /
+│   NamingAudit.lean / StubAudit.lean  -- lean_exe root shims for the audit gates
 ├── LegalKernel.lean           -- umbrella module (re-exports everything)
 ├── Lex.lean                   -- umbrella module for the Lex language
 ├── Deployments.lean           -- umbrella for the `Deployments` lean_lib
@@ -316,12 +319,17 @@ knomosis/
 │   └── Test/                  -- Lex test modules
 ├── Deployments/Examples/      -- worked example deployments (UsdClearing, GasPool)
 ├── Tools/                     -- non-Lex audit binaries + shared Common library
-├── solidity/                  -- Workstreams E + H + GP: L1 mirror contracts
+├── tools/                     -- audit allowlists (api_stability_allowlist.txt;
+│                                 stub/naming allowlists when present)
+├── codemaps/                  -- generated per-language navigation maps (CI gate)
+├── solidity/                  -- Workstreams E + H + GP + AX: L1 mirror contracts
 │                                 (see solidity/README.md)
 ├── runtime/                   -- Workstream RH: Rust host runtime
 │   ├── Cargo.toml             --   workspace manifest
 │   ├── rust-toolchain.toml    --   pinned Rust channel (stable 1.97)
-│   ├── knomosis-hash-fallback.c  --   AR.10 default fallback (lake-built)
+│   ├── deny.toml              --   cargo-deny supply-chain policy (ci-cargo-deny.yml)
+│   ├── knomosis-hash-fallback.c  --   AR.10 default hash fallback (lake-built)
+│   ├── knomosis-verify-fallback.c -- reject-all verifier fallback (lake-built)
 │   ├── knomosis-amount/          --   256-bit accounting scalar (Amount)
 │   ├── knomosis-cli-common/      --   shared CLI / logging helpers
 │   ├── knomosis-cross-stack/     --   dev-dep fixture loader
@@ -341,28 +349,40 @@ knomosis/
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
+│   ├── regenerate_codemaps.py -- codemap regeneration (CI gate)
 │   ├── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
 │   ├── verify_secp256k1_link.sh -- F-2 production-verifier link proof + SHA-256
 │   ├── verify_keccak_link.sh  -- F-1/F-2 production keccak256-hash link proof + SHA-256
 │   ├── verify_release_crypto.sh -- F-1/F-2 release gate: both adaptors in one binary
+│   ├── deploy_sepolia_launch.sh -- one-command Sepolia launch wrapper
+│   ├── knomosis_l2_sepolia_stack.sh -- L2 daemon-stack + gateway bring-up
 │   └── economic_simulation.py -- IC-1..IC-6 quantitative incentive harness
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits
 │   ├── ci-rust.yml            -- Rust workspace gates (runtime/**)
 │   ├── ci-fuzz.yml            -- nightly libFuzzer gate (runtime/fuzz/**)
+│   ├── ci-cargo-deny.yml      -- cargo-deny supply-chain gate (both workspaces)
 │   ├── ci-solidity.yml        -- Solidity cap gate + forge gates (solidity/**)
+│   ├── ci-gateway.yml         -- gateway OpenAPI-contract lint (docs/api/**)
 │   ├── ci-keccak-crossstack.yml -- Lean<->EVM keccak256 byte-equivalence
 │   ├── ci-verify-secp256k1.yml -- F-2 secp256k1-verifier production-link proof
 │   ├── ci-hash-keccak256-link.yml -- F-1/F-2 keccak256-hash production-link + SHA-256 pin
 │   └── ci-release-gate.yml    -- F-1/F-2 release/deploy gate (version tag / release)
+├── .claude/                   -- SessionStart hook + settings (web/remote provisioning)
 ├── README.md                  -- project entry point
-├── CLAUDE.md                  -- this file
+├── CLAUDE.md                  -- this file (byte-identical twin: AGENTS.md)
 └── docs/
     ├── GENESIS_PLAN.md          -- canonical design document
+    ├── DEVELOPMENT.md           -- end-to-end developer handbook
     ├── abi.md                   -- on-disk frame format + CLI ABI
+    ├── api/                     -- gateway OpenAPI contract + lint config
     ├── fault_proof_runbook.md   -- Workstream H operator runbook
-    ├── audits/                  -- per-area Lean audit reports
-    └── planning/                -- engineering / workstream plans
+    ├── gas_pool_runbook.md      -- GP operator runbook
+    ├── gateway_runbook.md       -- Workstream GW operator runbook
+    ├── sepolia_deployment_runbook.md -- Sepolia deploy + L2 stack runbook
+    ├── audits/                  -- per-area audit reports + security reviews
+    ├── planning/                -- engineering / workstream plans
+    └── ...                      -- design notes, econ analyses, std-dep audit
 ```
 
 Per-file purpose lives in each file's `/-! ... -/` module docstring,
@@ -536,8 +556,9 @@ Concretely:
   through to runtime, never "remove the unwired structure."
 - Deferred items buried in source comments → **fix them** if the
   current scope permits; otherwise lift them into the project debt
-  register (`docs/audits/`, `docs/WORKSTREAM_HISTORY.md`). Never leave
-  in-source TODOs that age out with the surrounding workstream.
+  register (`docs/audits/`, `docs/planning/deferred_work_index.md`).
+  Never leave in-source TODOs that age out with the surrounding
+  workstream.
 - A "first hardware target" or similar capability claim while the path
   is non-functional → **make the path functional**, never qualify the
   claim with a stub-status caveat.
@@ -803,7 +824,7 @@ work units.  Status:
 | LX-M1–M3 | Lex language (3 milestones) | Complete |
 | H | Fault-proof migration | **Complete.**  The terminal step authenticates its action against the log-entry chain AND adjudicates the state transition: `terminateOnSingleStep` calls `executeStepToRootMulti`, which returns a state ROOT computed by folding the step's derived cell writes into the pre-root from a deduplicating pre-root multiproof.  Both the bespoke `stepVMHash` recipe and the chained fold that replaced it are retired.  See the Workstream H section below |
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
-| SB | Batched submission + user-facing L2 AMM | **Complete** (SB.0–SB.12, v0.14.0).  One L1 record per batch `[prevEnd, end)`: structural prev-hash (R5), one chain-link fold per batch over the batch's actions-root SMT (R8; leaf binds the 65-byte signature, R7), revert recovery (R1/R3/R4), game anchored at the batch start (R2), terminal action authenticated by inclusion proof, settlement forwarded game→V2→bridge (R6).  Measured ~239 gas of amortised L1 per action at B=1000 (`gas_pool_runbook.md` §9.5).  `Laws.reserveSwap` (Action 25; Events 23/24) is the user-signed L2 swap priced in-kernel over the reserve actor's live balances, `user = signer` bound at the AuthorityPolicy; the deposit fee-split's seed leg is credited on L2 (`depositWithFee` gained the appended `seedAmount`); the embedded L1 AMM was subsequently EXCISED entirely (Workstream AX below), so the L2 pool is the ONE venue; `knomosis-l1-ingest` materialises deposits opt-in (`--materialise-deposits`, content-derived deposit ids).  The Lean game-model actions-root anchor follow-up is closed (audit-22 MAJOR closed at the model level: `GameState.actionsRoot` + the `actionNotInBatch` terminate guard + `terminate_ok_requires_authentication` + `anchored_challenger_wins`, amendment 1.34); on-chain signature verification at terminate is BUILT on the L1 side (Workstream F-A: `SignInput.sol` rebuilds the §8.8.5 digest, `Secp256k1.sol` resolves the signer's registered key from a registry-cell opening against the pre-root, `ecrecover` must match, and an invalid signature adjudicates as the no-op — the Lean game-model mirror is BUILT too — `applyTransitionWith` carries the verifier, the terminate arm opens the signer's registry cell against the pre-root, and an unauthorised entry adjudicates as the no-op, so F-A is complete on both stacks); the L1→L2 swap-mirror ingest is a deliberate non-goal.  See GENESIS_PLAN §15E.12 + amendments 1.33/1.34/1.35/1.36 |
+| SB | Batched submission + user-facing L2 AMM | **Complete** (SB.0–SB.12, v0.14.0).  One L1 record per batch `[prevEnd, end)`: structural prev-hash (R5), one chain-link fold per batch over the batch's actions-root SMT (R8; leaf binds the 65-byte signature, R7), revert recovery (R1/R3/R4), game anchored at the batch start (R2), terminal action authenticated by inclusion proof, settlement forwarded game→V2→bridge (R6).  Measured ~241 gas of amortised L1 per action at B=1000 (`gas_pool_runbook.md` §9.5).  `Laws.reserveSwap` (Action 25; Events 23/24) is the user-signed L2 swap priced in-kernel over the reserve actor's live balances, `user = signer` bound at the AuthorityPolicy; the deposit fee-split's seed leg is credited on L2 (`depositWithFee` gained the appended `seedAmount`); the embedded L1 AMM was subsequently EXCISED entirely (Workstream AX below), so the L2 pool is the ONE venue; `knomosis-l1-ingest` materialises deposits opt-in (`--materialise-deposits`, content-derived deposit ids).  The Lean game-model actions-root anchor follow-up is closed (audit-22 MAJOR closed at the model level: `GameState.actionsRoot` + the `actionNotInBatch` terminate guard + `terminate_ok_requires_authentication` + `anchored_challenger_wins`, amendment 1.34); on-chain signature verification at terminate is BUILT on the L1 side (Workstream F-A: `SignInput.sol` rebuilds the §8.8.5 digest, `Secp256k1.sol` resolves the signer's registered key from a registry-cell opening against the pre-root, `ecrecover` must match, and an invalid signature adjudicates as the no-op — the Lean game-model mirror is BUILT too — `applyTransitionWith` carries the verifier, the terminate arm opens the signer's registry cell against the pre-root, and an unauthorised entry adjudicates as the no-op, so F-A is complete on both stacks); the L1→L2 swap-mirror ingest is a deliberate non-goal.  See GENESIS_PLAN §15E.12 + amendments 1.33/1.34/1.35/1.36 |
 | AX | L1-AMM excision (one-AMM topology) | **Complete.**  The embedded L1 AMM was excised BEFORE any deployment existed (zero contracts live, no liquidity stranded): `KnomosisBridge.ammSwap`, the `ammReserveEth`/`ammReserveBold` books and their two `BridgeState` commitment segments (EI.7.e is 7-way again), the L2 bridge-attested mirror `Laws.ammSwap`, and every step-VM / Rust arm are gone.  Frozen `Action` index 23 and `Event` tag 21 are PERMANENT HOLES — every decoder on all three stacks refuses them like never-assigned tags, `StepWrites.isAdjudicable(23) = false`, and they must never be reused.  The kill-switch family survives re-pointed at the L2 pool: `emergencyDisableAmm` flips the committed `ammDisabled` flag only (`AmmDisabled(uint256)`), the reserveSwap admission gate requires `ammDisabled = false` (`reserveSwap_inadmissible_while_amm_disabled`), and `reclaimAmmReserves` (24) remains the post-disable sweep.  `ammReservePolicy` is deny-all on the reserve key's own signatures; the reserve moves only as the user swap's counterparty or via the bridge-signed sweep |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
@@ -877,15 +898,15 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 235 | 172 | `lake test` |
-| Rust | ~2 483 | across 13 crates | `cargo test --workspace` |
-| Solidity | ~909 passed | 64 forge suites | `cd solidity && forge test` |
+| Lean | ~3 235 | 170 | `lake test` |
+| Rust | ~2 483 | across 14 crates | `cargo test --workspace` |
+| Solidity | ~920 passed | 65 forge suites | `cd solidity && forge test` |
 
 (The Solidity count dropped from ~997 with the Workstream AX
 excision — the six L1-AMM swap suites and the kind-23 corpus rows
 went with the venue they exercised.)
 
-`forge test` runs **909 passed / 0 failed / 0 skipped** — the
+`forge test` runs **920 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -906,7 +927,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 909 / 0 / 0.  It is not redundant: a bare `lake test`
+reports the same 920 / 0 / 0.  It is not redundant: a bare `lake test`
 runs on the FALLBACK hash, where the hash-dependent Lean cross-stack
 assertions report `SKIPPED` rather than comparing anything.  Under the
 keccak lane that count is **zero** — every corpus is checked against
@@ -1018,7 +1039,9 @@ full catalogue):
   ETH wei-exact + BOLD via the OQ-GP-8b ETH→BOLD oracle + the unified
   composer).
 - `bridge-amm-reserve-policy` — GP.11.6 AMM reserve policy.
-- `crosscheck-amm-swap` — GP.11.7 tri-stack AMM fixture corpus.
+- `crosscheck-amm-getamountout` — GP.11.7 tri-stack `AmmMath.getAmountOut`
+  fixture corpus (the swap-execution corpus went with the Workstream AX
+  L1-AMM excision).
 - `faultproof-amm-commit` — GP.11.8 AMM state-root commitment
   integration + GP.11.10 `ammDisabled` kill-switch mirror (28 cases).
 - `deployments-gas-pool-example` — GP.7.4 end-to-end genesis ratification.
@@ -1029,13 +1052,14 @@ full catalogue):
 
 | Crate | ~Tests | Role |
 |-------|--------|------|
-| `knomosis-host` | ~436 | Network adaptor + fair scheduler |
-| `knomosis-faultproof-observer` | ~386 | Off-chain bisection-game observer |
-| `knomosis-l1-ingest` | ~347 | L1 event watcher + encoder |
-| `knomosis-event-subscribe` | ~219 | Event subscription server |
-| `knomosis-indexer` | ~206 | SQLite event indexer |
+| `knomosis-host` | ~460 | Network adaptor + fair scheduler |
+| `knomosis-faultproof-observer` | ~424 | Off-chain bisection-game observer |
+| `knomosis-l1-ingest` | ~388 | L1 event watcher + encoder |
+| `knomosis-gateway` | ~313 | HTTP/JSON + SSE gateway (Workstream GW) |
+| `knomosis-event-subscribe` | ~223 | Event subscription server |
+| `knomosis-indexer` | ~221 | SQLite event indexer |
 | `knomosis-bench` | ~147 | Transfer-throughput benchmark |
-| `knomosis-storage` | ~100 | Storage abstraction + SQLite |
+| `knomosis-storage` | ~116 | Storage abstraction + SQLite |
 
 **TCB audit.**  `#print axioms` on every kernel theorem returns a
 subset of `[propext, Classical.choice, Quot.sound]`.  No custom
@@ -1247,7 +1271,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 Plan: `docs/planning/ethereum_integration_plan.md`
 
 All seven Lean-side workstreams complete.  Solidity surface:
-11 contracts + 7 libraries in `solidity/`.  Cross-stack: F.1.x
+11 contracts + 16 libraries + 7 interfaces in `solidity/`.  Cross-stack: F.1.x
 equivalence corpus + SC.3 SMT cell-proof corpus + SVC step-VM
 corpus (278 entries / 170 happy).
 

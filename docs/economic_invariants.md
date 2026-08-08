@@ -70,7 +70,8 @@ Why a typeclass rather than a plain predicate?  Two reasons:
 
 1. **Automatic resolution.**  When constructing a `ConservativeLawSet`,
    the `isConservative` field is discharged by typeclass search:
-   each conservative law (currently `transfer`) provides a single
+   each conservative law — `transfer`, `freezeResource`, the
+   dispute-pipeline laws, the local-policy laws — provides an
    `instance`, and downstream deployments compose conservative law
    sets without re-stating the proof.
 
@@ -263,8 +264,8 @@ the kernel.
   *frozen* resource genuinely change a per-actor balance —
   witnessing the necessity of the disjointness hypothesis).
 
-`lake test` runs every suite via the `Tests.lean` driver (~3 040
-total tests across ~150 suites at the current build tag; `lake test`
+`lake test` runs every suite via the `Tests.lean` driver (~3 235
+total tests across 170 suites at the current version; `lake test`
 is the canonical query.  The per-section counts cited above are the
 Phase-2 baselines, with Phase-4-prelude bumps documented in the
 Phase-4-prelude section below) and exits non-zero on any failure; CI

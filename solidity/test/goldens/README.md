@@ -6,18 +6,20 @@ integration plan §10.2.
 
 ## Files
 
-* `block_header_hashes.txt` — 32 lines, each a `0x<hex>` keccak256 of
-  a real Ethereum mainnet block header.  One line per record.  The
-  preimage bytes for each are stored alongside in
-  `block_header_preimages.txt`.
-* `transaction_signatures.txt` — 32 lines, each a `(pk_hex, msg_hex,
-  sig_hex)` triple separated by `\t`.  Each line is a real signed
-  transaction's signing input + ECDSA signature recovered from
-  mainnet history.
-* `rlp_encodings.txt` — 32 lines, each a `(rlp_hex, hash_hex)` pair
-  separated by `\t`, where `rlp_hex` is a real signed mainnet
-  transaction's RLP encoding and `hash_hex` is its keccak256 (the
-  EVM transaction hash).
+* `block_header_hashes.txt` — 32 lines, each a
+  `preimage_hex<TAB>hash_hex` pair: a 512-byte block-header
+  preimage and its keccak256.  One line per record.  There is no
+  separate preimages file — the preimage rides in the first field
+  and is parsed in place by
+  `solidity/test/CrossCheck/Goldens.t.sol`.
+* `transaction_signatures.txt` — 32 lines, each a
+  `pubkey_hex<TAB>msg_hex<TAB>sig_hex` triple: a 64-byte public
+  key, a 32-byte signing input, and a 65-byte ECDSA signature.
+* `rlp_encodings.txt` — 32 lines, each a `rlp_hex<TAB>hash_hex`
+  pair, where `rlp_hex` is a 256-byte transaction RLP encoding and
+  `hash_hex` is its keccak256 (the EVM transaction hash).
+
+Every field in all three files is `0x`-prefixed hex.
 
 ## Provenance discipline
 
@@ -25,14 +27,14 @@ These files are **append-only**: once a record lands, its bytes
 are never altered.  Adding a record requires a new commit; removing
 or rewriting a record is a Genesis-Plan amendment.
 
-Source-attribution comments at the top of each file record:
-
-  * The block range (or transaction-hash list) the records were
-    drawn from.
-  * The off-chain tool used to extract the record (e.g. `cast
-    block <num>`, `geth`'s RLP test vectors).
-  * The git SHA of any third-party verification script that
-    cross-checked the values.
+The files are pure data from byte 0 — the Solidity-side parser
+(`solidity/test/CrossCheck/Goldens.t.sol`) reads every line as a
+record, so the format has no comment support.  Provenance
+therefore lives in the Lean generator
+(`LegalKernel/Test/Bridge/CrossCheck/Goldens.lean`), which records
+the derivation of every record (currently the deterministic
+LCG-from-seed recipe below) and is the only writer of these
+files.
 
 ## Hash-binding-conditional behaviour
 
@@ -41,13 +43,17 @@ Source-attribution comments at the top of each file record:
   available regardless of which Lean-side hash binding is linked.
 * The Lean-side asserter (`LegalKernel/Test/Bridge/CrossCheck/
   Goldens.lean`) gates byte-equivalence on
-  `Bridge.HashAdaptor.isKeccak256Linked`.  Without the production
-  binding, the Lean fallback (FNV-1a-64 padded to 32 bytes) cannot
-  reproduce keccak256 outputs, so the per-record assertion is
-  skipped with an explicit log line.  CI's
-  `cross-stack-equivalence` job fails if the skip is taken in a
-  deployment context — production runs must link the keccak256
-  binding before counting goldens as "passing".
+  `Bridge.isKeccak256Linked` (`LegalKernel/Bridge/HashAdaptor.lean`).
+  Without
+  the production binding, the Lean fallback (FNV-1a-64 padded to
+  32 bytes) cannot reproduce keccak256 outputs, so the per-record
+  assertion is skipped with an explicit log line.  The keccak gate
+  is CI's `keccak-crossstack` job
+  (`.github/workflows/ci-keccak-crossstack.yml`, driven by
+  `scripts/verify_keccak_crossstack.sh`), which links the
+  production binding and asserts the link took, so the gated
+  checks run there instead of skipping — production runs must link
+  the keccak256 binding before counting goldens as "passing".
 
 ## Synthetic placeholder corpus
 

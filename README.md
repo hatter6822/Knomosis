@@ -38,7 +38,7 @@
   <a href="https://github.com/hatter6822/Knomosis/actions/workflows/ci-solidity.yml">
     <img alt="Solidity CI" src="https://img.shields.io/github/actions/workflow/status/hatter6822/Knomosis/ci-solidity.yml?branch=main&label=Solidity%20CI" />
   </a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.14.0-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.14.1-blue" />
   <img alt="Lean" src="https://img.shields.io/badge/Lean-4.29.1-10b981" />
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-informational" />
 </p>
@@ -59,7 +59,7 @@ The canonical design specification is [`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN
 
 | Attribute | Value |
 |---|---|
-| Version | `v0.14.0` |
+| Version | `v0.14.1` |
 | L2 chain id (EIP-155) | `8357` production · `83572` test (add-network via the gateway `/rpc` shim; wallets sign L2 actions against it) |
 | Lean toolchain | `v4.29.1` (pinned in `lean-toolchain`) |
 | TCB core | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` |
@@ -119,8 +119,10 @@ lake exe stub_audit
 lake exe naming_audit
 lake exe deferral_audit
 lake exe mock_import_audit
+lake exe api_stability_audit
 lake exe lex_lint
 lake exe lex_codegen --check
+lake exe lex_codegen --canonical --check
 python3 scripts/regenerate_codemaps.py
 ```
 
@@ -189,14 +191,17 @@ Knomosis isolates two non-Lean cryptographic/runtime assumptions behind opaque d
 1. `Authority.Crypto.Verify`: the configured signature system is EUF-CMA secure.
 2. `Runtime.Hash.hashBytes`: the production hash adapter is collision-resistant.
 
-Kernel theorems and replay guarantees are conditional on these assumptions.
+Three further deployment-supplied opaques follow the same pattern for the L1 attestation surface (`l1FaultProofVerifier`, `l1GasReceiptVerifier`, `l1EthBoldRateOracle`) — none is an axiom, so `#print axioms` on kernel theorems stays at Lean's three built-ins. Kernel theorems and replay guarantees are conditional on these assumptions.
 
 ## Documentation map
 
 - Project blueprint: [`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN.md)
+- Developer handbook (setup, inner loop, gates, PR path): [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+- On-disk frame formats + CLI ABI: [`docs/abi.md`](docs/abi.md)
 - Ethereum integration plan: [`docs/planning/ethereum_integration_plan.md`](docs/planning/ethereum_integration_plan.md)
 - Fault-proof migration plan: [`docs/planning/fault_proof_migration_plan.md`](docs/planning/fault_proof_migration_plan.md)
 - Workstream-G amendment plan: [`docs/planning/ethereum_workstream_g_plan.md`](docs/planning/ethereum_workstream_g_plan.md)
+- Operator runbooks: [`docs/fault_proof_runbook.md`](docs/fault_proof_runbook.md), [`docs/gas_pool_runbook.md`](docs/gas_pool_runbook.md), [`docs/gateway_runbook.md`](docs/gateway_runbook.md), [`docs/sepolia_deployment_runbook.md`](docs/sepolia_deployment_runbook.md)
 - Runtime architecture and operations: [`runtime/README.md`](runtime/README.md)
 - Solidity package notes: [`solidity/README.md`](solidity/README.md)
 

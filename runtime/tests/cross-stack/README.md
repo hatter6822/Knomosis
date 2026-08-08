@@ -67,6 +67,7 @@ does not parse them.  Byte-equality is the contract.
 | `l1_ingest.cxsf` | `L1Ingest` | `knomosis-l1-ingest`'s `examples/gen_ingest_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack.rs` |
 | `l1_ingest_fee_split.cxsf` | `L1IngestFeeSplit` | `knomosis-l1-ingest`'s `examples/gen_fee_split_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack_fee_split.rs` |
 | `l1_ingest_bold.cxsf` | `L1IngestBold` | `LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean` (Lean-authored, written by `lake test`) | `knomosis-l1-ingest`'s `tests/cross_stack_bold.rs` |
+| `method_selectors.json` | — (JSON, not `.cxsf`; a shared cross-stack artifact all the same) | `solidity/scripts/export_method_selectors.py` (from the compiled Solidity artifacts) | `knomosis-faultproof-observer`'s `src/submitter.rs` ABI-selector pin |
 
 The retired `amm_swap.cxsf` corpus (`FixtureKind` tag 8, the excised
 L1-AMM mirror's CBE differential) left with the L1 embedded AMM; its
@@ -120,15 +121,12 @@ implementing PR.  See
     committed file's drift is gated by `lake test`'s verify-mode
     re-write (the Lean-side fixture authority), not a Rust `--check`
     example.
-  * **`AmmSwap`** (GP.11.7) — 71 records (54-entry reserve × direction
-    × fraction × slippage grid + 17 boundary cases).  Each record
-    carries the five `Action.ammSwap` fields (frozen index 23), the
-    Lean `Encoding.Action.encode` bytes (`expectedCbe`), the
-    `AmmMath.getAmountOut` result (`expectedOut`), the pre-swap reserves,
-    and the 30-bps fee.  Lean-authored
-    (`LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`), so the expected
-    bytes / amounts are produced by Lean and independently recomputed by
-    the Rust consumer and the Solidity `AmmMath.sol` mirror.
+  * **`AmmSwap`** (GP.11.7; RETIRED) — the excised L1-AMM mirror's
+    71-record CBE + `getAmountOut` differential.  The corpus, its
+    Lean generator, and its Rust / Solidity consumers left with the
+    L1 embedded AMM (Workstream AX); on-disk tag 8 is a permanent
+    hole that `FixtureKind::from_tag` decodes as `Custom(8)`,
+    exactly like a never-assigned tag.
 
 A companion **Lean-sourced** differential ships as a JSON fixture
 (NOT a `.cxsf`) under
@@ -164,7 +162,7 @@ use knomosis_cross_stack::{FixtureFile, FixtureKind};
 fn cross_stack_keccak256() {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../tests/cross-stack/keccak256_inputs.cxsf"
+        "/../tests/cross-stack/keccak256.cxsf"
     );
     let fixture = FixtureFile::load(path).expect("fixture present");
     assert!(matches!(fixture.kind(), FixtureKind::Hash));

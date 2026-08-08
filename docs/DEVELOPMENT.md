@@ -71,7 +71,7 @@ topic:
 
 | Attribute | Value |
 |-----------|-------|
-| Project version | `v0.8.4` (Lean + Rust in lockstep; `kernelVersion` in `LegalKernel.lean`) |
+| Project version | `v0.14.1` (Lean + Rust in lockstep; `kernelVersion` in `LegalKernel.lean`) |
 | Lean toolchain | `leanprover/lean4:v4.29.1` (pinned in [`../lean-toolchain`](../lean-toolchain)) |
 | Rust toolchain | stable **1.97** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.97`) |
 | Solidity toolchain | Foundry **v1.7.1** + solc **0.8.36** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
@@ -90,9 +90,9 @@ source ~/.elan/env            # put lean/lake on PATH for the current shell
 **The three canonical "did I break anything?" queries:**
 
 ```bash
-lake test                                   # Lean — ~3 050 tests across ~150 suites
-(cd runtime  && cargo test --workspace)     # Rust — ~1 960 tests across 11 crates
-(cd solidity && forge test)                 # Solidity — ~867 tests across 58 suites
+lake test                                   # Lean — ~3 235 tests across 170 suites
+(cd runtime  && cargo test --workspace)     # Rust — ~2 483 tests across the 14-crate workspace
+(cd solidity && forge test)                 # Solidity — ~920 tests across 65 suites
 ```
 
 ## 3. Repository topology
@@ -121,12 +121,12 @@ Solidity mirror (L1 contracts)          Rust mirror (host runtime)
 | `Deployments/` | Lean | Worked example deployments |
 | `Tools/` | Lean | Non-Lex audit binaries + shared `Tools.Common` library |
 | `Main.lean`, `Replay.lean`, `Tests.lean` | Lean | The `knomosis` CLI, the `knomosis-replay` audit binary, the `lake test` driver |
-| `runtime/` | Rust | 11-crate Cargo workspace (host runtime + crypto adaptors + observers) |
-| `solidity/` | Solidity | 11 contracts + 7 libraries + 7 interfaces (Foundry project) |
+| `runtime/` | Rust | 14-crate Cargo workspace (host runtime + crypto adaptors + observers + gateway), plus the separate nightly-only `fuzz/` workspace |
+| `solidity/` | Solidity | 11 contracts + 16 libraries + 7 interfaces (Foundry project) |
 | `scripts/` | Bash/Python | `setup.sh`, codemap regen, cross-stack orchestration, economic simulation |
 | `codemaps/` | JSON | Generated per-language navigation maps (a CI gate) |
 | `docs/` | Markdown | The Genesis Plan, planning docs, audits, runbooks, and this guide |
-| `.github/workflows/` | YAML | Five CI workflows (one per stack + two cross-stack) |
+| `.github/workflows/` | YAML | Ten CI workflows (per-stack gates + cross-stack, fuzz, supply-chain, and release lanes — see [§17](#17-continuous-integration-reference)) |
 
 The per-file purpose is documented in each file's own `/-! … -/` module
 docstring; it is intentionally **not** duplicated across documents.
@@ -169,7 +169,8 @@ crates against `Cargo.lock`. An outbound network policy must permit
 **For a public-testnet deployment ([§10.5](#105-deploying-to-a-public-testnet-sepolia)).**
 The build/test stacks above need nothing extra, but *broadcasting* to Sepolia
 additionally requires a **funded Sepolia deployer EOA** private key (~0.5
-test-ETH covers the nine deploys), a **Sepolia RPC endpoint**
+test-ETH covers the nine deploys — ≈16.5M gas total — at 30 gwei), a
+**Sepolia RPC endpoint**
 (`SEPOLIA_RPC_URL`), and — for source-verification — an **Etherscan API key**
 (`ETHERSCAN_API_KEY`). See [§5.8](#58-deploy-time-environment-variables) for the
 env vars and `docs/sepolia_deployment_runbook.md` for the full procedure.
@@ -230,7 +231,7 @@ trust story:
    unaffected; only the anvil-backed `make devnet` / `make deploy-local` need
    a newer host — use `make deploy-sepolia-dryrun` / `forge script`
    (in-memory) otherwise.
-6. Records the binary-integrity snapshot for step 2's future fast-paths.
+8. Records the binary-integrity snapshot for step 2's future fast-paths.
 
 Every pinned URL/version has a matching SHA-256 constant; **bumping any version
 requires recomputing its checksum in the same commit** (the regeneration
@@ -388,8 +389,10 @@ lake exe stub_audit           # placeholder-stub detection
 lake exe naming_audit         # content-name discipline (no provenance tokens)
 lake exe deferral_audit       # no-deferrals policy
 lake exe mock_import_audit    # no Test/* import in production modules
+lake exe api_stability_audit  # term-level API pins must be type-ascribed
 lake exe lex_lint             # Lex action-index registry + sidecar discipline
 lake exe lex_codegen --check  # Lex codegen-consistency (committed == generated)
+lake exe lex_codegen --canonical --check  # Lex canonical-manifest consistency
 python3 scripts/regenerate_codemaps.py   # regenerate navigation maps (CI gate)
 ```
 
@@ -401,8 +404,10 @@ python3 scripts/regenerate_codemaps.py   # regenerate navigation maps (CI gate)
 | `naming_audit` | "Names describe content, never provenance." Scans file names + declaration identifiers for forbidden tokens (`wu1`, `phase0`, `audit`, `f02`, `_v2`, `_old`, `_tmp`, `_todo`, `claude_`, `session_`, …). | A provenance/process token in any identifier or filename. | `tools/naming_allowlist.txt` |
 | `deferral_audit` | No-deferrals policy: ship the proof or don't ship the theorem. Scans docstrings/comments for `DEFERRED`, `PARTIAL`, `TODO:`, `FIXME:`, `not yet provable`, etc. | Any deferral marker under `LegalKernel/` or `Tools/`. | **none** — fix it or rewrite the comment |
 | `mock_import_audit` | No production module imports a `*.Test.*` module. | `import LegalKernel.Test.*` (etc.) from a production root. | — |
+| `api_stability_audit` | Every test-module term-level API pin (`let _proof : T := @theoremName`) carries a full type ascription — an unascribed pin cannot catch a signature change, which is the one job a pin exists for. | A new unascribed `let _ := @theoremName` pin. | `tools/api_stability_allowlist.txt` (frozen historical pins; must never be extended) |
 | `lex_lint` | The frozen Lex action-index registry (`Lex/IndexRegistry.txt`) is well-formed, append-only, strictly increasing, and consistent with the codegen-input sidecars under `Lex/Inputs/`. | Registry corruption or a sidecar/registry mismatch. | — |
 | `lex_codegen --check` | The committed cross-module artefacts (e.g. `Authority/Action.lean`) match what codegen would regenerate, byte-for-byte. | Editing a generated fence by hand, or forgetting to re-run `lake exe lex_codegen`. | — |
+| `lex_codegen --canonical --check` | The committed canonical manifest (`Lex/Inputs/canonical_manifest.txt`) is consistent with the registry + sidecars. | A registry/sidecar change without a `--canonical` regeneration. | — |
 | codemap gate | `codemaps/{lean,solidity,rust}/codemap.json` are in sync with tracked source. | A source change without a `regenerate_codemaps.py` re-run. | — |
 
 > **On allowlists.** `stub_audit` and `naming_audit` each read an allowlist for
@@ -440,7 +445,7 @@ Run these gates from `runtime/` before pushing any Rust change — they mirror
 cd runtime
 cargo fmt --all -- --check                              # style gate (run first)
 cargo build --workspace --all-targets --locked          # compile gate
-cargo test --workspace --locked                          # ~1 960 tests, 11 crates
+cargo test --workspace --locked                          # ~2 483 tests, 14 crates
 # Cross-stack fixture drift — CI runs this between test and clippy; required
 # whenever you touch the GP.6.1 fee-split encoder or its generator:
 cargo run --example gen_fee_split_fixtures --locked -- --check tests/cross-stack/l1_ingest_fee_split.cxsf
@@ -469,7 +474,7 @@ commit the resulting `.cxsf` files) — see `runtime/README.md`.
 
 ## 8. The Solidity workflow (`solidity/`)
 
-The Solidity tree is the **L1 mirror** of the kernel: 11 immutable contracts, 7
+The Solidity tree is the **L1 mirror** of the kernel: 11 immutable contracts, 16
 libraries, 7 interfaces. Its deep-dive is
 [`../solidity/README.md`](../solidity/README.md); design rationale is in
 [`planning/ethereum_integration_plan.md`](planning/ethereum_integration_plan.md)
@@ -479,7 +484,7 @@ and the fault-proof / SMT / step-VM plans.
 cd solidity
 ./scripts/vendor-deps.sh        # one-time: vendor OZ v5.0.2 + forge-std v1.9.4
 forge build
-forge test                      # ~867 tests across 58 suites
+forge test                      # ~920 tests across 65 suites
 make test-cross-stack           # CrossCheck/ only (Lean ↔ Solidity equivalence)
 make audit-caps                 # GP.5.2 constitutional fee-split-cap gate
 make audit-caps-selftest        # proves the cap gate actually trips
@@ -613,7 +618,7 @@ The on-disk frame formats and the full CLI ABI are specified in
 unlike the F.3 `TestnetAcceptance.s.sol`, which uses the `test/utils/Deployer`
 CREATE3 *bundler* (a 42 KB harness over EIP-170 that needs
 `--disable-code-size-limit`). Every production contract is under the
-24 576-byte cap (largest: `KnomosisBridge`, 17 195 B), so `DeploySepolia` needs
+24 576-byte cap (largest: `KnomosisStepVMRoot`, 20 163 B), so `DeploySepolia` needs
 no code-size accommodation against a real RPC. It breaks the two immutable
 constructor cycles with plain-nonce CREATE prediction, verifies the post-deploy
 invariants (`assertConsistent()` on both clusters, `bridge.migration() ==
@@ -720,7 +725,8 @@ those two files.
   `propext`, `Classical.choice`, `Quot.sound`. `#print axioms` on any kernel
   theorem must return a subset of those three. Non-Lean assumptions are exposed
   as `opaque` declarations (`Verify`, `hashBytes`, `l1FaultProofVerifier`,
-  `l1GasReceiptVerifier`), never as axioms, so the axiom set stays pristine.
+  `l1GasReceiptVerifier`, `l1EthBoldRateOracle`), never as axioms, so the
+  axiom set stays pristine.
   Adding an `axiom` is a Genesis-Plan amendment and triggers the two-reviewer
   gate.
 
@@ -962,7 +968,7 @@ The Lean and Rust versions move **in lockstep to the same value in every PR**:
 | README banner | [`../README.md`](../README.md) — the version badge + the "at a glance" table |
 
 After a Rust bump, `Cargo.lock` regenerates automatically and **must be
-committed**. Current version: `v0.7.1` (Lean + Rust).
+committed**. Current version: `v0.14.1` (Lean + Rust).
 
 ## 15. Git & branch workflow
 
@@ -984,8 +990,9 @@ committed**. Current version: `v0.7.1` (Lean + Rust).
 
 > **Pre-commit checklist (Lean change):** `lake build LegalKernel.<Module>` →
 > `lake build` (no warnings) → `lake test` → `count_sorries` + `tcb_audit` +
-> `naming_audit` + `deferral_audit` (+ `lex_lint` / `lex_codegen --check` for
-> Lex) → `regenerate_codemaps.py` → stage → name-discipline grep → commit.
+> `naming_audit` + `deferral_audit` + `api_stability_audit` +
+> `mock_import_audit` (+ `lex_lint` / `lex_codegen --check` for Lex) →
+> `regenerate_codemaps.py` → stage → name-discipline grep → commit.
 
 ## 16. Pull requests & code review
 
@@ -1009,17 +1016,24 @@ committed**. Current version: `v0.7.1` (Lean + Rust).
 
 ## 17. Continuous integration reference
 
-Five workflows live in [`../.github/workflows/`](../.github/workflows/). The
+Ten workflows live in [`../.github/workflows/`](../.github/workflows/). The
 single-stack workflows are **path-filtered**, so a PR triggers only the stacks it
-touches (the Lean `ci.yml` always runs).
+touches (the Lean `ci.yml` always runs); the two link-proof lanes and the
+keccak cross-stack lane also run on a daily schedule, the fuzz lane weekly,
+and all four on `workflow_dispatch`.
 
 | Workflow | Triggers on | Gates |
 |----------|-------------|-------|
-| `ci.yml` | every PR (always) | `lake build` (full project) · strict-warnings gate · `lake test` · F-1/F-2 fail-closed assertion · `count_sorries` · `tcb_audit` · `stub_audit` · `lex_lint` · `lex_codegen --check` · `naming_audit` · `deferral_audit` · codemap-sync · `mock_import_audit` |
-| `ci-rust.yml` | `runtime/**` (+ shared fixture) | `cargo fmt --check` · `cargo build --workspace --all-targets --locked` · `cargo test --workspace --locked` · fee-split fixture drift · `cargo clippy -- -D warnings` |
-| `ci-solidity.yml` | `solidity/**` (+ gas runbook) | **caps-audit job:** `make audit-caps` + self-test + gas-gate self-tests + runbook sync (toolchain-free, fast). **forge job:** vendor deps · `forge build` · `forge test` (CI profile, fuzz 1000) · `make snapshot-gas-check` |
-| `ci-keccak-crossstack.yml` | hash-interface + cross-stack surface | Links the real keccak adaptor and runs the Lean↔EVM `keccak256` byte-equivalence corpora (all three toolchains). |
-| `ci-verify-secp256k1.yml` | verifier surface | Proves linking the real secp256k1 adaptor flips `verify-check` to exit 0 with the production identifier. |
+| `ci.yml` | every PR (always) | `lake build` (full project) · strict-warnings gate · `lake test` · F-1/F-2 fail-closed assertion · `count_sorries` · `tcb_audit` · `stub_audit` · `lex_lint` · `lex_codegen --check` · `lex_codegen --canonical --check` · `api_stability_audit` · `naming_audit` · `deferral_audit` · codemap-sync · `mock_import_audit` |
+| `ci-rust.yml` | `runtime/**` (+ shared fixtures) | `cargo fmt --check` · `cargo build --workspace --all-targets --locked` · `cargo test --workspace --locked` · fee-split fixture drift · `cargo clippy -- -D warnings` |
+| `ci-fuzz.yml` | `runtime/**` + weekly schedule | Nightly-toolchain libFuzzer lane: fuzz-lockfile freshness · `cargo +nightly fuzz build` (all targets, the API-drift guard) · per-target smoke runs. |
+| `ci-cargo-deny.yml` | `runtime/**` manifests / lockfiles / `deny.toml` | `cargo deny check` on **both** the stable workspace and the `fuzz/` workspace (licences, advisories, bans, sources). |
+| `ci-solidity.yml` | `solidity/**` (+ gas runbook) | **caps-audit job:** `make audit-caps` + self-test + gas-gate self-tests + runbook sync (toolchain-free, fast). **forge job:** vendor deps · `forge build` · Solidity strict-warnings gate · `forge test` (CI profile, fuzz 1000) · method-selector cross-stack pin · `make snapshot-gas-check` |
+| `ci-gateway.yml` | `docs/api/**` + gateway crate | Redocly lint of the gateway OpenAPI contract (`docs/api/gateway.openapi.yaml`) — the BFF-facing protocol gate. (The gateway's Rust gates ride `ci-rust.yml`.) |
+| `ci-keccak-crossstack.yml` | hash-interface + cross-stack surface, daily | Links the real keccak adaptor and runs the Lean↔EVM `keccak256` byte-equivalence corpora (all three toolchains). |
+| `ci-verify-secp256k1.yml` | verifier surface, daily | Proves linking the real secp256k1 adaptor flips `verify-check` to exit 0 with the production identifier + functional self-test. |
+| `ci-hash-keccak256-link.yml` | hash-adaptor surface, daily | Proves linking the real keccak256 hash adaptor flips `hash-check` to exit 0, and records/verifies the staticlib SHA-256 pin. |
+| `ci-release-gate.yml` | version tags (`v*`) + dispatch | F-1/F-2 release gate: builds ONE `knomosis` with BOTH production adaptors linked and requires `hash-check` AND `verify-check` to pass on that single binary. |
 
 Operational notes:
 
@@ -1046,11 +1060,13 @@ each isolated behind an `opaque` declaration (**not** an axiom), so
 2. **`Runtime.Hash.hashBytes`** — the production hash function (BLAKE3 via
    `@[extern]`; FNV-1a-64 fallback for tests) is collision-resistant.
 
-Two further deployment-supplied opaques follow the same pattern for the L1
+Three further deployment-supplied opaques follow the same pattern for the L1
 attestation surface: `l1FaultProofVerifier`
 (`LegalKernel/FaultProof/Witness.lean`) backs the fault-proof game's truth
-oracle, and `l1GasReceiptVerifier` (`LegalKernel/Bridge/ReceiptVerifiedClaim.lean`)
-backs receipt-verified sequencer claims. `#print axioms` confirms each
+oracle, and `l1GasReceiptVerifier` + `l1EthBoldRateOracle`
+(`LegalKernel/Bridge/ReceiptVerifiedClaim.lean`) back receipt-verified
+sequencer claims (the latter is the OQ-GP-8b ETH→BOLD conversion-rate
+oracle for the BOLD leg). `#print axioms` confirms each
 `opaque` is a definitional black box, not an axiom. Kernel theorems and replay
 guarantees are *conditional* on these assumptions — and on nothing else.
 
@@ -1099,10 +1115,11 @@ knomosis/
 ├── Deployments/Examples/    worked example deployments
 ├── Tools/                   audit-binary libraries + Tools.Common
 ├── solidity/                Foundry L1 mirror (contracts, libs, interfaces, tests)
-├── runtime/                 Rust host-runtime Cargo workspace (11 crates)
+├── runtime/                 Rust host-runtime Cargo workspace (14 crates
+│                            + the separate nightly-only fuzz/ workspace)
 ├── scripts/                 setup.sh, codemap regen, cross-stack scripts, econ sim
 ├── codemaps/                generated per-language navigation maps (CI gate)
-├── .github/workflows/       five CI workflows
+├── .github/workflows/       ten CI workflows
 ├── .github/CODEOWNERS       review routing (TCB two-reviewer surface)
 ├── .claude/                 SessionStart hook + settings (web/remote provisioning)
 └── docs/                    GENESIS_PLAN.md, abi.md, planning/, audits/, runbooks,

@@ -240,14 +240,19 @@ Encoded as the concatenation of:
 
 ## 5. The `Action` CBE Encoding
 
-The `Action` type has 26 constructors, encoded by their inductive
-index (frozen — no phase will renumber existing constructors).
-Phase 5 ships indices 0..7; Phase 6 appends 8..11; Workstream B
-appends 12; Workstream C appends 13..14; Workstream LP (actor-
-scoped policies) appends 15..16; Workstream H (fault-proof
-migration) appends 17..18; Workstream GP (unified gas pool /
-budgets / AMM) appends 19..24; Workstream SB (batched submission +
-the user-facing L2 AMM) appends 25.
+The `Action` type has 25 constructors occupying 26 frozen tag
+slots 0..25.  The wire tag is `Action.tag`
+(`LegalKernel/Authority/LocalPolicySemantics.lean`), mirrored
+constructor-for-constructor by the CBE encoder — NOT the inductive
+position (no phase will renumber existing constructors): tag 23
+(the excised L1-AMM `ammSwap` mirror) is a permanent hole, so the
+last two constructors sit at inductive positions 23 / 24 while
+carrying tags 24 / 25.  Phase 5 ships tags 0..7; Phase 6 appends
+8..11; Workstream B appends 12; Workstream C appends 13..14;
+Workstream LP (actor-scoped policies) appends 15..16; Workstream H
+(fault-proof migration) appends 17..18; Workstream GP (unified gas
+pool / budgets / AMM) appends 19..24; Workstream SB (batched
+submission + the user-facing L2 AMM) appends 25.
 
 ```
 Action.transfer            := 0
@@ -289,8 +294,9 @@ Action.transfer r sender receiver amount  →
 ```
 
 (The tag and the three identifier fields are 9-byte CBE uints; the
-value-carrying `amount` is a 17-byte CBE amount, so the total
-transfer encoding is `9 * 4 + 17 = 53` bytes.)
+value-carrying `amount` is a 33-byte CBE amount — the `cbeTagAmount`
+type byte `0x06` plus 32 little-endian body bytes — so the total
+transfer encoding is `9 * 4 + 33 = 69` bytes.)
 
 The full per-constructor table is in
 `LegalKernel/Encoding/Action.lean`.
@@ -449,9 +455,10 @@ The full per-constructor table for the dispute types is in
 ### 5.3 Phase-6 + Workstream-C + Workstream-LP + Workstream-H `Event` Inductive Extension
 
 The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 16
-constructors at frozen indices 0..15 (and is further extended to
-23 by Workstream GP — indices 16..22, documented in the
-"Workstream-GP `Event` Inductive Extension" subsection below):
+constructors at frozen indices 0..15; the tag space now runs 0..24
+(25 slots) — Workstream GP appends 16..22 (21 since retired) and
+Workstream SB appends 23..24, documented in the "Workstream-GP
+`Event` Inductive Extension" subsection below:
 
 ```
 Event.balanceChanged       := 0
@@ -485,8 +492,10 @@ unrecognised by Phase-5-only consumers.
 
 ### 5.4 Workstream-GP `Event` Inductive Extension
 
-The unified-gas-pool workstream (§15E) appends seven more `Event`
-constructors at frozen indices 16..22:
+The unified-gas-pool workstream (§15E) appends six live `Event`
+constructors at frozen indices 16..20 / 22 plus the since-retired
+21 (the excised L1-AMM mirror's `ammSwapExecuted`); Workstream SB
+later appends 23..24:
 
 ```
 Event.depositWithFeeCredited     := 16 -- GP §15E v1.0 (fee-split deposit)
@@ -552,8 +561,8 @@ precondition).
 These tags carry no change to the §11 EVENT-frame layout — they
 emit at the existing 9-byte CBE tag head (§11.1) and stream
 additively.  The Rust-side streamer's tag registry
-(`runtime/knomosis-event-subscribe/src/event_type.rs`) mirrors all
-seven.
+(`runtime/knomosis-event-subscribe/src/event_type.rs`) mirrors the
+full 0..24 tag space (`KNOWN_EVENT_TAG_COUNT = 25`).
 
 ### 5.5 Phase-6 Incentive-Integration Amendment Runtime Structures
 
@@ -606,13 +615,17 @@ LocalPolicy := { clauses : List LocalPolicyClause }
 LocalPolicy.encode lp  →  CBE-array of CBE-encode(clauses[i])
 ```
 
-The `LocalPolicyClause` inductive has 3 frozen-index variants
-(LP §3.6):
+The `LocalPolicyClause` inductive has 4 frozen-index variants —
+the three restrictive MVP clauses (LP §3.6) plus the GP.3.4
+positive `allowTopUpFrom` clause (consulted against the
+*recipient*'s policy by the delegated top-up's default-deny
+consent gate, not against the signer's):
 
 ```
 LocalPolicyClause.denyTags          := tag 0
 LocalPolicyClause.requireRecipientIn := tag 1
 LocalPolicyClause.capAmount         := tag 2
+LocalPolicyClause.allowTopUpFrom    := tag 3   -- GP.3.4
 ```
 
 Per-clause field encodings:
@@ -626,6 +639,9 @@ LocalPolicyClause.requireRecipientIn r allowed  →
 
 LocalPolicyClause.capAmount r max  →
   CBE-uint(2) ++ CBE-uint(r) ++ CBE-uint(max)
+
+LocalPolicyClause.allowTopUpFrom delegates  →
+  CBE-uint(3) ++ CBE-array(CBE-uint(d) for d in delegates)
 ```
 
 The `ExtendedState.localPolicies` field is encoded as a sorted-
@@ -638,7 +654,7 @@ by the post-LP `ExtendedState.decode`; operators upgrade by
 re-snapshotting under the post-LP build (see Workstream-LP plan
 §4.5 / §12.4).
 
-#### 5.4.1 DoS bounds (frozen)
+#### 5.6.1 DoS bounds (frozen)
 
 ```
 MAX_CLAUSES_PER_POLICY      := 64
@@ -671,7 +687,7 @@ gate.
 > drift apart, because the constant is what the theorem
 > concludes.
 
-#### 5.4.2 Admissibility extension (LP.7)
+#### 5.6.2 Admissibility extension (LP.7)
 
 The `Admissible` predicate gains a 5th top-level conjunct (the
 6th condition in §8.2):
@@ -694,7 +710,7 @@ prevention exemption.  Actors with no declared policy see no
 admissibility narrowing (the `LocalPolicy.empty.permits` is
 vacuously `True`).
 
-#### 5.4.3 Future Solidity-port shape
+#### 5.6.3 Future Solidity-port shape
 
 The Solidity-side mirror of LP is documented in
 `solidity/README.md`'s "Future: actor-scoped policies" section.
@@ -790,12 +806,19 @@ sig    := (r ‖ s ‖ v)          -- 65 bytes: 32 + 32 + 1
 
 ## 8. The Runtime CLI (`knomosis`) ABI
 
-The `knomosis` binary multiplexes eleven subcommands plus a `help`
+The `knomosis` binary multiplexes fifteen subcommands plus a `help`
 alias.  The canonical list is the binary's own `knomosis help` output
 (`Main.lean`, `cmdHelp`); this section must stay in sync with it:
 
 ```
 knomosis [GLOBAL_FLAGS] info
+knomosis hash-check
+      (deployment gate: exit 0 iff a production-grade hash
+       is linked; exit 1 on the FNV-1a-64 fallback — F-1)
+knomosis verify-check
+      (deployment gate: exit 0 iff a production-grade
+       signature verifier is linked; exit 1 on the
+       Lean-opaque fallback — F-2)
 knomosis [GLOBAL_FLAGS] process                 LOG IN [OUT]
 knomosis [GLOBAL_FLAGS] replay                  LOG
 knomosis [GLOBAL_FLAGS] bootstrap               LOG
@@ -803,7 +826,9 @@ knomosis [GLOBAL_FLAGS] snapshot                LOG SNAP_PATH
 knomosis [GLOBAL_FLAGS] withdrawal-proof        SNAP_PATH ID
 knomosis [GLOBAL_FLAGS] replay-up-to            LOG IDX
 knomosis [GLOBAL_FLAGS] export-cell-proofs      LOG IDX SIGNER
-knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX
+knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX [PREV_END END]
+knomosis [GLOBAL_FLAGS] export-batch            LOG PREV_END END
+knomosis [GLOBAL_FLAGS] export-action-proof     LOG PREV_END END IDX
 knomosis [GLOBAL_FLAGS] extract-events          --log LOG
 knomosis gas-pool-demo
 knomosis help
@@ -835,7 +860,7 @@ before subcommand dispatch):
                                (`ByteArray.empty`) for back-compat
                                with single-deployment dev mode;
                                `knomosis-replay` REFUSES to start
-                               without this flag (see below).
+                               without this flag (see §9).
 
 The remaining global flags configure the GP budget / gas-pool /
 refund-rate machinery.  Each non-default value is persisted to a
@@ -868,6 +893,22 @@ config error rather than an opaque post-state-hash mismatch.
         Supplying either refund-rate flag enables refunds at that leg;
         a missing rate defaults to 0.  Persisted to the
         `<LOG>.refundratecfg` sidecar.
+  * `--amm-reserve` (Workstream SB / GP.11.6) — enable the
+        AMM-reserve genesis wiring: declares `ammReservePolicy` for
+        `ammReserveActor` (ActorId 3) in the genesis `localPolicies`
+        AND intersects `ammReserveAuthorityPolicy` plus
+        `reserveSwapBindingPolicy` into the deployment policy, so the
+        reserve key can sign nothing (it is a pure counterparty) and a
+        user-signed `reserveSwap` (25) must name its own signer as
+        `user` and the canonical reserve as its counterparty.  Off by
+        default (the genesis is unchanged).  Unlike the three flag
+        families above it has NO persistence sidecar yet, and the
+        genesis `localPolicies` participate in every post-state hash —
+        so replaying a log produced under it must re-supply
+        `--amm-reserve` explicitly, and a forgotten flag surfaces as a
+        post-state-hash mismatch rather than a clear config error.
+        The sidecar gap is registered in
+        `docs/planning/deferred_work_index.md`.
 
 Argument semantics:
 
@@ -882,8 +923,14 @@ Argument semantics:
   * `ID`         — a `WithdrawalId` (Nat) to look up in the
                    snapshot's `bridge.pending` map (Workstream D.2).
   * `IDX`        — a `LogIndex` (Nat) for `replay-up-to`,
-                   `export-cell-proofs`, and `export-terminate-bundle`.
+                   `export-cell-proofs`, `export-terminate-bundle`,
+                   and `export-action-proof`.
   * `SIGNER`     — an `ActorId` (Nat) for `export-cell-proofs`.
+  * `PREV_END` / `END` — the batch bounds: the batch covers log
+                   entries `[PREV_END, END)` (Workstream SB).  Used
+                   by `export-batch`, `export-action-proof`, and the
+                   optional 4-arg batch-binding arity of
+                   `export-terminate-bundle`.
 
 Exit codes:
 
@@ -965,11 +1012,19 @@ the wire format expected by `KnomosisBridge.sol` (Workstream E.1.3),
 which is a concatenation of `leaf || siblings[0] || siblings[1]
 || ... || siblings[63]` plus a fixed-width index encoding.
 
+## 9. The Audit CLI (`knomosis-replay`) ABI
+
+The `knomosis-replay` audit binary (`Replay.lean` /
+`LegalKernel/Runtime/ReplayCli.lean`) re-executes a log against the
+genesis (or a snapshot's) starting state and prints the final state
+hash:
+
 ```
-knomosis-replay [--allow-fallback-hash] --deployment-id <hex> LOG [SNAPSHOT]
+knomosis-replay [--allow-fallback-hash] --deployment-id <hex>
+                [--require-attestation <pk-hex>] LOG [SNAPSHOT]
 ```
 
-Global flags (Audit-3.1 + AR.2.6):
+Global flags (Audit-3.1 + AR.2.6 + AR.3.2):
 
   * `--allow-fallback-hash`  — required to run with the Lean
                                fallback hash.  Without it,
@@ -987,6 +1042,19 @@ Global flags (Audit-3.1 + AR.2.6):
                                empty default; production replay
                                must supply the deployment's
                                canonical identifier explicitly).
+  * `--require-attestation <pk-hex>` — AR.3.2: require `SNAPSHOT`
+                               to be an attested-snapshot envelope
+                               signed by the attestor holding the
+                               public key `<pk-hex>` over
+                               `(snapshot, deploymentId)`.  Under
+                               the flag a bare `Snapshot` frame is
+                               REJECTED outright
+                               (`ATTESTATION_DECODE_ERROR`): the
+                               bare frame's own hash check merely
+                               re-derives the hash from the
+                               supplied state, so an adversarial
+                               supplier passes it trivially — the
+                               envelope is the point.
 
 Output format (one or two lines):
 
@@ -998,8 +1066,12 @@ Output format (one or two lines):
     or `keccak256/EVM-compatible/v1` under the keccak-linked
     cross-stack build (`KNOMOSIS_HASH_BACKEND=keccak256`).
   * `CONFIG_ERROR <msg>` (exit 1) when a budget / gas-pool /
-    refund-rate sidecar fails to load or is inconsistent with the
-    flags supplied to `knomosis-replay`.
+    refund-rate sidecar fails to load or parse.  `knomosis-replay`
+    takes NO config flags — it RE-DERIVES the producer's config
+    from the persisted sidecars (`<LOG>.budgetcfg`,
+    `<LOG>.gaspoolcfg`, `<LOG>.refundratecfg`) — so a corrupt
+    sidecar fails loudly rather than auditing under the wrong
+    config.
   * `FALLBACK_HASH_NOT_PERMITTED` (Audit-3.1) on the fallback hash
     without `--allow-fallback-hash`.
   * `DEPLOYMENT_ID_MISSING` (AR.2.6) when `--deployment-id <hex>`
@@ -1019,6 +1091,19 @@ Output format (one or two lines):
   * `LOG_TRUNCATED entries=<count>` (info line, written before
     the success / error line) when the log file had a partial
     tail; replay still proceeds against the recovered prefix.
+  * `FLAG_ERROR` (exit 1) on a malformed or unrecognised flag.
+  * `USAGE_ERROR` (exit 1) on a wrong positional-argument count.
+  * `ATTESTATION_INVALID` (exit 1) under `--require-attestation`
+    when the envelope's signature does not verify against the
+    supplied attestor key.
+  * `ATTESTATION_DECODE_ERROR <repr>` (exit 1) under
+    `--require-attestation` when the snapshot file is not an
+    attested-snapshot envelope (a bare `Snapshot` frame lands
+    here).
+  * `ATTESTATION_DEPLOYMENT_MISMATCH` (exit 1) when the envelope
+    is validly signed but for a DIFFERENT deployment id — exactly
+    the cross-deployment replay the `--deployment-id` gate exists
+    to refuse.
 
 **Snapshot+log semantics (Genesis Plan §13.2).**  When a snapshot
 is provided, the LOG file is the *full* log (not pre-sliced).
@@ -1470,6 +1555,25 @@ Multiple transports may be configured simultaneously; the daemon
 runs one acceptor thread per transport and shares a single
 worker queue across them.
 
+Five further flags complete the daemon's CLI surface
+(`runtime/knomosis-host/src/config.rs`):
+
+  * `--connection-timeout <SECONDS>` — both the per-connection
+    socket read/write timeout AND the end-to-end per-request
+    frame-read deadline (the slow-loris bound; default 10 s).  The
+    two compose: the socket timeout bounds each individual read,
+    the deadline bounds the whole request, so a trickling client
+    that keeps resetting the socket timer is still cut off.
+  * `--mock` — serve the in-memory `MockKernel` (tests / demos).
+    Mutually exclusive with `--knomosis-binary`.
+  * `--knomosis-binary <PATH>` + `--knomosis-log <PATH>` — serve
+    the `CommandKernel`: shell out to the `knomosis` CLI at
+    `<PATH>` against the append-only log file (both flags are
+    required together).
+  * `--knomosis-work-dir <PATH>` — the `CommandKernel`'s temp
+    directory for per-request files (default:
+    `<knomosis-log dir>/knomosis-host-work/`).
+
 ### 10.4 Backpressure
 
 `knomosis-host` maintains a bounded mpsc queue of pending requests
@@ -1516,8 +1620,10 @@ existing `--max-queue-depth <N>` (reused as the global cap).
 
 **Rung 0 introduces NO wire-format change.**  It is host-internal: the
 request/response layout (§10.1), the verdict byte table (§10.2), and
-`PROTOCOL_VERSION` (= 1) are all unchanged, so no client needs any
-modification.  The scheduler choice CAN, however, change observable
+the default v1 framing are all unchanged, so no client needs any
+modification.  (`PROTOCOL_VERSION` is `2` since the Rung-1 amendment,
+but the bump belongs to Rung 1's opt-in signer-hint preamble —
+§10.1, §10.4.2 — not to the scheduler.)  The scheduler choice CAN, however, change observable
 *behaviour*: under `--scheduler drr` a request may be served in a
 different order than FIFO, and a new connection may receive `Busy` (the
 `--max-flows` / `--per-flow-cap` caps) where FIFO — bounded only by the
@@ -1716,8 +1822,10 @@ handler can flip the flag for graceful drain.
     running `knomosis serve` Lean-side subcommand once that work
     unit lands).
   * Client mirror: `runtime/knomosis-l1-ingest/src/submitter.rs`
-    (`HttpSubmitter` placeholder; migration to the canonical
-    raw-TCP protocol is a follow-up RH-B PR).
+    (`RawTcpSubmitter` is the shipped canonical client — it speaks
+    this section's raw-TCP wire format, byte-pinned against the
+    host's own frame encoders; `HttpSubmitter` survives as the
+    legacy/dev placeholder transport).
 
 ## 11. Event Subscription ABI (Workstream RH-D)
 
@@ -2206,6 +2314,7 @@ tuples in lex order.
 |-----------------|----------------------|------------------------------------------|
 | `c/cursor`      | 8-byte BE u64        | Last successfully-processed event seq   |
 | `c/identifier`  | UTF-8 text           | Indexer identifier (e.g. `knomosis-indexer/v1`) |
+| `c/current_epoch` | 8-byte BE u64      | Persisted budget-epoch counter (GP.6.4; see §11A.1, §11A.4) |
 
 The cursor advances atomically with each batch's balance
 updates inside a single `Storage::transaction`.  On restart,
@@ -2440,28 +2549,38 @@ one-shot query subcommands:
     balance + GP.6.4 budget / pool views.  Required flag:
     `--storage <PATH>`.  Optional flags: `--subscribe <ADDR>`,
     `--max-frame-size <BYTES>`, `--reconnect-backoff-ms <MS>`,
-    `--max-reconnects <N>`, `--verify-against-knomosis <URL>`,
+    `--max-reconnects <N>`, `--verify-against-knomosis <URL>`
+    (reserved; setting it aborts the daemon at startup with
+    `OperatorExitCode::NotImplemented`, exit 3),
     and the GP.6.4 additions `--gas-pool-actor <id>` (enables
     tag-18 pool-drain accounting; absent ⇒ pool ledgers are
     deposit-only), `--epoch-length <N>` (`> 0` ⇒ per-epoch
     grant / consumed tables reset every `N` log frames, aligned
     to the kernel's `logIndex / epochLength`; `0` ⇒ never
     reset), and `--verify-budget-against-knomosis <URL>`
-    (reserved; currently returns `NotImplemented`).
+    (reserved; setting it likewise aborts the daemon with
+    `OperatorExitCode::NotImplemented`, exit 3).
 
   * `knomosis-indexer query <actor> <resource>` — one-shot
     balance lookup.  Output: `<actor> <resource> <balance>\n`.
 
   * `knomosis-indexer query-budget <actor>` (GP.6.4) —
-    one-shot lifetime-cumulative budget lookup.  Output:
-    `<actor> <budget>\n`.
+    one-shot budget-view lookup.  Required flag:
+    `--storage <PATH>`; optional flag: `--free-tier <N>`, which
+    changes the remaining-budget arithmetic — the output gains
+    `remaining_this_epoch = free_tier + grants_this_epoch −
+    consumed_this_epoch`.  Output: `<actor> lifetime=<N>
+    grants_this_epoch=<N> consumed_this_epoch=<N>
+    [remaining_this_epoch=<N>]\n`.
 
   * `knomosis-indexer query-pool-eth <actor>` /
     `knomosis-indexer query-pool-bold <actor>` (GP.6.4) —
     one-shot NET gas-pool inflow lookup for the ETH / BOLD
     resource.  Output: `<actor> <pool_balance>\n`.
 
-  All subcommands exit 0 on success.
+  All subcommands exit 0 on success, except that `daemon` exits 3
+  (`OperatorExitCode::NotImplemented`) at startup when either
+  verify flag is set.
 
 ### 11A.9 Cross-reference
 
@@ -2520,13 +2639,17 @@ the fallback warning or fail-fast.
 
 ## 13. Solidity-side ABI surface (Workstream E)
 
-Workstream E ships the L1 Solidity mirror of the kernel as five
-immutable contracts in `solidity/`.  Each contract's external
-ABI is its public Solidity interface (`solidity/src/interfaces/
-IKnomosis*.sol`); the integration plan §9 lists the per-contract
-critical correctness obligations.  This section documents the
-ABI invariants that downstream consumers (deployment scripts,
-indexers, off-chain watchers) can rely on.
+Workstream E ships the L1 Solidity mirror of the kernel as the
+first five of what are now eleven immutable contracts under
+`solidity/src/contracts/` — the Workstream-E five documented
+here, the Workstream-H/SB fault-proof five (§15.1), and the
+GP.11.10 `KnomosisAmmDisasterRecoveryMultisig` (the single-purpose
+3-of-N reference multisig behind `emergencyDisableAmm`).  Each
+contract's external ABI is its public Solidity interface
+(`solidity/src/interfaces/IKnomosis*.sol`); the integration plan
+§9 lists the per-contract critical correctness obligations.  This
+section documents the ABI invariants that downstream consumers
+(deployment scripts, indexers, off-chain watchers) can rely on.
 
 ### 13.1 Cross-contract reference shape
 
@@ -2552,34 +2675,71 @@ each additionally expose:
 
 Every revert path uses a typed custom error (no string
 reverts).  Selectors are stable across deployments because the
-error names are part of the contract's frozen surface:
+error names (and their parameter types) are part of the
+contract's frozen surface.  Each catalogue below is COMPLETE —
+every `error` declaration in the contract source — with its
+count stated:
 
-  * `KnomosisBridge`: `NotAttestor`, `NotDisputeVerifier`,
-    `AttestationStale`, `DisputeCooldown`, `TvlCapReached`,
-    `MigrationActivated`, `NonMonotonic`, `UnknownStateRoot`,
-    `StateRootReverted`, `PreFinalisation`, `AlreadyRedeemed`,
-    `InvalidProof`, `InvalidLeafSizeForResource`,
-    `UnsupportedResource`, `EthValueMismatch`,
-    `InvariantViolation_DisputeWindowVsRedemption`,
-    `BridgeAccountingMismatch(uint256 totalLockedValue, uint256 amountRequested)`
-    (added by audit-1; reserved specifically for the TVL
-    underflow check at withdrawal time, distinct from the
-    constructor-time invariant check),
-    `InvalidSignatureLength`,
-    `ZeroSequencerStake` (added by audit-2),
-    `DuplicateResourceToken(address token)` (added by audit-2),
-    `TransferAmountMismatch(uint256 declared, uint256 received)`
-    (added by audit-2; rejects fee-on-transfer / rebasing
-    ERC-20s),
-    `InvalidRecipient` (added by audit-3; rejects withdrawals
-    to address(0)).
-  * `KnomosisDisputeVerifier`: `NotApprovedAdjudicator`,
+  * `KnomosisBridge` (57), by family:
+    - *Base bridge + constructor guards* (24): `NotAttestor`,
+      `NotDisputeVerifier`, `AttestationStale`, `DisputeCooldown`,
+      `TvlCapReached`, `MigrationActivated`, `NonMonotonic`,
+      `UnknownStateRoot`, `StateRootReverted`, `PreFinalisation`,
+      `AlreadyRedeemed`, `InvalidProof`,
+      `InvalidLeafSizeForResource`, `UnsupportedResource`,
+      `EthValueMismatch(uint256 expected, uint256 actual)`,
+      `InvariantViolation_DisputeWindowVsRedemption`,
+      `BridgeAccountingMismatch(uint256 totalLockedValue, uint256 amountRequested)`
+      (added by audit-1; reserved specifically for the TVL
+      underflow check at withdrawal time, distinct from the
+      constructor-time invariant check),
+      `InvalidSignatureLength`,
+      `ZeroSequencerStake` (added by audit-2),
+      `DuplicateResourceToken(address token)` (added by audit-2),
+      `TransferAmountMismatch(uint256 declared, uint256 received)`
+      (added by audit-2; rejects fee-on-transfer / rebasing
+      ERC-20s),
+      `InvalidRecipient` (added by audit-3; rejects withdrawals
+      to address(0)), `ZeroDisputeWindow`,
+      `ZeroMaxAttestationStaleBlocks`.
+    - *Fee-split deposits, GP.5.1/GP.9.1* (6): `ZeroDeposit`,
+      `FeeBpsBelowMin(uint16 chosenFeeBps)`,
+      `FeeBpsAboveMax(uint16 chosenFeeBps)`,
+      `MinFeeBpsExceedsMax(uint16 minFeeBps, uint16 maxFeeBps)`,
+      `MaxFeeBpsExceedsCap(uint16 maxFeeBps)`,
+      `WeiPerBudgetUnitTooSmall(uint64 weiPerBudgetUnit)`.
+    - *BOLD deposits + roles, GP.5.4/GP.5.5* (16):
+      `BoldTokenAddressMismatch(address provided)`,
+      `BoldTokenSymbolMismatch(string actualSymbol)`,
+      `BoldTokenSymbolUnavailable`,
+      `BoldTransferAmountMismatch(uint256 expected, uint256 actual)`,
+      `BoldNotEnabled`, `BoldResourceReserved`,
+      `BoldDepositViaFeeSplitOnly`, `BoldDepositPaused`,
+      `BoldTvlCapReached`,
+      `BoldTvlCapExceedsGlobal(uint256 boldTvlCap, uint256 tvlCap)`,
+      `NotBoldCircuitBreaker`, `NotBoldAdmin`,
+      `ZeroBoldCircuitBreaker`, `ZeroBoldAdmin`,
+      `BoldRolesNotDistinct`, `BoldRoleIsBridge`.
+    - *Liquity auto-trigger, GP.5.5* (6):
+      `AutoCircuitTriggerDisabled`, `LiquityV2ReadFailed`,
+      `NoLiquityBranchShutdown`, `AutoTriggerRequiresBold`,
+      `LiquityOracleHasNoCode(address troveManager)`,
+      `BoldTroveManagersNotDistinct`.
+    - *AMM kill switch, GP.11.3/GP.11.10* (5):
+      `AmmSeedRatioExceedsMax(uint16 ammSeedRatioBps)`,
+      `AmmRoleIsBridge`, `AmmDisasterRecoveryRequired`,
+      `NotAmmDisasterRecovery`, `AmmAlreadyDisabled`.
+  * `KnomosisDisputeVerifier` (25): `NotApprovedAdjudicator`,
     `UnknownDispute`, `AlreadyDecided`, `NotOpen`,
-    `QuorumNotMet`, `EvidenceNotUpheld`, `EvidenceNotRejected`,
+    `QuorumNotMet(uint256 verified, uint8 required)`,
+    `EvidenceNotUpheld`, `EvidenceNotRejected`,
     `SelfClaimInvalid`, `InvalidClaimVariant`,
     `MaxPrefixLenExceeded`, `PrefixSignerMissing`,
     `InvalidSignatureLength`, `VerifierBridgeMismatch`,
     `ZeroAddress`, `QuorumThresholdOutOfRange`, `VerdictReplay`,
+    `BridgeNotContract`, `IdentityRegistryNotContract`,
+    `IncorrectChallengerBond(uint256 sent, uint256 required)`,
+    `NoBondToClaim`, `BondTransferFailed`,
     `EvidenceBlobTooLarge(uint256 actual, uint256 maxBytes)`
     (added by audit-1), `TooManySigners(uint256 supplied,
     uint256 maxAllowed)` (added by audit-1),
@@ -2587,14 +2747,18 @@ error names are part of the contract's frozen surface:
     `DoubleApplyConcatBadCount(uint64 declared, uint64 expected)`
     (added by audit-3; rejects malformed
     `_runDoubleApplyFromConcat` blobs).
-  * `KnomosisIdentityRegistry`: `PubkeyAddressMismatch`,
-    `WrongPubkeyLength`, `NotEip1271Conforming`,
-    `AlreadyRegistered`, `NotRegistered`.
-  * `KnomosisSequencerStake`: `NotSequencer`,
+  * `KnomosisIdentityRegistry` (6):
+    `PubkeyAddressMismatch(address expected, address derived)`,
+    `WrongPubkeyLength(uint256 actual)`, `NotEip1271Conforming`,
+    `AlreadyRegistered(address actor)`,
+    `NotRegistered(address actor)`, `ZeroVersionTag`.
+  * `KnomosisSequencerStake` (10): `NotSequencer`,
     `NotDisputeVerifier`, `InsufficientStake`,
-    `WithdrawDuringOpenDispute`, `AlreadySlashed`,
-    `SlashRatioOutOfRange`, `ZeroAddress`, `EthSendFailed`.
-  * `KnomosisMigration`: `ZeroAddress`, `SelfMigration`,
+    `WithdrawDuringOpenDispute`,
+    `AlreadySlashed(uint64 disputeId)`, `SlashRatioOutOfRange`,
+    `ZeroAddress`, `EthSendFailed`, `NothingToClaim`,
+    `NotAContract`.
+  * `KnomosisMigration` (9): `ZeroAddress`, `SelfMigration`,
     `GraceTooShort`, `SameDeploymentId`,
     `PredecessorDoesNotReferenceThisMigration` (renamed from
     `SuccessorDoesNotReferenceThisMigration` in audit-3 to
@@ -2860,10 +3024,15 @@ contract `docs/api/gateway.openapi.yaml` and
     crash-consistency.
   * `LegalKernel/Runtime/Snapshot.lean` — snapshot format.
   * `solidity/README.md` — Workstream E developer guide.
-  * `solidity/src/contracts/*.sol` — five immutable Solidity
-    contracts (E.1 – E.5).
-  * `solidity/src/lib/{CBEDecode, SmtVerifier, KnomosisEip712,
-    CREATE3}.sol` — the cross-cutting libraries.
+  * `solidity/src/contracts/*.sol` — eleven immutable Solidity
+    contracts (the Workstream-E five, E.1 – E.5; the
+    Workstream-H/SB fault-proof five, §15.1; and the GP.11.10
+    `KnomosisAmmDisasterRecoveryMultisig`).
+  * `solidity/src/lib/*.sol` — the 16 cross-cutting libraries:
+    `ActionsRoot`, `AmmMath`, `CBEDecode`, `CBEEncode`, `CREATE3`,
+    `KnomosisChainId`, `KnomosisEip712`, `LogChain`, `Secp256k1`,
+    `SignInput`, `SmtCellVerifier`, `SmtMultiVerifier`,
+    `SmtVerifier`, `StepPlan`, `StepVMMerkle`, `StepWrites`.
   * Genesis Plan §8.7 (Persistence and Logging)
   * Genesis Plan §8.8 (Canonical Encoding)
   * Genesis Plan §13.2 (Repository Layout — for the file paths above)
@@ -2887,8 +3056,8 @@ contract `docs/api/gateway.openapi.yaml` and
 
 ### 15.1 New Solidity contracts
 
-The five immutable contracts shipped by Workstream H, as re-cut by
-Workstream SB (batched submission):
+Workstream H ships five of the eleven immutable contracts (§13),
+as re-cut by Workstream SB (batched submission):
 
   * `solidity/src/contracts/KnomosisStateRootSubmission.sol` —
     Sequencer BATCH submission registry: one record per batch
@@ -3046,7 +3215,7 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `KnomosisStepVMRoot`:
 
-  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..25`, excluding the retired 23 — `isAdjudicable` refuses it like a never-assigned kind; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
+  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..25`; `StepWrites.isAdjudicable` refuses the retired 23 like a never-assigned kind AND the two bulk variants 6 / 7 — `distributeOthers` / `proportionalDilute` are non-adjudicable on L1, their write set being a resource's actor set, which a pre-root holder cannot enumerate; the byte mirrors `actionKindByte` / the frozen kind-byte mapping — production Solidity carries no `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
   * `widestFrontier(bytes probeFields) pure returns (uint256)` — the
     largest frontier any adjudicable action produces, derived from
     `StepWrites.deriveWriteSet` rather than restated.  `assertConsistent`
@@ -3193,9 +3362,19 @@ this section.
     33-byte length on L1).
 
 Constructor indices are pinned by the AR.5 regression tests
-(`LegalKernel/Test/Authority/ActionIndexPins.lean`); the
+(`LegalKernel/Test/Encoding/Action.lean` and
+`LegalKernel/Test/Authority/Action.lean`); the
 `naming_audit` + `lex_lint` gates enforce that no Lean rename
 silently re-grouping these indices.
+
+> **Two index spaces.**  `Lex/IndexRegistry.txt` is a SEPARATE,
+> gap-free Lex-registry index space (`lex_lint` L007 forbids
+> holes there; a retired law's line stays as a live tombstone),
+> NOT the frozen kernel `Action` tag space of §5: `ammSwap` sits
+> at Lex index 20 as a tombstone while the `Action` tag hole is
+> 23, and `topUpActionBudget` / `topUpActionBudgetFor` /
+> `reclaimAmmReserves` / `reserveSwap` are Lex indices
+> 18 / 19 / 21 / 22 against `Action` tags 20 / 21 / 24 / 25.
 
 Workstream GP appends `Action` indices 19..24 (`depositWithFee`,
 `topUpActionBudget`, `topUpActionBudgetFor`, `claimBudgetRefund`,
@@ -3241,8 +3420,8 @@ BridgeState.encode bs =
   encodePending  bs ++       -- pending:  TreeMap WithdrawalId PendingWithdrawal
   CBE-uint(bs.nextWdId) ++
   CBE-uint(bs.boldCircuitClosed ? 1 : 0) ++  -- GP.11.8 (canonical 0/1)
-  CBE-uint(bs.boldTvlCap) ++                 -- GP.11.8
-  CBE-uint(bs.boldTotalLockedValue) ++       -- GP.11.8
+  CBE-amount(bs.boldTvlCap) ++               -- GP.11.8
+  CBE-amount(bs.boldTotalLockedValue) ++     -- GP.11.8
   CBE-uint(bs.ammDisabled ? 1 : 0)           -- GP.11.10 (canonical 0/1)
 ```
 
@@ -3253,10 +3432,12 @@ Where:
   * `encodePending` is the canonical sorted-pair encoding of
     `[(WithdrawalId, PendingWithdrawal.encodeAsBytes)]`.
   * Each `DepositRecord` encodes as
-    `CBE-uint(resource.toNat) ++ CBE-uint(userAmount) ++
-     CBE-uint(poolAmount) ++ CBE-uint(budgetGrant)` (the GP.4.1
+    `CBE-uint(resource.toNat) ++ CBE-amount(userAmount) ++
+     CBE-amount(poolAmount) ++ CBE-uint(budgetGrant)` (the GP.4.1
      four-field widening; the pre-widening form was the two-segment
-     `CBE-uint(resource.toNat) ++ CBE-uint(amount)`).
+     `CBE-uint(resource.toNat) ++ CBE-uint(amount)`).  The two
+     value-carrying legs ride the 33-byte `0x06` amount head;
+     `resource` and `budgetGrant` are 9-byte CBE uints.
   * Each `PendingWithdrawal` encodes as
     `CBE-uint(resource.toNat) ++ CBE-bstr(EthAddress.toBytes recipient) ++
      CBE-amount(amount) ++ CBE-uint(l2LogIndex) ++ CBE-uint(wdId)`.
@@ -3317,7 +3498,8 @@ operational, not structural:
     id `>= 4` via the GP.10.4 migration before upgrading; the Rust
     adaptor's state-file replay rejects a persisted reserved-range id
     rather than silently violating the reservation.
-  * `bridgeActor : ActorId := 0` (`LegalKernel/Bridge/BridgeActor.lean`).
+  * `bridgeActor : ActorId := 0` (`LegalKernel/Bridge/AddressBook.lean`,
+    alongside `gasPoolActor` / `sequencerActor` / `ammReserveActor`).
   * `bridgePolicy : AuthorityPolicy` admits only
     `Action.replaceKey`, `Action.registerIdentity`, and
     `Action.deposit` when the signer is `bridgeActor`.  Crucially,
@@ -3344,7 +3526,7 @@ production.  The identifier string
 `hashImplementationIdentifier ()` returns `"keccak256/EVM-compatible/v1"`
 under the production binding (`"fnv1a64-padded-32"` under the
 fallback); the `knomosis-replay` CLI's `--allow-fallback-hash` flag
-(see §11) is the operator's opt-in to run audit cycles under the
+(see §9) is the operator's opt-in to run audit cycles under the
 fallback.
 
 The `Bridge.HashAdaptor.isKeccak256Linked : Bool` flag
@@ -3468,6 +3650,9 @@ load-bearing entries:
     L1 contracts).
   * `LegalKernel/Bridge/*.lean` (Lean-side surfaces).
   * `solidity/src/contracts/*.sol` (L1 contracts).
-  * `solidity/src/lib/{KnomosisEip712, CBEDecode, SmtVerifier,
-    SmtCellVerifier, CREATE3, StepVMMerkle}.sol` (shared
-    libraries).
+  * `solidity/src/lib/*.sol` (the 16 shared libraries — the
+    load-bearing ones being `KnomosisEip712`, `CBEDecode`,
+    `CBEEncode`, `SmtVerifier`, `SmtCellVerifier`,
+    `SmtMultiVerifier`, `CREATE3`, `StepVMMerkle`, `StepWrites`,
+    `ActionsRoot`, and `LogChain`; the full set is the §14
+    references entry).

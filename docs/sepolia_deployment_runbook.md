@@ -72,7 +72,7 @@ stack against that manifest, (3) expose the gateway to Licio's BFF.
 | Need | How |
 |------|-----|
 | Toolchains | `./scripts/setup.sh --build` (Lean + Foundry + solc 0.8.36); `cd runtime && cargo build --release` (the Rust daemons) |
-| A funded **Sepolia deployer EOA** | ~0.5 test-ETH covers the 9 deploys (~5–6M gas total). Get test-ETH from a Sepolia faucet. |
+| A funded **Sepolia deployer EOA** | The 9 deploys total ≈16.5M gas (measured 16 445 967 on the dry-run); ~0.5 test-ETH covers that at 30 gwei. Get test-ETH from a Sepolia faucet. |
 | A **Sepolia RPC endpoint** | Alchemy / Infura / a public endpoint → `SEPOLIA_RPC_URL` |
 | An **Etherscan API key** (Sepolia) | For `--verify` source-verification → `ETHERSCAN_API_KEY` (one Etherscan v2 key verifies on every chain) |
 | Production **actor addresses** | attestor, sequencer, treasury, adjudicator set, and — if BOLD-enabled — the BOLD circuit-breaker/admin and the AMM disaster-recovery multisig signer set. See §4. |
@@ -130,7 +130,7 @@ deployment should set the actor addresses and the sized economics explicitly.
 `solidity/script/DeploySepolia.s.sol` deploys the **full 9-contract genesis
 suite** as individual transactions via plain-nonce CREATE prediction (no
 CREATE3 bundler → **no `--disable-code-size-limit`** needed; every production
-contract is under EIP-170, the largest being `KnomosisBridge` at 17 195 B),
+contract is under EIP-170, the largest being `KnomosisStepVMRoot` at 20 163 B),
 verifies the post-deploy invariants (`assertConsistent()` on both clusters,
 `bridge.migration() == address(0)`, and `deploymentId` self-consistency), and
 writes the manifest to `solidity/deployments/sepolia.json`.
@@ -159,6 +159,10 @@ export KNOMOSIS_ADJUDICATORS=0x...,0x...,0x...  # explicit, DISTINCT, custodied 
                                       # KNOMOSIS_ADJUDICATOR base+_COUNT derivation
                                       # is placeholder-only (no known keys) — dry-run
                                       # / test use ONLY, never value-bearing.
+export KNOMOSIS_GENESIS_STATE_COMMIT=0x...  # REQUIRED, no default (the script
+                                      # hard-reverts without it): the ratified
+                                      # L2 genesis anchor — `knomosis
+                                      # export-batch` emits it (§4.4).
 make deploy-sepolia                   # broadcasts + verifies on Etherscan
 ```
 
@@ -186,8 +190,12 @@ export KNOMOSIS_BOLD_TOKEN=0x...            # a Sepolia ERC-20 with symbol() == 
 export KNOMOSIS_BOLD_CIRCUIT_BREAKER=0x...  # hot pause role (multisig recommended)
 export KNOMOSIS_BOLD_ADMIN=0x...            # cold cap-tuning role (distinct address)
 export KNOMOSIS_AMM_SEED_RATIO_BPS=1000     # >0 makes the AMM functional (10%)
-export KNOMOSIS_AMM_MULTISIG_SIGNER=0x...   # base of the 3-of-N recovery signer set
-export KNOMOSIS_AMM_MULTISIG_COUNT=5
+export KNOMOSIS_AMM_MULTISIG_SIGNERS=0x...,0x...,0x...  # explicit, DISTINCT,
+                                      # custodied 3-of-N recovery signer set.
+                                      # The KNOMOSIS_AMM_MULTISIG_SIGNER
+                                      # base+_COUNT derivation is keyless
+                                      # placeholder-only — dry-run / test use
+                                      # ONLY; a real broadcast rejects it.
 export KNOMOSIS_AMM_MULTISIG_THRESHOLD=3    # >= 3 (MIN_DISABLE_THRESHOLD)
 make deploy-sepolia
 ```
@@ -206,21 +214,27 @@ real BOLD token, use `make deploy-local` (a live anvil node) or
 |----------|---------|---------|
 | `KNOMOSIS_VERSION_TAG` | `keccak256("knomosis-sepolia-v1")` | deployment-namespacing tag (must match the L2 kernel's tag) |
 | `KNOMOSIS_ATTESTOR` / `_SEQUENCER` / `_TREASURY` | placeholders | core actors (set for a real deploy) |
-| `KNOMOSIS_ADJUDICATOR` / `_ADJUDICATOR_COUNT` / `_ADJUDICATOR_QUORUM` | base / 3 / 3 | dispute-verifier adjudicator set |
+| `KNOMOSIS_ADJUDICATORS` | unset | explicit comma-separated adjudicator list — takes precedence over the base+`_COUNT` derivation; REQUIRED on a real broadcast (and by `scripts/deploy_sepolia_launch.sh`) |
+| `KNOMOSIS_ADJUDICATOR` / `_ADJUDICATOR_COUNT` / `_ADJUDICATOR_QUORUM` | base / 3 / 3 | dispute-verifier adjudicator set (the keyless base+count derivation — dry-run / test only; `_QUORUM` applies to either form) |
 | `KNOMOSIS_DISPUTE_WINDOW` / `_MAX_REDEMPTION` / `_ATTEST_STALE` / `_COOLDOWN` | 50 400 / 36 000 / 7 200 / 7 200 | bridge block windows (`disputeWindow ≥ maxRedemption`, both `> 0`) |
 | `KNOMOSIS_TVL_CAP` / `_MIN_FEE_BPS` / `_MAX_FEE_BPS` / `_WEI_PER_BUDGET_UNIT_ETH` | 100 000e / 0 / 5000 / 1e9 | bridge economics |
 | `KNOMOSIS_BOLD_TOKEN` / `_WEI_PER_BUDGET_UNIT_BOLD` / `_BOLD_TVL_CAP` | 0 / 1e9 / =tvlCap | BOLD leg (0 ⇒ ETH-only) |
 | `KNOMOSIS_BOLD_CIRCUIT_BREAKER` / `_BOLD_ADMIN` | placeholders | BOLD safety roles (required + distinct when BOLD-enabled) |
+| `KNOMOSIS_ENABLE_LIQUITY_AUTOTRIGGER` | `false` | Liquity auto-circuit-trigger (mainnet-only TroveManager oracles; forced OFF on any non-mainnet chain) |
 | `KNOMOSIS_AMM_SEED_RATIO_BPS` | 0 | AMM seed fraction (`>0` ⇒ functional AMM ⇒ multisig deployed) |
-| `KNOMOSIS_AMM_MULTISIG_SIGNER` / `_COUNT` / `_THRESHOLD` | base / 5 / 3 | AMM disaster-recovery 3-of-N multisig |
+| `KNOMOSIS_AMM_MULTISIG_SIGNERS` | unset | explicit comma-separated signer list — takes precedence over the base+`_COUNT` derivation; REQUIRED on a real functional-AMM broadcast (and by `scripts/deploy_sepolia_launch.sh`) |
+| `KNOMOSIS_AMM_MULTISIG_SIGNER` / `_COUNT` / `_THRESHOLD` | base / 5 / 3 | AMM disaster-recovery 3-of-N multisig (the keyless base+count derivation — dry-run / test only) |
 | `KNOMOSIS_SLASH_BPS` | 5000 | sequencer-stake slash ratio |
 | `KNOMOSIS_STATE_ROOT_BOND` / `_STATE_ROOT_DISPUTE_WINDOW` / `_WITHDRAWAL_WINDOW_BLOCKS` | 1e / 216 000 / 216 000 | state-root submission |
 | `KNOMOSIS_MIN_SUBMISSION_INTERVAL` / `_MAX_OUTSTANDING_ROOTS` | 100 / 100 | submission cadence + cap |
 | `KNOMOSIS_GENESIS_STATE_COMMIT` | **required** (no default on a real deploy) | the registry's genesis anchor (SB ruling R5): `commitExtendedState` of the ratified L2 genesis — `knomosis export-batch` emits it; a mismatch makes the first honest batch indefensible |
 | `KNOMOSIS_MAX_ACTIONS_PER_BATCH` | 65 536 | operational ceiling on one batch's span (SB ruling R10; see `deployment_parameters.md` §3) |
 | `KNOMOSIS_BISECTION_TIMEOUT_BLOCKS` / `_MIN_CHALLENGE_BOND` / `_MIN_BISECTION_STEP_INTERVAL` | 21 600 / 0.05e / 5 | fault-proof game (`bond > 0`, `timeout > stepInterval`) |
+| `KNOMOSIS_VERIFIER_CHALLENGER_BOND` | `= minChallengeBond` | wei a challenger posts to `KnomosisDisputeVerifier.fileDispute` — refunded on UPHELD, forfeited to the sequencer on REJECTED |
 | `KNOMOSIS_SUBMISSION_BREAKER_ADDRESS` | the broadcaster | the address that may halt / resume state-root submission.  **Set it explicitly on a real deploy.**  Required non-zero and required DISTINCT from `KNOMOSIS_SEQUENCER` — the constructor reverts `BreakerIsSequencer` otherwise, because a halt is reached on suspicion of the sequencer at least as often as for its benefit, so that sequencer must not be able to clear its own halt |
 | `KNOMOSIS_MANIFEST_OUT` | `deployments/<network>.json` | manifest output path |
+| `KNOMOSIS_DEPLOYER_ACCOUNT` | unset | forge keystore account name for the broadcast signer (read by `solidity/Makefile`; preferred over a raw `PRIVATE_KEY` — §4.2) |
+| `KNOMOSIS_DEPLOYER_ADDRESS` | unset | the deployer's public address — lets `scripts/deploy_sepolia_launch.sh` pin the forked dry-run's `--sender` without a keystore unlock |
 
 ---
 
@@ -254,7 +268,8 @@ in the repo consumed contract addresses from a file before):
     "KnomosisFaultProofGame": "0x…"
   },
   "actors": { "attestor": "0x…", "sequencer": "0x…", "treasury": "0x…",
-              "boldCircuitBreaker": "0x…", "boldAdmin": "0x…" }
+              "boldCircuitBreaker": "0x…", "submissionBreaker": "0x…",
+              "boldAdmin": "0x…" }
 }
 ```
 

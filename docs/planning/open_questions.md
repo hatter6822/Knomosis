@@ -150,8 +150,8 @@ OQ-CA-1 (L1EscrowLedger type ownership)
 
 | ID | Topic | Status | Urgency | Recommendation |
 |----|-------|--------|---------|----------------|
-| OQ-X-1 | Rust toolchain pinning strategy | OPEN | Before RH lands | (a) Pin minor; quarterly bump |
-| OQ-X-2 | Cross-stack fixture corpus storage format | OPEN | Before corpus expands | (a) In-tree CBE goldens |
+| OQ-X-1 | Rust toolchain pinning strategy | RESOLVED | (resolved — stable 1.97 pinned) | (a) Pin minor; quarterly bump |
+| OQ-X-2 | Cross-stack fixture corpus storage format | RESOLVED | (resolved — versioned `.cxsf` in-tree) | (a) In-tree CBE goldens |
 | OQ-X-3 | Multi-deployment shared infrastructure | OPEN | Before Phase 7 | (a) Single-deployment for v1 |
 | OQ-X-4 | Mathlib in non-TCB modules | RESOLVED-DEFAULT | Long-term | (a) No Mathlib until specifically justified |
 | OQ-PA-1 | Stake-weighted quorum | OPEN | Before PA lands | (a) Equal-weight for v1 |
@@ -189,11 +189,11 @@ OQ-CA-1 (L1EscrowLedger type ownership)
 | OQ-DOC-2 | Single canonical "Headline theorems" location | RESOLVED | (resolved) | (a) CLAUDE.md canonical |
 | OQ-DOC-3 | `Test/Umbrella.lean` build-tag pin lift | RESOLVED | (resolved) | (a) Keep the pin |
 | OQ-DOC-4 | Audit synthesis doc post-AR refresh | RESOLVED | (resolved) | (a) Annotated in place |
-| OQ-EI-1 | EI.1.c necessity (Std `toList_canonical` audit) | NEW | Before EI.1.b | Audit Std first; ship EI.1.c only if Std lacks |
+| OQ-EI-1 | EI.1.c necessity (Std `toList_canonical` audit) | RESOLVED | (resolved — EI.0–EI.8 complete) | Audit Std first; ship EI.1.c only if Std lacks |
 | OQ-RH-1 | Witness-state vs SMT cell-proof format default in observer | NEW | RH-G.4 + SC.2 coordination | Pre-SC: witness-state; post-SC: SMT-path |
-| OQ-RH-2 | Deep L1 re-org operator-alert threshold | NEW | Before RH-B / RH-G land | (a) confirmationDepth = 12; halt on deeper |
+| OQ-RH-2 | Deep L1 re-org operator-alert threshold | RESOLVED | (resolved — shipped with RH) | (a) confirmationDepth = 12; halt on deeper |
 | OQ-SC-1 | Cell-proof bitmask format choice | RESOLVED | (resolved during SC.2 spec) | Bitmask + non-empty siblings concatenated |
-| OQ-WG-1 | GENESIS_PLAN §15 chapter numbering | NEW | Before WG.1 lands | (a) Renumber existing §15B → §16 |
+| OQ-WG-1 | GENESIS_PLAN §15 chapter numbering | RESOLVED | (resolved — landed as §15D) | (a) Renumber existing §15B → §16 |
 | OQ-CA-1 | L1EscrowLedger type ownership | NEW | Before CA.3 lands | (a) `Bridge/L1Escrow.lean` (new module) |
 | OQ-P7-A-1 | Capability delegation depth limit default | NEW | Before P7.A.7 lands | (a) Default 4; configurable per deployment |
 | OQ-P7-B-1 | FROST flavour choice | NEW | Before P7.B.1 lands | (a) FROST-Ed25519 (more audited) |
@@ -218,7 +218,14 @@ OQ-CA-1 (L1EscrowLedger type ownership)
 **Recommendation.**  (a).  Pin minor; bump on a quarterly
 cadence aligned with Lean toolchain bumps.
 
-**Status.**  OPEN.  Owner: Rust workstream lead.
+**Status.**  RESOLVED in favour of (a).  The pin is now stable
+`1.97` (`runtime/rust-toolchain.toml`), succeeding the original
+`1.83`, with the workspace-level bump discipline the
+recommendation asked for documented in the toolchain file's
+header: a channel bump is a single workspace-wide PR verified
+across the full build / test / clippy / fmt gate, and
+`[workspace.package].rust-version = "1.97"` mirrors the
+constraint in `Cargo.toml`.
 
 ---
 
@@ -241,7 +248,13 @@ proofs.  The fixture format and versioning is informal.
 **Recommendation.**  (a) for ≤ 10 MB total; (c) for larger
 corpora.  Cross-stack corpus is currently under 5 MB.
 
-**Status.**  OPEN.  Owner: anyone landing a corpus expansion.
+**Status.**  RESOLVED.  The format is no longer informal: the
+versioned, typed `.cxsf` container shipped with the RH corpus
+work (`runtime/knomosis-cross-stack/src/lib.rs`) — a 16-byte
+header carrying `FORMAT_VERSION`, a `MAX_RECORD_BYTES` (16 MiB)
+bound on every record length, and typed loader errors — with the
+format documented in `runtime/tests/cross-stack/README.md`.
+Storage stayed in-tree per recommendation (a).
 
 ---
 
@@ -986,7 +999,9 @@ triggers the §13.6 two-reviewer rule for `RBMapLemmas.lean`.
 
 **Recommendation.**  (a).  EI.1.c's first activity is the audit.
 
-**Status.**  OPEN until EI.1.b lands (EI.1.c is gated on it).
+**Status.**  RESOLVED.  Workstream EI is complete (EI.0–EI.8;
+`docs/planning/encoder_injectivity_plan.md`), so the gate this
+question waited on has landed and closed with it.
 
 ### OQ-RH-1 — Cell-proof format default in observer
 
@@ -1024,7 +1039,12 @@ trigger an operator alert.
 **Recommendation.**  (a) as default; (b) as escape hatch.
 Both ship simultaneously.
 
-**Status.**  NEW; resolves at RH-B.1 / RH-G.1 design time.
+**Status.**  RESOLVED as recommended — RH is complete and both
+mechanisms shipped: the `ReorgWindow` sliding window
+(`knomosis-l1-ingest/src/reorg.rs`; shallow re-orgs absorbed,
+deeper ones surface an operator alert) and the
+`--confirmation-depth` CLI escape hatch (default 12) in both
+`knomosis-l1-ingest` and the fault-proof observer.
 
 ### OQ-WG-1 — GENESIS_PLAN §15 chapter numbering
 
@@ -1044,7 +1064,10 @@ renumber existing §15B (Fault-Proof Migration) → §16.
 **Recommendation.**  (a).  Long-term clarity wins; budget
 ~half day for the renumber pass in WG.1.l.
 
-**Status.**  NEW; resolves at WG.1.a.
+**Status.**  RESOLVED.  The chapter landed as GENESIS_PLAN §15D
+(Workstream E Amendment: Ethereum Integration) — the §15A–§15C
+cluster was extended rather than renumbered, so no
+cross-reference churn was paid.
 
 ### OQ-CA-1 — `L1EscrowLedger` type ownership
 
@@ -1185,7 +1208,7 @@ closed by the G4.2 own-HTTP-stack unification — see the table below.)
 | OQ-GW-5 | AuthZ scopes / multi-tenancy / browser-direct (CORS + HTTP/2) | OPEN — single token, BFF-fronted, HTTP/1.1 for v1 |
 | OQ-GW-6 | Post-submit seq (host wire extension vs event-stream correlation) | OPEN — stream correlation v1; measure demand first |
 | OQ-GW-7 | Address→actor-id resolution (gateway helper vs BFF supplies id) | OPEN — ids stay canonical; optional gateway address→id helper |
-| OQ-GW-8 | HTTP library (hand-rolled vs vetted sync crate vs reuse listener) | **RESOLVED** — vetted sync crate `tiny_http` (G1.0; `docs/audits/gateway_http_spike.md`) |
+| OQ-GW-8 | HTTP library (hand-rolled vs vetted sync crate vs reuse listener) | **RESOLVED** — initially resolved via the vetted sync crate `tiny_http` (G1.0; `docs/audits/gateway_http_spike.md`); superseded by the G4.2 own-HTTP-stack unification, which retired `tiny_http` entirely — the gateway owns its whole HTTP/1.1 stack (`runtime/knomosis-gateway/src/http/{conn,plain,tls}.rs`) on both transports, and no crate depends on `tiny_http` any longer |
 | OQ-GW-9 | Read source (direct read-only SQLite vs indexer query server) | OPEN — SQLite-direct, read-only, same-host v1 (WAL constraint) |
 | OQ-GW-10 | Metrics surface (log-based vs a `/metrics` endpoint) | OPEN — both behind config; default log-based |
 | OQ-GW-11 | Licio contract surface | **RESOLVED** — §1.4 reconciliation (read-first behind a fail-closed flag) |
