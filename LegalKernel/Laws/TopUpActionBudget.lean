@@ -23,5 +23,13 @@ def topUpActionBudget (a : ActorId) (gasResource : ResourceId)
     let s1 := setBalance s gasResource a (getBalance s gasResource a - gasAmount)
     setBalance s1 gasResource poolActor (getBalance s1 gasResource poolActor + gasAmount)
 
+/-- Decidability sanity check: `topUpActionBudget`'s precondition is
+    decidable on every state. -/
+example (a : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId) (s : State) :
+    Decidable ((topUpActionBudget a gasResource gasAmount budgetIncrement
+      poolActor).pre s) :=
+  inferInstance
+
 end Laws
 end LegalKernel

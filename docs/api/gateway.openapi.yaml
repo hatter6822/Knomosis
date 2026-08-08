@@ -35,6 +35,14 @@ info:
       * Opaque forwarding. `POST /actions` forwards the client-signed CBE bytes
         VERBATIM; the gateway never re-encodes them (the ECDSA signature is over
         the canonical CBE encoding).
+      * Request correlation. EVERY response carries a gateway-generated
+        `X-Request-Id` header; error responses mirror the same id into the
+        RFC 9457 `problem.instance` member, so a support report can cite one
+        token for both.
+      * Browser CORS. Cross-origin access is opt-in: when the gateway runs with
+        `--cors-origin`, it answers `OPTIONS` preflight requests (before auth —
+        a preflight carries no credentials) and decorates responses with the
+        matching CORS headers; without the flag, no CORS headers are emitted.
   license:
     name: GPL-3.0-or-later
     url: https://github.com/hatter6822/Knomosis/blob/main/LICENSE

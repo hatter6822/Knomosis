@@ -107,6 +107,13 @@ def claimBudgetRefund (claimant poolActor : ActorId) (gasResource : ResourceId)
     setBalance s1 gasResource claimant
       (getBalance s1 gasResource claimant + refundAmount)
 
+/-- Decidability sanity check: `claimBudgetRefund`'s precondition is
+    decidable on every state. -/
+example (claimant poolActor : ActorId) (gasResource : ResourceId)
+    (refundAmount : Amount) (s : State) :
+    Decidable ((claimBudgetRefund claimant poolActor gasResource refundAmount).pre s) :=
+  inferInstance
+
 /-- The refund kernel effect coincides with the debit-then-credit
     `transfer gasResource poolActor claimant refundAmount` effect at
     the `apply_impl` level.  Definitional (`rfl`): both unfold to the

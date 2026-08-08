@@ -161,21 +161,25 @@ Before deploying the Workstream-H contracts:
 
 ## 2. Deployment sequence
 
-The five Workstream-H contracts must be deployed in dependency
-order via CREATE3 (the Lean-side
-`solidity/script/DeployFaultProof.s.sol` script handles this
+The four Workstream-H contracts must be deployed in dependency
+order — plain `new` creates, with the circular game ↔ submission
+dependency resolved by `vm.computeCreateAddress` nonce prediction
+(the `solidity/script/DeployFaultProof.s.sol` script handles this
 automatically):
 
-  1. `KnomosisStepVM` — pure logic, no dependencies.
+  1. `KnomosisStepVMRoot` — pure logic, no dependencies.
   2. `KnomosisStateRootSubmission` — depends on the (predicted)
      fault-proof game address.
-  3. `KnomosisFaultProofGame` — depends on the deployed step VM
-     address + the (predicted) state-root submission address.
-  4. `KnomosisDisputeVerifierV2` — depends on the deployed
-     fault-proof game address.
-  5. `KnomosisFaultProofMigration` — depends on the V1 contracts
-     (the predecessors) being pre-committed via their
-     `migration` immutable.
+  3. `KnomosisDisputeVerifierV2` — depends on the (predicted)
+     fault-proof game address + the deployed state-root
+     submission address.
+  4. `KnomosisFaultProofGame` — depends on the deployed step VM,
+     state-root submission, and dispute-verifier addresses.
+
+(`KnomosisFaultProofMigration` is not deployed by this script —
+it is deployed at migration time, against the V1 contracts (the
+predecessors) pre-committed via their `migration` immutable; see
+§4.3.)
 
 After deployment, run the per-contract `assertConsistent()`
 view to verify deploy-time invariants:
@@ -183,12 +187,11 @@ view to verify deploy-time invariants:
 ```solidity
 stepVM.assertConsistent();
 stateRootSubmission.assertConsistent();
-faultProofGame.assertConsistent();
 disputeVerifier.assertConsistent();
-faultProofMigration.assertConsistent();
+faultProofGame.assertConsistent();
 ```
 
-All five must succeed (no revert).
+All four must succeed (no revert).
 
 ## 3. Operational monitoring
 
@@ -250,8 +253,10 @@ Track the following events from `KnomosisFaultProofGame`:
 
 Per-game state:
 
-  * `games[gameId].turnDeadline` — time of next response
-    deadline.  If exceeded with no response, anyone can call
+  * `games[gameId].turnDeadline` — the L1 block number of the
+    next response deadline (`uint64(block.number) +
+    BISECTION_RESPONSE_TIMEOUT`, reset on every move).  If
+    exceeded with no response, anyone can call
     `claimTimeout(gameId)`.
   * `games[gameId].depth` — bisection depth.  Capped at
     `MAX_BISECTION_DEPTH = 64`.
@@ -366,7 +371,7 @@ same discipline — read `games(gameId)` first and check `turn`.
 
 ### 4.3 Bug discovered in deployed contracts
 
-**Symptom**: A logic error in `KnomosisStepVM` or another
+**Symptom**: A logic error in `KnomosisStepVMRoot` or another
 deployed contract.
 
 **Response**: Use `KnomosisFaultProofMigration` to hand off to a
@@ -525,7 +530,7 @@ equivalence is verified at the fixture-corpus level.
 # runtime/knomosis-faultproof-observer/Cargo.toml
 [package]
 name = "knomosis-faultproof-observer"
-version.workspace = true     # 0.6.0, inherited from the workspace
+version.workspace = true     # inherits the workspace version (runtime/Cargo.toml)
 edition.workspace = true     # 2021
 
 [dependencies]

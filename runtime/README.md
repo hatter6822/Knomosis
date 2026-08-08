@@ -8,11 +8,14 @@
 
 # Knomosis Rust host-runtime workspace
 
-This directory houses the **11 workspace crates** that materialise
+This directory houses the **14 workspace crates** that materialise
 Knomosis's deployment-supplied substrates (cryptographic adaptors, L1
-event watcher, off-chain fault-proof observer) and the host-level
+event watcher, off-chain fault-proof observer), the host-level
 services Phase 5 deferred (network adaptor, event subscription,
-SQLite storage + indexer, throughput benchmark).
+SQLite storage + indexer, throughput benchmark), and the
+browser-facing HTTP/JSON + SSE gateway — plus the separate
+nightly-only `fuzz/` cargo-fuzz workspace, which is excluded from
+`--workspace`.
 
 The full design rationale lives in
 [`docs/planning/rust_host_runtime_plan.md`](../docs/planning/rust_host_runtime_plan.md);
@@ -21,10 +24,12 @@ read it first.  This README is the day-to-day developer guide.
 ## Status
 
 Every Rust workstream RH-H, RH-A.1, RH-A.2, RH-B, RH-C, RH-D, RH-E.0,
-RH-E.1, RH-F, and RH-G is **Complete**.  Two integration follow-ups
-remain: the Lean `knomosis extract-events` subcommand (needed by RH-D's
-`SubprocessExtractor`) and `knomosis-indexer`'s `--verify-against-knomosis`
-wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
+RH-E.1, RH-F, and RH-G is **Complete**.  The Lean `knomosis
+extract-events` subcommand (needed by RH-D's `SubprocessExtractor`)
+has shipped; one integration follow-up remains:
+`knomosis-indexer`'s `--verify-against-knomosis` wiring, which exits
+`NotImplemented` until knomosis-host grows the `getBalance` endpoint
+it needs.  Current state:
 
   * **`knomosis-amount`** — the workspace's 256-bit unsigned
     accounting scalar.  Sits below every other crate (it depends only
@@ -149,6 +154,26 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     `knomosis replay-up-to LOG IDX` subcommand provides the
     in-production truth function the `SubprocessTruthOracle`
     shells out to.
+  * **`knomosis-gateway`** — Workstream GW synchronous HTTP/JSON +
+    Server-Sent-Events gateway.  Library + binary.  Fronts the
+    knomosis-host submit surface, the knomosis-event-subscribe
+    stream, and the knomosis-indexer SQLite read model for a
+    browser-facing BFF.  Owns its whole HTTP stack — the
+    transport-neutral connection handler over the workspace's
+    rustls 0.23 (native TLS, optional mTLS + CRL revocation), one
+    thread per connection on both the plaintext and TLS listeners,
+    no `tiny_http` — and serves the read endpoints, the
+    content-negotiated opaque `SignedAction` submit path, and the
+    SSE event fan-out with resume.  See
+    `docs/planning/gateway_integration_plan.md` and
+    `docs/gateway_runbook.md`.
+  * **`knomosis-gateway-bench`** — Workstream GW (G4.6) read-path
+    throughput / latency benchmark for the gateway.  Seeds a
+    read-only indexer fixture, drives a real gateway listener with
+    concurrent raw-HTTP clients, and reports throughput + a
+    histogram latency summary as a human table + JSON, with
+    `--baseline` regression detection.  A manual tool, not a CI
+    gate.
 
 Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 
@@ -165,16 +190,26 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 | RH-F      | `knomosis-bench`                       | **Complete**     |
 | RH-G      | `knomosis-faultproof-observer`         | **Complete**     |
 
+The two gateway crates arrived later under Workstream GW (plan:
+`docs/planning/gateway_integration_plan.md`), and `knomosis-amount`
+under the amount-widening work (AM.1) that replaced the Rust side's
+`u128` balances with the kernel-exact 256-bit scalar.
+
 ## Layout
 
 ```
 runtime/
 ├── Cargo.toml                       — workspace manifest
 ├── rust-toolchain.toml              — pinned Rust channel (1.97)
+├── deny.toml                        — cargo-deny supply-chain policy
+│                                     (the ci-cargo-deny.yml gate)
 ├── README.md                        — this file
 ├── knomosis-hash-fallback.c            — pre-existing AR.10 fallback
 │                                       (lake-built static library; not
 │                                       part of the Cargo workspace)
+├── knomosis-verify-fallback.c          — F-2 verify-identifier fallback
+│                                       (its own archive; lake-built,
+│                                       not part of the Cargo workspace)
 │
 ├── knomosis-amount/                    — shared library  (implemented)
 │   ├── Cargo.toml
@@ -325,6 +360,17 @@ runtime/
 │   └── tests/
 │       └── smoke.rs                 — end-to-end smoke (Unix + TCP)
 │
+├── knomosis-gateway/                   — Workstream GW HTTP/JSON + SSE
+│                                       gateway (library + binary; see
+│                                       docs/gateway_runbook.md)
+├── knomosis-gateway-bench/             — G4.6 gateway read-path
+│                                       throughput / latency bench
+│                                       (library + binary)
+├── fuzz/                            — knomosis-fuzz cargo-fuzz harness:
+│                                     a SEPARATE nightly-only workspace,
+│                                     excluded from --workspace (the
+│                                     ci-fuzz.yml lane; see fuzz/README.md)
+│
 └── tests/cross-stack/               — fixture corpus
     ├── README.md                    — format + consumption guide
     └── *.cxsf                       — fixture files (added by RH-A.* …)
@@ -340,7 +386,7 @@ cd runtime/
 # downloads the pinned 1.97 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (~1 960 across the 11 crates).
+# Run every member crate's tests (~2 483 across the 14 crates).
 # `cargo test --workspace` is the canonical query; per-crate
 # breakdowns are recorded in CLAUDE.md's "Current development
 # status" section.
@@ -422,10 +468,6 @@ cargo run --example gen_ingest_fixtures -p knomosis-l1-ingest -- \
     tests/cross-stack/l1_ingest.cxsf
 ```
 
-> Note: workspace member directories retain historical `knomosis-*` folder names,
-> but Cargo package IDs are rebranded `knomosis-*`; use `-p knomosis-...`
-> selectors in commands.
-
 Output goes to `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`,
 `runtime/tests/cross-stack/keccak256.cxsf`, and
 `runtime/tests/cross-stack/l1_ingest.cxsf`.  The generators use
@@ -474,6 +516,12 @@ Several Knomosis primitives are implemented in both Lean and Rust:
   * **CBE encoding of `Action` / `Verdict`** — Lean's
     `LegalKernel/Encoding/*.lean` plus the Rust host's CBE consumer
     (`knomosis-host`, RH-C; `knomosis-l1-ingest`, RH-B).
+  * **Event encoding** — Lean's `Encodable Event`
+    (`LegalKernel/Encoding/Event.lean`) is the byte authority,
+    pinned byte-for-byte by `knomosis-indexer`'s decoder and lifted
+    to the gateway's §6.2 JSON envelope by
+    `knomosis-gateway/tests/cross_stack_lean_event.rs` (every
+    frozen tag 0..=24).
   * **Bisection-game state machine** — Lean's
     `LegalKernel/FaultProof/Game.lean` plus the off-chain observer
     mirror (`knomosis-faultproof-observer`, RH-G).
@@ -499,9 +547,9 @@ A future bump must update both files in the same PR.
 
 ## Adding a new crate
 
-If a future work unit introduces a new crate (uncommon — the 10
-plan-defined crates plus `knomosis-cross-stack` exhaust the documented
-architecture):
+If a future work unit introduces a new crate (uncommon — the RH
+plan's crates are all complete, and later workstreams add their own
+as scoped: Workstream GW's gateway pair, AM.1's `knomosis-amount`):
 
   1. Create the directory under `runtime/<crate-name>/`.
   2. Add `<crate-name>` to the `[workspace] members` list in

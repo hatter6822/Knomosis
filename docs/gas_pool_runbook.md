@@ -317,7 +317,9 @@ throttled by nothing.  It is **default-OFF**; FIFO remains the baseline.
 knomosis-host --listen 0.0.0.0:7654 --knomosis-binary … --knomosis-log … \
   --scheduler drr \
   --per-flow-cap 64 \      # max queued requests per connection (default 64)
-  --max-flows 4096         # max distinct active connections (default 4096)
+  --max-flows 4096 \       # max distinct active connections (default 4096)
+  --max-signers-per-conn 256 \  # Rung 1: distinct signers per connection (default 256)
+  --max-conn-backlog 64    # Rung 1.5: per-connection total backlog (default = --per-flow-cap)
 ```
 
 `--max-queue-depth <N>` (default 256) doubles as the DRR *global* cap
@@ -329,24 +331,28 @@ drr` the host additionally requires `--per-flow-cap ≤ --max-queue-depth`.
 **Observability.**  The fair worker logs an aggregate summary line
 (`"fair scheduler summary"`) at shutdown and, while running, at most
 once per 30 s when there has been activity — never per request.  Fields:
-`dispatched`, `active_flows`, `queued`, and the per-reason rejection
-counters (`rejected_per_flow` / `rejected_max_flows` / `rejected_global`).
+`dispatched`, `active_flows`, `active_signers`, `queued`, and the
+per-reason rejection counters (`rejected_per_flow` / `rejected_max_flows`
+/ `rejected_max_signers` / `rejected_conn_backlog` / `rejected_global`).
 A rising `rejected_per_flow` indicates a single connection over-submitting
 (it is back-pressured to its own share); a rising `rejected_global`
 indicates the host is saturated overall.
 
 **Safety + scope.**
 
-  * **No wire change** and **no admissibility change.**  Rung 0 is
-    host-internal (`PROTOCOL_VERSION` stays `1`); the connection id is a
-    fairness routing hint that affects *order and `Busy`-drop only*,
-    never which actions the kernel admits.  Clients need no changes.
+  * **No mandatory wire change** and **no admissibility change.**
+    `PROTOCOL_VERSION` is `2` (the FQ.9 Rung-1 amendment): v2 clients
+    opt in to a per-frame signer hint via the `KNH2` preamble, and v1
+    clients are unaffected (v2 is a strict superset).  The connection
+    id — or the v2 signer hint — is a fairness routing hint that
+    affects *order and `Busy`-drop only*, never which actions the
+    kernel admits.
   * **When it bites.**  Fairness is keyed by connection, so it helps when
     distinct actors arrive on distinct connections and a connection
     carries multiple in-flight requests.  In a deployment where each
     request opens its own one-shot connection, every connection is a
-    single-request flow and DRR coincides with FIFO; the mechanism still
-    ships ready, and the Rung-1 signer-hint extension (future work)
+    single-request flow and DRR coincides with FIFO; the shipped Rung-1
+    signer-hint extension (v2 per-frame hints — the inner DRR tier)
     sharpens fairness for the single-upstream-connection topology.
   * **Reversible.**  Switch back with `--scheduler fifo` (or drop the
     flag) — the FIFO path is byte-for-byte unchanged.
@@ -525,7 +531,7 @@ the committed baseline, which is why adjacent variant rows exist):
   first-ever BOLD credits a fresh ERC-20 balance slot; both pairs of
   rows differ by precisely the EVM's zero→non-zero SSTORE surcharge
   (22 100 − 5 000).  Quote first-time users the "first" rows.
-* **Fee-split machinery overhead ≈ 8.6k gas.**  `depositETHWithFee`
+* **Fee-split machinery overhead ≈ 3.6k gas.**  `depositETHWithFee`
   (first) minus the plain `depositETH` reference: the fee arithmetic,
   budget-grant conversion, AMM seeding, the richer event + receipt
   hash, and the slightly larger calldata, all-in.
@@ -537,7 +543,7 @@ the committed baseline, which is why adjacent variant rows exist):
   deployments that pre-wire a predicted `KnomosisMigration` successor
   (solidity/README, "Production deployment notes") pay one external
   `activated()` read in every `circuitOpen` operation — measured by
-  the "migration-wired" deposit row (+3 107).  Initial deployments
+  the "migration-wired" deposit row (+3 104).  Initial deployments
   with `migration = address(0)` skip it.
 * **Exact vs infinite approval: refunds can invert a per-transaction
   story.**  Clearing a BOLD allowance to zero earns a 4 800 EIP-3529
@@ -554,7 +560,7 @@ the committed baseline, which is why adjacent variant rows exist):
   64 levels over same-sized siblings).  Operators quoting "bridging
   cost" should quote deposit + withdrawal.
 * **Keeper-probe budgeting.**  The no-shutdown probe row (a measured
-  47 250 per probe ≈ $4.3 at the reference prices) is measured through
+  47 205 per probe ≈ $4.2 at the reference prices) is measured through
   a plain low-level call — no test cheatcode interferes with the
   revert — so it is the keeper bot's true recurring cost.
 
@@ -583,9 +589,9 @@ the committed baseline, which is why adjacent variant rows exist):
 * **Plan-sketch reconciliation.**  The GP.11.9 plan sketch quoted
   rough envelopes estimated before measurement.  The isolated-mode
   baselines here are the canonical numbers and land at or below every
-  sketched envelope (e.g. deposits "~80–120k" vs a measured 66 261
+  sketched envelope (e.g. deposits "~80–120k" vs a measured 61 514
   first fee-split deposit; the no-shutdown probe "up to ~100k" vs a
-  measured 47 250).
+  measured 47 205).
 
 ### 9.5 Rollup economics: batched submission amortisation (Workstream SB)
 
@@ -594,22 +600,22 @@ Batched state-root submission changed the L2's cost structure from
 `submitStateRoot(end, prevEnd, stateCommit, actionsRoot)` covers every
 L2 action in `[prevEnd, end)` with one fixed-size record, one bond,
 and one chain-link fold — its gas is **batch-size-independent** (the
-measured `submitStateRoot_batch` row: 238 963 gas, of which 1 368 is
+measured `submitStateRoot_batch` row: 241 085 gas, of which 1 368 is
 the fixed 4-word calldata).  The amortised L1 cost per L2 action is
 therefore that constant divided by the batch size:
 
 | Batch size B | Amortised L1 gas / action | $ / action @ 30 gwei, $3k/ETH |
 |---:|---:|---:|
-| 1 (the retired per-action regime) | 238 963 | $21.51 |
-| 10 | 23 896 | $2.15 |
-| 100 | 2 390 | $0.215 |
-| 1 000 | **239** | **$0.0215** |
-| 10 000 | 23.9 | $0.00215 |
-| 65 536 (the default `MAX_ACTIONS_PER_BATCH`) | 3.6 | $0.00033 |
+| 1 (the retired per-action regime) | 241 085 | $21.70 |
+| 10 | 24 109 | $2.17 |
+| 100 | 2 411 | $0.217 |
+| 1 000 | **241** | **$0.0217** |
+| 10 000 | 24.1 | $0.00217 |
+| 65 536 (the default `MAX_ACTIONS_PER_BATCH`) | 3.7 | $0.00033 |
 
 At the reference cadence (a batch of 1 000 actions), an L2 action
-carries **≈239 gas of amortised L1 cost ≈ 2.2¢** — the same class as
-established optimistic rollups, versus ~$21.5/action under the
+carries **≈241 gas of amortised L1 cost ≈ 2.2¢** — the same class as
+established optimistic rollups, versus ~$21.7/action under the
 retired one-record-per-action regime.  The batch size is an
 operational choice: larger batches amortise further but delay
 finalisation (the whole batch shares one dispute window) and
@@ -617,7 +623,7 @@ concentrate more actions under one bond.
 
 **The dispute path is priced separately and paid only when a batch is
 disputed.**  The measured `terminateOnSingleStep_withInclusion` row —
-1 206 393 gas ≈ $108.6 — is the terminal transaction of a batch
+1 206 501 gas ≈ $108.6 — is the terminal transaction of a batch
 dispute: the disputed action re-derived as its signature-bound leaf,
 verified by inclusion against the batch's submitted actions root, its
 SIGNATURE verified against the signer's registered key, and the whole
@@ -656,7 +662,7 @@ mirror at Action 23 — was **excised before any deployment existed**
 (no contract was live, so no liquidity was stranded).  The
 excision closes what would otherwise be a standing two-venue price
 gap: one pool means one spot price, no arbitrage channel to monitor,
-and no L1→L2 swap-mirror pipeline to build.  An L2 swap costs ~239
+and no L1→L2 swap-mirror pipeline to build.  An L2 swap costs ~241
 gas of amortised L1 (§9.5); users needing L1-side ETH↔BOLD
 conversion use an external DEX.  Action index 23 and Event tag 21
 are permanent holes: the decoders on all three stacks refuse them
@@ -700,7 +706,9 @@ the AMM requires a fresh `KnomosisBridge` deployment via
 (one quorum), re-enabling is heavy (full migration) — that prevents
 flip-flopping mid-crisis and is strictly stricter than the toggling
 BOLD circuit breaker (§3).  When both brakes are engaged the kill
-switch takes precedence (`AmmIsDisabled` is the revert you will see).
+switch takes precedence: there is no L1 swap left to revert (§9.6) —
+a second `emergencyDisableAmm` reverts `AmmAlreadyDisabled()`, and
+`reserveSwap` admission on L2 is refused while `ammDisabled = true`.
 
 ### 10.1 When to invoke
 
@@ -832,8 +840,8 @@ pre-wired `KnomosisMigration` successors):
 
 `ammDisabled` is committed to the L2 state root: the Lean
 `BridgeState` carries an `ammDisabled` mirror field (GP.11.10),
-appended to the canonical CBE encoding after the five GP.11.8
-AMM/BOLD fields and committed by `commitBridgeState` /
+appended to the canonical CBE encoding after the three GP.11.8
+BOLD mirror fields and committed by `commitBridgeState` /
 `commitExtendedState`.  Consequences operators should know:
 
 * the L2 ingestor learns the disable from the state commitment —
@@ -843,11 +851,11 @@ AMM/BOLD fields and committed by `commitBridgeState` /
 * a sequencer cannot publish a state root that misrepresents the
   kill-switch state: under collision resistance, two states
   differing only in `ammDisabled` have different top-level roots
-  (`commitExtendedState_reflects_ammDisabled` /
+  (`commitExtendedStateConcat_reflects_ammDisabled` /
   `commitBridgeState_reflects_ammDisabled`, machine-checked in
   `LegalKernel/FaultProof/Commit.lean`), so the fault-proof game can
   adjudicate a dispute that turns on it;
-* WITHIN a committed action batch the mirror cannot move: all six
+* WITHIN a committed action batch the mirror cannot move: all four
   AMM-mirror fields are step-invariant under every admissible
   action (`amm_mirrors_constant_over_admitted_trace`,
   `LegalKernel/Bridge/Admissible.lean`).  The mirror changes only
@@ -865,12 +873,12 @@ transaction gas, refunds netted).  At 30 gwei / $3 000 ETH:
 
 | Leg | Gas (measured) | $ |
 |---|---:|---:|
-| `confirmDisable` (each non-final signer) | 59 629 | ~$5.4 |
-| `confirmDisable` (threshold-th signer — executes the disable through the bridge) | 112 582 | ~$10.1 |
-| `emergencyDisableAmm` (direct `ammDisasterRecovery` call, no multisig) | 49 623 | ~$4.5 |
+| `confirmDisable` (each non-final signer) | 59 615 | ~$5.4 |
+| `confirmDisable` (threshold-th signer — executes the disable through the bridge) | 107 795 | ~$9.7 |
+| `emergencyDisableAmm` (direct `ammDisasterRecovery` call, no multisig) | 44 806 | ~$4.0 |
 
 A full 3-of-N multisig firing therefore costs two non-final
-confirms plus one executing confirm — about **$21** total.  Gas
+confirms plus one executing confirm — about **$20** total.  Gas
 cost is never a reason to delay firing it.
 
 ## 11. Sequencer reimbursement claims (GP.8 Track B)

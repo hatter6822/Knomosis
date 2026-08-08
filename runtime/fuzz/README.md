@@ -54,7 +54,7 @@ cargo install cargo-fuzz --locked        # pin: 0.13.2 (see ci-fuzz.yml)
 # From the runtime workspace root (the dir that contains fuzz/):
 cd runtime
 
-cargo +nightly fuzz list                 # the four targets above
+cargo +nightly fuzz list                 # the five targets above
 
 # Run one target (Ctrl-C to stop; add -max_total_time=<s> to bound it).
 # The committed dictionaries seed the branch-guarding magic bytes (the

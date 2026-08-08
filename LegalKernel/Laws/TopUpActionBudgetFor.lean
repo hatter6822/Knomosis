@@ -86,6 +86,15 @@ def topUpActionBudgetFor (recipient signer : ActorId) (gasResource : ResourceId)
     let s1 := setBalance s gasResource signer (getBalance s gasResource signer - gasAmount)
     setBalance s1 gasResource poolActor (getBalance s1 gasResource poolActor + gasAmount)
 
+/-- Decidability sanity check: `topUpActionBudgetFor`'s precondition
+    is decidable on every state. -/
+example (recipient signer : ActorId) (gasResource : ResourceId)
+    (gasAmount : Amount) (budgetIncrement : Nat) (poolActor : ActorId)
+    (s : State) :
+    Decidable ((topUpActionBudgetFor recipient signer gasResource gasAmount
+      budgetIncrement poolActor).pre s) :=
+  inferInstance
+
 /-- The delegated-top-up kernel effect coincides with the
     debit-then-credit `transfer gasResource signer poolActor
     gasAmount` effect at the `apply_impl` level.  Definitional

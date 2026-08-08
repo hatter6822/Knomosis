@@ -105,6 +105,13 @@ def reclaimAmmReserves (r : ResourceId) (amount : Amount)
     setBalance s1 r poolActor
       (getBalance s1 r poolActor + amount)
 
+/-- Decidability sanity check: `reclaimAmmReserves`'s precondition is
+    decidable on every state. -/
+example (r : ResourceId) (amount : Amount)
+    (reserveActor poolActor : ActorId) (s : State) :
+    Decidable ((reclaimAmmReserves r amount reserveActor poolActor).pre s) :=
+  inferInstance
+
 /-! ## Cross-resource independence
 
 Both writes land at the single resource `r`; any other resource is

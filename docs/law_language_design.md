@@ -32,7 +32,13 @@ through the existing kernel typing rules; the trusted core
 >
 > * **Macro keyword.**  The law-declaration macro is `lexlaw`
 >   (`Lex/DSL/Law.lean`), *not* `law` as the worked examples below
->   spell it.  (The `deployment` macro keyword is as shown.)
+>   spell it.  (The `deployment` macro keyword is as shown, but the
+>   shipped deployment *clauses* are all `deploy_`-prefixed:
+>   `deploy_id`, `deploy_deployment_id`, `deploy_version`,
+>   `deploy_resources`, `deploy_laws`, `deploy_authority`,
+>   `deploy_invariant_claims`, `deploy_attestor` —
+>   `Lex/DSL/Deployment.lean`; worked example
+>   `Deployments/Examples/UsdClearing.lean`.)
 > * **Reserved action-index range.**  The `legalkernel.*` org prefix
 >   reserves indices **0..16** (17 kernel-built-in entries); every
 >   non-`legalkernel` law uses `action_index ≥ 17` (lint code L006).
@@ -351,6 +357,21 @@ emit_stmt       ::= "emit" event_ctor (term)*
 -- extended with `getBalance postState …` references; events read
 -- both pre- and post-state, while `pre_expr` reads only pre-state.
 ```
+
+> **As built.**  The shipped law surface is `lexlaw <ident> where`
+> with `lex_`-prefixed clause keywords (`lex_id`, `lex_version`,
+> `lex_action_index`, `lex_intent`, `lex_signed_by`,
+> `lex_authorized_by`, `lex_pre`, `lex_impl`, `lex_satisfies`,
+> `lex_events`, `lex_proof`); the header's `"(" params ")"` became
+> a `lex_params` clause taking Lean binders, and `lex_intent`
+> takes a string literal, not an `md_block` (`Lex/DSL/Law.lean`).
+> The `impl_block` production shipped as `lex_impl := <term>` —
+> any Lean term of type `State → State`.  The calculus surface is
+> the `lex_do` term macro (`Lex/DSL/ImplLowering.lean`), which
+> accepts exactly ONE statement per block (multi-statement
+> composition is deferred, per that module's own note), and whose
+> `flow` statement requires the explicit `amt` keyword:
+> `flow r amt v from a to b`.
 
 `bounded_iter` is any expression of type `List α` produced by
 `BalanceMap.toList`, `KeyRegistry.toList`, `NonceState.toList`, or
@@ -1170,6 +1191,16 @@ claim ::= "monotonic_law_set"      "[" ident ("," ident)* "]"
         | ident                                          -- user-defined claim
 ```
 
+> **As built.**  Shipped clause names carry the `deploy_` prefix
+> (`deploy_id`, `deploy_deployment_id`, `deploy_version`,
+> `deploy_resources`, `deploy_laws`, `deploy_authority`,
+> `deploy_invariant_claims`, `deploy_attestor` —
+> `Lex/DSL/Deployment.lean`); `deploy_deployment_id` takes a
+> 64-hex-character *string literal* (no `0x` prefix), decoded and
+> validated to exactly 32 bytes (L018); and `deploy_resources`
+> entries are `str ":=" num` pairs, e.g.
+> `deploy_resources := [ "USD" := 0 ]`.
+
 ### 7.2. Worked example: a USD-clearing manifest
 
 ```
@@ -1205,6 +1236,14 @@ deployment usd_clearing where
     -- Adding it here would fail elaboration with diagnostic L008.
   ]
 ```
+
+> **As built.**  Not elaborable as written: the shipped clause
+> spellings are the `deploy_`-prefixed forms noted under §7.1, and
+> the shipped `deploy_laws` clause binds a Lean identifier in
+> scope, so the elaborable counterpart of this manifest
+> (`Deployments/Examples/UsdClearing.lean`) binds parameterless
+> wrapper laws — `Transfer = transferWrapper @ "1.0.0"` — rather
+> than the dotted `legalkernel.transfer @ "1.0.0"` shown here.
 
 ### 7.3. Elaboration semantics
 

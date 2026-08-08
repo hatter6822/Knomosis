@@ -125,8 +125,13 @@ The companion machine-readable contract is
 > `--sse-max-streams`) and **OQ-GW-15** (the `--sse-write-timeout-ms` per-record
 > write deadline is now honoured on both transports).  The remaining §9.2 surface
 > is complete: **`--cors-origin`** (+ OPTIONS preflight), **`--log-format`**,
-> **`--dev`** (in-process mock upstreams), **`--upstream-subscriptions`**, and
-> **`--sse-write-timeout-ms`**.  The **G3.2c cross-stack pin is shipped**: the
+> **`--dev`** (in-process mock upstreams), **`--upstream-subscriptions`**,
+> **`--sse-write-timeout-ms`**, and **`--l2-chain-id`** (default `83572`;
+> production `8357`) — the chain id answered by the shipped auth-exempt
+> **`/rpc`** wallet-discovery JSON-RPC shim (`eth_chainId` / `net_version` /
+> `eth_blockNumber` / `web3_clientVersion`, so a browser wallet's Add-Network
+> probe succeeds without a credential; `/rpc` joins `/healthz` + `/readyz` as
+> the only auth-exempt paths).  The **G3.2c cross-stack pin is shipped**: the
 > Lean `Encodable Event` instance (`Encoding/Event.lean`) is the byte authority,
 > pinned byte-for-byte by `knomosis-indexer` and lifted to the gateway's §6.2
 > envelope by `knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen

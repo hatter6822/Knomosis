@@ -102,6 +102,7 @@ Genesis Plan wins until amended.
 - [15B. Workstream H Amendment: Fault-Proof Migration](#15b-workstream-h-amendment-fault-proof-migration)
 - [15C. Workstream AR Amendment: Audit Remediation](#15c-workstream-ar-amendment-audit-remediation)
 - [15D. Workstream E Amendment: Ethereum Integration](#15d-workstream-e-amendment-ethereum-integration)
+- [15E. Workstream GP Amendment: Unified Gas Pool and Per-Actor Budgets](#15e-workstream-gp-amendment-unified-gas-pool-and-per-actor-budgets)
 - [16. Final Principles](#16-final-principles)
 - [17. End State Vision](#17-end-state-vision)
 - [Appendix A. Glossary](#appendix-a-glossary)
@@ -3294,9 +3295,13 @@ admissibility conditions discharged before any state change.
 applied exactly once; replay rejected by `replay_impossible`; key
 rotation tested end-to-end.
 
-**Phase 3 status: complete.**  All ten work units (3.1 – 3.10)
-landed in `LegalKernel/Authority/{Crypto, Action, Identity, Nonce,
-SignedAction}.lean`.  Notable design notes:
+**Phase 3 status: complete.**  Work units 3.1 – 3.10 are closed:
+the Lean-side units landed in `LegalKernel/Authority/{Crypto,
+Action, Identity, Nonce, SignedAction}.lean`, and WU 3.9's
+deployment-supplied cryptographic adaptor — deferred to the
+runtime layer at the time — has since shipped as the production
+secp256k1 verifier (`runtime/knomosis-verify-secp256k1`, RH-A.1).
+Notable design notes:
 
 * **WU 3.2 — structural injectivity via wrapper.**  `Action.compile`
   was redesigned to return a `CompiledAction` wrapper (`source :
@@ -3323,9 +3328,13 @@ SignedAction}.lean`.  Notable design notes:
   assumption surfaces as a *trust assumption* on the
   deployment-supplied runtime adaptor (Phase 5, WU 3.9), not as a
   Lean axiom.
-* **WU 3.9 — Ed25519 adaptor deferred to Phase 5.**  The
-  cryptographic adaptor is part of the runtime layer; Phase 3
-  ships only the Lean-side `Verify` interface.
+* **WU 3.9 — runtime adaptor deferred to Phase 5, since shipped.**
+  The cryptographic adaptor is part of the runtime layer; Phase 3
+  shipped only the Lean-side `Verify` interface.  The production
+  adaptor has since landed as ECDSA secp256k1
+  (`runtime/knomosis-verify-secp256k1`, RH-A.1) — chosen over the
+  originally-sketched Ed25519 for Ethereum-ecosystem key
+  compatibility.
 * **Test coverage.**  96 new test cases added across four suites
   (Authority.{ActionTests, IdentityTests, NonceTests,
   SignedActionTests}), bringing the total to 191.  Tests cover
@@ -3838,8 +3847,10 @@ Three streams (after 4.4 / 3.7):
 working; replay tool reproduces state from any log; benchmarks pass;
 crash-consistency fuzz green.
 
-**Phase 5 status.** Lean-side WUs complete; Rust-side WUs deferred
-to a follow-up PR.
+**Phase 5 status.** Complete.  The Lean-side WUs landed with the
+phase; the Rust-side WUs (deferred at the time) have since shipped
+via Workstream RH — the `runtime/` workspace (see §12's RH rows and
+`docs/planning/rust_host_runtime_plan.md`).
 
 - WU 5.1: `LegalKernel/Runtime/Loop.lean` ships the `RuntimeState`
   record + `processSignedAction` (single-step state advance with
@@ -3908,11 +3919,14 @@ to a follow-up PR.
   resume-from-sequence backfill.  Wire format documented in
   `docs/abi.md` §11; engineering plan in
   `docs/planning/rust_host_runtime_plan.md` §RH-D.  158 new tests
-  bring the Rust workspace total to 684.  The `knomosis
-  extract-events` Lean-side subcommand the
-  `SubprocessExtractor` delegates to is a follow-up PR; the
-  framework ships with a working `MockExtractor` for tests + dev.
-- WU 5.8: deferred (SQLite indexer — depends on a Rust DB layer).
+  bring the Rust workspace total to 684 at that point.  The
+  `knomosis extract-events` Lean-side subcommand the
+  `SubprocessExtractor` delegates to has since shipped
+  (`Main.lean`, RH-D / GP.6.3); the `MockExtractor` remains for
+  tests + dev.
+- WU 5.8: shipped since, as Workstream RH-E — the
+  `knomosis-storage` DB layer (RH-E.0) plus the `knomosis-indexer`
+  SQLite event indexer (RH-E.1) under `runtime/`.
 - WU 5.9: `docs/extraction_notes.md` ships the per-construct
   erasure / persistence map (what survives Lean's compilation
   pipeline into the runtime binary) plus the `Verify` opaque-
@@ -4464,7 +4478,7 @@ Per-phase totals are sums of the WU estimates above.
 | 3     | 10       | 9.5                       | complete          |
 | 4-pre | 23       | (Phase-4 prelude)         | complete          |
 | 4     | 9        | 8.5                       | complete          |
-| 5     | 12       | 13.0                      | complete (Lean side); Rust deferred |
+| 5     | 12       | 13.0                      | complete (Lean + Rust via RH) |
 | 6     | 12       | 9.5                       | complete          |
 | 7     | 7        | 20.0+ (open-ended)        | not started       |
 | X.x   | 6        | 7.5                       | continuous        |
@@ -6503,10 +6517,11 @@ EVM transactions.  See `docs/abi.md` §13.6 / §13.10 and
 
 ### 15D.8 Solidity contract surface
 
-Workstream E-E ships ten immutable Solidity contracts plus six
-shared libraries under `solidity/`.  The full per-contract
-inventory lives in `solidity/README.md` and `docs/abi.md` §13 +
-§15; the highlights are:
+The Solidity surface has grown to eleven immutable contracts plus
+sixteen shared libraries under `solidity/` (Workstream E-E's
+original set extended by the later H / SB / GP workstreams).  The
+full per-contract inventory lives in `solidity/README.md` and
+`docs/abi.md` §13 + §15; the highlights are:
 
 **Workstream-E contracts (E.1 – E.5):**
 
@@ -6776,11 +6791,15 @@ workstream.
      new dispute-verifier deployment plus a
      `KnomosisMigration` handoff (no in-place extension path
      — Solidity contracts are immutable per §15D.8.2).
-  10. **Multi-resource bridges.**  The MVP bridge handles a
-      single resource family (configured at construction
-      time).  Multi-resource support is a deployment-time
-      composition (one bridge contract per resource), not
-      a code-level extension.
+  10. **Multi-resource bridges.**  The original MVP bridge
+      handled a single resource family; the shipped
+      `KnomosisBridge` has since grown a constructor-time
+      ERC-20 resource registry (parallel `erc20ResourceIds[]` /
+      `erc20TokenAddrs[]` arrays validated as a bijection)
+      alongside the reserved native-ETH resource 0 and BOLD
+      resource 1.  Resources remain fixed at construction —
+      adding one post-deploy is still a new-deployment
+      composition, not a code-level extension.
   11. **DAO governance for tunable parameters.**  The MVP's
       bridge / verifier parameters are immutable
       constructor arguments.  Parameterised governance

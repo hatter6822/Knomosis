@@ -341,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-amount"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "crypto-bigint",
  "serde",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cli-common"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "thiserror",
  "tracing",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-faultproof-observer"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "hex",
  "k256",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-host"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "knomosis-amount",
  "knomosis-cli-common",
@@ -404,7 +404,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-indexer"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "knomosis-amount",
  "knomosis-cli-common",
@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-l1-ingest"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "k256",
  "knomosis-amount",
@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-storage"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "knomosis-amount",
  "rusqlite",

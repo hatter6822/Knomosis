@@ -1,6 +1,6 @@
 # Knomosis Solidity contracts
 
-L1 mirror of Knomosis's kernel: **eleven immutable contracts, seven
+L1 mirror of Knomosis's kernel: **eleven immutable contracts, sixteen
 shared libraries, seven interfaces** that anchor deposits, state-root
 submissions, withdrawals, the dispute pipeline, sequencer staking,
 interactive fault proofs (Workstream H), SMT cell proofs (Workstream
@@ -36,7 +36,7 @@ solidity/
 │   │   ├── KnomosisMigration.sol          (E.5)  — attested handoff
 │   │   ├── KnomosisStateRootSubmission.sol (H)   — state-root window + bonds
 │   │   ├── KnomosisFaultProofGame.sol     (H)    — bisection-game arbiter
-│   │   ├── KnomosisStepVM.sol             (H)    — single-step verifier (pure)
+│   │   ├── KnomosisStepVMRoot.sol         (H)    — single-step → state-root verifier (pure)
 │   │   ├── KnomosisFaultProofMigration.sol (H)   — v1 → v2 migration
 │   │   └── KnomosisAmmDisasterRecoveryMultisig.sol (GP.11.10) — 3-of-N AMM kill-switch quorum
 │   ├── interfaces/                            — 7 public interface files
@@ -44,33 +44,49 @@ solidity/
 │   │                                            (GP.5.5) + IKnomosisAmmDisasterRecovery
 │   │                                            (GP.11.10))
 │   └── lib/
-│       ├── KnomosisEip712.sol      — EIP-712 domain + struct-hash helpers
-│       ├── CBEDecode.sol        — CBE byte decoder (mirrors Lean)
-│       ├── SmtVerifier.sol      — withdrawal-tree SMT verifier (D.1, depth 64)
-│       ├── SmtCellVerifier.sol  — state-cell SMT verifier (SC.2, depth 256)
-│       ├── CREATE3.sol          — proxy-factory deploy for cyclic refs
+│       ├── ActionsRoot.sol      — per-batch actions-root SMT (SB)
 │       ├── AmmMath.sol          — constant-product AMM math (prices the L2 reserveSwap)
-│       └── StepVMMerkle.sol     — per-cell proof helpers (H + SC.2)
+│       ├── CBEDecode.sol        — CBE byte decoder (mirrors Lean)
+│       ├── CBEEncode.sol        — CBE value encoders (inverse of CBEDecode)
+│       ├── CREATE3.sol          — proxy-factory deploy for cyclic refs
+│       ├── KnomosisChainId.sol  — canonical L2 chain ids (vs the L1's)
+│       ├── KnomosisEip712.sol   — EIP-712 domain + struct-hash helpers
+│       ├── LogChain.sol         — batched-submission hash chain (SB)
+│       ├── Secp256k1.sol        — SEC1 pubkey decompression → address (F-A)
+│       ├── SignInput.sol        — recomputes the L2 signing digest on L1 (F-A)
+│       ├── SmtCellVerifier.sol  — state-cell SMT verifier (SC.2, depth 256)
+│       ├── SmtMultiVerifier.sol — merged multi-cell SMT walk (one walk, one root)
+│       ├── SmtVerifier.sol      — withdrawal-tree SMT verifier (D.1, depth 64)
+│       ├── StepPlan.sol         — per-variant scalars the cell derivations need
+│       ├── StepVMMerkle.sol     — per-cell proof helpers (H + SC.2)
+│       └── StepWrites.sol       — derived cell writes (mirrors Lean VerifierWrites)
 ├── scripts/
 │   ├── audit_compile_time_caps*.sh   — GP.5.2 cap gate + self-test
 │   ├── check_gas_baseline.py         — GP.11.9 gas-regression gate
+│   ├── export_method_selectors.py    — compiled-ABI selector fixture (Rust observer)
 │   ├── generate_gas_runbook_table.py — GP.11.9 runbook-table generator
+│   ├── local_devnet.sh               — live-anvil deploy + verify (`make devnet`)
 │   └── vendor-deps.sh                — pinned dependency vendoring
 └── test/
     ├── *.t.sol                  — per-contract unit suites (incl. the
     │                               GP.11.9 BenchmarkGasV1_3 gas benchmarks)
     ├── BenchmarkGasV1_3.gas-baseline.json — committed GP.11.9 gas baseline
     ├── CrossCheck/*.t.sol       — cross-stack suites (Lean ↔ Solidity)
+    ├── goldens/                 — F.2 mainnet keccak cross-stack
+    │                               golden vectors (own README)
     └── utils/                   — Deployer.sol (CREATE3 harness),
                                     MockERC20.sol, MockBold.sol,
-                                    MockBoldOz.sol, MockLiquityV2.sol
+                                    MockBoldOz.sol, MockLiquityV2.sol,
+                                    and 11 more shared helpers
 ```
 
-Total: **~894 forge tests passing across 59 suites** (`forge test`;
-fuzz and property tests additionally report per-test run counts). A
-subset is conditionally skipped when the production keccak256 binding
-is not linked (the cross-check suites probe `isKeccak256Linked` on
-the Lean side and skip on the fallback).
+Total: **~920 forge tests passing across 65 suites** (`forge test`;
+fuzz and property tests additionally report per-test run counts).
+None are skipped: the hash-dependent cross-check corpora are keccak
+artifacts by construction (the Lean fixture writers refuse to author
+them on a fallback-hash build), and the consuming suites require the
+keccak-linked fixture header (`_requireKeccakLinked`) instead of
+skipping.
 
 ## Build & test
 
@@ -99,11 +115,23 @@ make snapshot-gas-check           # GP.11.9 gas-benchmark regression gate
 make snapshot-gas                 # regenerate the GP.11.9 baseline + runbook table
 make snapshot-gas-selftest        # self-tests for the GP.11.9 gate + generator
 make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
+make testnet-acceptance           # F.3 LIVE testnet run (needs RPC_URL + keys)
+make devnet                       # F.3 LIVE anvil deploy + verify vs deployed
+make deploy-sepolia-dryrun        # unified full-suite deploy (in-memory; manifest)
+make deploy-sepolia               # REAL Sepolia broadcast + Etherscan verify
+make deploy-local                 # full BOLD+AMM suite vs a live anvil
+make coverage                     # line/branch coverage (via --ir-minimum)
+make coverage-lcov                # coverage as lcov.info for CI / IDE
+make vendor-deps                  # pinned dependency vendoring (as above)
+make clean                        # forge clean
 ```
 
 `foundry.toml` pins:
 
-* `solc_version = "0.8.36"` with `evm_version = "shanghai"`.
+* `solc = "/usr/local/bin/solc"` — the solc *binary path*, not a
+  `solc_version` key — with `evm_version = "shanghai"`.  The version
+  at that path is pinned to exactly 0.8.36 by the install step above
+  and by CI, and the sources declare `pragma solidity ^0.8.36`.
 * `via_ir = true` — required because `KnomosisBridge.withdrawWithProof`
   and a few other functions are stack-too-deep without it.
 * `optimizer_runs = 200`.
@@ -201,8 +229,8 @@ Specifically:
 * `KnomosisEip712`'s digest matches `LegalKernel.Bridge.Eip712.digest`.
 * `KnomosisBridge`'s `receiptHash` derivation matches
   `LegalKernel.Laws.Deposit.depositId`.
-* `KnomosisStepVM.executeStep` matches
-  `LegalKernel.FaultProof.Step.kernelStep` byte-for-byte (H).
+* `KnomosisStepVMRoot.executeStepToRootMulti` matches
+  `LegalKernel.FaultProof.Step.kernelStepApply` byte-for-byte (H).
 * `KnomosisFaultProofGame` state transitions match
   `LegalKernel.FaultProof.Game` (H).
 
@@ -211,10 +239,11 @@ The Lean side (`LegalKernel/Test/Bridge/CrossCheck/*` and
 across seven Workstream-F sub-suites plus three Workstream-H
 sub-suites. The Solidity side (`solidity/test/CrossCheck/*`)
 consumes the fixtures via `vm.readFile` + `vm.parseJson` and
-asserts byte equality against the recorded Lean outputs. Per-entry
-assertions are gated on the production keccak256 binding being
-linked (`isKeccak256Linked`); when running with the FNV fallback
-the cross-checks log a skip line and exit cleanly.
+asserts byte equality against the recorded Lean outputs. The
+hash-dependent fixtures are keccak artifacts by construction (the
+Lean writers refuse to author them on a fallback-hash build); each
+consuming suite requires the fixture header's `isKeccak256Linked`
+flag via `_requireKeccakLinked` rather than skipping.
 
 To regenerate fixtures (Lean side):
 
@@ -286,8 +315,11 @@ class — so the tripwire cannot be silently disabled by a later edit.
 Both layers run on every Solidity PR via
 `.github/workflows/ci-solidity.yml`: the `caps-audit` job runs the gate
 + self-test (no toolchain, fast), and the `forge` job runs the runtime
-pin alongside the full suite.  The gate audits `KnomosisBridge.sol` —
-the authoritative source of these caps; the derived Solidity mirror in
+pin alongside the full suite.  The gate audits two files:
+`KnomosisBridge.sol` — the authoritative source of these caps — and
+`KnomosisAmmDisasterRecoveryMultisig.sol` (pinning the GP.11.10
+governance constants `MIN_DISABLE_THRESHOLD` / `MAX_SIGNERS` /
+`CONFIRMATION_WINDOW`); the derived Solidity mirror in
 `test/utils/FeeSplitMath.sol` is held equal to the contract getter by
 `test_compileTimeCaps_pinned`, and the Lean mirror by the
 `deposit_fee_split.json` cross-stack corpus.  Changing any cap is a
@@ -301,7 +333,7 @@ auto-trigger reads) AND a fourth uintN cap
 gas cap that bounds malicious-callee griefing), all under the
 identical dual-layer protection (source gate + runtime pins
 `test_troveManagerConstants_pinned` / `test_liquityOracleReadGas_pinned`);
-the self-test grows to 37 cases (includes a multi-line-declaration
+the self-test now runs 47 cases (includes a multi-line-declaration
 tolerance check that confirms the gate handles forge-fmt-wrapped
 address pins correctly).  GP.11.1 adds the constitutional cap
 `MAX_AMM_SEED_RATIO_BPS = 8000` (the 80% cap on the deposit→AMM seed
@@ -470,7 +502,7 @@ bridge itself; `BoldRolesNotDistinct` / `BoldRoleIsBridge` enforce):
    commitment; it defaults to 0 (fails closed) when a deployer leaves
    it unset.
 
-Coverage: `test/BoldCircuitBreaker.t.sol` (85 cases incl. a stateful
+Coverage: `test/BoldCircuitBreaker.t.sol` (82 cases incl. a stateful
 Foundry-invariant suite — manual + auto circuit toggling, access
 control + least-privilege separation + roles-not-distinct +
 role-is-bridge + TM-distinctness constructor guards, per-branch
@@ -595,19 +627,23 @@ assumption tightens from "M-of-N bots honest" to
 `LegalKernel/FaultProof/`; the operator-facing material is in
 [`docs/fault_proof_runbook.md`](../docs/fault_proof_runbook.md).
 
-### `KnomosisStepVM.sol`
+### `KnomosisStepVMRoot.sol`
 
-The pure, stateless single-step verifier. Given a kernel sub-state
-and a signed action, returns the canonical post sub-state. Mirrors
-`LegalKernel.FaultProof.Step.kernelStep` byte-for-byte (cross-stack
-fixture: `solidity/test/CrossCheck/StepVM.t.sol`).
+The pure, stateless single-step verifier. Given a pre-state root, the
+disputed action, and one deduplicating pre-root multiproof,
+`executeStepToRootMulti` re-derives every written cell's post-value
+and folds it into the canonical post-state root. Mirrors
+`LegalKernel.FaultProof.Step.kernelStepApply` (cross-stack fixture:
+`solidity/test/CrossCheck/StepVM.t.sol`).
 
 ### `KnomosisStateRootSubmission.sol`
 
 The L1 state-root window. Sequencers post `(stateCommit, bond)`
 records; bonds release after the dispute window if no fault proof
-unseats them, or get slashed (95% to challenger, 5% to treasury)
-if a fault proof wins. Rate-limited via `MIN_SUBMISSION_INTERVAL_BLOCKS`
+unseats them, or get slashed if a fault proof wins
+(`slashSequencerBond` forwards the bond to the game, whose `_settle`
+splits the pot 95% to the winner / 5% to the treasury).
+Rate-limited via `MIN_SUBMISSION_INTERVAL_BLOCKS`
 and bounded by `outstandingRootsCount[sequencer]`.
 
 ### `KnomosisFaultProofGame.sol`
@@ -615,7 +651,7 @@ and bounded by `outstandingRootsCount[sequencer]`.
 The on-chain bisection-game arbiter. Manages dispute rounds:
 challenger and sequencer alternate `respond(hash)` calls,
 narrowing the disputed interval by 2× each round until they
-disagree on a single step. The arbiter then asks `KnomosisStepVM`
+disagree on a single step. The arbiter then asks `KnomosisStepVMRoot`
 to recompute that step and declares the loser. Tracks per-game
 bonds; settles `winnerTakesBond` on conclusion.
 
@@ -632,7 +668,7 @@ The v1 → v2 migration contract. Same attested-handoff pattern as
 `KnomosisMigration` but tailored for moving from the
 `KnomosisDisputeVerifier` (v1) + `KnomosisBridge` deployment to the
 `KnomosisDisputeVerifierV2` + `KnomosisStateRootSubmission` +
-`KnomosisFaultProofGame` + `KnomosisStepVM` quartet.
+`KnomosisFaultProofGame` + `KnomosisStepVMRoot` quartet.
 
 ## Workstream GP.11.10 contract (AMM disaster recovery)
 
@@ -675,7 +711,7 @@ capability is calling `emergencyDisableAmm()` on the immutable
   doubles as a safety check that no upgradeable-proxy bytecode has
   accidentally crept in.
 * For Workstream-H deployment ordering, sequence is:
-  `KnomosisStepVM → KnomosisStateRootSubmission → KnomosisFaultProofGame →
+  `KnomosisStepVMRoot → KnomosisStateRootSubmission → KnomosisFaultProofGame →
   KnomosisDisputeVerifierV2 → KnomosisFaultProofMigration` (see
   `docs/fault_proof_runbook.md` §2).
 

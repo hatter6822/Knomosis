@@ -28,21 +28,30 @@ form *refines* the old form.
 Before the amendment, the law's surface is:
 
 ```lean
-lexlaw transfer where
+lexlaw legalkernel_transfer where
   lex_id              legalkernel.transfer
   lex_version         "1.0.0"
   lex_action_index    0
-  lex_intent          "Move balance between actors at a resource."
+  lex_intent          "Move `amount` units of resource `r` from `sender` to `receiver`.  The post-debit re-read of the receiver's balance is what makes self-transfers conserve total supply (Genesis Plan §4.11)."
   lex_signed_by       sender
   lex_authorized_by   (fun _ _ => True)
-  lex_params          (r : ResourceId) (sender receiver : ActorId)
+  lex_params          (r : ResourceId)
+                      (sender receiver : ActorId)
                       (amount : Amount)
-  lex_pre             := fun s => amount > 0 ∧ getBalance s r sender ≥ amount
-  lex_impl            := fun s =>
-                          let s' := setBalance s r sender (getBalance s r sender - amount)
-                          setBalance s' r receiver (getBalance s' r receiver + amount)
+  lex_pre             :=
+    fun s => getBalance s r sender ≥ amount ∧ amount > 0 ∧
+             LegalKernel.Laws.AmountBounded
+               (setBalance s r sender (getBalance s r sender - amount))
+               r receiver amount
+  lex_impl            :=
+    fun s =>
+      let fromBal := getBalance s r sender
+      let s1      := setBalance s r sender (fromBal - amount)
+      let toBal   := getBalance s1 r receiver
+      setBalance s1 r receiver (toBal + amount)
   lex_satisfies       := [conservative, monotonic, «local»,
-                          freeze_preserving, registry_preserving]
+                          freeze_preserving, nonce_advances,
+                          registry_preserving]
   lex_events          := []
 ```
 
@@ -52,12 +61,17 @@ surface.
 
 ## Step 1 — Author Edits
 
-The author edits the `lex_pre` clause to add the upper bound:
+The author edits the `lex_pre` clause to add the upper bound,
+keeping the existing conjuncts (in particular the `AmountBounded`
+credit-ceiling conjunct must not be dropped):
 
 ```lean
-  lex_pre             := fun s =>
-                          amount > 0 ∧ amount ≤ 2^32 ∧
-                          getBalance s r sender ≥ amount
+  lex_pre             :=
+    fun s => getBalance s r sender ≥ amount ∧ amount > 0 ∧
+             amount ≤ 2^32 ∧
+             LegalKernel.Laws.AmountBounded
+               (setBalance s r sender (getBalance s r sender - amount))
+               r receiver amount
 ```
 
 And bumps the version:
@@ -123,7 +137,7 @@ The output identifies the changed law and classifies the bump:
 Laws modified:
 legalkernel.transfer:
   version: 1.0.0 → 1.1.0   (minor)
-  pre: amount > 0 ∧ getBalance s r sender ≥ amount → amount > 0 ∧ amount ≤ 2^32 ∧ getBalance s r sender ≥ amount
+  pre: getBalance s r sender ≥ amount ∧ amount > 0 ∧ LegalKernel.Laws.AmountBounded ... → getBalance s r sender ≥ amount ∧ amount > 0 ∧ amount ≤ 2^32 ∧ LegalKernel.Laws.AmountBounded ...
   refinement_proof: MISSING (L016)
 ```
 
@@ -139,10 +153,11 @@ Per the convention `refinement_v<MAJ>_<MIN>` for the OLD version
 ```lean
   lex_proof refinement_v1_0 := by
     -- Refinement: every state admitted by the new pre is also
-    -- admitted by the old pre.  Concretely: a > 0 ∧ a ≤ 2^32 ∧
-    -- balance ≥ a → a > 0 ∧ balance ≥ a.
+    -- admitted by the old pre.  Concretely: balance ≥ a ∧ a > 0 ∧
+    -- a ≤ 2^32 ∧ AmountBounded ... → balance ≥ a ∧ a > 0 ∧
+    -- AmountBounded ....
     intro s hpre
-    exact ⟨hpre.1, hpre.2.2⟩
+    exact ⟨hpre.1, hpre.2.1, hpre.2.2.2⟩
 ```
 
 (The `lex_proof` clause is captured by the macro and recorded
@@ -187,7 +202,7 @@ manifest fields (`identifier`, `deploymentId`, `version`,
 `resources`, `laws`, `authority`, `invariantClaims`) changes.
 
 A `transfer` law's internal upgrade does NOT change the manifest's
-fields directly (the manifest still references `Transfer = legalkernel.transfer @ "1.0.0"` if pinned at `1.0.0`).  To
+fields directly (the manifest still references `Transfer = transferWrapper @ "1.0.0"` if pinned at `1.0.0`).  To
 upgrade the manifest's pinned version, the operator edits the
 manifest:
 
@@ -257,7 +272,7 @@ After Steps 1–8 complete:
 ## Example commit pair
 
 For a real-world example of this workflow, see the test fixtures
-in `LegalKernel/Test/Lex/Tools/Diff.lean`'s `classifyMinorOnPreOnly`
+in `Lex/Test/Tools/Diff.lean`'s `classifyMinorOnPreOnly`
 case, which exercises the per-clause diff + classifier on a
 hand-built `LawDecl` pair.
 

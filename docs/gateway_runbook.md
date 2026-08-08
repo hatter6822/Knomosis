@@ -60,6 +60,7 @@ host** — WAL shared memory is host-local).
 |---|---|---|
 | `GET /healthz` | Liveness (always `200` while the process runs). | exempt |
 | `GET /readyz` | Readiness: probes each configured upstream. | exempt |
+| `POST /rpc` | Wallet-discovery JSON-RPC shim (`eth_chainId`, `net_version`, `eth_blockNumber`, `web3_clientVersion`) so a browser wallet's Add-Network flow can resolve the L2 chain id. | exempt |
 | `GET /v1/info` | Deployment + protocol metadata + the config echo. | required |
 | `GET /v1/actors/{id}/balances[/{resource}]` | Balance view(s). | required |
 | `GET /v1/actors/{id}/budget` | Epoch budget view. | required |
@@ -88,9 +89,10 @@ Secrets (the auth token file) are passed **by path, never argv/env value**.
 | `--free-tier` / `--action-cost` / `--epoch-length` | `0` | Budget-view rendering + `/v1/info` echo (**must match the deployment policy**, §10). |
 | `--gas-pool-actor` (`…_GAS_POOL_ACTOR`) | unset | Sets the pool-view `net` flag (**must match the indexer's**, §10). |
 | `--deployment-id` / `--ok-admission-stage` | `""` / `Finalized` | `/v1/info` metadata echo. |
+| `--l2-chain-id` (`…_L2_CHAIN_ID`) | `83572` (test) | EIP-155 chain id served by the `/rpc` shim and echoed by `/v1/info` (`8357` = production). |
 | `--host-addr` (`…_HOST_ADDR`) | unset → submit `503` | Host upstream (loopback plaintext); probed by `/readyz`. |
 | `--host-pool-size` / `--host-max-inflight` | `8` / = pool | Persistent host connections / concurrent-checkout cap. |
-| `--request-deadline-ms` | `5000` | End-to-end submit deadline (host connect/read/write). |
+| `--request-deadline-ms` | `5000` | Per-operation host connect/read/write timeout on the submit path (each of the three operations gets the full value, so a worst-case submit can take up to ~3×). |
 | `--max-frame-size` | `1 MiB` (ceiling 16 MiB) | `POST /v1/actions` body cap → `413`. |
 | `--event-subscribe-addr` (`…_EVENT_SUBSCRIBE_ADDR`) | unset → events `503` | Event-subscribe upstream; probed by `/readyz`; feeds the SSE fan-out + the backfill. |
 | `--upstream-subscriptions` (`…_UPSTREAM_SUBSCRIPTIONS`) | `1` | Shared live-tail subscriptions feeding the single SSE ring; `>1` is a redundancy knob, deduped on `(seq,index)`. Range `1..=64`. |
@@ -166,11 +168,12 @@ unseen records.
 
     The result is **cached for one second** (EG.4).  `/readyz` is exempt
     from both the auth gate and the rate limiter — it has to be, for an
-    orchestrator to reach it — so without a cache each call would open a
-    TCP connection to *every* configured upstream, letting an
-    unauthenticated caller amplify one cheap request into three and pin
-    a connection thread for up to the two-second probe timeout on each,
-    worst exactly when an upstream is already down.  Caching makes the
+    orchestrator to reach it — so without a cache each call would re-probe
+    every configured upstream (a TCP connect to the host and to
+    event-subscribe, plus a fresh indexer cursor read), letting an
+    unauthenticated caller amplify one cheap request into three upstream
+    probes and pin a connection thread for up to the two-second timeout
+    on each connect, worst exactly when an upstream is already down.  Caching makes the
     probe rate independent of the request rate, and callers arriving
     while a probe is in flight are served the previous sample
     immediately rather than queueing behind it — so a dead upstream
@@ -191,6 +194,10 @@ unseen records.
     file, or a key that does not match the cert) is **logged and ignored** —
     the previously-loaded certificate keeps serving, so a fat-fingered rotation
     never takes the listener down.  (No effect when `--tls-listen` is unset.)
+
+---
+
+## 6. Observability
 
   * **Per-request correlation id** (`X-Request-Id: req-<nonce>-<seq>`) on
     every response, mirrored into the RFC 9457 `problem.instance` on error
@@ -329,7 +336,9 @@ knomosis-gateway --listen 127.0.0.1:8080 \
   --host-addr 127.0.0.1:7654 \
   --event-subscribe-addr 127.0.0.1:7655 \
   --auth-token-file /etc/knomosis/gw.tokens \
-  --gas-pool-actor 161 --free-tier 1000 --action-cost 5 --epoch-length 7200
+  --gas-pool-actor 161 --free-tier 1000 --action-cost 5 --epoch-length 7200 \
+  --l2-chain-id 8357          # production chain id for the /rpc shim
+                              # (default 83572 = test; §3)
 
 # Health / readiness / metadata:
 curl -fsS localhost:8080/healthz

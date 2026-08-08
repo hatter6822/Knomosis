@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "f3db787d3a0ab6df5de9276a05ce698e279de143782ef4c556c120bfabdbb4d4"
+    "source_digest": "01bedc41f7f9e0c416151d2aeb062c5577af5ac1dce641e50dfdb7aa09a10e91"
   },
   "summary": {
     "module_count": 346,
@@ -35664,6 +35664,7 @@
             "Amount",
             "AmountBounded",
             "ResourceId",
+            "State",
             "Transition",
             "claimant",
             "gasResource",
@@ -35676,7 +35677,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_apply_eq_transfer",
-          "line": 118,
+          "line": 125,
           "called": [
             "ActorId",
             "Amount",
@@ -35693,13 +35694,13 @@
         {
           "kind": "theorem",
           "name": "refund_arithmetic",
-          "line": 137,
+          "line": 144,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_conserves",
-          "line": 149,
+          "line": 156,
           "called": [
             "ActorId",
             "Amount",
@@ -35721,7 +35722,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_other_resource_untouched",
-          "line": 189,
+          "line": 196,
           "called": [
             "ActorId",
             "Amount",
@@ -35740,7 +35741,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_does_not_touch_other_resources",
-          "line": 207,
+          "line": 214,
           "called": [
             "ActorId",
             "Amount",
@@ -35759,7 +35760,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_conserves_other_resource",
-          "line": 218,
+          "line": 225,
           "called": [
             "ActorId",
             "Amount",
@@ -35778,7 +35779,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_pool_debited",
-          "line": 239,
+          "line": 246,
           "called": [
             "ActorId",
             "Amount",
@@ -35798,7 +35799,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_claimant_credited",
-          "line": 261,
+          "line": 268,
           "called": [
             "ActorId",
             "Amount",
@@ -35818,7 +35819,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_other_actor_untouched",
-          "line": 284,
+          "line": 291,
           "called": [
             "ActorId",
             "Amount",
@@ -35838,7 +35839,7 @@
         {
           "kind": "instance",
           "name": "claimBudgetRefund_isConservative",
-          "line": 307,
+          "line": 314,
           "called": [
             "ActorId",
             "Amount",
@@ -35856,7 +35857,7 @@
         {
           "kind": "instance",
           "name": "claimBudgetRefund_isMonotonic",
-          "line": 321,
+          "line": 328,
           "called": [
             "ActorId",
             "Amount",
@@ -35873,7 +35874,7 @@
         {
           "kind": "instance",
           "name": "claimBudgetRefund_localTo",
-          "line": 333,
+          "line": 340,
           "called": [
             "ActorId",
             "Amount",
@@ -35890,7 +35891,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_freezePreserving",
-          "line": 350,
+          "line": 357,
           "called": [
             "ActorId",
             "Amount",
@@ -35907,7 +35908,7 @@
         {
           "kind": "instance",
           "name": "claimBudgetRefund_freezePreserving_empty",
-          "line": 368,
+          "line": 375,
           "called": [
             "ActorId",
             "Amount",
@@ -36132,7 +36133,9 @@
             "Amount",
             "AmountBounded",
             "ResourceId",
+            "State",
             "Transition",
+            "budgetGrant",
             "getBalance",
             "poolActor",
             "setBalance"
@@ -36141,7 +36144,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_other_resource_untouched",
-          "line": 56,
+          "line": 66,
           "called": [
             "ActorId",
             "Amount",
@@ -37061,6 +37064,7 @@
             "Amount",
             "AmountBounded",
             "ResourceId",
+            "State",
             "Transition",
             "getBalance",
             "poolActor",
@@ -37070,7 +37074,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_other_resource_untouched",
-          "line": 114,
+          "line": 121,
           "called": [
             "ActorId",
             "Amount",
@@ -37085,7 +37089,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_does_not_touch_other_resources",
-          "line": 132,
+          "line": 139,
           "called": [
             "ActorId",
             "Amount",
@@ -37101,7 +37105,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_zeroes_reserve",
-          "line": 146,
+          "line": 153,
           "called": [
             "ActorId",
             "Amount",
@@ -37118,7 +37122,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_credits_pool",
-          "line": 165,
+          "line": 172,
           "called": [
             "ActorId",
             "Amount",
@@ -37135,7 +37139,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_other_actor_untouched",
-          "line": 183,
+          "line": 190,
           "called": [
             "ActorId",
             "Amount",
@@ -37152,13 +37156,13 @@
         {
           "kind": "theorem",
           "name": "reclaim_conservation_arithmetic",
-          "line": 212,
+          "line": 219,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_conserves_at",
-          "line": 222,
+          "line": 229,
           "called": [
             "ActorId",
             "Amount",
@@ -37177,7 +37181,7 @@
         {
           "kind": "instance",
           "name": "reclaimAmmReserves_isConservative",
-          "line": 250,
+          "line": 257,
           "called": [
             "ActorId",
             "Amount",
@@ -37193,7 +37197,7 @@
         {
           "kind": "instance",
           "name": "reclaimAmmReserves_localTo",
-          "line": 267,
+          "line": 274,
           "called": [
             "ActorId",
             "Amount",
@@ -37207,7 +37211,7 @@
         {
           "kind": "theorem",
           "name": "reclaimAmmReserves_freezePreserving",
-          "line": 281,
+          "line": 288,
           "called": [
             "ActorId",
             "Amount",
@@ -37221,7 +37225,7 @@
         {
           "kind": "instance",
           "name": "reclaimAmmReserves_freezePreserving_empty",
-          "line": 294,
+          "line": 301,
           "called": [
             "ActorId",
             "Amount",
@@ -37349,6 +37353,7 @@
             "Amount",
             "AmountBounded",
             "ResourceId",
+            "State",
             "Transition",
             "getBalance",
             "reserveQuote",
@@ -37359,7 +37364,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_no_reserve_drain",
-          "line": 209,
+          "line": 217,
           "called": [
             "ActorId",
             "Amount",
@@ -37373,7 +37378,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_k_nondecreasing",
-          "line": 226,
+          "line": 234,
           "called": [
             "ActorId",
             "Amount",
@@ -37387,7 +37392,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_min_out_honoured",
-          "line": 244,
+          "line": 252,
           "called": [
             "ActorId",
             "Amount",
@@ -37400,7 +37405,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_setBalance_other",
-          "line": 260,
+          "line": 268,
           "called": [
             "ActorId",
             "Amount",
@@ -37413,7 +37418,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_other_resource_untouched",
-          "line": 269,
+          "line": 277,
           "called": [
             "ActorId",
             "Amount",
@@ -37427,7 +37432,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_does_not_touch_other_resources",
-          "line": 291,
+          "line": 299,
           "called": [
             "ActorId",
             "Amount",
@@ -37442,7 +37447,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_other_actor_untouched",
-          "line": 305,
+          "line": 313,
           "called": [
             "ActorId",
             "Amount",
@@ -37457,13 +37462,13 @@
         {
           "kind": "theorem",
           "name": "swap_leg_arithmetic",
-          "line": 334,
+          "line": 342,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "reserveSwap_conserves_from",
-          "line": 344,
+          "line": 352,
           "called": [
             "ActorId",
             "Amount",
@@ -37482,7 +37487,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_conserves_to",
-          "line": 396,
+          "line": 404,
           "called": [
             "ActorId",
             "Amount",
@@ -37504,7 +37509,7 @@
         {
           "kind": "instance",
           "name": "reserveSwap_isConservative",
-          "line": 529,
+          "line": 537,
           "called": [
             "ActorId",
             "Amount",
@@ -37520,7 +37525,7 @@
         {
           "kind": "instance",
           "name": "reserveSwap_localTo",
-          "line": 550,
+          "line": 558,
           "called": [
             "ActorId",
             "Amount",
@@ -37533,7 +37538,7 @@
         {
           "kind": "theorem",
           "name": "reserveSwap_freezePreserving",
-          "line": 569,
+          "line": 577,
           "called": [
             "ActorId",
             "Amount",
@@ -37546,7 +37551,7 @@
         {
           "kind": "instance",
           "name": "reserveSwap_freezePreserving_empty",
-          "line": 585,
+          "line": 593,
           "called": [
             "ActorId",
             "Amount",
@@ -37754,6 +37759,7 @@
             "Laws",
             "LegalKernel",
             "ResourceId",
+            "State",
             "Transition",
             "gasResource",
             "getBalance",
@@ -37789,6 +37795,7 @@
             "Amount",
             "AmountBounded",
             "ResourceId",
+            "State",
             "Transition",
             "gasResource",
             "getBalance",
@@ -37799,7 +37806,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_apply_eq_transfer",
-          "line": 94,
+          "line": 103,
           "called": [
             "ActorId",
             "Amount",
@@ -37814,13 +37821,13 @@
         {
           "kind": "theorem",
           "name": "topUpFor_arithmetic",
-          "line": 112,
+          "line": 121,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_conserves",
-          "line": 124,
+          "line": 133,
           "called": [
             "ActorId",
             "Amount",
@@ -37840,7 +37847,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_totalSupply_invariant",
-          "line": 164,
+          "line": 173,
           "called": [
             "ActorId",
             "Amount",
@@ -37857,7 +37864,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_other_resource_untouched",
-          "line": 181,
+          "line": 190,
           "called": [
             "ActorId",
             "Amount",
@@ -37874,7 +37881,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_does_not_touch_other_resources",
-          "line": 200,
+          "line": 209,
           "called": [
             "ActorId",
             "Amount",
@@ -37891,7 +37898,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_conserves_other_resource",
-          "line": 212,
+          "line": 221,
           "called": [
             "ActorId",
             "Amount",
@@ -37908,7 +37915,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_signer_debited",
-          "line": 232,
+          "line": 241,
           "called": [
             "ActorId",
             "Amount",
@@ -37926,7 +37933,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_pool_credited",
-          "line": 255,
+          "line": 264,
           "called": [
             "ActorId",
             "Amount",
@@ -37944,7 +37951,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_other_actor_untouched",
-          "line": 279,
+          "line": 288,
           "called": [
             "ActorId",
             "Amount",
@@ -37962,7 +37969,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_isConservative",
-          "line": 303,
+          "line": 312,
           "called": [
             "ActorId",
             "Amount",
@@ -37978,7 +37985,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_isMonotonic",
-          "line": 319,
+          "line": 328,
           "called": [
             "ActorId",
             "Amount",
@@ -37993,7 +38000,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_localTo",
-          "line": 332,
+          "line": 341,
           "called": [
             "ActorId",
             "Amount",
@@ -38008,7 +38015,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_freezePreserving",
-          "line": 350,
+          "line": 359,
           "called": [
             "ActorId",
             "Amount",
@@ -38023,7 +38030,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_freezePreserving_empty",
-          "line": 369,
+          "line": 378,
           "called": [
             "ActorId",
             "Amount",

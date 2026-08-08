@@ -49,8 +49,12 @@ them.
       asserts pass with the values you will use. Record them. See
       `docs/deployment_parameters.md`.
 - [ ] **Env filled.** `cp solidity/deploy.sepolia.env.example
-      solidity/deploy.sepolia.env` and fill every `SET-THIS…`. The filled
-      copy is git-ignored — never commit it.
+      solidity/deploy.sepolia.env` and fill every `SET-THIS…` — including
+      `KNOMOSIS_GENESIS_STATE_COMMIT` (the genesis extended-state commit;
+      required, no default — the deploy script hard-reverts without it)
+      and `KNOMOSIS_SUBMISSION_BREAKER_ADDRESS` (set explicitly on a real
+      deploy; must be distinct from the sequencer). The filled copy is
+      git-ignored — never commit it.
 - [ ] **Keys custodied** (see §5 for the full inventory). Each on-chain role
       (attestor, sequencer, treasury, adjudicators, BOLD breaker/admin, the
       AMM multisig signers) is an address whose key you control — **none is

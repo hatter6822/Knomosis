@@ -1,6 +1,6 @@
 # Knomosis — Testnet-Readiness Assessment
 
-**Date:** 2026-06-14
+**Date:** 2026-06-14 (updated 2026-08-08)
 **Status:** Workstream P2 deliverable.  Companion to
 `docs/audits/20-production-security-review-and-external-audit-scope.md`
 and `docs/economic_incentive_analysis.md`.
@@ -10,7 +10,7 @@ and `docs/economic_incentive_analysis.md`.
 > **go/no-go readiness gate** for that deployment: it inventories the
 > shipped operational surface, maps it to a deployment topology, and
 > gives a checklist + honest gap analysis.  Operational facts verified
-> against source on 2026-06-14.
+> against source on 2026-08-08.
 
 ---
 
@@ -51,14 +51,20 @@ and the SVC step-VM + SC SMT cross-stack corpora.
 ## 3. Go / no-go readiness checklist
 
 ### 3.1 Contracts & parameters
-- [ ] All 11 contracts deployed to the testnet and **source-verified**
-      on the explorer.
+- [ ] The nine-contract genesis suite deployed to the testnet and
+      **source-verified** on the explorer.  (The two migration
+      contracts — `KnomosisMigration`, `KnomosisFaultProofMigration` —
+      are not genesis contracts; they deploy at migration time.)
 - [ ] Constructor parameters (`MIN_CHALLENGE_BOND`, bisection timeouts,
-      `stakeAmount`, `maxDrainPerAction{Eth,Bold}`, `MIN_FEE_BPS` /
-      `MAX_FEE_BPS`, TVL cap) **sized per `docs/deployment_parameters.md`**
-      (the per-parameter sizing guide mapping every immutable constructor
-      value to its IC-1…IC-6 condition) for testnet gas/value assumptions,
-      calibrated with `scripts/economic_simulation.py`.
+      `slashRatioBps`, `MIN_FEE_BPS` / `MAX_FEE_BPS`, TVL cap) — and the
+      off-Solidity L2 policy values `stakeAmount` (the Lean
+      `StakingPolicy`) + `maxDrainPerAction{Eth,Bold}` (the
+      `gasPoolActor` `LocalPolicy`), set in the genesis manifest —
+      **sized per `docs/deployment_parameters.md`** (the per-parameter
+      sizing guide mapping every immutable constructor value to its
+      IC-1…IC-6 condition; its §7 covers the off-Solidity pair) for
+      testnet gas/value assumptions, calibrated with
+      `scripts/economic_simulation.py`.
 - [ ] `KnomosisAmmDisasterRecoveryMultisig` signer set chosen; `N`
       such that 3-of-N collusion exceeds reserve value (E-2/§5).
 
@@ -91,14 +97,16 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       *deployed* contracts (on-chain bytecode + a live `deploymentId()`
       read).  Green locally; the live-node counterpart to the in-memory
       `testnet-acceptance-dryrun`.  **Surfaced finding:** the F.3
-      `Deployer` is a CREATE3 *bundler* test-harness (43 065 B) that
-      exceeds the EIP-170 limit, so `make testnet-acceptance` against a
-      real RPC needs `--disable-code-size-limit` (or a non-bundling
-      deploy path) — but **every PRODUCTION contract is comfortably
-      under the limit** (`forge build --sizes`: Bridge 17 195 B / 7 381 B
-      margin, FaultProofGame 7 551 B, all others well under), so the
-      production contracts are genuinely deployable; only the test
-      bundler needs the accommodation.
+      `Deployer` is a CREATE3 *bundler* test-harness (39 611 B runtime /
+      39 637 B initcode) that exceeds the EIP-170 limit, so
+      `make testnet-acceptance` against a real RPC needs
+      `--disable-code-size-limit` (or a non-bundling deploy path) — but
+      **every PRODUCTION contract is under the limit** (`forge build
+      --sizes`, runtime: the largest, `KnomosisStepVMRoot`, 20 163 B /
+      4 413 B margin; FaultProofGame 15 887 B; Bridge 13 566 B /
+      11 010 B margin; all others under), so the production contracts
+      are genuinely deployable; only the test bundler needs the
+      accommodation.
 - [ ] `make deploy-sepolia` (the unified non-bundling `DeploySepolia.s.sol`)
       deploys the full nine-contract suite, source-verifies on Etherscan, and
       emits `deployments/sepolia.json` against a real Sepolia RPC.  This is the
@@ -204,9 +212,10 @@ and the SVC step-VM + SC SMT cross-stack corpora.
 ## 4. Status & gaps
 
 **Ready (shipped & verified):** the full operational daemon set, the L1
-contract suite (~867 forge tests green), the cross-stack corpora, the
-F.3 acceptance harness, and the two operator runbooks.  The system is
-*functionally* deployable to a testnet today.
+contract suite (~920 forge tests green across 65 suites, 0 skipped),
+the cross-stack corpora, the F.3 acceptance harness, and the two
+operator runbooks.  The system is *functionally* deployable to a
+testnet today.
 
 **Gaps before a *value-bearing* public testnet** (ordered):
 1. The **F-1 / F-2 trust-binding hardening** (security review §7) — the
@@ -219,11 +228,11 @@ F.3 acceptance harness, and the two operator runbooks.  The system is
    per deployment:* run them against the target gas/value assumptions.
 3. **Monitoring/alerting + key-custody** procedures (§3.5) — currently
    the daemons exist but the *operational* wrapping does not.
-4. **Adversarial fuzzing** of the untrusted-input boundaries —
-   *in progress*: never-panics property fuzz on the l1-ingest decoder,
-   host frame reader, and indexer decoder + dispatch; SMT
-   size-discipline adversarial tests.  A coverage-target sweep +
-   cargo-fuzz on the network boundaries remain.
+4. ~~**Adversarial fuzzing** of the untrusted-input boundaries.~~
+   **Shipped** (§3.6): stable never-panics proptest (`ci-rust.yml`) +
+   coverage-guided cargo-fuzz/libFuzzer (`runtime/fuzz/`, the nightly
+   `ci-fuzz.yml` lane) over the host frame reader, l1-ingest ABI
+   decoder, and indexer decoder; SMT size-discipline adversarial tests.
 5. The **independent external audit** (the §20 scope) — the gate to
    *mainnet*, strongly advisable before a value-bearing testnet.  The
    internal deep review (§21) has remediated 5 contract defects ahead of
